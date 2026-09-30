@@ -1,3 +1,5 @@
+import type { BoardRegistry } from '../boards/index.js';
+import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
  * scan, and its wire item shape; the route layer k-way merges provider pages
@@ -187,7 +189,7 @@ export interface DecisionAttentionSpec {
   occurredAt(decision: FactoryDeferredDecisionRecord): Date;
   title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
   detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
-  extra?(decision: FactoryDeferredDecisionRecord): Record<string, unknown>;
+  extra?(decision: FactoryDeferredDecisionRecord, context: { overtaken: boolean }): Record<string, unknown>;
   matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
 }
 
@@ -195,9 +197,14 @@ export class DecisionAttentionProvider implements AttentionProvider {
   readonly kind: FactoryAttentionKind;
   readonly #workItems: WorkItemsStorage;
   readonly #spec: DecisionAttentionSpec;
+  readonly #boards: BoardRegistry;
 
-  constructor({ workItems }: { workItems: WorkItemsStorage }, spec: DecisionAttentionSpec) {
+  constructor(
+    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry },
+    spec: DecisionAttentionSpec,
+  ) {
     this.#workItems = workItems;
+    this.#boards = boards;
     this.#spec = spec;
     this.kind = spec.kind;
   }
@@ -258,9 +265,10 @@ export class DecisionAttentionProvider implements AttentionProvider {
 
   async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
     return collectPage(this.#scan(scope, before), limit, async decisions => {
-      const [receiptByKey, itemById] = await Promise.all([
+      const [receiptByKey, itemById, overtaken] = await Promise.all([
         this.#receiptsFor(scope, decisions),
         this.#linkedItems(scope, decisions),
+        overtakenDecisionIds(this.#workItems, this.#boards, scope, decisions),
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {
@@ -282,7 +290,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
             title: this.#spec.title(decision, item),
             detail: this.#spec.detail(decision, item),
             decisionType: factoryDecisionType(decision),
-            ...this.#spec.extra?.(decision),
+            ...this.#spec.extra?.(decision, { overtaken: overtaken.has(decision.id) }),
             occurredAt: occurredAt.toISOString(),
             read: receipt !== undefined,
             archived: receipt?.state === 'archived',
@@ -338,9 +346,9 @@ export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
   occurredAt: decision => decision.completedAt ?? decision.updatedAt,
   title: (decision, item) => item?.title ?? factoryDispatchFailureMetadata(decision.failureCode).label,
   detail: decision => decision.lastError?.slice(0, 512) ?? factoryDispatchFailureMetadata(decision.failureCode).label,
-  extra: decision => ({
+  extra: (decision, { overtaken }) => ({
     failureCode: decision.failureCode,
-    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: !overtaken && factoryDispatchFailureMetadata(decision.failureCode).canRetry,
   }),
   matches: (decision, item, search) =>
     item?.title.toLowerCase().includes(search) === true ||

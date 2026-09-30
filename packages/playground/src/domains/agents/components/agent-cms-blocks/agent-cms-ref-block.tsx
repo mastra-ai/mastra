@@ -121,7 +121,7 @@ const RefBlockContent = ({
       )}
 
       {/* Content area with left accent border */}
-      <div className="border-l-2 border-accent3/30 pl-3">
+      <div className="border-l-2 border-info-edge pl-3">
         {isLoading ? (
           <div className="flex items-center gap-2 py-3 text-muted-foreground">
             <Spinner className="h-4 w-4" />
@@ -135,12 +135,12 @@ const RefBlockContent = ({
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
+                <Badge size="xs" variant="warning" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="warning" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
               )}
@@ -201,7 +201,7 @@ const RefBlockContent = ({
                       {onDelete && (
                         <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-error hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
@@ -231,7 +231,7 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="text-warning flex items-start gap-1.5 px-1 pb-1 text-meta">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
@@ -257,7 +257,7 @@ const RefBlockContent = ({
             />
           </>
         ) : (
-          <div className="text-warning flex items-center gap-2 py-3">
+          <div className="flex items-center gap-2 py-3 text-warning-foreground">
             <Txt variant="caption">Prompt block not found (ID: {block.promptBlockId})</Txt>
           </div>
         )}

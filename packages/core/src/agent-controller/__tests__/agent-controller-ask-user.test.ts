@@ -482,3 +482,18 @@ describe('AgentController: Stop on a parked question frees the thread', () => {
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
   }, 20_000);
 });
+
+describe('resume boundary waiter', () => {
+  it('settles when the stream is torn down before any terminal event', async () => {
+    const { session } = await buildController('teardown', JSON.stringify({ question: 'Color?' }));
+    const waiter = (session as any).createSubscribedResumeBoundaryWaiter({ toolCallId: 'call-1' });
+    let settled = false;
+    void waiter.promise.then(() => {
+      settled = true;
+    });
+
+    session.stream.cleanup();
+
+    await vi.waitFor(() => expect(settled).toBe(true));
+  });
+});

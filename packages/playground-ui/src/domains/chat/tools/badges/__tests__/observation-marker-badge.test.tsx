@@ -8,29 +8,26 @@ afterEach(() => cleanup());
 
 describe('ObservationMarkerBadge', () => {
   describe('when a completed observation marker carries extracted values', () => {
-    it('shows scalar and structured extracted values once the panel is expanded', () => {
+    it('shows scalar and structured extracted values once the extractions line is expanded', () => {
       render(
         <ObservationMarkerBadge
           toolName="mastra-memory-om-observation"
-          args={{}}
-          metadata={{
-            omData: {
-              _state: 'complete',
-              cycleId: 'cycle-1',
-              operationType: 'observation',
-              completedAt: '2026-05-29T00:00:00.000Z',
-              tokensObserved: 1200,
-              observationTokens: 300,
-              extractedValues: {
-                mood: 'focused',
-                profile: { plan: 'rewrite', priority: 1 },
-              },
+          omData={{
+            _state: 'complete',
+            cycleId: 'cycle-1',
+            operationType: 'observation',
+            completedAt: '2026-05-29T00:00:00.000Z',
+            tokensObserved: 1200,
+            observationTokens: 300,
+            extractedValues: {
+              mood: 'focused',
+              profile: { plan: 'rewrite', priority: 1 },
             },
           }}
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /extractions \(2\)/i }));
+      fireEvent.click(screen.getByRole('button', { name: /extractions.*2 extracted/i }));
 
       expect(screen.getByText('mood')).toBeTruthy();
       expect(screen.getByText('focused')).toBeTruthy();
@@ -41,29 +38,68 @@ describe('ObservationMarkerBadge', () => {
   });
 
   describe('when a buffered reflection marker carries extraction failures', () => {
-    it('shows each failure with its slug and error once the panel is expanded', () => {
+    it('shows each failure with its slug and error once the extractions line is expanded', () => {
       render(
         <ObservationMarkerBadge
           toolName="mastra-memory-om-observation"
-          args={{}}
-          metadata={{
-            omData: {
-              _state: 'buffering-complete',
-              cycleId: 'cycle-2',
-              operationType: 'reflection',
-              completedAt: '2026-05-29T00:00:00.000Z',
-              tokensBuffered: 1600,
-              bufferedTokens: 400,
-              extractionFailures: [{ slug: 'profile', error: 'Expected object, received string' }],
-            },
+          omData={{
+            _state: 'buffering-complete',
+            cycleId: 'cycle-2',
+            operationType: 'reflection',
+            completedAt: '2026-05-29T00:00:00.000Z',
+            tokensBuffered: 1600,
+            bufferedTokens: 400,
+            extractionFailures: [{ slug: 'profile', error: 'Expected object, received string' }],
           }}
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: /extractions \(0\).*1 failed/i }));
+      fireEvent.click(screen.getByRole('button', { name: /extractions.*1 failed/i }));
 
       expect(screen.getByText('profile')).toBeTruthy();
       expect(screen.getByText('Expected object, received string')).toBeTruthy();
+    });
+  });
+
+  describe('when a reflection fails with an error', () => {
+    it('opens on its own and shows the error', () => {
+      render(
+        <ObservationMarkerBadge
+          toolName="mastra-memory-om-observation"
+          omData={{ _state: 'failed', cycleId: 'cycle-3', operationType: 'reflection', error: 'Model timed out' }}
+        />,
+      );
+
+      expect(screen.getByText('Model timed out')).toBeTruthy();
+    });
+  });
+
+  describe('when extractions arrive after the user closed the marker', () => {
+    it('opens again to show them', () => {
+      const completed = {
+        _state: 'complete' as const,
+        cycleId: 'cycle-4',
+        operationType: 'observation' as const,
+        tokensObserved: 1200,
+        observationTokens: 300,
+      };
+      const { rerender } = render(
+        <ObservationMarkerBadge toolName="mastra-memory-om-observation" omData={completed} />,
+      );
+      const marker = () => screen.getByRole('button', { name: /^Observed/ });
+
+      fireEvent.click(marker());
+      fireEvent.click(marker());
+      expect(marker().getAttribute('aria-expanded')).toBe('false');
+
+      rerender(
+        <ObservationMarkerBadge
+          toolName="mastra-memory-om-observation"
+          omData={{ ...completed, extractedValues: { mood: 'focused' } }}
+        />,
+      );
+
+      expect(marker().getAttribute('aria-expanded')).toBe('true');
     });
   });
 });

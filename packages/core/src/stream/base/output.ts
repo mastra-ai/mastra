@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { isChunkOutputProcessed } from './output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
@@ -189,6 +190,13 @@ export type FullOutput<OUTPUT = undefined> = {
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  *
+ * Converting to model messages splits an assistant message at every tool
+ * result, so when the current loop iteration called a tool the last converted
+ * message holds only the text after the call, or nothing if the step ended on
+ * it. In that case the text is read from the DB message's parts after the
+ * iteration's boundary instead. The last `step-start` is not that boundary:
+ * one is also inserted inside a single response whenever text follows a tool call.
+ *
  * Returns `undefined` only when there is no response message to read text from,
  * so callers can distinguish "no processed output exists" from an output
  * processor deliberately clearing the text to `''`. Never collapse the two with
@@ -197,15 +205,21 @@ export type FullOutput<OUTPUT = undefined> = {
 function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
   const responseDbMessages = messageList.get.response.db();
   const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  if (hasCompletionCheckMessages) {
-    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-    const lastConverted = converted[converted.length - 1];
-    return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+  const lastRealMessage = hasCompletionCheckMessages
+    ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
+    : responseDbMessages[responseDbMessages.length - 1];
+  if (!lastRealMessage) return undefined;
+  if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
+    const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
+    if (stepParts.some(p => p.type === 'tool-invocation')) {
+      return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
+    }
   }
-  const responseMessages = messageList.get.response.aiV4.core();
-  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : undefined;
+  const converted = hasCompletionCheckMessages
+    ? convertMessages([lastRealMessage]).to('AIV4.Core')
+    : messageList.get.response.aiV4.core();
+  const lastConverted = converted[converted.length - 1];
+  return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -443,13 +457,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             // may still be retried or served by a fallback model, so processors
             // must not react to them here. The caller runs processors on the
             // error once it has ruled out recovery.
+            //
+            // Chunks marked output-processed already ran through the
+            // processors upstream, so they pass through too.
             const isDeferredErrorChunk =
               options.deferErrorChunks &&
               (chunk.type === 'error' || (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'error'));
 
             if (
               (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') ||
-              isDeferredErrorChunk
+              isDeferredErrorChunk ||
+              isChunkOutputProcessed(chunk)
             ) {
               controller.enqueue(chunk);
               return;
@@ -1167,12 +1185,21 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // aggregate stream text because pre-approval text is part of the resumed run.
                   // Durable agents set resolveFinalPromises to force resolution even when
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
+                  // Durable runs output processors in its workflow, so a blocked final step gets
+                  // its text back here, as the output processor pass above does for the main loop.
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const hasToolStep = self.#bufferedSteps.some(
-                    step => step.toolCalls.length > 0 || step.toolResults.length > 0,
-                  );
+                  if (
+                    self.#options.resolveFinalPromises &&
+                    lastStep?.finishReason === 'tripwire' &&
+                    lastStep.toolCalls.length === 0
+                  ) {
+                    lastStep.text = lastStep.content
+                      .filter(part => part.type === 'text')
+                      .map(part => part.text)
+                      .join('');
+                  }
                   this.resolvePromises({
-                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
+                    text: self.#producedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -1186,9 +1213,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
+                  // A tripwire rejects the output without erasing it; keep `text` in sync with
+                  // steps/response messages and report the rejection via `tripwire`.
                   self.resolvePromises({
                     finishReason: 'other',
-                    text: '',
+                    text: self.#producedText(),
                   });
                 } else {
                   self.#error = getErrorFromUnknown(error, {
@@ -1742,7 +1771,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const textFromSteps = steps.map((step: any) => step.text || '').join('');
 
     const fullOutput: FullOutput<OUTPUT> = {
-      text: textFromSteps,
+      // After a tripwire, `text` already holds the resolved output (and a processOutputStream
+      // tripwire can end the run before any step completes), so reuse it to stay in sync.
+      text: this.tripwire || steps.length === 0 ? await this.text : textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
@@ -2073,6 +2104,22 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
     this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
     this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  /**
+   * Text produced by the run: the last step's text for tool-driven multi-step runs (excluding
+   * pre-tool narration), otherwise the aggregate stream text. Suspended/resumed runs keep the
+   * aggregate because pre-approval text is part of the resumed run.
+   */
+  #producedText(): string {
+    const lastStep = this.#bufferedSteps[this.#bufferedSteps.length - 1];
+    const hasToolStep = this.#bufferedSteps.some(step => step.toolCalls.length > 0 || step.toolResults.length > 0);
+    // Durable reads its final text from the steps, where a retried attempt's text is empty,
+    // plus the text of a step that never finished (an aborted run).
+    if (!hasToolStep && !this.#wasSuspended && this.#options.resolveFinalPromises) {
+      return this.#bufferedSteps.map(step => step.text).join('') + this.#bufferedByStep.text;
+    }
+    return hasToolStep && !this.#wasSuspended && lastStep ? lastStep.text : this.#bufferedText.join('');
   }
 
   /**

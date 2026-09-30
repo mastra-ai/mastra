@@ -15,6 +15,7 @@ import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
 import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
+import type { ThreadScheduler } from '@mastra/code-sdk/schedules';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
@@ -171,6 +172,9 @@ export interface MastraTUIOptions {
 
   /** Session-scoped, read-only Subconscious knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
+
+  /** Process-local scheduler behind /schedules. */
+  threadScheduler?: ThreadScheduler;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;

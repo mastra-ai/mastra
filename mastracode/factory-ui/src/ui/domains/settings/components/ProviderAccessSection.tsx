@@ -72,7 +72,7 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   const own = credentialAt(provider, rowScope.scope);
   if (own) {
     return (
-      <Badge size="sm" variant="green">
+      <Badge size="sm" variant="success">
         {CREDENTIAL_LABEL[own]}
       </Badge>
     );
@@ -209,7 +209,7 @@ export function ProviderAccessSection({
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
             </Txt>
           )}

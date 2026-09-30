@@ -25,7 +25,7 @@ const tokenSeries = [
   {
     dataKey: 'output',
     label: 'Output tokens',
-    color: CHART_COLORS.yellow,
+    color: CHART_COLORS.amber,
     aggregate: sumMetric('output'),
   },
 ];

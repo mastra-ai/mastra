@@ -508,22 +508,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       const target: SessionSandbox = requireExec(args.sandbox);
-      // Observability plus the post-checkout skill rescan run on every start
-      // (create or reconnect). Observability only — nothing reads these columns
-      // for decisions; the workdir was resolved (and memoized on the entry) by
-      // the guarded setup. The skill roots were reported empty by the
+      // Sandbox persistence plus the post-checkout skill rescan run on every
+      // start (create or reconnect). The persisted sandbox id is read back on
+      // resume to reattach; the workdir was resolved (and memoized on the
+      // entry) by the guarded setup. The skill roots were reported empty by the
       // unmaterialized-source guard before the checkout existed, so rescan now.
-      const publishStartSideEffects = () => {
-        void storage.sessions
-          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
-          .catch(() => {});
+      // The physical-id write is awaited and its failure propagates: a start
+      // that completes before the id is durable lets a concurrent resume read a
+      // stale id and provision a replacement VM.
+      const publishStartSideEffects = async () => {
+        await storage.sessions.setSandbox({
+          id: session.id,
+          // Persist the provider's PHYSICAL, reattachable VM id so resume can
+          // reattach to the same VM. Providers with no separate physical id
+          // (e.g. local) fall back to the logical id, preserving prior behavior.
+          sandboxId: target.sandboxId ?? target.id,
+          sandboxWorkdir: sessionEntry.workdir ?? '',
+        });
         void constructedWorkspaces
           .get(workspaceId)
           ?.skills?.refresh()
           .catch(() => {});
       };
       if (!githubProvider) {
-        publishStartSideEffects();
+        await publishStartSideEffects();
         return;
       }
       const existingRegistration = githubTokenInjectors.get(workspaceId);
@@ -546,7 +554,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         existingRegistration.inject(existingRegistration.ghToken);
-        publishStartSideEffects();
+        await publishStartSideEffects();
         return;
       }
       // First start: resolve the credential and authorize the constructing
@@ -574,12 +582,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      publishStartSideEffects();
+      await publishStartSideEffects();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
         const sandbox = createSessionSandboxInstance({
           sessionId: session.id,
+          // Physical VM id persisted from a prior start (undefined on first
+          // start). Providers that reattach by physical id use it to resume the
+          // original VM instead of provisioning a replacement.
+          sandboxId: session.sandboxId ?? undefined,
           repoFullName,
           // Stored nullable; the context speaks `undefined` for absent.
           setupCommand: projectRepository.setupCommand ?? undefined,

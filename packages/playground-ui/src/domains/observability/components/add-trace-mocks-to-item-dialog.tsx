@@ -14,6 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 import { toast } from '@/utils/toast';
 
 type AddTraceMocksToItemDialogProps = {
@@ -221,9 +222,9 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
       <div className="grid gap-2">
         <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
         <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-40" />
-        <p className="text-caption text-muted-foreground">
+        <Txt variant="caption" tone="muted">
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
-        </p>
+        </Txt>
       </div>
 
       <div className="flex justify-end gap-2 pt-4">

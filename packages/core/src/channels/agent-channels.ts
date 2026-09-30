@@ -677,7 +677,7 @@ export class AgentChannels {
               // Resolve the tool display mode so the approve/deny edit matches
               // the original card's rendering (cards → Block Kit, text → plain).
               // Streaming is irrelevant here — we're outside the agent loop.
-              const { resolved: toolDisplay } = this.resolveToolDisplay(
+              const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
                 platform,
                 adapterConfig?.toolDisplay,
                 false,
@@ -685,6 +685,37 @@ export class AgentChannels {
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              // Let a function-form `toolDisplay` own the resolved card. Only
+              // non-blank `post` results are honored; anything else (or a
+              // throwing renderer) falls back to the default formatter.
+              const renderResolved = (
+                decision: { kind: 'approved' } | { kind: 'denied'; byUser?: string },
+              ): PostableMessage | undefined => {
+                if (!toolDisplayFn) return undefined;
+                try {
+                  const result = toolDisplayFn(
+                    {
+                      ...decision,
+                      toolCallId,
+                      toolName: toolName ?? displayName,
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                    },
+                    { mode: 'static', platform },
+                  );
+                  if (result?.kind !== 'post' || result.message == null) return undefined;
+                  const message = result.message;
+                  const blank =
+                    typeof message === 'string'
+                      ? message.trim().length === 0
+                      : 'markdown' in message && message.markdown.trim().length === 0;
+                  return blank ? undefined : message;
+                } catch (err) {
+                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, err);
+                  return undefined;
+                }
+              };
 
               if (!approved) {
                 const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -692,7 +723,8 @@ export class AgentChannels {
                   await adapter.editMessage(
                     chatThread.id,
                     messageId,
-                    formatToolDenied(displayName, argsSummary, byUser, useCards),
+                    renderResolved({ kind: 'denied', byUser }) ??
+                      formatToolDenied(displayName, argsSummary, byUser, useCards),
                   );
                 } catch (err) {
                   this.log('debug', 'Failed to edit denied card', err);
@@ -745,7 +777,7 @@ export class AgentChannels {
                 await adapter.editMessage(
                   chatThread.id,
                   messageId,
-                  formatToolApproved(displayName, argsSummary, useCards),
+                  renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
                 );
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', err);

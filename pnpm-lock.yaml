@@ -1212,6 +1212,31 @@ importers:
         specifier: 'catalog:'
         version: 4.6.5
 
+  channels/teams:
+    dependencies:
+      '@chat-adapter/teams':
+        specifier: ~4.40.0
+        version: 4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23(typescript@7.0.2))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      undici:
+        specifier: 6.29.0
+        version: 6.29.0
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+
   channels/telegram:
     dependencies:
       '@chat-adapter/telegram':
@@ -5000,6 +5025,9 @@ importers:
       '@optimize-lodash/rollup-plugin':
         specifier: ^5.1.0
         version: 5.1.0(rollup@4.62.2)
+      '@rollup/plugin-alias':
+        specifier: 6.0.0
+        version: 6.0.0(rollup@4.62.2)
       '@rollup/plugin-commonjs':
         specifier: 29.0.2
         version: 29.0.2(rollup@4.62.2)
@@ -5955,6 +5983,9 @@ importers:
       '@mcp-ui/client':
         specifier: ^7.1.0
         version: 7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)
+      '@pierre/diffs':
+        specifier: 1.5.1
+        version: 1.5.1(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-visually-hidden':
         specifier: ^1.2.4
         version: 1.2.4(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -11858,8 +11889,16 @@ packages:
     resolution: {integrity: sha512-yDhtBOGDCdK9ipQ9g3+wmlMEPnZx2pXaDicDd9jYyR1L+7lEbvEohTDmF5qejZDutZY3m9pWPxeYxzNC701A2w==}
     engines: {node: '>=0.8.0'}
 
+  '@azure/msal-common@16.13.0':
+    resolution: {integrity: sha512-rOAy0KUcyBbdwVJ+f3uPpthXatFLLZN+/KWAsTLzk1aB23Xl9DRmmXYwSvBFOZyXj4jUQQ5FKxxRkhAFW1fOow==}
+    engines: {node: '>=0.8.0'}
+
   '@azure/msal-node@5.4.2':
     resolution: {integrity: sha512-fnqOpGYAV+i0RH4W5HB6Oy1IhqGZoCdnp7Y2Sa9k18FlT8aBkCA7L8Hv19hUHLDUK6kVjUO29AfnGX6wgAHyNg==}
+    engines: {node: '>=20'}
+
+  '@azure/msal-node@5.6.0':
+    resolution: {integrity: sha512-uFY9NxrWHw8PwZx7gAX6PDn+9vdfS05+levc/kwkx77IkjfaldnQbbcQzzDIZ5Hq5Zdr6/z92oAIoRWKp6MnOA==}
     engines: {node: '>=20'}
 
   '@azure/search-documents@12.2.0':
@@ -12942,6 +12981,10 @@ packages:
 
   '@chat-adapter/slack@4.40.0':
     resolution: {integrity: sha512-aEkJ8OdQPZpIICbxHO08TOPrFVnwvy9e1S1J+AIqB9S1Tf5lE5DtF9AZXWCglRVXFoNCeZ8QcdJYIglxgVIaTg==}
+    engines: {node: '>=20'}
+
+  '@chat-adapter/teams@4.40.0':
+    resolution: {integrity: sha512-WNZ2cAtPKCgix3k2caNlojDqF5G/hVyLaqWjZk190NrsRcG1pNnS/TZuZPTCIgi7pbOOc0iZW7zM/gxbJrIHOw==}
     engines: {node: '>=20'}
 
   '@chat-adapter/telegram@4.40.0':
@@ -16219,6 +16262,30 @@ packages:
   '@microsoft/api-extractor@7.58.12':
     resolution: {integrity: sha512-VNpgC/1LaroLbn+UKmwDYspq+9r3EHyj4vJ3qUy/g8vB0rKt+1Wgs7WFj/JGpgxhG8SNyXs1XwYwe7nqkk8IDg==}
     hasBin: true
+
+  '@microsoft/teams.api@2.1.0':
+    resolution: {integrity: sha512-tS7NRqxpyzrgCwHCZh4xUys1Waon/cEtVb801Yx6DekOIOZaOgHA4KFuspM6FvlErzTt5tm6GGlXDstm4dkHbw==}
+    engines: {node: '>=22.12.0'}
+
+  '@microsoft/teams.apps@2.1.0':
+    resolution: {integrity: sha512-0nZDI4CGKQp5MnFPd+1wH+6PPdl/IEsg4likbXqDaoGiXCwJ8Y+5/4EeNPNR8q9wG2vbbX1Cyod7q7OOoY0kVQ==}
+    engines: {node: '>=22.12.0'}
+
+  '@microsoft/teams.cards@2.1.0':
+    resolution: {integrity: sha512-Ok6WRhcfflCZmPqP5g3DtG5/MKPyXamll8gyuxGtNBhZLfitQtr0TAdcvXN8I4B6c7hoqSBDthvQ0aDReWTzXA==}
+    engines: {node: '>=22.12.0'}
+
+  '@microsoft/teams.common@2.1.0':
+    resolution: {integrity: sha512-7UVRGEYQtNLLYkMwAxaA+0S4ckRxSiJ67U5vfqg3xQnKgY4Wop5ZtVj8zNxCLtoeAROamUToGJSstHsl8SZpUg==}
+    engines: {node: '>=22.12.0'}
+
+  '@microsoft/teams.graph-endpoints@2.1.0':
+    resolution: {integrity: sha512-kB+/sBbkNzLCxt8elpZxAmnSB54BE8GtnLhU4FoIqwGjipEN1lAsXpqCzpkJkz5CK9XPGYo+h4k07mRWlooOuQ==}
+    engines: {node: '>=22.12.0'}
+
+  '@microsoft/teams.graph@2.1.0':
+    resolution: {integrity: sha512-/us8P/lyYTRu6TF98LiUoSggheyxWRCOe9oVcM1rQprA9TBbjB4LTwYNeBNw20ixu3BUQuD0ZYMSM1QdhUBXhQ==}
+    engines: {node: '>=22.12.0'}
 
   '@microsoft/tsdoc-config@0.18.1':
     resolution: {integrity: sha512-9brPoVdfN9k9g0dcWkFeA7IH9bbcttzDJlXvkf8b2OBzd5MueR1V2wkKBL0abn0otvmkHJC6aapBOTJDDeMCZg==}
@@ -19671,6 +19738,15 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
+
+  '@rollup/plugin-alias@6.0.0':
+    resolution: {integrity: sha512-tPCzJOtS7uuVZd+xPhoy5W4vThe6KWXNmsFCNktaAh5RTqcLiSfT4huPQIXkgJ6YCOjJHvecOAzQxLFhPxKr+g==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      rollup: '>=4.0.0'
+    peerDependenciesMeta:
+      rollup:
+        optional: true
 
   '@rollup/plugin-commonjs@29.0.2':
     resolution: {integrity: sha512-S/ggWH1LU7jTyi9DxZOKyxpVd4hF/OZ0JrEbeLjXk/DFXwRny0tjD2c992zOUYQobLrVkRVMDdmHP16HKP7GRg==}
@@ -27501,6 +27577,10 @@ packages:
     resolution: {integrity: sha512-BqTyEDV+lS8F2trk3A+qJnxV5Q9EqKCBJOPti3W97r7qTympCZjb7h2X6f2kc+0K3rsSTY1/6YG2eaXKoj497w==}
     engines: {node: '>=14'}
 
+  jwks-rsa@4.1.0:
+    resolution: {integrity: sha512-sbkByqyATKYJP5F4RXj03N5TUNC0QLTjCAZvwTzC4BwJZ8e0/cWxN8YROnyUth2g1/ONWi4eSFHeu6oYalrc3Q==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >= 23.0.0}
+
   jws@4.0.1:
     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
 
@@ -27923,6 +28003,9 @@ packages:
 
   lru-memoizer@2.3.0:
     resolution: {integrity: sha512-GXn7gyHAMhO13WSKrIiNfztwxodVsP8IoZ3XfrJV4yH2x0/OeTO/FIaAHTY5YekdGgW94njfuKmyyt1E0mR6Ug==}
+
+  lru-memoizer@3.0.0:
+    resolution: {integrity: sha512-m83w/cYXLdUIboKSPxzPAGfYnk+vqeDYXuoSrQRw1q+yVEd8IXhvMufN8Q5TIPe7e2jyX4SRNrDJI2Skw1yznQ==}
 
   lru.min@1.1.4:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
@@ -33341,6 +33424,96 @@ packages:
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
+  '@pierre/diffs@1.5.1':
+    resolution: {integrity: sha512-+EXNfz4ZXI6FHr7P6ToWEORwyYiPVfAmzhA70xF+0y/oNvj7gbNTLJJ6jNzkBjuMbRlu564TAmgYZLc5OyHURA==}
+    peerDependencies:
+      react: ^18.3.1 || ^19.0.0
+      react-dom: ^18.3.1 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+
+  '@pierre/theme@2.0.0':
+    resolution: {integrity: sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw==}
+    engines: {vscode: ^1.0.0}
+
+  '@pierre/theming@1.0.1':
+    resolution: {integrity: sha512-WCI5Qd7iprDpISL9fBYOLe8RV53+b7mFNA3bPzl60/2CKCSrsKN8zEcep6Y3BAzvARlmca50zGjDodqPGiTUKA==}
+    peerDependencies:
+      '@pierre/theme': ^1.1.0 || ^2.0.0
+      '@shikijs/themes': ^3.0.0 || ^4.0.0
+      react: ^18.3.1 || ^19.0.0
+      react-dom: ^18.3.1 || ^19.0.0
+      shiki: ^3.0.0 || ^4.0.0
+    peerDependenciesMeta:
+      '@pierre/theme':
+        optional: true
+      '@shikijs/themes':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      shiki:
+        optional: true
+
+  '@shikijs/core@4.4.3':
+    resolution: {integrity: sha512-QCR4q2ZO/ILJEuwiBMel4wdcTDb1JGwfjKTxPDF6x8ixOaluPrVqIn06C99AcRPhmYlBR56d/Fb+GN58GzExpg==}
+    engines: {node: '>=20'}
+
+  '@shikijs/engine-javascript@4.4.3':
+    resolution: {integrity: sha512-FbOjFJp9VLdo1Wevs10BBtVxiTWwNLqZh5Gkhjgda/ioL15YOgeSl9n+6XMa3qRlPQzfhFNe641SrynFHYG0nQ==}
+    engines: {node: '>=20'}
+
+  '@shikijs/engine-oniguruma@4.4.3':
+    resolution: {integrity: sha512-EcOQkxdxGQrc1Row/cC2c96/v1dbZqGnEVu1qTuT/MJmp6+cXCvQussowVmCv5Tqr3KuY3c7IbM6HTW3LJ1k9w==}
+    engines: {node: '>=20'}
+
+  '@shikijs/langs@4.4.3':
+    resolution: {integrity: sha512-ePic0yfAJGOF83D5wBHK/00EjK65oahBYxFk5epgq33WRv7X9UuxLEV8PtR0szC0z8dl7INIpIodB99JRFlR+A==}
+    engines: {node: '>=20'}
+
+  '@shikijs/primitive@4.4.3':
+    resolution: {integrity: sha512-m0wBeLDQDeIxRdUmrCPdQqfuUamDwRL5isCfYbguKD6NiaKpVbsv+3J81DyIKgNW5h4WAIIr8T4EkgQrBBxvaQ==}
+    engines: {node: '>=20'}
+
+  '@shikijs/themes@4.4.3':
+    resolution: {integrity: sha512-w8UHjeUnIR965KMWJHUPXOc2mNJUnK3vpVLYLvw5IYU2mnTTJ89E24OrJDBNiJDQ0qzb0tc4l7mrIXx5cFeIyw==}
+    engines: {node: '>=20'}
+
+  '@shikijs/transformers@4.4.3':
+    resolution: {integrity: sha512-oJSARV6NaWd+rnNJbtnpAdj3Zg0ZVyzsnMgb3vi3HA+35y8lBWUCpOnWsmyiXZIikY+x1BDqrQUgmxfzWh7Jvw==}
+    engines: {node: '>=20'}
+
+  '@shikijs/types@4.4.3':
+    resolution: {integrity: sha512-UEJxmRR++MAGR6hugn0vgVS2W/6lWAts84FFSrnlH9sP0LNol7E5+NQ792pH8liWUhyMyjhTgSUH3k7iD7tc5g==}
+    engines: {node: '>=20'}
+
+  '@types/hast@3.0.5':
+    resolution: {integrity: sha512-rp/ezSWaD1m44dPKICGhiskI13nVr7qTloFwDa/IYkhhf5nzwP+zIQcIJh3WIFSBOy/H1PzB40jPjMDksN4F+g==}
+
+  '@ungap/structured-clone@1.4.0':
+    resolution: {integrity: sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ==}
+
+  diff@9.0.0:
+    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
+    engines: {node: '>=0.3.1'}
+
+  lru_map@0.4.1:
+    resolution: {integrity: sha512-I+lBvqMMFfqaV8CJCISjI3wbjmwVu/VyOoU7+qtu9d7ioW5klMgsTTiUOUp+DJvfTTzKXoPbyC6YfgkNcyPSOg==}
+
+  micromark-util-types@2.0.3:
+    resolution: {integrity: sha512-oxB2Ik03hI0gv+VNn9tnh1t1YEe9MDPptViAEgfdf3YQHsn0pzGTgCdlSCJXcwhqm8phaEuM7zeEu3QQzVBrPg==}
+
+  property-information@7.2.0:
+    resolution: {integrity: sha512-IAtzIB6sUiWaJYrX9smp3V46pBGbBeLFRGdh25kg1334VcBlD8HzhPeNIWQH9zhGmo2itIe25EHt9dQP7G5hmg==}
+
+  shiki@4.4.3:
+    resolution: {integrity: sha512-Mb/GvXPHBAXdgGIcnfU5L3ldpn1XcxrGkPHwqgRx17/I2XRfqlFKk2vGkHWINn1kdXvzJZeuO3is6I9KLPFm0g==}
+    engines: {node: '>=20'}
+
 snapshots:
 
   '@11ty/gray-matter@1.0.0':
@@ -35912,9 +36085,16 @@ snapshots:
 
   '@azure/msal-common@16.11.2': {}
 
+  '@azure/msal-common@16.13.0': {}
+
   '@azure/msal-node@5.4.2':
     dependencies:
       '@azure/msal-common': 16.11.2
+      jsonwebtoken: 9.0.3
+
+  '@azure/msal-node@5.6.0':
+    dependencies:
+      '@azure/msal-common': 16.13.0
       jsonwebtoken: 9.0.3
 
   '@azure/search-documents@12.2.0(supports-color@10.2.2)':
@@ -37390,6 +37570,21 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
+      - workflow
+      - zod
+
+  '@chat-adapter/teams@4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)':
+    dependencies:
+      '@chat-adapter/shared': 4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)
+      '@microsoft/teams.api': 2.1.0(supports-color@10.2.2)
+      '@microsoft/teams.apps': 2.1.0(supports-color@10.2.2)
+      '@microsoft/teams.cards': 2.1.0
+      '@microsoft/teams.graph-endpoints': 2.1.0
+      chat: 4.40.0(ai@7.0.112(zod@4.6.5))(supports-color@10.2.2)(zod@4.6.5)
+    transitivePeerDependencies:
+      - ai
+      - debug
+      - supports-color
       - workflow
       - zod
 
@@ -41645,6 +41840,53 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  '@microsoft/teams.api@2.1.0(supports-color@10.2.2)':
+    dependencies:
+      '@microsoft/teams.cards': 2.1.0
+      '@microsoft/teams.common': 2.1.0(supports-color@10.2.2)
+      '@opentelemetry/api': 1.9.1
+      jwt-decode: 4.0.0
+      qs: 6.16.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
+  '@microsoft/teams.apps@2.1.0(supports-color@10.2.2)':
+    dependencies:
+      '@azure/msal-node': 5.6.0
+      '@microsoft/teams.api': 2.1.0(supports-color@10.2.2)
+      '@microsoft/teams.common': 2.1.0(supports-color@10.2.2)
+      '@microsoft/teams.graph': 2.1.0(supports-color@10.2.2)
+      '@opentelemetry/api': 1.9.1
+      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      cors: 2.8.6
+      express: 5.2.1(supports-color@10.2.2)
+      jsonwebtoken: 9.0.3
+      jwks-rsa: 4.1.0(supports-color@10.2.2)
+      reflect-metadata: 0.2.2
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
+  '@microsoft/teams.cards@2.1.0': {}
+
+  '@microsoft/teams.common@2.1.0(supports-color@10.2.2)':
+    dependencies:
+      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
+  '@microsoft/teams.graph-endpoints@2.1.0': {}
+
+  '@microsoft/teams.graph@2.1.0(supports-color@10.2.2)':
+    dependencies:
+      '@microsoft/teams.common': 2.1.0(supports-color@10.2.2)
+      qs: 6.16.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
   '@microsoft/tsdoc-config@0.18.1':
     dependencies:
       '@microsoft/tsdoc': 0.16.0
@@ -45247,6 +45489,10 @@ snapshots:
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
   '@rolldown/pluginutils@1.0.1': {}
+
+  '@rollup/plugin-alias@6.0.0(rollup@4.62.2)':
+    optionalDependencies:
+      rollup: 4.62.2
 
   '@rollup/plugin-commonjs@29.0.2(rollup@4.62.2)':
     dependencies:
@@ -54063,6 +54309,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  jwks-rsa@4.1.0(supports-color@10.2.2):
+    dependencies:
+      '@types/jsonwebtoken': 9.0.10
+      debug: 4.4.3(supports-color@10.2.2)
+      jose: 6.2.12
+      limiter: 1.1.5
+      lru-cache: 11.5.2
+      lru-memoizer: 3.0.0
+    transitivePeerDependencies:
+      - supports-color
+
   jws@4.0.1:
     dependencies:
       jwa: 2.0.1
@@ -54481,6 +54738,11 @@ snapshots:
     dependencies:
       lodash.clonedeep: 4.5.0
       lru-cache: 6.0.0
+
+  lru-memoizer@3.0.0:
+    dependencies:
+      lodash.clonedeep: 4.5.0
+      lru-cache: 11.5.2
 
   lru.min@1.1.4: {}
 
@@ -61761,3 +62023,96 @@ snapshots:
       react: 19.2.7
 
   zwitch@2.0.4: {}
+
+  '@pierre/diffs@1.5.1(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@pierre/theme': 2.0.0
+      '@pierre/theming': 1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)
+      '@shikijs/transformers': 4.4.3
+      diff: 9.0.0
+      hast-util-to-html: 9.0.5
+      lru_map: 0.4.1
+      shiki: 4.4.3
+    optionalDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+    transitivePeerDependencies:
+      - '@shikijs/themes'
+
+  '@pierre/theme@2.0.0': {}
+
+  '@pierre/theming@1.0.1(@pierre/theme@2.0.0)(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.4.3)':
+    optionalDependencies:
+      '@pierre/theme': 2.0.0
+      '@shikijs/themes': 4.4.3
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      shiki: 4.4.3
+
+  '@shikijs/core@4.4.3':
+    dependencies:
+      '@shikijs/primitive': 4.4.3
+      '@shikijs/types': 4.4.3
+      '@shikijs/vscode-textmate': 10.0.2
+      '@types/hast': 3.0.5
+      hast-util-to-html: 9.0.5
+
+  '@shikijs/engine-javascript@4.4.3':
+    dependencies:
+      '@shikijs/types': 4.4.3
+      '@shikijs/vscode-textmate': 10.0.2
+      oniguruma-to-es: 4.3.6
+
+  '@shikijs/engine-oniguruma@4.4.3':
+    dependencies:
+      '@shikijs/types': 4.4.3
+      '@shikijs/vscode-textmate': 10.0.2
+
+  '@shikijs/langs@4.4.3':
+    dependencies:
+      '@shikijs/types': 4.4.3
+
+  '@shikijs/primitive@4.4.3':
+    dependencies:
+      '@shikijs/types': 4.4.3
+      '@shikijs/vscode-textmate': 10.0.2
+      '@types/hast': 3.0.5
+
+  '@shikijs/themes@4.4.3':
+    dependencies:
+      '@shikijs/types': 4.4.3
+
+  '@shikijs/transformers@4.4.3':
+    dependencies:
+      '@shikijs/core': 4.4.3
+      '@shikijs/types': 4.4.3
+
+  '@shikijs/types@4.4.3':
+    dependencies:
+      '@shikijs/vscode-textmate': 10.0.2
+      '@types/hast': 3.0.5
+
+  '@types/hast@3.0.5':
+    dependencies:
+      '@types/unist': 3.0.3
+
+  '@ungap/structured-clone@1.4.0': {}
+
+  diff@9.0.0: {}
+
+  lru_map@0.4.1: {}
+
+  micromark-util-types@2.0.3: {}
+
+  property-information@7.2.0: {}
+
+  shiki@4.4.3:
+    dependencies:
+      '@shikijs/core': 4.4.3
+      '@shikijs/engine-javascript': 4.4.3
+      '@shikijs/engine-oniguruma': 4.4.3
+      '@shikijs/langs': 4.4.3
+      '@shikijs/themes': 4.4.3
+      '@shikijs/types': 4.4.3
+      '@shikijs/vscode-textmate': 10.0.2
+      '@types/hast': 3.0.5

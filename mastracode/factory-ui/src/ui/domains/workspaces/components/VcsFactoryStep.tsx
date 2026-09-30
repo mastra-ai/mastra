@@ -260,9 +260,9 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <p role="alert" className="text-caption text-notice-destructive-fg m-0">
+    <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
       {message}
-    </p>
+    </Txt>
   );
 }
 
@@ -313,17 +313,28 @@ function RepositoryRows({
               <GithubIcon className="text-muted-foreground size-4 shrink-0" />
             )}
             <span className="min-w-0 flex-1">
-              <span className="text-column text-foreground block truncate">{repo.fullName}</span>
-              <span className="text-meta text-muted-foreground block">
+              <Txt as="span" variant="column" tone="ink" className="block truncate">
+                {repo.fullName}
+              </Txt>
+              <Txt as="span" variant="meta" tone="muted" className="block">
                 {provider === 'gitlab' ? 'GitLab' : repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}
-              </span>
+              </Txt>
             </span>
             {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
+              <Spinner
+                size="sm"
+                aria-label={`Connecting ${repo.fullName}`}
+                className="text-badge-green-indicator shrink-0"
+              />
             ) : (
-              <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">
+              <Txt
+                as="span"
+                variant="meta"
+                tone="faint"
+                className="opacity-0 transition-opacity group-hover:opacity-100"
+              >
                 Select
-              </span>
+              </Txt>
             )}
           </button>
         );

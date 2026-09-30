@@ -38,7 +38,6 @@ import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../domains/factory/hooks/useItemSessionStatuses';
 import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
-import { isTerminalStage } from '../domains/factory/stages';
 import {
   boardLabels,
   boardParticipants,
@@ -61,6 +60,7 @@ import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /**
  * Factory › Board: an org-wide kanban over the repository's work items. The
@@ -547,7 +547,9 @@ function BoardContent({
                     {stageWorkItems.length > 0 && stageCandidates.length > 0 ? (
                       <div role="separator" aria-label="New candidates" className="flex items-center gap-2 py-1">
                         <span aria-hidden className="bg-border h-px flex-1" />
-                        <span className="text-meta text-muted-foreground">New candidates</span>
+                        <Txt as="span" variant="meta" tone="muted">
+                          New candidates
+                        </Txt>
                         <span aria-hidden className="bg-border h-px flex-1" />
                       </div>
                     ) : null}
@@ -610,7 +612,7 @@ function IntakeSourceSwitch({
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-meta transition',
             active === source.id
-              ? 'border-accent1 bg-fill text-foreground'
+              ? 'border-badge-green-indicator bg-fill text-foreground'
               : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
           )}
         >

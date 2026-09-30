@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { coreAuthMiddleware } from '@mastra/server/auth';
+import { coreAuthMiddleware, isCustomRoutePublic } from '@mastra/server/auth';
 import type { NextFunction, Request, Response } from 'express';
 
 export interface ExpressAuthMiddlewareOptions {
@@ -52,7 +52,10 @@ export function createAuthMiddleware({
     const path = String(req.path || '/');
     const method = String(req.method || 'GET');
     const customRouteAuthConfig = new Map<string, boolean>(res.locals.customRouteAuthConfig ?? []);
-    customRouteAuthConfig.set(`${method}:${path}`, true);
+    // Don't reclassify a custom route the app declared public (requiresAuth: false).
+    if (!isCustomRoutePublic(path, method, customRouteAuthConfig)) {
+      customRouteAuthConfig.set(`${method}:${path}`, true);
+    }
 
     const authHeader = req.headers.authorization;
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;

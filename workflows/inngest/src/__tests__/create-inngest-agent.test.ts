@@ -12,10 +12,11 @@ import {
   AGENT_STREAM_TOPIC,
   AgentControlEventTypes,
   AgentStreamEventTypes,
+  agentThreadStreamRuntime,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
-import { MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1924,6 +1925,124 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     expect(resumeSpy.mock.calls[1]![0]).toBe('r2');
     expect(resumeSpy.mock.calls[1]![1]).toEqual({ approved: false, reason: 'nope' });
     expect(resumeSpy.mock.calls[1]![2]).not.toHaveProperty('reason');
+  });
+
+  it('sendToolApproval resumes an explicit run through the durable path', async () => {
+    const durableAgent = makeDurable('send-tool-approval-explicit');
+    const { resumeSpy } = spyResume(durableAgent);
+    const wrappedSpy = vi.spyOn(Agent.prototype, 'resumeStream');
+
+    const approved = await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved: true,
+    });
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r2',
+      approved: false,
+      declineContext: { reason: 'nope' },
+    });
+
+    expect(approved).toEqual({ accepted: true, runId: 'r1', toolCallId: 't1' });
+    expect(resumeSpy.mock.calls[0]![0]).toBe('r1');
+    expect(resumeSpy.mock.calls[0]![1]).toEqual({ approved: true });
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({
+      toolCallId: 't1',
+      memory: { thread: 'th', resource: 'res' },
+    });
+    expect(resumeSpy.mock.calls[1]![1]).toEqual({ approved: false, reason: 'nope' });
+    expect(wrappedSpy).not.toHaveBeenCalled();
+    wrappedSpy.mockRestore();
+  });
+
+  it('sendToolApproval discovers the suspended durable run by toolCallId', async () => {
+    const durableAgent = makeDurable('send-tool-approval-discover');
+    const { resumeSpy } = spyResume(durableAgent);
+    const listSpy = vi.spyOn(Agent.prototype, 'listSuspendedRuns').mockResolvedValue({
+      runs: [
+        { runId: 'other', toolCalls: [{ toolCallId: 'x' }] },
+        { runId: 'suspended', toolCalls: [{ toolCallId: 't1' }] },
+      ],
+    } as any);
+
+    const result = await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      toolCallId: 't1',
+      approved: true,
+    });
+
+    expect(result.runId).toBe('suspended');
+    expect(resumeSpy.mock.calls[0]![0]).toBe('suspended');
+
+    listSpy.mockResolvedValue({ runs: [] } as any);
+    await expect(
+      durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
+    ).rejects.toThrow(/could not find an active or suspended run/);
+
+    listSpy.mockResolvedValue({
+      runs: [
+        { runId: 'a', toolCalls: [{ toolCallId: 't1' }] },
+        { runId: 'b', toolCalls: [{ toolCallId: 't1' }] },
+      ],
+    } as any);
+    await expect(
+      durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
+    ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS', details: { runIds: 'a, b' } });
+
+    listSpy.mockRejectedValue(
+      new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'no storage',
+      }),
+    );
+    await expect(
+      durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
+    ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN' });
+    listSpy.mockRestore();
+  });
+
+  it('sendToolApproval with messages continues through the durable stream()', async () => {
+    const durableAgent = makeDurable('send-tool-approval-messages');
+    const continueSpy = vi
+      .spyOn(agentThreadStreamRuntime, 'continueWithMessages')
+      .mockReturnValue({ accepted: true, runId: 'cont' });
+
+    const result = await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      toolCallId: 't1',
+      approved: true,
+      messages: 'follow up',
+    });
+
+    expect(result).toEqual({ accepted: true, runId: 'cont', toolCallId: 't1' });
+    expect(continueSpy.mock.calls[0]![0]).toBe(durableAgent);
+    expect(continueSpy.mock.calls[0]![2]).toMatchObject({ threadId: 'th', resourceId: 'res' });
+    continueSpy.mockRestore();
+  });
+
+  it('sendToolApproval deep-merges streamOptions with execution options', async () => {
+    const durableAgent = makeDurable('send-tool-approval-merge');
+    const { resumeSpy } = spyResume(durableAgent);
+
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved: true,
+      streamOptions: { memory: { thread: 'th', resource: 'res', options: { lastMessages: 5 } } },
+      memory: { thread: 'th', resource: 'res' },
+    } as any);
+
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ memory: { options: { lastMessages: 5 } } });
   });
 
   it('approveToolCallGenerate / declineToolCallGenerate route through resumeGenerate()', async () => {

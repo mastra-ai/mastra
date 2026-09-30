@@ -4,6 +4,7 @@ import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
@@ -95,18 +96,52 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
+const installScore = () => {
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, ({ params }) =>
+      HttpResponse.json({
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        scores: [
+          {
+            id: 'score-1',
+            scorerId: 'scorer-1',
+            entityId: 'chef',
+            runId: 'run-1',
+            score: 0.8,
+            scorer: { name: 'Helpfulness' },
+            source: 'LIVE',
+            entity: {},
+            traceId: String(params.traceId),
+            spanId: String(params.spanId),
+            createdAt: '2026-09-01T00:00:00.000Z',
+            updatedAt: '2026-09-01T00:00:00.000Z',
+          } as ListScoresResponse['scores'][number],
+        ],
+      } satisfies ListScoresResponse),
+    ),
+  );
+};
+
 const renderView = ({
   search = '',
   withFeedback = true,
+  withQueryTrace = true,
   onOpenScore = () => {},
-}: { search?: string; withFeedback?: boolean; onOpenScore?: (traceId: string, scoreId: string) => void } = {}) =>
+  paths,
+}: {
+  search?: string;
+  withFeedback?: boolean;
+  withQueryTrace?: boolean;
+  onOpenScore?: (traceId: string, scoreId: string) => void;
+  paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+} = {}) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider paths={paths}>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
             threadId={THREAD_ID}
-            withQueryTrace
+            withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
             anchorTraceId={new URLSearchParams(search).get('traceId') ?? undefined}
             onOpenScore={onOpenScore}
@@ -213,7 +248,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('underlines each turn and frames the messages column with side borders, like the trace panel', async () => {
+  it('underlines each turn and separates the messages column from the trace with a right border', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -226,7 +261,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row.className).toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-x');
+      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
       expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
     }
   });
@@ -253,22 +288,6 @@ describe('ThreadViewByTrace', () => {
     // Re-clicking the selected span toggles the span panel off.
     fireEvent.click(screen.getByText('Chef agent run'));
     await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-  });
-
-  it('shows a rail with one stop per turn that jumps to the matching row', async () => {
-    installHandlers();
-    const { queryClient } = renderView();
-
-    // trace-a reconstructs a user turn, so its stop carries the prompt.
-    const stop = await screen.findByRole('button', { name: 'Jump to cook pasta' });
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    expect(screen.getByTestId('thread-rail').querySelectorAll('button')).toHaveLength(2);
-
-    scrollIntoView.mockClear();
-    fireEvent.click(stop);
-    const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView.mock.instances[0]).toBe(row);
   });
 
   describe('arriving from a trace with ?traceId', () => {
@@ -553,6 +572,44 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
     });
 
+    it('hides "Go to trace" when the app has no trace route', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      renderView({ paths: { traceLink: () => '' } });
+
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+
+      expect(firstRow.queryByRole('link', { name: 'Go to trace' })).toBeNull();
+    });
+
+    describe('given a scored trace', () => {
+      it('when scorerLink resolves, then "Open scorer run" links to the scorer run built by the link provider', async () => {
+        installHandlers();
+        installFeedbackHandlers();
+        installScore();
+        renderView();
+
+        const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+        fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
+
+        const link = await row.findByRole('link', { name: /Open scorer run/ });
+        expect(link.getAttribute('href')).toBe('/scorers/scorer-1?scoreId=score-1');
+      });
+
+      it('when the app has no scorer route, then "Open scorer run" is hidden', async () => {
+        installHandlers();
+        installFeedbackHandlers();
+        installScore();
+        renderView({ paths: { scorerLink: () => '' } });
+
+        const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+        fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
+
+        expect(await row.findByRole('button', { name: /^Score / })).not.toBeNull();
+        expect(row.queryByRole('link', { name: /Open scorer run/ })).toBeNull();
+      });
+    });
+
     it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -588,29 +645,7 @@ describe('ThreadViewByTrace', () => {
     it('hands the trace and score ids to onOpenScore when a score is selected', async () => {
       installHandlers();
       installFeedbackHandlers();
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, ({ params }) =>
-          HttpResponse.json({
-            pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
-            scores: [
-              {
-                id: 'score-1',
-                scorerId: 'scorer-1',
-                entityId: 'chef',
-                runId: 'run-1',
-                score: 0.8,
-                scorer: { name: 'Helpfulness' },
-                source: 'LIVE',
-                entity: {},
-                traceId: String(params.traceId),
-                spanId: String(params.spanId),
-                createdAt: '2026-09-01T00:00:00.000Z',
-                updatedAt: '2026-09-01T00:00:00.000Z',
-              } as ListScoresResponse['scores'][number],
-            ],
-          } satisfies ListScoresResponse),
-        ),
-      );
+      installScore();
       const onOpenScore = vi.fn<(traceId: string, scoreId: string) => void>();
       renderView({ onOpenScore });
 
@@ -688,6 +723,46 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('tab', { name: /Scores/ })).not.toBeNull();
       expect(screen.queryByRole('tab', { name: /Feedback/ })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("when listing the thread's traces", () => {
+    it('scopes the trace query to the thread', async () => {
+      installHandlers();
+      const onQuery = vi.fn();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(queryPageFromList(newestFirstList));
+        }),
+      );
+      renderView();
+
+      await screen.findByText('Chef agent run');
+
+      expect(onQuery).toHaveBeenCalled();
+      expect(onQuery.mock.calls[0][0]).toMatchObject({
+        where: { op: 'eq', left: { path: 'threadId' }, right: { literal: THREAD_ID } },
+      });
+    });
+
+    it('scopes the legacy trace list to the thread when trace query is disabled', async () => {
+      installHandlers();
+      const onList = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) => {
+          onList(new URL(request.url).searchParams);
+          return HttpResponse.json(newestFirstList);
+        }),
+      );
+      renderView({ withQueryTrace: false });
+
+      await screen.findByText('Chef agent run');
+
+      expect(onList).toHaveBeenCalled();
+      const params: URLSearchParams = onList.mock.calls[0][0];
+      expect(params.get('threadId')).toBe(THREAD_ID);
+      expect(params.get('startedAt')).not.toBeNull();
     });
   });
 });

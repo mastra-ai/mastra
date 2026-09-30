@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
@@ -201,7 +199,7 @@ export async function initializeObservationalMemory(
   const now = new Date();
   // Start with empty active observations; later calls append observations and reflection output transactionally.
   const record: ObservationalMemoryRecord = {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     scope: input.scope,
     threadId: input.threadId,
     resourceId: input.resourceId,
@@ -301,7 +299,7 @@ export async function createReflectionGeneration(
 ): Promise<ObservationalMemoryRecord> {
   const now = new Date();
   const record: ObservationalMemoryRecord = {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     scope: input.currentRecord.scope,
     threadId: input.currentRecord.threadId,
     resourceId: input.currentRecord.resourceId,
