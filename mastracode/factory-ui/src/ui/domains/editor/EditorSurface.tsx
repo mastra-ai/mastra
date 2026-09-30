@@ -16,7 +16,7 @@ import {
   Settings,
   TerminalSquare,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useParams, useSearchParams } from 'react-router';
 
@@ -38,6 +38,7 @@ import { queryKeys } from '../../../api/keys';
 import type { EditorLspCodeAction } from '../../../api/types';
 
 import { CodeMirrorSurface, type CodeMirrorApi, type LineRange } from './CodeMirrorSurface';
+import { PierreFileSurface } from './PierreFileSurface';
 import type { CodeLensAction, CodeLensEntry } from './editor-code-lens';
 import { EditorContextMenu } from './EditorContextMenu';
 import { EditorTabs } from './EditorTabs';
@@ -147,8 +148,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
   const { resourceId, projectPath, baseUrl } = useChatSessionContext();
 
   const [leftTab, setLeftTab] = useState<LeftTab>('files');
-  const [treeSize, setTreeSize] = useState({ width: 260, height: 400 });
-  const treeHostRef = useRef<HTMLDivElement>(null);
 
   const buffers = useEditorBuffers();
   const actions = useEditorBufferActions();
@@ -264,18 +263,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     );
   }, [activePath, pendingSelection, setSearchParams]);
 
-  // Track pane size for react-arborist (it needs explicit height/width).
-  useLayoutEffect(() => {
-    if (!treeHostRef.current) return;
-    const el = treeHostRef.current;
-    const ro = new ResizeObserver(entries => {
-      const cr = entries[0]?.contentRect;
-      if (cr) setTreeSize({ width: cr.width, height: cr.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   // Fold server content into a per-buffer baseline for dirty tracking.
   const baseline = activeFile.data?.content ?? '';
   const draftContent = activePath ? buffers.buffers[activePath]?.draft : undefined;
@@ -354,6 +341,19 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     !activeIsExternal && settings.multiplayer,
     settings.displayName,
   );
+
+  // Opt-in Pierre editor surface via `?editor=pierre`. Default stays on the
+  // CodeMirror path until Pierre reaches feature parity (hover, autocomplete,
+  // collab remote-cursor rendering all still to wire).
+  const usePierreEditor = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('editor') === 'pierre';
+  }, []);
+
+  // Pierre surface uses its own polled LSP diagnostics fetch instead of the
+  // in-editor lint extension. Leaving null keeps markers off until wired.
+  const diagnostics = null;
 
   // ── LSP: hover + go-to commands ──────────────────────────────────────────
   const lspQuery = useEditorLspQuery(workspacePath);
@@ -789,14 +789,12 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                 />
               )}
             </div>
-            <div ref={treeHostRef} className="min-h-0 flex-1 overflow-hidden p-1">
+            <div className="min-h-0 flex-1 overflow-hidden p-1">
               {leftTab === 'files' && tree.data ? (
                 <FileTree
                   entries={tree.data.entries}
                   activePath={activePath}
                   onOpen={path => openFile(path)}
-                  height={treeSize.height}
-                  width={treeSize.width}
                   activity={agentActivity}
                 />
               ) : leftTab === 'search' ? (
@@ -1024,6 +1022,22 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   <div className="text-body-sm text-muted-foreground grid h-full place-items-center px-4 text-center">
                     Binary or oversized file — can’t edit here.
                   </div>
+                ) : usePierreEditor ? (
+                  <PierreFileSurface
+                    path={activePath}
+                    initialContent={editorContent}
+                    readOnly={activeIsExternal}
+                    selectLines={jump && jump.path === activePath ? jump.range : null}
+                    diagnostics={activeIsExternal ? null : diagnostics}
+                    blame={blameLines}
+                    codeLenses={activeIsExternal ? undefined : codeLenses}
+                    onCodeLensAction={handleLensAction}
+                    onCursorLineChange={setCursorLine}
+                    onChange={next => actions.updateDraft(activePath, next, baseline)}
+                    onSaveShortcut={handleSave}
+                    apiRef={editorApiRef}
+                    settings={settings}
+                  />
                 ) : (
                   <CodeMirrorSurface
                     path={activePath}

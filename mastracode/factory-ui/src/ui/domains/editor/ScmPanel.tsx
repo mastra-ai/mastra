@@ -1,3 +1,4 @@
+import { PatchDiff } from '@pierre/diffs/react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -47,6 +48,48 @@ export function splitDiffHunks(diff: string): DiffHunk[] {
     hunks.push({ header: current[0]!, patch: `${fileHeader}\n${current.join('\n')}\n` });
   }
   return hunks;
+}
+
+interface HunkCardProps {
+  hunk: DiffHunk;
+  workspacePath: string;
+  staging: boolean;
+  onStage(patch: string): void;
+}
+
+const PIERRE_DIFF_OPTIONS = {
+  theme: { light: 'pierre-light', dark: 'pierre-dark' },
+  diffStyle: 'unified',
+  hideLineNumbers: true,
+} as const;
+
+/**
+ * One expandable hunk: header, syntax-highlighted diff preview via Pierre's
+ * PatchDiff, and a Stage-hunk action. Preview lets the user see exactly what
+ * they're about to stage instead of guessing from the `@@` header alone.
+ */
+function HunkCard({ hunk, workspacePath, staging, onStage }: HunkCardProps) {
+  void workspacePath;
+  return (
+    <div className="border-border-subtle mb-1 overflow-hidden rounded border">
+      <div className="bg-fill-subtle/40 flex items-center gap-1.5 px-2 py-1">
+        <span className="text-meta text-muted-foreground min-w-0 flex-1 truncate font-mono" title={hunk.header}>
+          {hunk.header}
+        </span>
+        <button
+          type="button"
+          disabled={staging}
+          onClick={() => onStage(hunk.patch)}
+          className="text-meta text-muted-foreground hover:text-foreground border-border shrink-0 rounded border px-1.5 disabled:opacity-50"
+        >
+          Stage hunk
+        </button>
+      </div>
+      <div className="text-caption overflow-x-auto font-mono">
+        <PatchDiff patch={hunk.patch} options={PIERRE_DIFF_OPTIONS} />
+      </div>
+    </div>
+  );
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -137,19 +180,13 @@ function EntryRow({
             <div className="text-caption text-muted-foreground py-1">No stageable hunks.</div>
           ) : (
             hunks.map((hunk, index) => (
-              <div key={index} className="flex items-center gap-1.5 py-0.5">
-                <span className="text-meta text-muted-foreground min-w-0 flex-1 truncate font-mono" title={hunk.header}>
-                  {hunk.header}
-                </span>
-                <button
-                  type="button"
-                  disabled={stageHunk.isPending}
-                  onClick={() => stageHunk.mutate({ workspacePath, patch: hunk.patch })}
-                  className="text-meta text-muted-foreground hover:text-foreground border-border shrink-0 rounded border px-1.5 disabled:opacity-50"
-                >
-                  Stage hunk
-                </button>
-              </div>
+              <HunkCard
+                key={index}
+                hunk={hunk}
+                workspacePath={workspacePath}
+                staging={stageHunk.isPending}
+                onStage={patch => stageHunk.mutate({ workspacePath, patch })}
+              />
             ))
           )}
         </div>

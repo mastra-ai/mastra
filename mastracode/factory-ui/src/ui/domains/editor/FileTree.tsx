@@ -1,170 +1,93 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  ChevronDown,
-  ChevronRight,
-  File as FileIcon,
-  FileCode,
-  FileJson,
-  FileText,
-  Folder,
-  FolderOpen,
-  Image,
-} from 'lucide-react';
-import { createContext, useContext, useMemo } from 'react';
-import type { NodeApi, NodeRendererProps } from 'react-arborist';
-import { Tree } from 'react-arborist';
-import type { ReactNode } from 'react';
+import { FileTree as PierreFileTree, useFileTree } from '@pierre/trees/react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import type { EditorTreeEntry } from '../../../api/types';
 import type { AgentActivity } from './use-agent-activity';
-
-import './editor-activity.css';
 
 interface FileTreeProps {
   entries: EditorTreeEntry[];
   activePath: string | null;
   onOpen(path: string): void;
-  height: number;
-  width: number;
-  /** Live agent file activity — rows the agent is touching get a ring. */
+  /** Live agent file activity — rows the agent is touching get a decoration. */
   activity?: AgentActivity;
 }
 
-// Rows render through a module-level component (recreating it per render
-// would remount every row), so activity reaches them via context.
-const ActivityContext = createContext<AgentActivity | undefined>(undefined);
-
-interface TreeNode {
-  id: string;
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: TreeNode[];
-}
-
-function getFileIcon(path: string): ReactNode {
-  const ext = path.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-    case 'js':
-    case 'jsx':
-    case 'py':
-    case 'rs':
-    case 'go':
-      return <FileCode size={14} className="text-notice-info/70 shrink-0" />;
-    case 'json':
-      return <FileJson size={14} className="text-notice-warning/70 shrink-0" />;
-    case 'md':
-    case 'mdx':
-      return <FileText size={14} className="text-muted-foreground shrink-0" />;
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'gif':
-    case 'svg':
-    case 'webp':
-      return <Image size={14} className="text-muted-foreground shrink-0" />;
-    default:
-      return <FileIcon size={14} className="text-muted-foreground shrink-0" />;
+/**
+ * Convert flat `/web/workspace/tree` entries into Pierre's path format:
+ * directories end with `/`, files do not. Sorted directories-first,
+ * then lexically — Pierre expects presorted or sorts internally.
+ */
+function entriesToPaths(entries: EditorTreeEntry[]): readonly string[] {
+  const out: string[] = [];
+  for (const entry of entries) {
+    out.push(entry.type === 'directory' && !entry.path.endsWith('/') ? `${entry.path}/` : entry.path);
   }
+  return out;
 }
 
 /**
- * Fold the flat entry list from `/web/workspace/tree` into a nested
- * `TreeNode` structure keyed by path. Entries arrive sorted (directories
- * first, then lexical) so we can build the tree in a single pass.
+ * Pierre @trees-based file tree. The model owns rendering, virtualization,
+ * selection, and expansion; we drive it with the workspace entry list and
+ * observe selection changes to open files in the editor.
  */
-function foldEntries(entries: EditorTreeEntry[]): TreeNode[] {
-  const roots: TreeNode[] = [];
-  const byPath = new Map<string, TreeNode>();
-  for (const entry of entries) {
-    const node: TreeNode = {
-      id: entry.path,
-      name: entry.name,
-      path: entry.path,
-      type: entry.type,
-      children: entry.type === 'directory' ? [] : undefined,
-    };
-    byPath.set(entry.path, node);
-    const slash = entry.path.lastIndexOf('/');
-    if (slash < 0) {
-      roots.push(node);
-      continue;
-    }
-    const parentPath = entry.path.slice(0, slash);
-    const parent = byPath.get(parentPath);
-    if (parent?.children) parent.children.push(node);
-    else roots.push(node); // Orphaned (parent skipped by server prune) — surface anyway.
-  }
-  return roots;
-}
+export function FileTree({ entries, activePath, onOpen, activity }: FileTreeProps) {
+  // Stable refs let the model's callbacks read the latest values without
+  // re-creating the model on every render.
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
 
-function Node({ node, style, dragHandle }: NodeRendererProps<TreeNode>) {
-  const data = node.data;
-  const isDir = data.type === 'directory';
-  const activity = useContext(ActivityContext);
-  const agentBusyHere = !isDir && activity?.isActiveFile(data.path);
-  const agentBusyInside = isDir && !node.isOpen && activity?.isActiveDir(data.path);
-  return (
-    <div
-      ref={dragHandle}
-      style={style}
-      className={cn(
-        'text-body-sm hover:bg-fill-hover flex h-full cursor-pointer items-center gap-1 rounded-md px-1',
-        node.isSelected && 'bg-fill text-foreground',
-        !node.isSelected && 'text-muted-foreground',
-        agentBusyHere && 'editor-activity-ring',
-      )}
-      onClick={() => (isDir ? node.toggle() : node.tree.props.onActivate?.(node))}
-    >
-      {isDir ? (
-        node.isOpen ? (
-          <ChevronDown size={12} className="text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight size={12} className="text-muted-foreground shrink-0" />
-        )
-      ) : (
-        <span className="w-3 shrink-0" />
-      )}
-      {isDir ? (
-        node.isOpen ? (
-          <FolderOpen size={14} className="text-notice-warning/70 shrink-0" />
-        ) : (
-          <Folder size={14} className="text-notice-warning/70 shrink-0" />
-        )
-      ) : (
-        getFileIcon(data.path)
-      )}
-      <span className="truncate">{data.name}</span>
-      {agentBusyInside && (
-        <span
-          className="bg-notice-success ml-auto size-1.5 shrink-0 animate-pulse rounded-full"
-          aria-label="Agent working inside"
-        />
-      )}
-    </div>
-  );
-}
+  const activityRef = useRef(activity);
+  activityRef.current = activity;
 
-export function FileTree({ entries, activePath, onOpen, height, width, activity }: FileTreeProps) {
-  const data = useMemo(() => foldEntries(entries), [entries]);
-  return (
-    <ActivityContext.Provider value={activity}>
-      <Tree<TreeNode>
-        data={data}
-        openByDefault={false}
-        height={height}
-        width={width}
-        rowHeight={24}
-        indent={12}
-        selection={activePath ?? undefined}
-        onActivate={(node: NodeApi<TreeNode>) => {
-          if (node.data.type === 'file') onOpen(node.data.path);
-        }}
-      >
-        {Node}
-      </Tree>
-    </ActivityContext.Provider>
-  );
+  const paths = useMemo(() => entriesToPaths(entries), [entries]);
+
+  // Only pass the initial path list to `useFileTree` so we control resets
+  // manually — otherwise recreating the model wipes expansion state.
+  const initialPathsRef = useRef(paths);
+
+  const { model } = useFileTree({
+    paths: initialPathsRef.current,
+    initialExpansion: 'closed',
+    onSelectionChange: selected => {
+      const first = selected[0];
+      if (first && !first.endsWith('/')) onOpenRef.current(first);
+    },
+    renderRowDecoration: ({ item }) => {
+      const current = activityRef.current;
+      if (!current) return null;
+      if (item.kind === 'file' && current.isActiveFile(item.path)) {
+        return {
+          text: '●',
+          title: 'Agent editing this file',
+          parts: [{ text: '●', color: 'var(--color-notice-success)' }],
+        };
+      }
+      if (item.kind === 'directory') {
+        const dir = item.path.endsWith('/') ? item.path.slice(0, -1) : item.path;
+        if (current.isActiveDir(dir)) {
+          return {
+            text: '●',
+            title: 'Agent working inside this folder',
+            parts: [{ text: '●', color: 'var(--color-notice-success)' }],
+          };
+        }
+      }
+      return null;
+    },
+  });
+
+  // Sync path list after mount when the workspace entries change.
+  useEffect(() => {
+    if (paths === initialPathsRef.current) return;
+    model.resetPaths(paths);
+  }, [paths, model]);
+
+  // Keep the active file focused so keyboard navigation feels anchored.
+  useEffect(() => {
+    if (!activePath) return;
+    model.focusPath(activePath);
+    model.scrollToPath(activePath, { offset: 'nearest' });
+  }, [activePath, model]);
+
+  return <PierreFileTree model={model} className="h-full min-h-0 w-full" />;
 }
