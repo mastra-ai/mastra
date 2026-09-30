@@ -423,7 +423,11 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           // regardless of how eagerly the client calls this route.
           const now = Date.now();
           const nextPollAt = session.nextPollAt?.getTime();
-          if (nextPollAt != null && now < nextPollAt) {
+          // claimLoginSession parks next_poll_at at expires_at while another
+          // request owns the flow. That is a lock, not a schedule, so fall
+          // through to the claim and take its short retry instead.
+          const parkedByClaim = nextPollAt != null && nextPollAt >= session.expiresAt.getTime();
+          if (nextPollAt != null && now < nextPollAt && !parkedByClaim) {
             return c.json({ status: 'pending', nextPollMs: nextPollAt - now });
           }
 

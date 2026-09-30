@@ -119,8 +119,14 @@ export function createProcessorPipelineTests(context: DurableAgentTestContext) {
 
         const result = await durableAgent.prepare('Hello');
 
+        // The agent adds its default error processors after the caller's own.
         expect(result.registryEntry.errorProcessors).toBeDefined();
-        expect(result.registryEntry.errorProcessors!.length).toBe(1);
+        expect(result.registryEntry.errorProcessors!.map(p => p.id)).toEqual([
+          'test-error-processor',
+          'provider-history-compat',
+          'prefill-error-handler',
+          'stream-error-retry-processor',
+        ]);
       });
 
       it('should set hasErrorProcessors flag in workflow input', async () => {

@@ -48,6 +48,13 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Observations Before Reflection/i, terminal, 8_000);
+    // Kitty-protocol Escape must cancel the threshold input without changing the value.
+    terminal.write('\x1b[27u');
+    await runtime.waitForScreenTextAbsent(/_k tokens/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observations before reflection\s+80k/i, terminal, 8_000);
+
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Observations Before Reflection/i, terminal, 8_000);
     terminal.write('60');
     terminal.write('\r');
     await runtime.waitForScreenText(/Observations before reflection\s+60k/i, terminal, 8_000);

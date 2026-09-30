@@ -7796,7 +7796,7 @@ export type GetProcessors_Response = {
     id: string;
     name?: string | undefined;
     description?: string | undefined;
-    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
+    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
     agentIds: string[];
     configurations: {
       agentId: string;
@@ -7833,7 +7833,7 @@ export type GetProcessorsProcessorId_Response = {
   id: string;
   name?: string | undefined;
   description?: string | undefined;
-  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
+  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
   configurations: {
     agentId: string;
     agentName: string;
@@ -7863,7 +7863,7 @@ export interface GetProcessorsProcessorId_RouteContract {
 export type PostProcessorsProcessorIdExecute_PathParams = GetProcessorsProcessorId_PathParams;
 
 export type PostProcessorsProcessorIdExecute_Body = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest';
   messages: {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';

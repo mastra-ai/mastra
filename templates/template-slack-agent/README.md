@@ -24,7 +24,7 @@ Connecting AI agents to Slack is one of the most common integration patterns —
    - **Event Subscriptions** → enable and set the Request URL to `https://your-server.com/slack/{agentName}/events`.
    - Subscribe to bot events: `app_mention`, `message.im`.
    - **Agents & AI Apps** → toggle on.
-   - **Basic Information** → copy Signing Secret to `.env`.
+   - **Basic Information** → copy Signing Secret to `.env`
 4. **Start the dev server**
    - Run `ngrok http 4111` to get a public URL, then `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 

@@ -49,6 +49,7 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handleSchedulesCommand,
   handleWorkflowsCommand,
   handlePruneCommand,
   handleProfileCommand,
@@ -304,6 +305,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
+      return true;
+    case 'schedules':
+      await handleSchedulesCommand(buildCtx(), args);
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

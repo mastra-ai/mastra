@@ -47,6 +47,22 @@ export interface CustomProviderSetting {
 /** Storage backend type. */
 export type StorageBackend = 'libsql' | 'pg';
 
+/** Experimental agent implementation used by MastraCode. */
+export type ExperimentalAgent = 'durable' | 'evented';
+
+export class ExperimentalAgentSettingsError extends Error {
+  readonly value: unknown;
+
+  constructor(value: unknown, settingsPath?: string) {
+    super(
+      `Invalid "experimentalAgent" setting${settingsPath ? ` in ${settingsPath}` : ''}: ${JSON.stringify(value)}. ` +
+        `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+    );
+    this.name = 'ExperimentalAgentSettingsError';
+    this.value = value;
+  }
+}
+
 /** LibSQL-specific storage settings. */
 export interface LibSQLStorageSettings {
   url?: string;
@@ -349,6 +365,10 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
+  // Raw persisted experimental agent value. Resolve through resolveExperimentalAgent() before use.
+  experimentalAgent: unknown;
+  // Internal load diagnostic retained on clones until the user repairs the setting.
+  _experimentalAgentSettingsPath?: string;
   // Native background execution for eligible Mastra Code tools
   backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
@@ -378,6 +398,8 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
   experimentalCrossAgentSignals: boolean;
+  /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
+  experimentalScheduleTools: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -467,11 +489,13 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
+  experimentalAgent: null,
   backgroundTools: { enabled: false },
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
+    experimentalScheduleTools: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -496,6 +520,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
+    left.experimentalScheduleTools === right.experimentalScheduleTools &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -630,6 +655,26 @@ function parseGithubPollIntervalMs(value: unknown): number {
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
 }
 
+export function parseExperimentalAgentSetting(value: unknown, settingsPath?: string): ExperimentalAgent | null {
+  if (value === undefined || value === null) return null;
+  if (value === 'durable' || value === 'evented') return value;
+  throw new ExperimentalAgentSettingsError(value, settingsPath);
+}
+
+function loadExperimentalAgentSetting(
+  value: unknown,
+  settingsPath: string,
+): { selection: unknown; settingsPath?: string } {
+  try {
+    return { selection: parseExperimentalAgentSetting(value, settingsPath) };
+  } catch (error) {
+    if (error instanceof ExperimentalAgentSettingsError) {
+      return { selection: error.value, settingsPath };
+    }
+    throw error;
+  }
+}
+
 function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
   const raw =
     rawBackgroundTools && typeof rawBackgroundTools === 'object' ? (rawBackgroundTools as Record<string, unknown>) : {};
@@ -651,6 +696,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalCrossAgentSignals === 'boolean'
         ? raw.experimentalCrossAgentSignals
         : DEFAULTS.signals.experimentalCrossAgentSignals,
+    experimentalScheduleTools:
+      typeof raw.experimentalScheduleTools === 'boolean'
+        ? raw.experimentalScheduleTools
+        : DEFAULTS.signals.experimentalScheduleTools,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
@@ -966,6 +1015,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
       const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+      const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, settingsPath);
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: {
@@ -996,6 +1046,8 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
+        experimentalAgent: experimentalAgentSetting.selection,
+        _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
@@ -1101,6 +1153,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, filePath);
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -1134,6 +1187,8 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
+      experimentalAgent: experimentalAgentSetting.selection,
+      _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
@@ -1404,7 +1459,9 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileAtomically(filePath, JSON.stringify(settings, null, 2));
+  const settingsToSave: Record<string, unknown> = { ...settings };
+  delete settingsToSave._experimentalAgentSettingsPath;
+  writeFileAtomically(filePath, JSON.stringify(settingsToSave, null, 2));
 }
 
 /** Marker file name to track which provider last used a profile. */
