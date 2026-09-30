@@ -10294,7 +10294,7 @@ export class Agent<
           typeof customResumeData === 'object' &&
           customResumeData !== null &&
           !Array.isArray(customResumeData)
-          ? { ...customResumeData, approved }
+          ? { ...customResumeData, approved, ...(!approved && declineContext ? declineContext : {}) }
           : customResumeData
         : approved
           ? { approved }
