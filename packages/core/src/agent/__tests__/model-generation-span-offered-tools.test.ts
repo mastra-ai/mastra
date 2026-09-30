@@ -138,22 +138,22 @@ describe('MODEL_GENERATION span offered tools (#25302)', () => {
     }
   });
 
-  it('unions tools offered across steps when a later step widens the set', async () => {
+  it('keeps tools from earlier steps when a later step offers a different set', async () => {
     updateGenerationCalls.length = 0;
     const providerTools: string[][] = [];
     const spy = await mockTracedSpans();
     try {
       const agent = new Agent({
-        id: 'widen-agent',
-        name: 'Widen Agent',
+        id: 'switch-agent',
+        name: 'Switch Agent',
         instructions: 'test',
         model: createModel(providerTools),
         tools: { a: tool('a'), b: tool('b'), hidden: tool('hidden') },
         inputProcessors: [
           {
-            id: 'widen',
+            id: 'switch',
             processInputStep: async ({ steps }) => ({
-              activeTools: steps.length === 0 ? ['a', 'b'] : ['a', 'b', 'hidden'],
+              activeTools: steps.length === 0 ? ['a', 'b'] : ['hidden'],
             }),
           },
         ],
@@ -162,10 +162,7 @@ describe('MODEL_GENERATION span offered tools (#25302)', () => {
       const res = await agent.stream('go');
       await res.consumeStream();
 
-      expect(providerTools).toEqual([
-        ['a', 'b'],
-        ['a', 'b', 'hidden'],
-      ]);
+      expect(providerTools).toEqual([['a', 'b'], ['hidden']]);
       const toolUpdates = updateGenerationCalls.filter(c => c.attributes?.tools);
       expect(toolNames(toolUpdates[0])).toEqual(['a', 'b']);
       expect(toolNames(toolUpdates.at(-1))).toEqual(['a', 'b', 'hidden']);
