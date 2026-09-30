@@ -140,6 +140,37 @@ async function runDiscoveryProbe() {
   await waitForCommand('close');
 }
 
+const HAMMER_ROUNDS = 100;
+
+async function runDiscoveryHammer() {
+  if (role === 'owner') {
+    const claim = await claimThread(ownerThreadId);
+    emit('thread-owned', { threadId: ownerThreadId });
+    await waitForCommand('close');
+    claim.unsubscribe();
+    return;
+  }
+
+  let found = 0;
+  for (let i = 0; i < HAMMER_ROUNDS; i++) {
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 250 });
+    if (peers.some(candidate => candidate.threadId === ownerThreadId)) found++;
+  }
+  // Each failed claim of the owner's thread runs one owner-discovery round trip.
+  let claimed = 0;
+  for (let i = 0; i < HAMMER_ROUNDS; i++) {
+    const claim = await agent.claimThreadOwnership({ resourceId, threadId: ownerThreadId, peer: false });
+    if (claim.claimed) {
+      claimed++;
+      claim.unsubscribe();
+    }
+  }
+  // Reply topics are released fire-and-forget once each request settles.
+  await new Promise(resolve => setTimeout(resolve, 250));
+  emit('discovery-hammer-done', { found, claimed, rounds: HAMMER_ROUNDS });
+  await waitForCommand('close');
+}
+
 async function runOwnershipContention() {
   const claim = await agent.claimThreadOwnership({
     resourceId,
@@ -483,6 +514,7 @@ async function main() {
   else if (scenario === 'lease-mutation-hammer') await runLeaseMutationHammer();
   else if (scenario === 'claim-only') await runClaimOnly();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
+  else if (scenario === 'discovery-hammer') await runDiscoveryHammer();
   else if (scenario === 'ownership-contention') await runOwnershipContention();
   else if (scenario === 'simultaneous-owner-wake') await runSimultaneousOwnerWake();
   else if (scenario === 'simultaneous-wake-sender') await runSimultaneousWakeSender();

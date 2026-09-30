@@ -3,14 +3,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const instances: MockUnixSocketPubSub[] = [];
   let mkdirImpl: () => Promise<void> = async () => {};
+  let publishImpl: () => Promise<void> = async () => {};
+  let closeImpl: () => Promise<void> = async () => {};
 
-  class MockPubSub {}
+  class MockPubSub {
+    clearTopic(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
 
   class MockUnixSocketPubSub {
     readonly socketPath: string;
     readonly published: Array<{ topic: string; event: unknown }> = [];
     readonly subscriptions: string[] = [];
     readonly leaseKeys: string[] = [];
+    readonly unsubscriptions: string[] = [];
     closed = false;
 
     async acquireLease(key: string): Promise<boolean> {
@@ -43,6 +50,7 @@ const mocks = vi.hoisted(() => {
     }
 
     async publish(topic: string, event: unknown): Promise<void> {
+      await publishImpl();
       this.published.push({ topic, event });
     }
 
@@ -50,12 +58,15 @@ const mocks = vi.hoisted(() => {
       this.subscriptions.push(topic);
     }
 
-    async unsubscribe(): Promise<void> {}
+    async unsubscribe(topic: string): Promise<void> {
+      this.unsubscriptions.push(topic);
+    }
 
     async flush(): Promise<void> {}
 
     async close(): Promise<void> {
       this.closed = true;
+      await closeImpl();
     }
   }
 
@@ -66,6 +77,12 @@ const mocks = vi.hoisted(() => {
     mkdir: vi.fn(() => mkdirImpl()),
     setMkdirImpl: (impl: () => Promise<void>) => {
       mkdirImpl = impl;
+    },
+    setPublishImpl: (impl: () => Promise<void>) => {
+      publishImpl = impl;
+    },
+    setCloseImpl: (impl: () => Promise<void>) => {
+      closeImpl = impl;
     },
   };
 });
@@ -99,6 +116,8 @@ describe('SignalsPubSub', () => {
     mocks.instances.length = 0;
     mocks.mkdir.mockClear();
     mocks.setMkdirImpl(async () => {});
+    mocks.setPublishImpl(async () => {});
+    mocks.setCloseImpl(async () => {});
     vi.resetModules();
   });
 
@@ -289,5 +308,152 @@ describe('SignalsPubSub', () => {
     expect(Buffer.byteLength(socketPath!)).toBeLessThanOrEqual(104);
     // Should use a hash-based filename instead of the raw topic
     expect(socketPath).toMatch(/\/tmp\/mc\/[^/]+\/[a-f0-9]{16}\.sock$/);
+  });
+
+  describe('one-shot reply topics', () => {
+    // Short enough that reply socket paths stay under the 104-byte limit and keep readable names.
+    const resourceId = 'res-a';
+    const requestId = '33333333-3333-4333-8333-333333333333';
+    const peerReplyTopic = `agent.thread-peer-discovery.${requestId}`;
+    const ownerReplyTopic = `agent.thread-owner-discovery.${requestId}`;
+
+    it('closes a requester reply socket once it is unsubscribed and cleared', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+      const cb = vi.fn();
+
+      await pubsub.subscribe(peerReplyTopic, cb);
+      const socket = pubsub.getSocket(peerReplyTopic);
+      expect(socket).toBeDefined();
+
+      await pubsub.unsubscribe(peerReplyTopic, cb);
+      await pubsub.clearTopic(peerReplyTopic);
+
+      expect(pubsub.getSocket(peerReplyTopic)).toBeUndefined();
+      expect(findSocket(`/tmp/mc/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`)?.closed).toBe(true);
+    });
+
+    it('does not retain a responder reply socket after its publish settles', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+
+      await pubsub.publish(ownerReplyTopic, event);
+
+      expect(pubsub.getSocket(ownerReplyTopic)).toBeUndefined();
+      const socket = findSocket(`/tmp/mc/_shared/agent_thread-owner-discovery_${requestId}.sock`);
+      expect(socket?.published).toHaveLength(1);
+      expect(socket?.closed).toBe(true);
+    });
+
+    it('closes idle-acceptance reply sockets after their publish settles', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+      const topic = `${threadTopic(resourceId, 'thread-a')}.idle-acceptance.${requestId}`;
+
+      await pubsub.publish(topic, event);
+
+      expect(pubsub.getSocket(topic)).toBeUndefined();
+      expect(mocks.instances.find(instance => instance.published.length === 1)?.closed).toBe(true);
+    });
+
+    it('delivers concurrent publishes on one reply topic before closing it', async () => {
+      const gate = deferred();
+      mocks.setPublishImpl(() => gate.promise);
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+      const cb = vi.fn();
+      await pubsub.subscribe(peerReplyTopic, cb);
+      const socket = findSocket(`/tmp/mc/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`)!;
+
+      const first = pubsub.publish(peerReplyTopic, event);
+      const second = pubsub.publish(peerReplyTopic, event);
+      gate.resolve();
+      await Promise.all([first, second]);
+
+      expect(socket.published).toHaveLength(2);
+      expect(socket.closed).toBe(false);
+      expect(pubsub.getSocket(peerReplyTopic)).toBe(socket);
+
+      await pubsub.unsubscribe(peerReplyTopic, cb);
+      await pubsub.clearTopic(peerReplyTopic);
+      expect(socket.closed).toBe(true);
+    });
+
+    it('keeps a responder reply socket open until every concurrent publish settles', async () => {
+      const gates = [deferred(), deferred()];
+      let calls = 0;
+      mocks.setPublishImpl(() => gates[calls++]!.promise);
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+
+      const first = pubsub.publish(ownerReplyTopic, event);
+      const second = pubsub.publish(ownerReplyTopic, event);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const socket = pubsub.getSocket(ownerReplyTopic)!;
+
+      gates[0]!.resolve();
+      await first;
+      expect(socket.closed).toBe(false);
+
+      gates[1]!.resolve();
+      await second;
+      expect(socket.published).toHaveLength(2);
+      expect(socket.closed).toBe(true);
+      expect(mocks.instances.filter(instance => instance.socketPath === socket.socketPath)).toHaveLength(1);
+    });
+
+    it('does not close long-lived topics on clearTopic', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+      const workflowTopic = 'workflow.events.v2.run-1';
+      const streamTopic = threadTopic(resourceId, 'thread-a');
+      await pubsub.subscribe(workflowTopic, vi.fn());
+      await pubsub.subscribe(streamTopic, vi.fn());
+
+      await pubsub.clearTopic(workflowTopic);
+      await pubsub.clearTopic(streamTopic);
+
+      expect(pubsub.getSocket(workflowTopic)?.closed).toBe(false);
+      expect(pubsub.getSocket(streamTopic)?.closed).toBe(false);
+    });
+
+    it('gives a publish that races a close a fresh socket', async () => {
+      const closeGate = deferred();
+      mocks.setCloseImpl(() => closeGate.promise);
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+
+      await pubsub.publish(ownerReplyTopic, event);
+      const closing = mocks.instances.find(instance => instance.published.length === 1)!;
+      expect(closing.closed).toBe(true);
+
+      const second = pubsub.publish(ownerReplyTopic, event);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      closeGate.resolve();
+      await second;
+
+      const sockets = mocks.instances.filter(instance => instance.socketPath === closing.socketPath);
+      expect(sockets).toHaveLength(2);
+      expect(closing.published).toHaveLength(1);
+      expect(sockets[1]!.published).toHaveLength(1);
+    });
+
+    it('leaves nothing behind when clearTopic races an in-flight subscribe', async () => {
+      const mkdir = deferred();
+      mocks.setMkdirImpl(() => mkdir.promise);
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+      const cb = vi.fn();
+
+      const subscribing = pubsub.subscribe(peerReplyTopic, cb);
+      await Promise.resolve();
+      await pubsub.clearTopic(peerReplyTopic);
+      mkdir.resolve();
+      await expect(subscribing).resolves.toBeUndefined();
+
+      expect(pubsub.getSocket(peerReplyTopic)).toBeUndefined();
+      const socket = findSocket(`/tmp/mc/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`);
+      expect(socket?.closed).toBe(true);
+    });
   });
 });

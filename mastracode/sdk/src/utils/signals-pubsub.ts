@@ -12,6 +12,17 @@ const THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const MAX_PATH_SEGMENT_LENGTH = 128;
+const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
+const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');
+
+/**
+ * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
+ * single round trip, and never published to again once the request settles.
+ */
+function isEphemeralTopic(topic: string): boolean {
+  return DISCOVERY_REPLY_TOPIC.test(topic) || IDLE_ACCEPTANCE_REPLY_TOPIC.test(topic);
+}
 
 export type SignalsPubSubOptions = {
   /** Directory that holds every resource's socket directory. Defaults to `/tmp/mc`. */
@@ -116,6 +127,12 @@ function topicKey(topic: string): string {
  * ECONNREFUSED on a dead broker socket, unlinks it, and re-elects.
  * No blanket cleanup is needed here — that would break concurrent
  * mc instances sharing a directory.
+ *
+ * One-shot reply topics (discovery and idle-acceptance replies) are
+ * reference-counted: every in-flight publish/subscribe and every live
+ * subscription holds a reference, and the topic's socket is closed as soon as
+ * the count drops to zero. Without this each request would keep a socket, a
+ * file descriptor and (for the broker) a socket file for the process lifetime.
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
@@ -123,6 +140,10 @@ class SignalsPubSub extends PubSub {
   readonly #leaseSockets = new Map<string, UnixSocketPubSub>();
   readonly #sockets = new Map<string, UnixSocketPubSub>();
   readonly #pending = new Map<string, Promise<UnixSocketPubSub>>();
+  readonly #refs = new Map<string, number>();
+  readonly #liveSubscriptions = new Map<string, Set<EventCallback>>();
+  readonly #clearGenerations = new Map<string, number>();
+  readonly #closing = new Map<string, Promise<void>>();
   readonly #leaseProvider: LeaseProvider;
   #closed = false;
 
@@ -160,19 +181,86 @@ class SignalsPubSub extends PubSub {
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
-    const socket = await this.#getOrCreate(topic);
-    await socket.publish(topic, event, options);
+    if (!isEphemeralTopic(topic)) {
+      const socket = await this.#getOrCreate(topic);
+      await socket.publish(topic, event, options);
+      return;
+    }
+    const key = this.#socketKey(topic);
+    // Retain synchronously so a concurrent release cannot close the socket
+    // this publish is about to use.
+    this.#retain(key);
+    try {
+      const socket = await this.#getOrCreate(topic);
+      await socket.publish(topic, event, options);
+    } finally {
+      this.#release(key);
+    }
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
-    const socket = await this.#getOrCreate(topic);
-    await socket.subscribe(topic, cb, options);
+    if (!isEphemeralTopic(topic)) {
+      const socket = await this.#getOrCreate(topic);
+      await socket.subscribe(topic, cb, options);
+      return;
+    }
+    const key = this.#socketKey(topic);
+    this.#retain(key);
+    const generation = this.#clearGenerations.get(key) ?? 0;
+    try {
+      const socket = await this.#getOrCreate(topic);
+      await socket.subscribe(topic, cb, options);
+      if ((this.#clearGenerations.get(key) ?? 0) !== generation) {
+        // The topic was cleared while this subscribe was in flight.
+        await socket.unsubscribe(topic, cb);
+        return;
+      }
+      let subscriptions = this.#liveSubscriptions.get(key);
+      if (!subscriptions) {
+        subscriptions = new Set();
+        this.#liveSubscriptions.set(key, subscriptions);
+      }
+      if (!subscriptions.has(cb)) {
+        subscriptions.add(cb);
+        this.#retain(key);
+      }
+    } finally {
+      this.#release(key);
+    }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    const socket = this.#sockets.get(this.#socketKey(topic));
-    if (!socket) return;
-    await socket.unsubscribe(topic, cb);
+    const key = this.#socketKey(topic);
+    const socket = this.#sockets.get(key);
+    const subscriptions = isEphemeralTopic(topic) ? this.#liveSubscriptions.get(key) : undefined;
+    if (!subscriptions?.delete(cb)) {
+      if (!socket) return;
+      await socket.unsubscribe(topic, cb);
+      return;
+    }
+    if (subscriptions.size === 0) this.#liveSubscriptions.delete(key);
+    try {
+      await socket?.unsubscribe(topic, cb);
+    } finally {
+      this.#release(key);
+    }
+  }
+
+  /**
+   * Drops a one-shot reply topic: its remaining subscriptions release their
+   * references and the socket closes once no operation still uses it. Other
+   * topics (workflow events, thread streams) have subscribers in other
+   * processes that need the broker, so clearing them is a no-op.
+   */
+  override async clearTopic(topic: string): Promise<void> {
+    if (!isEphemeralTopic(topic)) return;
+    const key = this.#socketKey(topic);
+    if (!this.#refs.has(key)) return;
+    this.#clearGenerations.set(key, (this.#clearGenerations.get(key) ?? 0) + 1);
+    const subscriptions = this.#liveSubscriptions.get(key);
+    if (!subscriptions) return;
+    this.#liveSubscriptions.delete(key);
+    for (let i = 0; i < subscriptions.size; i++) this.#release(key);
   }
 
   async flush(): Promise<void> {
@@ -184,9 +272,13 @@ class SignalsPubSub extends PubSub {
     await Promise.allSettled([
       ...[...this.#leaseSockets.values()].map(s => s.close()),
       ...[...this.#sockets.values()].map(s => s.close()),
+      ...this.#closing.values(),
     ]);
     this.#sockets.clear();
     this.#leaseSockets.clear();
+    this.#refs.clear();
+    this.#liveSubscriptions.clear();
+    this.#clearGenerations.clear();
   }
 
   /** Get the underlying socket for a topic (for testing/inspection). */
@@ -215,9 +307,41 @@ class SignalsPubSub extends PubSub {
     return `${this.#dirFor(topic)}/${topicKey(topic)}`;
   }
 
+  #retain(key: string): void {
+    this.#refs.set(key, (this.#refs.get(key) ?? 0) + 1);
+  }
+
+  #release(key: string): void {
+    const refs = (this.#refs.get(key) ?? 0) - 1;
+    if (refs > 0) {
+      this.#refs.set(key, refs);
+      return;
+    }
+    this.#refs.delete(key);
+    this.#clearGenerations.delete(key);
+    this.#liveSubscriptions.delete(key);
+    const socket = this.#sockets.get(key);
+    if (!socket) return;
+    this.#sockets.delete(key);
+    const closing: Promise<void> = socket
+      .close()
+      .catch(() => {})
+      .finally(() => {
+        if (this.#closing.get(key) === closing) this.#closing.delete(key);
+      });
+    this.#closing.set(key, closing);
+  }
+
   async #getOrCreate(topic: string): Promise<UnixSocketPubSub> {
     if (this.#closed) throw new Error('SignalsPubSub is closed');
     const key = this.#socketKey(topic);
+    // A socket for this key may still be closing after its last reference
+    // was released; never hand out the closing instance.
+    const closing = this.#closing.get(key);
+    if (closing) {
+      await closing;
+      if (this.#closed) throw new Error('SignalsPubSub is closed');
+    }
     const existing = this.#sockets.get(key);
     if (existing) return existing;
     // Deduplicate concurrent callers so only one socket is created per topic.

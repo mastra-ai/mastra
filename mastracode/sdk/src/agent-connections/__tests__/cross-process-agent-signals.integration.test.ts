@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +69,25 @@ function startChild(role: 'owner' | 'sender', resourceId: string, scenario = 're
     },
     result: new Promise<number | null>(resolve => child.on('close', resolve)),
   };
+}
+
+function listUnixSocketFds(pid: number): string[] {
+  let output: string;
+  try {
+    output = execFileSync('lsof', ['-a', '-U', '-p', String(pid)], { encoding: 'utf8' });
+  } catch (error) {
+    // lsof exits 1 when the process has no matching descriptors.
+    output = (error as { stdout?: string }).stdout ?? '';
+  }
+  return output
+    .split('\n')
+    .slice(1)
+    .filter(line => line.trim());
+}
+
+/** Open Unix-socket descriptors in `pid` bound to a one-shot discovery reply socket path. */
+function countDiscoveryReplyFds(pid: number): number {
+  return listUnixSocketFds(pid).filter(line => line.includes('discovery_')).length;
 }
 
 async function waitForChildEvent(
@@ -219,6 +238,39 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     expect(observerCode).toBe(0);
     rmSync(`/tmp/mc/${isolatedResourceId}`, { recursive: true, force: true });
   }, 30_000);
+
+  it('keeps discovery reply sockets and descriptors flat across repeated lookups', async () => {
+    const owner = startChild('owner', resourceId, 'discovery-hammer');
+    const owned = await owner.waitFor('thread-owned');
+    // Use the pids the children report — `child.pid` is the tsx wrapper, not the node process.
+    const ownerFdsBefore = listUnixSocketFds(owned.pid).length;
+
+    const sender = startChild('sender', resourceId, 'discovery-hammer');
+    const done = await sender.waitFor('discovery-hammer-done', 90_000);
+
+    // Measured while both processes are still alive: files can be unlinked while descriptors leak.
+    // The responder's client-side reply descriptors carry no path, so the owner is
+    // checked by total Unix-socket growth across the 200 round trips it answered.
+    const replySocketFiles = readdirSync(socketDir).filter(name => name.includes('discovery_'));
+    const ownerFdGrowth = listUnixSocketFds(owned.pid).length - ownerFdsBefore;
+    const senderReplyFds = countDiscoveryReplyFds(done.pid);
+
+    owner.child.stdin.write('close\n');
+    sender.child.stdin.write('close\n');
+    owner.child.stdin.end();
+    sender.child.stdin.end();
+    const [ownerCode, senderCode] = await Promise.all([owner.result, sender.result]);
+
+    expect(done).toMatchObject({ found: 100, claimed: 0, rounds: 100 });
+    expect(replySocketFiles).toEqual([]);
+    // A few connections from the sender to long-lived topics the owner brokers are expected.
+    expect(ownerFdGrowth).toBeLessThanOrEqual(10);
+    expect(senderReplyFds).toBeLessThanOrEqual(2);
+    expect(owner.stderr).toBe('');
+    expect(sender.stderr).toBe('');
+    expect(ownerCode).toBe(0);
+    expect(senderCode).toBe(0);
+  }, 120_000);
 
   it('allows exactly one process to claim ownership of a thread', async () => {
     const owner = startChild('owner', resourceId, 'ownership-contention');
