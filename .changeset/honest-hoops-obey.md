@@ -2,4 +2,8 @@
 '@mastra/factory': patch
 ---
 
-Slack sessions backed by a GitHub repository can now reload the GitHub CLI credential in their running sandbox with `github_refresh_token`, so a `gh` command that failed authentication can be retried.
+Fixed GitHub authentication recovery in repository-backed Slack sessions. Reload the stored credential in the running sandbox, then retry the failed `gh` command:
+
+```text
+github_refresh_token({})
+```
