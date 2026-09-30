@@ -171,7 +171,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                             <AlertCircleIcon
                               role="img"
                               aria-label="Error"
-                              className="size-3.5 text-destructive-indicator"
+                              className="size-3.5 text-destructive-foreground"
                             />
                           }
                         />

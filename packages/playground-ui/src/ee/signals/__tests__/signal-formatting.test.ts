@@ -216,7 +216,7 @@ describe('getSignalColor', () => {
 
   describe('when the name matches an inherited object property', () => {
     it('treats it as a custom signal', () => {
-      expect(['var(--chart-pink)', 'var(--chart-yellow)']).toContain(getSignalColor('constructor'));
+      expect(['var(--chart-pink)', 'var(--chart-amber)']).toContain(getSignalColor('constructor'));
     });
   });
 });

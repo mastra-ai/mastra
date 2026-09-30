@@ -71,10 +71,10 @@ export const buttonVariants = cva(
           'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
           focusRingOffset,
           'focus-visible:border-transparent',
-          'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-foreground',
+          'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-disabled-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-disabled-foreground',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive-indicator not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-indicator not-disabled:active:bg-destructive-subtle-active',
+          'border border-transparent bg-transparent text-destructive-foreground not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
           'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(

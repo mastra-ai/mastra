@@ -82,7 +82,7 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   }
   const failed = steps.filter(step => step.status === 'error').length;
   const errorIndicator =
-    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-indicator" /> : null;
+    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" /> : null;
   // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
   if (steps.some(step => step.hasResult === undefined)) return errorIndicator;
 

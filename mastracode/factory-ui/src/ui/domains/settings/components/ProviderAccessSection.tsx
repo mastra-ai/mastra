@@ -209,7 +209,7 @@ export function ProviderAccessSection({
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-indicator">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
             </Txt>
           )}

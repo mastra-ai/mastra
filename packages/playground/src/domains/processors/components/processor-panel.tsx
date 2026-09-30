@@ -196,13 +196,13 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-warning-indicator">
+            <Txt variant="meta" className="text-warning-foreground">
               Output Stream phase cannot be executed directly. Use streaming instead.
             </Txt>
           )}
 
           {selectedPhase === 'llmRequest' && (
-            <Txt variant="meta" className="text-warning-indicator">
+            <Txt variant="meta" className="text-warning-foreground">
               LLM Request phase cannot be executed directly. It runs on the provider prompt during an agent call.
             </Txt>
           )}
