@@ -88,7 +88,7 @@ export function ScheduleTriggersList({
                   <Txt
                     as="span"
                     variant="caption"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-indicator"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
                   >
                     <AlertTriangleIcon size={14} />
                     publish failed
@@ -108,7 +108,7 @@ export function ScheduleTriggersList({
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-destructive-indicator">
+                      <span className="inline-flex text-destructive-foreground">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

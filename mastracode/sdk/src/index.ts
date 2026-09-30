@@ -17,8 +17,8 @@ import type {
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
@@ -26,7 +26,6 @@ import {
   createBackgroundWorkSignalProcessor,
   CyberRefusalHandler,
   isBadRequestError,
-  PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
@@ -84,6 +83,7 @@ import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
+import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { createMcpManager } from './mcp/index.js';
@@ -479,6 +479,22 @@ function resolveInjectedStorageBackend(
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
+/** Whether the model router would resolve `modelId` through a gateway outside `sdkGatewayIds`. */
+function routesToOtherGateway(
+  modelId: string,
+  gateways: MastraModelGatewayInterface[],
+  sdkGatewayIds: ReadonlySet<string>,
+): boolean {
+  try {
+    return !sdkGatewayIds.has(getGatewayId(findGatewayForModel(modelId, gateways)));
+  } catch (error) {
+    // No gateway at all falls back to the SDK resolver; any other lookup
+    // failure is the gateway's to report, not a reason to switch providers.
+    if ((error as { id?: string })?.id === 'MODEL_ROUTER_NO_GATEWAY_FOUND') return false;
+    throw error;
+  }
+}
+
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
@@ -508,6 +524,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
+  const experimentalAgent = resolveExperimentalAgent(globalSettings);
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
@@ -1042,7 +1059,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
       },
     }),
-    new ProviderHistoryCompat(),
   ];
 
   // Built-in providers are named so the plugin lane can reserve their ids.
@@ -1092,7 +1108,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
-  const codeAgent: Agent = createCodingAgent({
+  const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
     // Workspace is wired per-request at the AgentController level (see
@@ -1211,7 +1227,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
       // isBadRequestError matcher retries the identical request. Error processors
       // short-circuit on the first `retry: true`, so a blind retry first would resend
-      // the broken history and fail again.
+      // the broken history and fail again. It is named here rather than inherited
+      // because the Agent appends missing defaults after a caller's list, which would
+      // place this after the retry processor.
+      // `prefill-error-handler` is deliberately absent: the Agent appends it from the
+      // shared stability defaults, which lands in the same position it occupied here.
       new ProviderHistoryCompat(),
       // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
       // 5xx errors, and a blind retry would resend the request without the
@@ -1236,7 +1256,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           },
         ],
       }),
-      new PrefillErrorHandler(),
       // Rotation runs last in the error lane: a transient error reaching here
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
@@ -1255,6 +1274,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // ceiling for custom/plugin processors that might retry indefinitely.
     maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
   });
+  const codeAgent = wrapExperimentalAgent(baseCodeAgent, experimentalAgent);
 
   // const defaultSubAgents: Array<AgentControllerSubagent> = [];
   // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -1452,6 +1472,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents,
+    // Subagents resolve like the main agent: tenant credentials and
+    // request-scoped custom providers come from the calling run's context.
+    // Ids the model router would hand to another registered gateway (by
+    // prefix or `handlesModel`) stay strings so that gateway resolves them.
+    resolveSubagentModel: (modelId, { requestContext }) =>
+      routesToOtherGateway(
+        modelId,
+        Object.values(controller.getMastra()?.listGateways() ?? {}),
+        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
+      )
+        ? modelId
+        : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
@@ -1733,6 +1765,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const { controller, sessionId, ownerId, projectPath, codeAgent, mcpManager } = base;
 
   await controller.init();
+  validateExperimentalAgent(codeAgent, controller.getMastra());
   // Register workflow primitives (sub-agent + workspace tools + code-agent
   // + web + notification_inbox + snapshot of MCP tools) on the controller's
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
@@ -1876,6 +1909,7 @@ export async function prepareAgentControllerMount(
 
   const finalize = async () => {
     await controller.init();
+    validateExperimentalAgent(codeAgent, controller.getMastra());
     if (weOwnTheMastra) {
       const mastra = controller.getMastra();
       if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });

@@ -2,9 +2,12 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { anthropicOAuthProvider } from '@mastra/code-sdk/auth/providers/anthropic';
+import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { createGlobalPatchScope } from './global-patches.js';
 import { readMutableSettingsFixture } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
+
+let scenarioAppDataDir = '';
 
 /**
  * `/login` on a connected provider manages a multi-account registry:
@@ -19,6 +22,7 @@ export const multiAccountLoginScenario = {
   description: 'Manages multiple OAuth accounts per provider through /login.',
   testName: 'adds, lists, and removes provider accounts through the /login account manager',
   prepare({ appDataDir, projectDir }) {
+    scenarioAppDataDir = appDataDir;
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     const settings = readMutableSettingsFixture(join(appDataDir, 'settings.json'));
     settings.onboarding = {
@@ -203,6 +207,26 @@ export const multiAccountLoginScenario = {
     await runtime.waitForScreenText(/MULTI_ACCOUNT_ACTIVE=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/MULTI_ACCOUNT_REFRESH_OK=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/MULTI_SLOT_OK=true/i, terminal, 8_000);
+
+    // Another instance changes the shared file while this TUI stays open.
+    const peer = new AuthStorage(join(scenarioAppDataDir, 'auth.json'));
+    const previousAccount = peer.getActiveAccount('anthropic')!;
+    await peer.addAccount(
+      'anthropic',
+      { access: 'mc-peer-access', refresh: 'mc-peer-refresh', expires: Date.now() + 60 * 60 * 1000 },
+      { label: 'Peer Account' },
+    );
+    terminal.submit('/login');
+    await runtime.waitForScreenText(/\(2 accounts\)/i, terminal, 8_000);
+    // A second change while the provider selector is open must also be read
+    // before constructing the account manager, not just at command entry.
+    peer.removeAccount('anthropic', previousAccount.id);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Peer Account\s*✓ active/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Peer Account:/i, terminal, 8_000);
+    terminal.write('\x1b');
+    terminal.write('\x1b');
 
     terminal.keyCtrlC();
   },

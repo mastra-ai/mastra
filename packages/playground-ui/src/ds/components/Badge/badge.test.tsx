@@ -29,7 +29,7 @@ describe('Badge', () => {
   it.each([
     ['green', 'success'],
     ['red', 'destructive'],
-    ['yellow', 'warning'],
+    ['amber', 'warning'],
     ['blue', 'info'],
   ] as const)('keeps the %s category indicator apart from the %s status indicator', (hue, status) => {
     render(

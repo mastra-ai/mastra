@@ -18,7 +18,9 @@ describe.each(['factory-review', 'factory-rereview'])('%s verdict ordering', ski
   const content = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
 
   it('keeps the verdict line first so the repair loop can route it', () => {
-    expect(content).toContain('immediately after the verdict line (the verdict line stays first)');
+    expect(content).toContain(
+      'immediately after the `Reviewed head:` line (the verdict line stays first and `Reviewed head:` stays second)',
+    );
     expect(content).not.toContain('Prepend this line to the published body');
   });
 });

@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="mt-1 block truncate text-destructive-indicator">
+        <Txt variant="meta" className="mt-1 block truncate text-destructive-foreground">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -145,7 +145,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-indicator' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-foreground' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -194,7 +194,7 @@ export function ReviewItemCard({
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="xs" className="text-placeholder hover:text-destructive-indicator">
+                <Icon size="xs" className="text-placeholder hover:text-destructive-foreground">
                   <Trash2 />
                 </Icon>
               </Button>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-indicator">
+              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground">
                 {formatUnknown(item.error)}
               </pre>
             </div>

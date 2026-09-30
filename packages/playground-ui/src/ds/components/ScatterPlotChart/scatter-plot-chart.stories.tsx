@@ -6,7 +6,7 @@ const data = [
   { id: 'refund-policy', duration: 180, cost: 0.34, color: 'var(--chart-blue)' },
   { id: 'shipping-delay', duration: 260, cost: 0.51, color: 'var(--chart-blue-deep)' },
   { id: 'shipping-update', duration: 320, cost: 0.64, color: 'var(--chart-blue-deep)' },
-  { id: 'competitor-analysis', duration: 420, cost: 0.91, color: 'var(--chart-yellow)' },
+  { id: 'competitor-analysis', duration: 420, cost: 0.91, color: 'var(--chart-amber)' },
 ];
 
 const meta: Meta<typeof ScatterPlotChart> = {

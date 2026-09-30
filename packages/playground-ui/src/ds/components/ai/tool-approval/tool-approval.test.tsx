@@ -14,7 +14,7 @@ describe('ToolApproval', () => {
 
     const declined = screen.getByRole<HTMLButtonElement>('button', { name: 'Declined write_file' });
     expect(declined.disabled).toBe(true);
-    expect(declined.className).toContain('text-destructive-indicator!');
+    expect(declined.className).toContain('text-destructive-foreground!');
     expect(screen.getByRole('button', { name: 'Approve write_file' })).not.toBeNull();
     expect(screen.getByRole('group').className).toContain('border-l-destructive-indicator');
   });

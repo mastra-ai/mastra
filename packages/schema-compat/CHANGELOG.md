@@ -1,5 +1,15 @@
 # @mastra/schema-compat
 
+## 1.3.12
+
+### Patch Changes
+
+- Fixed structured output validation failing when optional fields inside `.nullable()` or `.nullish()` objects or arrays were returned as `null`. They are now dropped, matching the behavior for non-nullable parents. ([#25276](https://github.com/mastra-ai/mastra/pull/25276))
+
+- Fixed `zodToJsonSchema` so nullable Zod v4 enums and literals still accept `null`. A field like `z.enum(['red', 'blue']).nullable()` was exported as `{ type: ['string', 'null'], enum: ['red', 'blue'] }`, which rejects `null`. The exported schema now lists `null` among the allowed values, so tool parameters, OpenAPI schemas and dataset schemas match the Zod schema again. Fixes [#24516](https://github.com/mastra-ai/mastra/issues/24516). ([#25086](https://github.com/mastra-ai/mastra/pull/25086))
+
+- Fixed OpenAI tools failing silently when they have optional number parameters with a `format`, such as `pageSize: { type: "integer", format: "int32" }`. These tools now return responses as expected. ([#25067](https://github.com/mastra-ai/mastra/pull/25067))
+
 ## 1.3.12-alpha.1
 
 ### Patch Changes

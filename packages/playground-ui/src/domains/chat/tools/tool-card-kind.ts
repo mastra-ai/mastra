@@ -83,12 +83,17 @@ export function toolInteraction(
   };
 }
 
+/** Tools the transcript never draws: working memory updates and task tools (shown in the docked task list). */
+export function isHiddenTool(toolName: string): boolean {
+  return toolName === 'updateWorkingMemory' || isTaskTool(toolName);
+}
+
 export function toolCardKind(
   { toolName, toolCallId, input, output }: ToolPartFields,
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
-  if (toolName === 'updateWorkingMemory' || isTaskTool(toolName)) return 'hidden';
+  if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);

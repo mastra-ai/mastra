@@ -124,7 +124,7 @@ export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProp
     <Badge size="xs" variant={result.isError ? 'destructive' : 'success'} className="justify-self-start">
       {result.isError ? 'Error' : 'Answered'}
     </Badge>
-    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-indicator')}>
+    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-foreground')}>
       {result.content}
     </Txt>
   </div>

@@ -30,7 +30,7 @@ type Theme = 'dark' | 'light';
 
 const themeSources = [themeCss, colorsCss, statusCss, dataVizCss, surfacesCss];
 const rampPattern =
-  /^(?:(?:red|orange|yellow|green|cyan|blue|purple|pink)-(?:soft-)?\d+|gray-(?:alpha-)?\d+|background-\d)$/;
+  /^(?:(?:red|orange|amber|green|cyan|blue|purple|pink)-(?:soft-)?\d+|gray-(?:alpha-)?\d+|background-\d)$/;
 
 const readTheme = (theme: Theme) => {
   const references = new Map<string, string>();
@@ -287,7 +287,7 @@ const MatrixTable = ({
   </div>
 );
 
-const hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
+const hues = ['red', 'orange', 'amber', 'green', 'cyan', 'blue', 'purple', 'pink'];
 const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const grayColumns = Array.from({ length: 10 }, (_, index) => index + 1);
 const countNote = 'The number under a step counts the roles that resolve to it in this mode. Blank means unused.';
@@ -336,7 +336,7 @@ const productRoles = ['studio', 'server', 'observability', 'factory', 'workers',
 const chartRows: TokenRow[] = [
   { token: 'chart-blue', use: 'Primary series: p50 latency, input tokens, completed runs' },
   { token: 'chart-blue-deep', use: 'Lower segment of a stack topped by chart-blue' },
-  { token: 'chart-yellow', use: 'Second series beside blue: p95 latency, output tokens' },
+  { token: 'chart-amber', use: 'Second series beside blue: p95 latency, output tokens' },
   { token: 'chart-green', use: 'First scorer series' },
   { token: 'chart-purple', use: 'Cost, in tokens and currency' },
   { token: 'chart-orange', use: 'Scorer datasets, fourth scorer series' },

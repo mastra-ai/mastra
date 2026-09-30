@@ -187,7 +187,7 @@ const semanticNodeColors = new Map([
   ['Search', 'var(--chart-blue)'],
   ['Referral', 'var(--chart-purple)'],
   ['Partner', 'var(--chart-orange)'],
-  ['Europe', 'var(--chart-yellow)'],
+  ['Europe', 'var(--chart-amber)'],
   ['North America', 'var(--chart-green)'],
   ['Asia Pacific', 'var(--chart-pink)'],
   ['Won', 'var(--chart-blue)'],

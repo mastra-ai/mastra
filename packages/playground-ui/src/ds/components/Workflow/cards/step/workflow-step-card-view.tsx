@@ -39,9 +39,9 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
   success: 'text-success-indicator',
-  failed: 'text-destructive-indicator',
-  suspended: 'text-warning-indicator',
-  tripwire: 'text-warning-indicator',
+  failed: 'text-destructive-foreground',
+  suspended: 'text-warning-foreground',
+  tripwire: 'text-warning-foreground',
 };
 
 const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };

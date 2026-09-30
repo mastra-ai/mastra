@@ -60,6 +60,8 @@ import { customProviderModalValidationScenario } from './custom-provider-modal-v
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
+import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
+import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -75,10 +77,12 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
 import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
 import { goalFreshThreadPersistenceScenario } from './goal-fresh-thread-persistence.js';
+import { goalJudgeEscLoadedScenario, goalJudgeEscUnloadedScenario } from './goal-judge-esc-pause.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { goalMaxRunsEndsGoalScenario } from './goal-max-runs-ends-goal.js';
 import { goalResumeSingleRenderScenario } from './goal-resume-single-render.js';
+import { goalSurvivesNewThreadScenario } from './goal-survives-new-thread.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { hiddenReasoningSingleLabelScenario } from './hidden-reasoning-single-label.js';
 import {
@@ -254,6 +258,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
+  'experimental-agent-durable': experimentalAgentDurableScenario,
+  'experimental-agent-evented': experimentalAgentEventedScenario,
+  'experimental-agent-settings': experimentalAgentSettingsScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,
@@ -301,8 +308,11 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'goal-fresh-thread-persistence': goalFreshThreadPersistenceScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
+  'goal-judge-esc-loaded': goalJudgeEscLoadedScenario,
+  'goal-judge-esc-unloaded': goalJudgeEscUnloadedScenario,
   'goal-max-runs-ends-goal': goalMaxRunsEndsGoalScenario,
   'goal-resume-single-render': goalResumeSingleRenderScenario,
+  'goal-survives-new-thread': goalSurvivesNewThreadScenario,
   'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'initial-prompt': initialPromptScenario,
