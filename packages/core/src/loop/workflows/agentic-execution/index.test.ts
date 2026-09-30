@@ -145,3 +145,59 @@ describe('createAgenticExecutionWorkflow response message handling', () => {
     }
   });
 });
+
+describe('createAgenticExecutionWorkflow tool call concurrency wiring', () => {
+  // Resume paths can skip the completed mapping step, so the live foreach entry keeps the
+  // concurrency computed when the workflow is built. Read it from the step graph the engine executes.
+  function buildWorkflowForConcurrency(toolCallConcurrency: OuterLLMRun<{}>['toolCallConcurrency']) {
+    const workflow = createAgenticExecutionWorkflow({
+      agentId: 'test-agent',
+      messageId: 'msg-1',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller: {
+        enqueue: vi.fn(),
+        desiredSize: 1,
+        close: vi.fn(),
+        error: vi.fn(),
+      } as unknown as ReadableStreamDefaultController,
+      outputWriter: vi.fn(),
+      messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
+      models: [],
+      tools: {
+        safe: {},
+        suspend: { hasSuspendSchema: true },
+      },
+      activeTools: ['safe', 'suspend'],
+      toolCallConcurrency,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      requestContext: new RequestContext(),
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const foreachEntry = workflow.stepGraph.find(entry => entry.type === 'foreach') as
+      { opts: { concurrency: number } } | undefined;
+    expect(foreachEntry).toBeDefined();
+    return foreachEntry!.opts.concurrency;
+  }
+
+  it("keeps the configured limit for resumed batches under strategy 'called'", () => {
+    expect(buildWorkflowForConcurrency({ limit: 4, strategy: 'called' })).toBe(4);
+  });
+
+  it("stays sequential for resumed batches under strategy 'available'", () => {
+    expect(buildWorkflowForConcurrency({ limit: 4, strategy: 'available' })).toBe(1);
+    expect(buildWorkflowForConcurrency(4)).toBe(1);
+  });
+});
