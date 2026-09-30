@@ -333,7 +333,7 @@ To verify a request:
       const parts = new Map(signatureHeader.split(',').map(part => part.split('=') as [string, string]))
       const timestamp = Number(parts.get('t'))
       const signature = parts.get('v1')
-      if (!Number.isInteger(timestamp) || !signature) return false
+      if (!Number.isInteger(timestamp) || !signature || !/^[0-9a-f]{64}$/.test(signature)) return false
       if (Math.abs(Date.now() / 1000 - timestamp) > TOLERANCE_SECONDS) return false
 
       const expected = createHmac('sha256', signingSecret)
@@ -381,7 +381,7 @@ Return a `401` status for a request that fails verification. After you rotate a 
 
 ### Retries and duplicate notifications
 
-Mastra treats any `2xx` response as delivered. Respond within 10 seconds and process the notification after responding if the work takes longer. Mastra doesn't follow redirects.
+Mastra treats any `2xx` response as delivered and doesn't retry it. Persist or durably enqueue the notification before responding, and return a `5xx` response if that step fails so Mastra retries the delivery. Respond within 10 seconds and process the notification after responding if the work takes longer. Mastra doesn't follow redirects.
 
 When a request fails, Mastra retries based on the response:
 
