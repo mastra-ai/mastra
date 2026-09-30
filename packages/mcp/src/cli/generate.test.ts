@@ -53,7 +53,7 @@ async function client(file = 'client.ts', output = 'generated.ts', servers = '{}
   );
 }
 function stdio() {
-  return `{weather:{command:${JSON.stringify(process.execPath)},args:${JSON.stringify([server, 'stdio', join(directory, 'events'), '', join(directory, 'mode')])},timeout:200,discovery:{retry: {maxAttempts:1}}}}`;
+  return `{weather:{command:${JSON.stringify(process.execPath)},args:${JSON.stringify([server, 'stdio', join(directory, 'events'), '', join(directory, 'mode')])},timeout:200}}`;
 }
 async function events() {
   return (await readFile(join(directory, 'events'), 'utf8').catch(() => ''))
