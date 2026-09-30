@@ -31,6 +31,14 @@ const storageOrderBySchema = z.object({
 
 export { statusQuerySchema };
 
+/** Selector query for a single stored agent. Handler validation preserves the
+ * stable INVALID_VERSION_SELECTOR response for conflicting fields. */
+export const storedAgentVersionQuerySchema = z.object({
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  versionId: z.string().optional(),
+  label: z.string().optional(),
+});
+
 /**
  * GET /stored/agents - List stored agents
  */
@@ -443,6 +451,8 @@ export const storedAgentSchema = z.object({
   id: z.string(),
   status: z.string().describe('Agent status: draft or published'),
   activeVersionId: z.string().optional(),
+  resolvedVersionId: z.string().optional(),
+  selectedVersionLabel: z.string().optional(),
   authorId: z.string().optional(),
   author: resolvedAuthorSchema.optional().describe('Resolved author identity (when an auth provider is configured)'),
   metadata: z.record(z.string(), z.unknown()).optional(),
