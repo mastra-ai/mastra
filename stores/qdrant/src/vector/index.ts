@@ -118,7 +118,15 @@ export interface DeletePayloadIndexParams {
   wait?: boolean;
 }
 
-const QDRANT_UUID_REGEX = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
+// Qdrant accepts simple, hyphenated, braced, and `urn:uuid:` UUID forms.
+const QDRANT_UUID_REGEX =
+  /^(?:urn:uuid:)?(?:[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}|\{[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\})$/i;
+const QDRANT_MAX_POINT_ID = 18446744073709551615n;
+
+function isValidQdrantPointId(id: string): boolean {
+  if (/^\d+$/.test(id)) return BigInt(id) <= QDRANT_MAX_POINT_ID;
+  return QDRANT_UUID_REGEX.test(id);
+}
 
 export class QdrantVector extends MastraVector {
   protected client: QdrantClient;
@@ -792,7 +800,7 @@ export class QdrantVector extends MastraVector {
       if (ids) {
         // Qdrant rejects the whole batch with a 400 if any ID is not a uint64 or UUID,
         // so surface malformed IDs as a user error instead of letting nothing be deleted.
-        const invalidIds = ids.filter(id => !/^\d+$/.test(id) && !QDRANT_UUID_REGEX.test(id));
+        const invalidIds = ids.filter(id => !isValidQdrantPointId(id));
         if (invalidIds.length > 0) {
           throw new MastraError({
             id: createVectorErrorId('QDRANT', 'DELETE_VECTORS', 'INVALID_IDS'),

@@ -209,6 +209,26 @@ describe('QdrantVector', () => {
       expect(stats.count).toBe(3);
     });
 
+    it('should reject numeric ids above the uint64 maximum', async () => {
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await expect(
+        qdrant.deleteVectors({ indexName: testCollectionName, ids: ['18446744073709551616'] }),
+      ).rejects.toThrow(/Invalid Qdrant point IDs.*18446744073709551616/);
+    });
+
+    it('should accept urn:uuid and braced UUID ids', async () => {
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await qdrant.deleteVectors({
+        indexName: testCollectionName,
+        ids: ['urn:uuid:F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4', '{00000000-0000-4000-8000-000000000001}'],
+      });
+
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
+      expect(stats.count).toBe(3);
+    });
+
     it('should not throw when deleteVectors gets valid ids that do not exist', async () => {
       const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
 
