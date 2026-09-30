@@ -177,7 +177,7 @@ export async function executeCoordinator(
       while (current) {
         if (current.status === 'cancel-requested' || current.status === 'canceled') {
           const remaining = Math.max(0, deadline - Date.now());
-          if (remaining) await delay(remaining, undefined, { ref: false });
+          if (remaining) await delay(remaining);
           break;
         }
         const parent: RunRecord['parent'] = current.parent;
