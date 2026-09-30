@@ -3,17 +3,12 @@
   "localId": "google-docs",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-30T14:20:01.751Z",
-  "toolCount": 37,
-  "skippedActions": [
-    {
-      "action": "update-table-column-properties",
-      "reason": "exec uses unsupported template SDK helpers: proxy"
-    }
-  ],
+  "generatedAt": "2026-09-30T15:01:58.547Z",
+  "toolCount": 38,
+  "skippedActions": [],
   "files": {
     "index.ts": "820dfcacb833c819af78883391c3be3571f394833bcb61e6902f502752749d44",
-    "tools.ts": "0316bccae36430fbee38a7c4047be9725dbb0c179b79b4d53d9a01d4ec711c9b",
+    "tools.ts": "9ed35f2665af0a5ff7ea7139a6dd6af770316468cfcf839a8be5ceb288a10623",
     "tools/add-document-tab.ts": "ef493a7d33c7171605924123eb75f21c79350f92a6d8f37dc9afb73db2434382",
     "tools/create-document.ts": "1c4f001211ddf4553609f3ab6d5c3d01a2fe4f72d27029b5c0c2fd48075ba7c7",
     "tools/create-footer.ts": "ef257ae58ec44f0a087d290813e10fa18a1e47b83b79d95b779e1395c28f8d54",
@@ -49,6 +44,7 @@
     "tools/update-paragraph-style.ts": "d053c84efc60c2dbd950d5ae9e4a0b97f09e9d21bb8ad6be6798a661cd831bf5",
     "tools/update-section-style.ts": "a646db35abd81e37ed6a541718598663d186eebe38dbadf73956e08dc1b48983",
     "tools/update-table-cell-style.ts": "16d6bb8a4466b76947c1bcb49bf04b7ae9c49bfe2b73abaf541f32c3a22519a6",
+    "tools/update-table-column-properties.ts": "c465154cbcb2a9207e3bd595a0a89248b42575487b994572bf4d377ee8823981",
     "tools/update-table-row-style.ts": "af61abfea6cae5374bb4ade9bdc75bbe681936eb90df25a037d9d5897a5c2955",
     "tools/update-text-style.ts": "d4ba15a6d0fe22b3d03ea7ea3478460e053f7432595ebf3c70095e4605726216"
   }

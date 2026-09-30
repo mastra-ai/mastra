@@ -37,6 +37,7 @@ import { updateDocumentTabPropertiesTool } from './tools/update-document-tab-pro
 import { updateParagraphStyleTool } from './tools/update-paragraph-style.js';
 import { updateSectionStyleTool } from './tools/update-section-style.js';
 import { updateTableCellStyleTool } from './tools/update-table-cell-style.js';
+import { updateTableColumnPropertiesTool } from './tools/update-table-column-properties.js';
 import { updateTableRowStyleTool } from './tools/update-table-row-style.js';
 import { updateTextStyleTool } from './tools/update-text-style.js';
 
@@ -78,6 +79,7 @@ export function createGoogleDocsTools(options?: ProviderToolsOptions) {
     google_docs_update_paragraph_style: updateParagraphStyleTool(platformProxy),
     google_docs_update_section_style: updateSectionStyleTool(platformProxy),
     google_docs_update_table_cell_style: updateTableCellStyleTool(platformProxy),
+    google_docs_update_table_column_properties: updateTableColumnPropertiesTool(platformProxy),
     google_docs_update_table_row_style: updateTableRowStyleTool(platformProxy),
     google_docs_update_text_style: updateTextStyleTool(platformProxy),
   };

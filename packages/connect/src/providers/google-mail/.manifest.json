@@ -3,21 +3,12 @@
   "localId": "google-mail",
   "templateSha": "c3091db1e8a623113d581197a8ee0d5b1aa87136",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-22T15:56:19.741Z",
-  "toolCount": 52,
-  "skippedActions": [
-    {
-      "action": "delete-send-as-alias",
-      "reason": "missing identifier input/output or exec in createAction"
-    },
-    {
-      "action": "verify-send-as-alias",
-      "reason": "missing identifier input/output or exec in createAction"
-    }
-  ],
+  "generatedAt": "2026-09-30T15:01:41.280Z",
+  "toolCount": 54,
+  "skippedActions": [],
   "files": {
     "index.ts": "9fa564553da39f2dfb5e85e553ea0ba103aadb34122fbe397c38b6c0ce11948b",
-    "tools.ts": "cf1d064cba6c7f095fa82ceb5af39261f286e857e067fc027cd2f8aaf337667b",
+    "tools.ts": "f93cb6e17c7edfee93850a8ccc7e979db9fa291086954fbd21f571ee01e11015",
     "tools/batch-delete-messages.ts": "a63499d49c5cb7604c48e56be223b8d1e3566638796f641dd22a0a7d80e6224c",
     "tools/batch-modify-messages.ts": "7e2526beafee825fe5213b4d433fc20fd697c2c90d5b8a7931136e39ef5cfe27",
     "tools/create-draft.ts": "cf536c5ba591c9824228bfa2185033336a820b6c9ea702040b67df36409bf5fd",
@@ -29,6 +20,7 @@
     "tools/delete-forwarding-address.ts": "7fd2157243ba954f6277a23efcf268f63264150e7af2ea7a53af1fa60ac09a96",
     "tools/delete-label.ts": "90e0da870457b0befec3fb4d49e8fc64aa311b54c306c37e0fd91921f3bbaae4",
     "tools/delete-message.ts": "3323b96aa81d1b5c37070cefa3341f0e97bc557e9dd7b5a5e178cd16208596d6",
+    "tools/delete-send-as-alias.ts": "8eecf42edde0c75b82b629c9d98a8c5c69e51a536628c30a5a3da8435f7665c1",
     "tools/delete-thread.ts": "8572a81726c9e6be22a9635cfab81443cfde86c6d14983439bd831a482a2af92",
     "tools/get-attachment.ts": "b59885dfe5262c9255c47af64f6a2d8b1212cc3a6ca40d61c78107e930dd86aa",
     "tools/get-auto-forwarding-settings.ts": "525992dad55b996ec6125fc52e2084b154e210e76af7ac1f822b988e5afa4c8e",
@@ -69,6 +61,7 @@
     "tools/update-send-as-alias.ts": "821a133fd622e9fd384a8ff00fb17bcecb4b2dbf2f33368313efa664adc52d1e",
     "tools/update-send-as-smtp-msa.ts": "04b1988631162b9b0837cce9c235cb9de565a816030268ac2c1785f2f767fd6a",
     "tools/update-vacation-settings.ts": "4e475c54bc0053e8b9fe986324391e3afc7190bb6a70c1b5bbf6641c394b97a1",
+    "tools/verify-send-as-alias.ts": "e7c432fa5d8655d4f1ab7bc0e98680cf009d7f332636f64e4114010bc7fd07c6",
     "tools/watch-mailbox.ts": "8d8dc97c6e0cf537551412b520dbcd628a3d5cbff45e78fda95ee1db0526d73a"
   }
 }

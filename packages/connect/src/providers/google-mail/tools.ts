@@ -13,6 +13,7 @@ import { deleteFilterTool } from './tools/delete-filter.js';
 import { deleteForwardingAddressTool } from './tools/delete-forwarding-address.js';
 import { deleteLabelTool } from './tools/delete-label.js';
 import { deleteMessageTool } from './tools/delete-message.js';
+import { deleteSendAsAliasTool } from './tools/delete-send-as-alias.js';
 import { deleteThreadTool } from './tools/delete-thread.js';
 import { getAttachmentTool } from './tools/get-attachment.js';
 import { getAutoForwardingSettingsTool } from './tools/get-auto-forwarding-settings.js';
@@ -53,6 +54,7 @@ import { updatePopSettingsTool } from './tools/update-pop-settings.js';
 import { updateSendAsAliasTool } from './tools/update-send-as-alias.js';
 import { updateSendAsSmtpMsaTool } from './tools/update-send-as-smtp-msa.js';
 import { updateVacationSettingsTool } from './tools/update-vacation-settings.js';
+import { verifySendAsAliasTool } from './tools/verify-send-as-alias.js';
 import { watchMailboxTool } from './tools/watch-mailbox.js';
 
 export function createGoogleMailTools(options?: ProviderToolsOptions) {
@@ -69,6 +71,7 @@ export function createGoogleMailTools(options?: ProviderToolsOptions) {
     google_mail_delete_forwarding_address: deleteForwardingAddressTool(platformProxy),
     google_mail_delete_label: deleteLabelTool(platformProxy),
     google_mail_delete_message: deleteMessageTool(platformProxy),
+    google_mail_delete_send_as_alias: deleteSendAsAliasTool(platformProxy),
     google_mail_delete_thread: deleteThreadTool(platformProxy),
     google_mail_get_attachment: getAttachmentTool(platformProxy),
     google_mail_get_auto_forwarding_settings: getAutoForwardingSettingsTool(platformProxy),
@@ -109,6 +112,7 @@ export function createGoogleMailTools(options?: ProviderToolsOptions) {
     google_mail_update_send_as_alias: updateSendAsAliasTool(platformProxy),
     google_mail_update_send_as_smtp_msa: updateSendAsSmtpMsaTool(platformProxy),
     google_mail_update_vacation_settings: updateVacationSettingsTool(platformProxy),
+    google_mail_verify_send_as_alias: verifySendAsAliasTool(platformProxy),
     google_mail_watch_mailbox: watchMailboxTool(platformProxy),
   };
   return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });

@@ -69,13 +69,22 @@ export interface PlatformProxyRequest {
    * whichever helper they need.
    */
   paginate?: PaginateConfig;
-}
-
-/** Extended request shape for `platformProxy.proxy` / `platformProxy.paginate`. */
-export interface PlatformProxyDispatchRequest extends PlatformProxyRequest {
-  /** HTTP method. Defaults to GET when omitted (matches Nango's `proxy` helper). */
+  /**
+   * Optional HTTP method. Only consumed by `platformProxy.proxy` (and
+   * `paginate`, which forwards it to each page request); ignored by the
+   * single-verb helpers (`get`, `post`, etc.) which set the method
+   * themselves. Kept on the base shape so templates can share one config
+   * literal across helpers.
+   */
   method?: ProxyRequestOptions['method'];
 }
+
+/**
+ * Extended request shape for `platformProxy.proxy` / `platformProxy.paginate`.
+ * Left as an alias of `PlatformProxyRequest` for backward compatibility —
+ * `method` and `paginate` live on the base shape now.
+ */
+export type PlatformProxyDispatchRequest = PlatformProxyRequest;
 
 interface CommonPaginateConfig {
   /** Dot-separated path inside the response body where the items array lives. */

@@ -152,6 +152,25 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
 }
 
+/**
+ * Returns the text of an inline zod expression assigned to `name` on the
+ * object literal, e.g. `output: z.void()` returns `'z.void()'`. Used to
+ * synthesize a named schema declaration when a template inlines the output
+ * type instead of pointing at a `const OutputSchema = ...` binding. Only
+ * matches direct `z.<method>(...)` calls to keep the shape auditable.
+ */
+function readInlineZodPropertyInitializer(obj: ObjectLiteralExpression, name: string): string | undefined {
+  const property = obj.getProperty(name);
+  if (!property || !Node.isPropertyAssignment(property)) return undefined;
+  const initializer = property.getInitializer();
+  if (!initializer || !Node.isCallExpression(initializer)) return undefined;
+  const expression = initializer.getExpression();
+  if (!Node.isPropertyAccessExpression(expression)) return undefined;
+  const target = expression.getExpression();
+  if (!Node.isIdentifier(target) || target.getText() !== 'z') return undefined;
+  return initializer.getText();
+}
+
 function unsupportedImportReason(source: SourceFile): string | undefined {
   for (const declaration of source.getImportDeclarations()) {
     const moduleName = declaration.getModuleSpecifierValue();
@@ -511,11 +530,28 @@ function extractAction(
   }
 
   const inputName = readIdentifierPropertyInitializer(argument, 'input');
-  const outputName = readIdentifierPropertyInitializer(argument, 'output');
+  let outputName = readIdentifierPropertyInitializer(argument, 'output');
   const execProperty = argument.getProperty('exec');
-  if (!inputName || !outputName || !execProperty) {
-    return { kind: 'skip', reason: 'missing identifier input/output or exec in createAction' };
+  if (!inputName || !execProperty) {
+    return { kind: 'skip', reason: 'missing identifier input or exec in createAction' };
   }
+
+  // Some templates inline the output schema (e.g. `output: z.void()`) instead
+  // of naming a const. Synthesize a declaration so the rest of the pipeline
+  // can treat it uniformly.
+  if (!outputName) {
+    const inlineOutput = readInlineZodPropertyInitializer(argument, 'output');
+    if (!inlineOutput) {
+      return { kind: 'skip', reason: 'missing identifier or inline zod output in createAction' };
+    }
+    outputName = '__InlineOutputSchema';
+    source.insertStatements(0, `const ${outputName} = ${inlineOutput};`);
+    const outputProperty = argument.getPropertyOrThrow('output');
+    if (Node.isPropertyAssignment(outputProperty)) {
+      outputProperty.setInitializer(outputName);
+    }
+  }
+
   if (inputName === outputName) {
     return { kind: 'skip', reason: 'input and output reference the same declaration' };
   }
