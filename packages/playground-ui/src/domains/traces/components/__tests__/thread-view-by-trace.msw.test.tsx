@@ -26,19 +26,12 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-// jsdom implements neither scrollIntoView (timeline reveals the selected span) nor element
-// scrollTo (the list brings the anchor row into view).
+// jsdom does not implement scrollIntoView, which the timeline uses to reveal the selected span.
 const scrollIntoView = vi.fn();
-const scrollTo = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
-  Element.prototype.scrollTo = scrollTo;
 });
-const listScrolled = (el: Element) => el.matches('[data-slot="thread-trace-list"]');
-beforeEach(() => {
-  scrollIntoView.mockClear();
-  scrollTo.mockClear();
-});
+beforeEach(() => scrollIntoView.mockClear());
 
 // The API returns traces newest-first (startedAt DESC): trace-b (12:05) before trace-a (12:00).
 const newestFirstList = { ...threadTracesList, spans: [threadTracesList.spans[1], threadTracesList.spans[0]] };
@@ -305,11 +298,9 @@ describe('ThreadViewByTrace', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-b"]');
-      const list = row?.closest('[data-slot="thread-trace-list"]');
-      // Only the list scrolls (never the host page), once; the row is expanded so the whole trace is readable.
-      await waitFor(() => expect(scrollTo.mock.instances).toContain(list));
-      expect(scrollTo.mock.instances.filter(el => el === list)).toHaveLength(1);
-      expect(scrollIntoView.mock.instances).not.toContain(row);
+      await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
+      // The row is expanded so the whole trace is readable; nothing else was scrolled to.
+      expect(scrollIntoView.mock.instances.filter(el => el === row)).toHaveLength(1);
       expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
       expect(screen.getAllByRole('button', { name: 'Show more' })).toHaveLength(1);
       vi.restoreAllMocks();
@@ -321,7 +312,7 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findByText('Chef agent follow-up');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(scrollTo.mock.instances.filter(listScrolled)).toHaveLength(0);
+      expect(scrollIntoView).not.toHaveBeenCalled();
     });
 
     it('does not scroll to the row when it only arrives on a later page', async () => {
@@ -363,7 +354,7 @@ describe('ThreadViewByTrace', () => {
         'trace-a',
         'trace-b',
       ]);
-      expect(scrollTo.mock.instances.filter(listScrolled)).toHaveLength(0);
+      expect(scrollIntoView).not.toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
       vi.unstubAllGlobals();
     });

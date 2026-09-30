@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
-import { scrollRowIntoList } from './scroll-row-into-list';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
 import { cn } from '@/lib/utils';
@@ -83,7 +82,7 @@ export function ThreadTraceRoot({
     const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-trace-id]') ?? [];
     for (const row of rows) {
       if (row.dataset.traceId === traceId) {
-        scrollRowIntoList(row, 'smooth');
+        row.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
     }

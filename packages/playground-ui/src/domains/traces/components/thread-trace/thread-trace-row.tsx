@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ComponentProps } from 'react';
 
-import { scrollRowIntoList } from './scroll-row-into-list';
 import { useThreadTrace } from './thread-trace-context';
 import { ThreadTraceRowContext } from './thread-trace-row-context';
 import type { ThreadTraceRowContextValue } from './thread-trace-row-context';
@@ -16,7 +15,7 @@ export interface ThreadTraceRowProps extends ComponentProps<'div'> {
 
 // Module-level so the callback ref keeps its identity and React only invokes it on mount/unmount.
 const scrollIntoViewOnMount = (row: HTMLDivElement | null) => {
-  if (row) scrollRowIntoList(row);
+  row?.scrollIntoView({ block: 'start' });
 };
 
 /**

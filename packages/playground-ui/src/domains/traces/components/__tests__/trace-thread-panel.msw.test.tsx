@@ -17,17 +17,12 @@ import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-// jsdom implements neither scrollIntoView nor element scrollTo, which the thread list uses to reveal the anchored trace.
+// jsdom does not implement scrollIntoView, which the thread view uses to reveal the anchored trace.
 const scrollIntoView = vi.fn();
-const scrollTo = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
-  Element.prototype.scrollTo = scrollTo;
 });
-beforeEach(() => {
-  scrollIntoView.mockClear();
-  scrollTo.mockClear();
-});
+beforeEach(() => scrollIntoView.mockClear());
 afterEach(() => vi.restoreAllMocks());
 
 // The API returns traces newest-first (startedAt DESC).
@@ -87,7 +82,7 @@ describe('TraceThreadPanel', () => {
 
       expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
       const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
-      await waitFor(() => expect(scrollTo.mock.instances).toContain(row?.closest('[data-slot="thread-trace-list"]')));
+      await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
       expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
     });
 

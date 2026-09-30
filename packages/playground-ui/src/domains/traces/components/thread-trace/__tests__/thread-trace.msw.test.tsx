@@ -23,18 +23,15 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// jsdom implements neither scrollIntoView (timeline) nor element scrollTo (anchor row).
+// jsdom does not implement scrollIntoView, which the anchor row relies on.
 const scrollIntoView = vi.fn();
-const scrollTo = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
-  Element.prototype.scrollTo = scrollTo;
 });
 
 beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   scrollIntoView.mockClear();
-  scrollTo.mockClear();
   server.use(
     http.get(`${BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () => HttpResponse.json(spanADetail)),
     http.get(`${BASE_URL}/api/observability/traces/:traceId`, ({ params }) =>
@@ -165,10 +162,8 @@ describe('ThreadTrace', () => {
       renderView({ anchorTraceId: 'trace-b' });
       await screen.findByText('Chef agent follow-up');
 
-      // Only the list scrolls, so the host page/dialog is never shifted.
-      const list = getRow('trace-b').closest('[data-slot="thread-trace-list"]');
-      expect(scrollTo.mock.instances.filter(el => el === list)).toHaveLength(1);
-      expect(scrollIntoView.mock.instances).not.toContain(getRow('trace-b'));
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
       // trace-b is expanded from the start so its timeline is not clamped; trace-a is.
       await screen.findByRole('button', { name: 'Show more' });
       expect(within(getRow('trace-a')).getByRole('button', { name: 'Show more' })).toBeTruthy();
