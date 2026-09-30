@@ -996,21 +996,28 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
       )
       .sort((left, right) => left.id - right.id)[0];
+    const body = appendArtifactAttributionFooter(input.body, input.attribution);
+    const requestOptions = {
+      actingUserId: input.attribution?.kind === 'human' ? input.attribution.userId : undefined,
+      factoryAttributionApplied: input.attribution !== undefined,
+    };
     if (existing) {
       const comment = await this.#client.request<GithubComment>(
         'PATCH',
         repositoryPath(input.repository, `issues/comments/${existing.id}`),
-        { body: input.body },
+        { body },
+        requestOptions,
       );
-      this.#observeSelfAuthor(comment, undefined);
+      this.#observeSelfAuthor(comment, requestOptions.actingUserId);
       return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
     }
     const comment = await this.#client.request<GithubComment>(
       'POST',
       repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
-      { body: input.body },
+      { body },
+      requestOptions,
     );
-    this.#observeSelfAuthor(comment, undefined);
+    this.#observeSelfAuthor(comment, requestOptions.actingUserId);
     return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
   }
 
@@ -1247,13 +1254,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Learn Factory's own login from a write it just made. Skipped when the write
-   * was made on behalf of a user — that comment is authored by the human, and
-   * recording it would teach Factory to mistake a person for itself.
+   * Learn Factory's own login from a write it just made. Older Platform
+   * releases may still author an acting-user request as the human, so only
+   * trust an observed App login when actingUserId is present. Upgraded
+   * Platform releases return the installation bot even for attributed writes.
    */
   #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
-    if (actingUserId) return;
-    this.identity.observeSelfAuthor(comment.user?.login);
+    const login = comment.user?.login;
+    if (actingUserId && !login?.trim().toLowerCase().endsWith('[bot]')) return;
+    this.identity.observeSelfAuthor(login);
   }
 
   async #createIssueComment(input: CreateIntakeCommentInput) {

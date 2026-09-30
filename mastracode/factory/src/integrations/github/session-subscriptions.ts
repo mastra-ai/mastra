@@ -3,6 +3,11 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import {
+  resolveFactoryArtifactAttribution,
+  type FactoryArtifactSession,
+  type FactoryArtifactTrigger,
+} from '../../capabilities/artifact-attribution.js';
 import { runsPullRequestCreate } from '../../session/shell-commands.js';
 import type {
   ProjectRepository,
@@ -15,7 +20,12 @@ import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
 
-type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
+type RepositorySessionState = {
+  factoryProjectId?: string;
+  projectRepositoryId?: string;
+  factoryWorkItemId?: string;
+  factoryRole?: string;
+};
 
 /**
  * The host-authenticated user placed on the request context under the `user`
@@ -184,12 +194,26 @@ export async function upsertFactoryTriageComment(
   const target = await resolveSessionTarget(requestContext, github);
   const installationId = Number(target.installation.externalId);
   if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  const trustedSession = requestContext.get('factoryArtifactSession') as FactoryArtifactSession | undefined;
+  const attribution = resolveFactoryArtifactAttribution({
+    user: getFactoryAuthUserFromContext(requestContext),
+    userId: target.userId,
+    trigger: requestContext.get('factoryArtifactTrigger') as FactoryArtifactTrigger | undefined,
+    session:
+      trustedSession ??
+      ({
+        role: target.context.getState().factoryRole ?? target.context.session.modeId ?? 'session',
+        workItemRef: target.context.getState().factoryWorkItemId ?? target.context.resourceId,
+        runId: target.context.threadId ?? target.context.resourceId,
+      } satisfies FactoryArtifactSession),
+  });
   return serializeTriageComment(`${installationId}:${target.repository.externalId}:${input.issueNumber}`, () =>
     github.upsertFactoryTriageComment({
       installationId,
       repository: target.repository.slug,
       issueNumber: input.issueNumber,
       body: input.body,
+      attribution,
     }),
   );
 }

@@ -117,6 +117,12 @@ describe('PlatformGithubIntegration', () => {
         repository: 'acme/app',
         issueNumber: 7,
         body: '<!-- mastra-factory-triage -->\nFinal',
+        attribution: {
+          kind: 'human',
+          userId: 'user-42',
+          displayName: 'Ada Lovelace',
+          session: { role: 'triage', workItemRef: 'work-7', runId: 'run-7' },
+        },
       }),
     ).resolves.toEqual({ action: 'updated', commentId: '10', url: older.htmlUrl });
 
@@ -130,8 +136,11 @@ describe('PlatformGithubIntegration', () => {
       'PATCH /v1/server/github/repos/acme/app/issues/comments/10',
     ]);
     expect(JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body))).toEqual({
-      body: '<!-- mastra-factory-triage -->\nFinal',
+      body:
+        '<!-- mastra-factory-triage -->\nFinal\n\n— via Mastra Factory · actor: Ada Lovelace',
     });
+    expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('x-acting-user-id')).toBe('user-42');
+    expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('x-mastra-factory-attribution')).toBe('applied');
     expect(integration.isFactoryCommentAuthor('actual-factory-writer[bot]')).toBe(true);
   });
 
@@ -156,6 +165,12 @@ describe('PlatformGithubIntegration', () => {
         repository: 'acme/app',
         issueNumber: 7,
         body: '<!-- mastra-factory-triage -->\nPending',
+        attribution: {
+          kind: 'human',
+          userId: 'user-42',
+          displayName: 'Ada Lovelace',
+          session: { role: 'triage', workItemRef: 'work-7', runId: 'run-7' },
+        },
       }),
     ).resolves.toEqual({ action: 'created', commentId: '42', url: created.htmlUrl });
     expect(
@@ -166,6 +181,41 @@ describe('PlatformGithubIntegration', () => {
       'GET /v1/server/github/repos/acme/app/issues/7/comments?page=1&per_page=30',
       'POST /v1/server/github/repos/acme/app/issues/7/comments',
     ]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body))).toEqual({
+      body:
+        '<!-- mastra-factory-triage -->\nPending\n\n— via Mastra Factory · actor: Ada Lovelace',
+    });
+    expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('x-acting-user-id')).toBe('user-42');
+    expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('x-mastra-factory-attribution')).toBe('applied');
+  });
+
+  it('does not learn a legacy human writer as the Factory App identity', async () => {
+    const human = {
+      id: 42,
+      body: '<!-- mastra-factory-triage --> Pending',
+      htmlUrl: 'https://github.com/acme/app/issues/7#issuecomment-42',
+      user: { login: 'ada', avatarUrl: null, htmlUrl: 'https://github.com/ada' },
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-01T00:00:00Z',
+    };
+    const integration = createIntegration(
+      vi.fn<typeof fetch>().mockResolvedValueOnce(json({ comments: [] })).mockResolvedValueOnce(json(human)),
+    );
+
+    await integration.upsertFactoryTriageComment({
+      installationId: 7,
+      repository: 'acme/app',
+      issueNumber: 7,
+      body: '<!-- mastra-factory-triage -->\nPending',
+      attribution: {
+        kind: 'human',
+        userId: 'user-42',
+        displayName: 'Ada Lovelace',
+        session: { role: 'triage', workItemRef: 'work-7', runId: 'run-7' },
+      },
+    });
+
+    expect(integration.isFactoryCommentAuthor('ada')).toBe(false);
   });
 
   it('lists platform-owned installations and repositories as Intake sources', async () => {

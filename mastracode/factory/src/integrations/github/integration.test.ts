@@ -263,6 +263,12 @@ describe('GithubIntegration triage comment upsert', () => {
         repository: 'acme/app',
         issueNumber: 7,
         body: '<!-- mastra-factory-triage -->\nFinal',
+        attribution: {
+          kind: 'human',
+          userId: 'user-42',
+          displayName: 'Ada Lovelace',
+          session: { role: 'triage', workItemRef: 'work-7', runId: 'run-7' },
+        },
       }),
     ).resolves.toEqual({
       action: 'updated',
@@ -288,7 +294,8 @@ describe('GithubIntegration triage comment upsert', () => {
       owner: 'acme',
       repo: 'app',
       comment_id: 10,
-      body: '<!-- mastra-factory-triage -->\nFinal',
+      body:
+        '<!-- mastra-factory-triage -->\nFinal\n\n— via Mastra Factory · actor: Ada Lovelace',
     });
     expect(createComment).not.toHaveBeenCalled();
   });
@@ -312,6 +319,12 @@ describe('GithubIntegration triage comment upsert', () => {
         repository: 'acme/app',
         issueNumber: 7,
         body: '<!-- mastra-factory-triage -->\nPending',
+        attribution: {
+          kind: 'human',
+          userId: 'user-42',
+          displayName: 'Ada Lovelace',
+          session: { role: 'triage', workItemRef: 'work-7', runId: 'run-7' },
+        },
       }),
     ).resolves.toEqual({
       action: 'created',
@@ -322,7 +335,8 @@ describe('GithubIntegration triage comment upsert', () => {
       owner: 'acme',
       repo: 'app',
       issue_number: 7,
-      body: '<!-- mastra-factory-triage -->\nPending',
+      body:
+        '<!-- mastra-factory-triage -->\nPending\n\n— via Mastra Factory · actor: Ada Lovelace',
     });
     expect(updateComment).not.toHaveBeenCalled();
   });

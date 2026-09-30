@@ -72,7 +72,7 @@ import { registerGithubPatKind, registerGithubTokenInjector } from './token-refr
 
 function authenticatedRequestContext(scope = '/worktrees/a') {
   const requestContext = new RequestContext();
-  requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1', name: 'Ada Lovelace' });
   requestContext.set('controller', {
     resourceId: 'resource-1',
     threadId: 'thread-1',
@@ -292,6 +292,16 @@ describe('GitHub subscription entry points', () => {
       repository: 'mastra-ai/mastra',
       issueNumber: 7,
       body: '<!-- mastra-factory-triage -->\nPending',
+      attribution: {
+        kind: 'human',
+        userId: 'user-1',
+        displayName: 'Ada Lovelace',
+        session: {
+          role: 'build',
+          workItemRef: 'resource-1',
+          runId: 'thread-1',
+        },
+      },
     });
   });
 

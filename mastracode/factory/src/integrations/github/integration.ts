@@ -34,6 +34,7 @@ import {
   appendPullRequestAttribution,
   requireFactoryArtifactAttribution,
 } from '../../capabilities/artifact-attribution.js';
+import type { FactoryArtifactAttribution } from '../../capabilities/artifact-attribution.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -110,6 +111,7 @@ export interface GithubTriageCommentUpsertInput {
   repository: string;
   issueNumber: number;
   body: string;
+  attribution?: FactoryArtifactAttribution;
 }
 
 export interface GithubTriageCommentUpsertResult {
@@ -1375,14 +1377,15 @@ export class GithubIntegration implements FactoryIntegration {
           comment.body?.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
       )
       .sort((left, right) => left.id - right.id)[0];
+    const body = appendArtifactAttributionFooter(input.body, input.attribution);
     if (existing) {
-      const { data } = await octokit.issues.updateComment({ ...parts, comment_id: existing.id, body: input.body });
+      const { data } = await octokit.issues.updateComment({ ...parts, comment_id: existing.id, body });
       return { action: 'updated', commentId: String(data.id), url: data.html_url };
     }
     const { data } = await octokit.issues.createComment({
       ...parts,
       issue_number: input.issueNumber,
-      body: input.body,
+      body,
     });
     return { action: 'created', commentId: String(data.id), url: data.html_url };
   }
