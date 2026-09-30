@@ -143,4 +143,76 @@ describe('evented nested workflow restart after crash during resume (issue #2536
     expect(seen).toEqual([false]);
     expect(nestedAfter?.status).toBe('success');
   });
+
+  it('resumes the step the caller resumed when parallel nested steps are suspended', async () => {
+    const buildParallel = (onResume: (id: string, data: any) => Promise<void>) => {
+      const mk = (id: string) =>
+        createStep({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({ v: z.string() }),
+          resumeSchema: z.string(),
+          execute: async ({ resumeData, suspend }) => {
+            if (resumeData === undefined) return suspend({});
+            await onResume(id, resumeData);
+            return { v: resumeData };
+          },
+        });
+      const nested = createWorkflow({ id: 'nested', inputSchema: z.object({}), outputSchema: z.any() })
+        .parallel([mk('a'), mk('b')])
+        .commit();
+      const parent = createWorkflow({ id: 'parent', inputSchema: z.object({}), outputSchema: z.any() })
+        .then(nested)
+        .commit();
+      return { parent, nested } as unknown as ReturnType<typeof build>;
+    };
+
+    // Crash after the parent claimed the resume, before the nested run did.
+    const storage = new MockStore();
+    let markClaimed!: () => void;
+    const claimed = new Promise<void>(r => (markClaimed = r));
+    const p = buildParallel(async () => {
+      await new Promise(() => {});
+    });
+    const mastra = await makeHost(storage, p);
+    const run = await p.parent.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    const store = (await storage.getStore('workflows'))!;
+    const nestedRunId = (
+      (await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId }))?.context as any
+    ).nested.metadata.nestedRunId as string;
+    const suspendedNested = JSON.parse(
+      JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: 'nested', runId: nestedRunId })),
+    );
+    const poll = setInterval(async () => {
+      const s = await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId });
+      if ((s?.context as any)?.nested?.status === 'running') markClaimed();
+    }, 5);
+    void run.resume({ step: ['nested', 'b'], resumeData: 'forB' });
+    await claimed;
+    clearInterval(poll);
+    const parentSnapshot = JSON.parse(
+      JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: 'parent', runId: run.runId })),
+    );
+    await mastra.stopWorkers();
+
+    const storage2 = new MockStore();
+    const store2 = (await storage2.getStore('workflows'))!;
+    await store2.persistWorkflowSnapshot({ workflowName: 'parent', runId: run.runId, snapshot: parentSnapshot });
+    await store2.persistWorkflowSnapshot({ workflowName: 'nested', runId: nestedRunId, snapshot: suspendedNested });
+    const seen: any[] = [];
+    const p2 = buildParallel(async (id, data) => {
+      seen.push([id, data]);
+    });
+    const mastra2 = await makeHost(storage2, p2);
+    try {
+      const result = await (await p2.parent.createRun({ runId: run.runId })).restart();
+      expect(seen).toEqual([['b', 'forB']]);
+      expect(result.status).toBe('suspended');
+      const nestedAfter = await store2.loadWorkflowSnapshot({ workflowName: 'nested', runId: nestedRunId });
+      expect((nestedAfter?.context as any).a.status).toBe('suspended');
+    } finally {
+      await mastra2.stopWorkers();
+    }
+  });
 });

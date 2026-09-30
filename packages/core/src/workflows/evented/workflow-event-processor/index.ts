@@ -1576,7 +1576,15 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowName: workflowId,
             runId,
             stepId: leafId,
-            result: { ...storedResult, status: 'running', resumePayload: resumeData, resumedAt: Date.now() },
+            result: {
+              ...storedResult,
+              status: 'running',
+              resumePayload: resumeData,
+              resumedAt: Date.now(),
+              // For a nested workflow step, the inner steps the caller resumed,
+              // so restart can target them instead of guessing.
+              ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
+            },
             requestContext,
           });
         }
@@ -1850,9 +1858,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         // step running yet). Restarting it would re-suspend the step and drop
         // the resume data, so resume it with the data recorded on the parent.
         const nestedContext = (snapshot.context ?? {}) as Record<string, any>;
-        const suspendedNestedStepId =
-          Object.keys(snapshot.suspendedPaths ?? {}).find(id => nestedContext[id]?.status === 'suspended') ??
-          Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended');
+        const recordedNestedSteps = (stepResults[leafId] as any)?.resumedNestedSteps as string[] | undefined;
+        const suspendedNestedStepId = recordedNestedSteps?.length
+          ? nestedContext[recordedNestedSteps[0]!]?.status === 'suspended'
+            ? recordedNestedSteps[0]
+            : undefined
+          : (Object.keys(snapshot.suspendedPaths ?? {}).find(id => nestedContext[id]?.status === 'suspended') ??
+            Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended'));
+        const nestedResumeSteps = recordedNestedSteps?.length ? recordedNestedSteps : [suspendedNestedStepId!];
         const nestedHasRunningStep = Object.values(nestedContext).some(result => result?.status === 'running');
         if (
           isResumedRunningRecord(stepResults[leafId]) &&
@@ -1871,7 +1884,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 runId,
                 stepGraph,
                 executionPath,
-                resumeSteps: [leafId, suspendedNestedStepId],
+                resumeSteps: [leafId, ...nestedResumeSteps],
                 stepResults,
                 input: prevResult,
                 parentWorkflow,
@@ -1881,7 +1894,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath: (snapshot.suspendedPaths?.[suspendedNestedStepId] ??
                 snapshot.activeStepsPath?.[suspendedNestedStepId]) as any,
               runId: nestedRunId,
-              resumeSteps: [suspendedNestedStepId],
+              resumeSteps: nestedResumeSteps,
               stepResults: nestedContext,
               prevResult: {
                 status: 'success',
