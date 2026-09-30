@@ -10,6 +10,15 @@
  * be listed directly in `inputProcessors` (not inside a processor workflow) so the
  * agent can bind it to the run's workspace. Without a writable workspace
  * destination the run is aborted instead of sending the file to the model.
+ *
+ * Routed files persist under `uploads/<id>/<name>` in the workspace; cleaning
+ * them up is left to the user.
+ *
+ * Tripwire codes (`metadata.code`) when the run is aborted:
+ * - `WORKSPACE_REQUIRED_FOR_ATTACHMENT`: no workspace, or none that can be written to.
+ * - `ATTACHMENT_NOT_INLINE`: the file was sent as a URL instead of inline data.
+ * - `ATTACHMENT_INVALID_DATA`: the data is not base64 or a base64 data URL.
+ * - `ATTACHMENT_TOO_LARGE`: the decoded file is larger than `maxBytes`.
  */
 
 import type { MastraDBMessage, MastraMessageContentV2 } from '../../agent/message-list';
@@ -20,20 +29,58 @@ import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import type { AnyWorkspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
+/** Tripwire code: a routed attachment arrived but the agent has no writable workspace. */
 export const WORKSPACE_REQUIRED_FOR_ATTACHMENT = 'WORKSPACE_REQUIRED_FOR_ATTACHMENT';
+/** Tripwire code: a routed attachment was sent as a URL instead of inline data. */
 export const ATTACHMENT_NOT_INLINE = 'ATTACHMENT_NOT_INLINE';
+/** Tripwire code: a routed attachment's data is not base64 or a base64 data URL. */
 export const ATTACHMENT_INVALID_DATA = 'ATTACHMENT_INVALID_DATA';
+/** Tripwire code: a routed attachment is larger than `maxBytes`. */
 export const ATTACHMENT_TOO_LARGE = 'ATTACHMENT_TOO_LARGE';
 
 const FALLBACK_MEDIA_TYPE = 'application/octet-stream';
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
+/**
+ * Options for {@link WorkspaceAttachmentsProcessor}.
+ *
+ * An attachment is routed to the workspace if its filename extension is in
+ * `extensions` **or** its MIME type is in `mimeTypes`. The MIME check never
+ * routes a `.csv` file, because browsers report CSVs as
+ * `application/vnd.ms-excel`; to route CSVs, add `.csv` to `extensions`.
+ * With neither option set, nothing is routed.
+ *
+ * @example
+ * ```ts
+ * new WorkspaceAttachmentsProcessor({
+ *   extensions: ['.xlsx', '.xls'],
+ *   mimeTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
+ *   maxBytes: 10_000_000,
+ * });
+ * ```
+ */
 export interface WorkspaceAttachmentsProcessorOptions {
-  /** Filename extensions to route to the workspace, e.g. `['.xlsx', '.xls']`. */
+  /**
+   * Filename extensions to route, e.g. `['.xlsx', '.xls']`. Matched
+   * case-insensitively against the last extension of the filename; the leading
+   * dot is optional (`'xlsx'` and `'.xlsx'` both work). Empty or `'.'` entries
+   * throw in the constructor. A file matched only by extension that has no MIME
+   * type is noted as `application/octet-stream`.
+   */
   extensions?: string[];
-  /** Media types to route to the workspace, e.g. `['application/vnd.ms-excel']`. */
+  /**
+   * MIME types to route, e.g. `['application/vnd.ms-excel']`. Exact,
+   * case-insensitive match. Applies to files with no filename or whose
+   * extension isn't listed in `extensions` (never to `.csv`). Empty entries
+   * throw in the constructor.
+   */
   mimeTypes?: string[];
-  /** Largest attachment accepted, in bytes. Larger ones abort the run. Unlimited when omitted. */
+  /**
+   * Largest routed attachment accepted, in bytes, checked after decoding. A file
+   * exactly at the limit is accepted; a larger one stops the run with an
+   * `ATTACHMENT_TOO_LARGE` tripwire before anything is written. Must be a
+   * positive integer, or the constructor throws. No limit when omitted.
+   */
   maxBytes?: number;
   /**
    * Workspace used by the current run. The agent sets it; when absent, routed attachments abort the run.
