@@ -2837,11 +2837,14 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
  *   the messageList or from being sent to the model in the next iteration.
  * - A positive maxSteps value is a hard ceiling: once the accumulated step count
  *   reaches it the loop stops, even when an isTaskComplete scorer keeps failing.
- *   `maxSteps: 0` (or leaving it unset) means unbounded and never stops the loop
- *   this way. The plain loop gained the ceiling in the #24569 loop extraction and
- *   keeps it deliberately; the durable ladder enforces the same one. A failing
- *   scorer's feedback is still injected for that final iteration, but it no longer
- *   buys another turn.
+ *   The two loops differ on an unset or zero value. The plain loop computes
+ *   `underMaxSteps` as `!maxSteps || accumulatedSteps < maxSteps`, so unset and
+ *   `maxSteps: 0` both mean unbounded. The durable loop resolves unset to
+ *   DurableAgentDefaults.MAX_STEPS and keeps `maxSteps: 0` as a zero budget, so
+ *   its budget is always finite. The plain loop gained the ceiling in the #24569
+ *   loop extraction and keeps it deliberately; the durable ladder enforces the
+ *   same one. A failing scorer's feedback is still injected for that final
+ *   iteration, but it no longer buys another turn.
  */
 describe('Supervisor Pattern - IsTaskComplete feedback', () => {
   it('should require all scorers to pass with "all" strategy', async () => {
