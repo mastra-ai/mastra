@@ -16,14 +16,6 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { SettingsSubsection } from './SettingsSubsection';
 import { SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
-type NotificationMode = AgentControllerSessionSettings['notifications'];
-const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'bell', label: 'Bell' },
-  { value: 'system', label: 'System' },
-  { value: 'both', label: 'Both' },
-];
-
 export function GeneralSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
@@ -109,11 +101,10 @@ export function BehaviorSettings({
               disabled={!settings}
               onValueChange={v => onBehaviorChange({ notifications: v })}
             >
-              {NOTIFICATION_MODES.map(option => (
-                <SegmentedControlItem key={option.value} value={option.value}>
-                  {option.label}
-                </SegmentedControlItem>
-              ))}
+              <SegmentedControlItem value="off">Off</SegmentedControlItem>
+              <SegmentedControlItem value="bell">Bell</SegmentedControlItem>
+              <SegmentedControlItem value="system">System</SegmentedControlItem>
+              <SegmentedControlItem value="both">Both</SegmentedControlItem>
             </SegmentedControl>
           </SettingsRow>
         </SettingsContainer>
@@ -130,12 +121,6 @@ const TOOL_CATEGORIES: { value: ToolCategory; label: string; hint: string }[] = 
   { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers' },
   { value: 'other', label: 'Other', hint: 'Anything not in the above categories' },
 ];
-const PERMISSION_POLICIES: { value: PermissionPolicy; label: string }[] = [
-  { value: 'allow', label: 'Allow' },
-  { value: 'ask', label: 'Ask' },
-  { value: 'deny', label: 'Deny' },
-];
-
 function PermissionsSection({
   permissions,
   setPermissionForCategory,
@@ -149,22 +134,36 @@ function PermissionsSection({
       <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
           <SettingsRow key={value} label={label} description={hint}>
-            <SegmentedControl
-              aria-label={`${label} permission`}
-              value={permissions?.categories?.[value] ?? 'ask'}
+            <PermissionPolicyControl
+              category={label}
+              policy={permissions?.categories?.[value] ?? 'ask'}
               disabled={!permissions}
-              onValueChange={policy => void setPermissionForCategory(value, policy)}
-            >
-              {PERMISSION_POLICIES.map(option => (
-                <SegmentedControlItem key={option.value} value={option.value}>
-                  {option.label}
-                </SegmentedControlItem>
-              ))}
-            </SegmentedControl>
+              onChange={policy => void setPermissionForCategory(value, policy)}
+            />
           </SettingsRow>
         ))}
       </SettingsContainer>
     </SettingsSubsection>
+  );
+}
+
+function PermissionPolicyControl({
+  category,
+  policy,
+  disabled,
+  onChange,
+}: {
+  category: string;
+  policy: PermissionPolicy;
+  disabled: boolean;
+  onChange: (policy: PermissionPolicy) => void;
+}) {
+  return (
+    <SegmentedControl aria-label={`${category} permission`} value={policy} disabled={disabled} onValueChange={onChange}>
+      <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
+      <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
+      <SegmentedControlItem value="deny">Deny</SegmentedControlItem>
+    </SegmentedControl>
   );
 }
 

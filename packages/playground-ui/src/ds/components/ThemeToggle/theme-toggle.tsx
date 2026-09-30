@@ -36,6 +36,14 @@ export type ThemeToggleProps = ThemeToggleGroupProps & {
   'aria-label'?: string;
 } & (ControlledProps | UncontrolledProps);
 
+/** The theme to show as selected: the current one if it is an option, else the first option. */
+function pickSelectedTheme(options: ReadonlyArray<ThemeToggleOption>, current: Theme): Theme {
+  if (options.some(option => option.value === current)) return current;
+  const [first] = options;
+  if (first) return first.value;
+  return 'system';
+}
+
 /** Icon-only `SegmentedControl` bound to the active theme, or to `value`/`onChange` when controlled. */
 export const ThemeToggle = ({
   value,
@@ -48,7 +56,7 @@ export const ThemeToggle = ({
   const { theme, setTheme } = useTheme();
   const current = value ?? theme;
   const commit = onChange ?? setTheme;
-  const effectiveCurrent = options.some(option => option.value === current) ? current : (options[0]?.value ?? 'system');
+  const selected = pickSelectedTheme(options, current);
 
   return (
     <SegmentedControl
@@ -56,7 +64,7 @@ export const ThemeToggle = ({
       aria-label={ariaLabel}
       iconOnly
       size={size === 'xs' ? 'sm' : size}
-      value={effectiveCurrent}
+      value={selected}
       onValueChange={commit}
     >
       {options.map(option => (

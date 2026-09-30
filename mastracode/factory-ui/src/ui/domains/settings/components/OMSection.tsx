@@ -23,12 +23,6 @@ function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   return 'auto';
 }
 
-const ATTACHMENT_OPTIONS: { value: AttachmentChoice; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'on', label: 'On' },
-  { value: 'off', label: 'Off' },
-];
-
 function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
@@ -205,11 +199,9 @@ export function OMSection({
           disabled={busy || !config}
           onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
         >
-          {ATTACHMENT_OPTIONS.map(option => (
-            <SegmentedControlItem key={option.value} value={option.value}>
-              {option.label}
-            </SegmentedControlItem>
-          ))}
+          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+          <SegmentedControlItem value="on">On</SegmentedControlItem>
+          <SegmentedControlItem value="off">Off</SegmentedControlItem>
         </SegmentedControl>
       </SettingsRow>
     </>

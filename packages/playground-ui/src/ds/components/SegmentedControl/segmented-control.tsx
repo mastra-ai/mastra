@@ -11,10 +11,11 @@ import { cn } from '@/lib/utils';
 
 type SegmentedControlContextValue = {
   iconOnly: boolean;
-  registerItem: (value: string, element: HTMLElement | null) => void;
+  registerItem: (value: string, element: HTMLElement) => void;
+  unregisterItem: (value: string) => void;
 };
 
-const SegmentedControlContext = React.createContext<SegmentedControlContextValue | null>(null);
+const SegmentedControlContext = React.createContext<SegmentedControlContextValue | undefined>(undefined);
 
 type RadioGroupPassthroughProps = Omit<
   RadioGroupPrimitive.Props,
@@ -61,10 +62,8 @@ export function SegmentedControl<T extends string = string>({
 
   const context: SegmentedControlContextValue = {
     iconOnly,
-    registerItem: (itemValue, element) => {
-      if (element) itemRefs.current.set(itemValue, element);
-      else itemRefs.current.delete(itemValue);
-    },
+    registerItem: (itemValue, element) => itemRefs.current.set(itemValue, element),
+    unregisterItem: itemValue => itemRefs.current.delete(itemValue),
   };
 
   // Base UI reports the chosen value as `unknown`; accept only a value one of our items carries.
@@ -154,10 +153,10 @@ export function SegmentedControlItem({
 }: SegmentedControlItemProps) {
   const context = React.useContext(SegmentedControlContext);
   if (!context) throw new Error('SegmentedControlItem must be used inside a SegmentedControl');
-  const { iconOnly, registerItem } = context;
+  const { iconOnly, registerItem, unregisterItem } = context;
   const itemRef = mergeRefs<HTMLElement>(ref, element => {
-    registerItem(value, element);
-    return () => registerItem(value, null);
+    if (element) registerItem(value, element);
+    return () => unregisterItem(value);
   });
 
   return (
