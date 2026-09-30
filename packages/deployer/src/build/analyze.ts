@@ -16,7 +16,7 @@ import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
-import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
+import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
   isBareModuleSpecifier,
@@ -393,8 +393,8 @@ export async function analyzeBundle(
     platform: BundlerPlatform;
     isDev?: boolean;
     bundlerOptions?: Pick<
-      BundlerOptions,
-      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages'
+      InternalBundlerOptions,
+      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
     > | null;
     env?: Record<string, string>;
   },
@@ -450,6 +450,7 @@ export async function analyzeBundle(
       activeEntries: activeAnalyzeEntries,
       externals: mergedExternals,
       externalsPreset,
+      alias: bundlerOptions?.alias,
     });
 
     // Detect pino transports in the bundled output
@@ -526,6 +527,7 @@ export async function analyzeBundle(
       externalsPreset,
       mergedExternals,
       isDev,
+      alias: bundlerOptions?.alias,
     },
     projectRoot,
     workspaceRoot,

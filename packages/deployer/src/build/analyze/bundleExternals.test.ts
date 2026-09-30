@@ -456,6 +456,44 @@ describe('bundleExternals', () => {
     expect(result.usedExternals).not.toBeInstanceOf(Map);
   });
 
+  it('should apply module aliases while optimizing dependencies', async () => {
+    const packageDir = join(testDir, 'node_modules', 'fixture-package');
+    const shimFile = join(testDir, 'ajv-shim.js');
+    await ensureDir(packageDir);
+    await Promise.all([
+      writeFile(
+        join(packageDir, 'package.json'),
+        JSON.stringify({ name: 'fixture-package', version: '1.0.0', type: 'module', main: 'index.js' }),
+      ),
+      writeFile(join(packageDir, 'index.js'), `import Ajv from 'ajv'; export const marker = new Ajv();`),
+      writeFile(shimFile, `export default class Ajv { constructor() { this.marker = 'MASTRA_AJV_SHIM'; } }`),
+    ]);
+
+    const packageEntry = join(packageDir, 'index.js');
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        packageEntry,
+        {
+          exports: ['marker'],
+          rootPath: packageDir,
+          isWorkspace: false,
+        },
+      ],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, testDir, {
+      projectRoot: testDir,
+      bundlerOptions: {
+        ...normalizeExternals(undefined),
+        alias: { ajv: shimFile },
+      },
+    });
+    const code = result.output.map(output => ('code' in output ? output.code : '')).join('\n');
+
+    expect(code).toContain('MASTRA_AJV_SHIM');
+    expect(code).not.toContain("from 'ajv'");
+  });
+
   it('should handle different bundler options configurations', async () => {
     await writeFile(
       join(testDir, 'package.json'),

@@ -15,6 +15,7 @@ import { getPackageRootPath, getPackageInfo } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
+import { moduleAlias } from '../plugins/module-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
@@ -143,6 +144,7 @@ async function getInputPlugins(
     rootDir,
     externals,
     platform,
+    alias,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
@@ -151,6 +153,7 @@ async function getInputPlugins(
     rootDir: string;
     externals: string[];
     platform: BundlerPlatform;
+    alias: Record<string, string>;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -174,6 +177,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    moduleAlias(alias, path.join(rootDir, 'package.json')),
     tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
     subpathExternalsResolver(externals, workspaceMap),
@@ -307,6 +311,7 @@ async function buildExternalDependencies(
     outputDir,
     bundlerOptions,
     platform,
+    alias,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
@@ -319,6 +324,7 @@ async function buildExternalDependencies(
       externalsPreset: boolean;
     };
     platform: BundlerPlatform;
+    alias: Record<string, string>;
   },
 ) {
   /**
@@ -340,6 +346,7 @@ async function buildExternalDependencies(
     rootDir,
     externals,
     platform,
+    alias,
   });
 
   const bundler = await rollup({
@@ -477,6 +484,7 @@ export async function bundleExternals(
     bundlerOptions: NormalizedExternals & {
       isDev?: boolean;
       transpilePackages?: string[];
+      alias?: Record<string, string>;
     };
     projectRoot?: string;
     workspaceRoot?: string;
@@ -491,7 +499,7 @@ export async function bundleExternals(
     bundlerOptions,
     platform = 'node',
   } = options;
-  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false } = bundlerOptions;
+  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false, alias = {} } = bundlerOptions;
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
@@ -534,6 +542,7 @@ export async function bundleExternals(
       externalsPreset,
     },
     platform,
+    alias,
   });
 
   const moduleResolveMap = new Map<string, Map<string, string>>();

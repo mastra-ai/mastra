@@ -1,0 +1,11 @@
+{
+  "name": "@inner/alias-source",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0"
+  }
+}

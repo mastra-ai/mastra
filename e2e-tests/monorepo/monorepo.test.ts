@@ -447,7 +447,7 @@ export const environmentRoute = registerApiRoute('/environment', {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 10_000);
           try {
-            const instanceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            const instanceIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
             while (!controller.signal.aborted) {
               const page = await fetch(`http://localhost:${port}/`, { signal: controller.signal });
               expect(page.status).toBe(200);
@@ -1099,6 +1099,108 @@ export const mastra = new Mastra({
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
     });
+  });
+
+  describe.sequential('deployer module aliases', () => {
+    it(
+      'should replace aliased dependencies in every bundling pass',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-deployer-alias-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const ajvShimPath = join(appDir, 'src', 'ajv-shim.mjs');
+          const ajv2020ShimPath = join(appDir, 'src', 'ajv-2020-shim.mjs');
+          const ajvFormatsShimPath = join(appDir, 'src', 'ajv-formats-shim.mjs');
+          await Promise.all([
+            writeFile(
+              ajvShimPath,
+              `globalThis.MASTRA_AJV_SHIM = true;
+export class Ajv {
+  compile() { const validate = () => true; validate.errors = null; return validate; }
+  addFormat() { return this; }
+  addKeyword() { return this; }
+}
+export default Ajv;
+`,
+            ),
+            writeFile(ajv2020ShimPath, `export { Ajv as default, Ajv, Ajv as Ajv2020 } from './ajv-shim.mjs';\n`),
+            writeFile(ajvFormatsShimPath, `export default function addFormats(ajv) { return ajv; }\n`),
+          ]);
+
+          const originalConfig = await readFile(mastraConfigPath, 'utf-8');
+          const deployerSource = `
+import { Deployer } from '@mastra/deployer';
+import { aliasValidators } from '@inner/alias-source';
+
+(globalThis as any).MASTRA_ALIAS_VALIDATORS = aliasValidators;
+
+class AliasDeployer extends Deployer {
+  constructor() { super({ name: 'alias-test' }); }
+
+  async bundle(entryFile: string, outputDirectory: string, { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string }) {
+    await this._bundle(\`
+      import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+      import { mastra } from '#mastra';
+      import { createNodeServer, getToolExports } from '#server';
+      import { tools } from '#tools';
+      await createNodeServer(mastra, { tools: getToolExports(tools), studio: false });
+      const storage = mastra.getStorage();
+      if (storage) {
+        if (!storage.disableInit) await storage.init();
+        mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+      }
+    \`, entryFile, {
+      outputDirectory,
+      projectRoot,
+      alias: {
+        ajv: './src/ajv-shim.mjs',
+        'ajv/dist/2020.js': './src/ajv-2020-shim.mjs',
+        'ajv-formats': './src/ajv-formats-shim.mjs',
+      },
+    }, toolsPaths);
+  }
+
+  async deploy(_outputDirectory: string) {}
+}
+`;
+          await writeFile(
+            mastraConfigPath,
+            `${deployerSource}\n${originalConfig
+              .replace(
+                'export const mastra = new Mastra({',
+                'export const mastra = new Mastra({\n  deployer: new AliasDeployer(),',
+              )
+              .replace(
+                "externals: ['bcrypt', '@inner/subpath-only']",
+                "externals: ['bcrypt', '@inner/subpath-only', '@mastra/deployer']",
+              )}`,
+          );
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          const outputFiles = (await readdir(outputDir)).filter(file => file.endsWith('.mjs'));
+          const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join(
+            '\n',
+          );
+          expect(output).toContain('MASTRA_AJV_SHIM');
+
+          const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+          expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('workspace subpath externals', () => {

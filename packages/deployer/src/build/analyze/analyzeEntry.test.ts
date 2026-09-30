@@ -221,6 +221,34 @@ describe('analyzeEntry', () => {
     }
   });
 
+  it('should resolve module aliases before applying the externals preset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-module-alias-'));
+    const entryFilePath = join(root, 'entry.ts');
+    const shimFilePath = join(root, 'shim.ts');
+
+    try {
+      await Promise.all([
+        writeFile(shimFilePath, 'export const value = 42;'),
+        writeFile(entryFilePath, `import { value } from 'aliased-package';\nexport { value };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externalsPreset: true,
+        alias: { 'aliased-package': shimFilePath },
+      });
+
+      expect(result.dependencies.has('aliased-package')).toBe(false);
+      expect(result.output.code).not.toContain('aliased-package');
+      expect(result.output.code).toContain('42');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('should detect workspace packages correctly', async () => {
     const entryAsString = await readFile(join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts'), 'utf-8');
 

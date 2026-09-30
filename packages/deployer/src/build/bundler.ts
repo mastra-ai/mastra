@@ -11,6 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
 import { localStorageDetector } from './plugins/local-storage-detector';
+import { moduleAlias } from './plugins/module-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { protocolExternalResolver } from './plugins/protocol-external-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
@@ -77,6 +78,7 @@ export async function getInputOptions(
     enableEsmShim = true,
     externalsPreset = false,
     explicitExternals = [],
+    alias = {},
   }: {
     sourcemap?: boolean;
     minify?: boolean;
@@ -86,6 +88,7 @@ export async function getInputOptions(
     enableEsmShim?: boolean;
     externalsPreset?: boolean;
     explicitExternals?: string[];
+    alias?: Record<string, string>;
   },
 ): Promise<InputOptions> {
   const nodeResolvePlugin = nodeResolve({
@@ -104,6 +107,7 @@ export async function getInputOptions(
     external: externalsPreset ? [] : externals,
     plugins: [
       protocolExternalResolver(),
+      moduleAlias(alias, entryFile),
       subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
