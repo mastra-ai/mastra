@@ -48,6 +48,20 @@ describe('SubagentExecutionComponent', () => {
     }
   });
 
+  it('keeps the reported duration when finish is called again without one', () => {
+    vi.useFakeTimers();
+    try {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      comp.finish(false, 4_000);
+      vi.advanceTimersByTime(9_000);
+      comp.finish(false, undefined, 'final');
+      expect(comp['durationMs']).toBe(4_000);
+      expect(comp['finalResult']).toBe('final');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('renders task and borders while running', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
     const lines = renderPlain(comp);

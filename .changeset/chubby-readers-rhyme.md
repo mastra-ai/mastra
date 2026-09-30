@@ -1,9 +1,4 @@
 ---
-'@mastra/factory': patch
-'@mastra/clickhouse': patch
-'@mastra/modal': patch
-'@mastra/server': patch
-'mastracode': patch
 '@mastra/core': patch
 ---
 
