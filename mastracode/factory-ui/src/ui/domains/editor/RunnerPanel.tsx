@@ -1,8 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Eraser, ExternalLink, Play, Square, TerminalSquare, X } from 'lucide-react';
+import { Eraser, ExternalLink, Square, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -17,14 +14,11 @@ import {
 import { buildSandboxPreviewUrl, detectLocalhostUrls } from './preview-url';
 import {
   applyCompletion,
-  classifyToken,
   completionCandidates,
   loadHistory,
   parseAnsi,
   saveHistory,
-  tokenizeCommand,
   type AnsiSpan,
-  type TokenKind,
 } from './runner-terminal';
 
 /**
@@ -33,14 +27,8 @@ import {
  */
 const FILE_REF = /((?:[\w.@~-]+\/)+[\w.@~-]+\.\w{1,8}):(\d+)(?::\d+)?/g;
 
-/** Design-system tokens for each token class in the prompt preview. */
-const TOKEN_STYLE: Record<TokenKind, string> = {
-  command: 'text-foreground font-semibold',
-  flag: 'text-notice-warning',
-  path: 'text-notice-info',
-  string: 'text-notice-success',
-  value: 'text-muted-foreground',
-};
+/** Prompt glyph. Kept as a constant so future prompt/theming stays central. */
+const PROMPT = '❯';
 
 /** Render one ANSI-styled span with our design-system colour tokens. */
 function AnsiSpanElement({ span, children }: { span: AnsiSpan; children: ReactNode }) {
@@ -112,7 +100,7 @@ export function OutputLine({
             href={target}
             target="_blank"
             rel="noreferrer"
-            className="text-notice-success underline decoration-dotted underline-offset-2 hover:decoration-solid"
+            className="text-cyan-300 underline decoration-dotted underline-offset-2 hover:decoration-solid"
           >
             {match.match}
           </a>
@@ -132,7 +120,7 @@ export function OutputLine({
             key={`${spanIndex}-file-${start}-${text}`}
             type="button"
             onClick={() => onJump(path!, Number(lineNumber))}
-            className="text-notice-info underline decoration-dotted underline-offset-2 hover:decoration-solid"
+            className="text-amber-300 underline decoration-dotted underline-offset-2 hover:decoration-solid"
           >
             {text}
           </button>
@@ -159,20 +147,60 @@ export function OutputLine({
   return <div className="break-all whitespace-pre-wrap">{parts.length ? parts : '\u00a0'}</div>;
 }
 
-/** Render the current command with per-token syntax highlighting. */
-function PromptPreview({ command }: { command: string }) {
-  const trimmed = command.trimEnd();
-  if (!trimmed) return null;
-  const tokens = tokenizeCommand(trimmed);
+/**
+ * Compact chip in the terminal top-strip for each script or detected port —
+ * rendered as terminal-tinted link chips rather than DS buttons so the whole
+ * strip reads as prompt affordances instead of app UI.
+ */
+function ChipButton({
+  children,
+  onClick,
+  disabled,
+  title,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
-    <div className="text-caption pointer-events-none absolute inset-x-0 -top-5 flex gap-1 truncate px-2 font-mono">
-      <span className="text-muted-foreground/70">›</span>
-      {tokens.map((token, index) => (
-        <span key={`${index}-${token}`} className={TOKEN_STYLE[classifyToken(token, index)]}>
-          {token}
-        </span>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-400/10 disabled:hover:bg-transparent focus-visible:ring-emerald-400/40 shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Minimal icon button styled for the terminal chrome. */
+function IconButton({
+  onClick,
+  disabled,
+  ariaLabel,
+  title,
+  children,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  ariaLabel: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={title}
+      className="text-neutral-500 hover:bg-white/5 hover:text-neutral-200 focus-visible:ring-emerald-400/40 grid size-6 shrink-0 place-items-center rounded focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -193,11 +221,11 @@ function PreviewChip({ port, previewBase }: { port: number; previewBase: Preview
       target="_blank"
       rel="noreferrer"
       title={`${label} — ${url}`}
-      className="text-meta text-notice-success border-notice-success/30 hover:bg-notice-success/10 flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 font-mono"
+      className="text-cyan-400/80 hover:text-cyan-300 hover:bg-cyan-400/10 focus-visible:ring-cyan-400/40 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1"
     >
       <ExternalLink size={10} className="shrink-0" />
-      <span className="truncate">:{port}</span>
-      <span className="text-muted-foreground/70 max-w-40 truncate">{displayUrl}</span>
+      <span>:{port}</span>
+      <span className="text-neutral-500 max-w-40 truncate">{displayUrl}</span>
     </a>
   );
 }
@@ -391,177 +419,179 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
 
   const exitCode = poll.data?.exitCode;
   const scriptChips = (scripts.data?.scripts ?? []).slice(0, 6);
+  const echoedCommand = poll.data?.command ?? (runId ? command : '');
 
   return (
-    <div className="border-border bg-card flex h-56 shrink-0 flex-col border-t" data-testid="runner-panel">
-      <div className="border-border relative flex shrink-0 items-center gap-2 border-b px-2 py-1.5">
-        {(scriptChips.length > 0 || detectedPorts.length > 0) && (
-          <div className="flex max-w-[45%] shrink-0 flex-wrap items-center gap-1 overflow-hidden">
-            {scriptChips.map(script => (
-              <button
-                key={script.name}
-                type="button"
-                title={script.command}
-                disabled={running}
-                onClick={() => void run(`npm run ${script.name}`)}
-                className="text-meta text-muted-foreground hover:bg-fill-subtle hover:text-foreground focus-visible:ring-accent3/60 focus-visible:outline-none focus-visible:ring-1 border-border shrink-0 rounded border px-1.5 py-0.5 font-mono transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-              >
-                {script.name}
-              </button>
-            ))}
-            {detectedPorts.map(port => (
-              <PreviewChip key={`preview-${port}`} port={port} previewBase={previewBase} />
-            ))}
-          </div>
-        )}
-        <div className="relative min-w-0 flex-1">
-          <PromptPreview command={command} />
-          <input
-            ref={inputRef}
-            value={command}
-            onChange={event => {
-              setCommand(event.target.value);
-              setHistoryCursor(null);
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={running ? 'Waiting for the current command to finish…' : 'Run a command (Tab to complete, ↑ history)'}
-            spellCheck={false}
-            autoComplete="off"
-            aria-autocomplete="list"
-            aria-expanded={completionOpen}
-            className="text-body-sm placeholder:text-placeholder w-full bg-transparent font-mono outline-none"
-          />
-          {completionOpen && completions.length > 0 && (
-            <div
-              role="listbox"
-              className="border-border bg-popover absolute bottom-full left-0 z-20 mb-1 max-h-56 w-72 max-w-full overflow-auto rounded-md border py-1 shadow-lg"
-            >
-              <div className="text-meta text-muted-foreground border-border/50 mb-1 flex items-center justify-between border-b px-2 pb-1">
-                <span>Suggestions</span>
-                <span>
-                  <kbd className="border-border rounded border px-1 font-mono">Tab</kbd> to accept
-                </span>
-              </div>
-              {completions.map((candidate, index) => (
-                <button
-                  key={candidate}
-                  type="button"
-                  role="option"
-                  aria-selected={index === completionIndex}
-                  onMouseDown={event => event.preventDefault()}
-                  onClick={() => acceptCompletion(candidate)}
-                  className={cn(
-                    'text-caption block w-full truncate px-2 py-1 text-left font-mono',
-                    index === completionIndex
-                      ? 'bg-accent3/15 text-foreground'
-                      : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
-                  )}
+    <div
+      className="border-border flex h-64 shrink-0 flex-col border-t bg-[#0b0e14] font-mono text-[13px] leading-relaxed text-neutral-100 selection:bg-emerald-400/25"
+      data-testid="runner-panel"
+    >
+      {/* Terminal chrome — tab-bar-like strip with title + chips + actions. */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-white/5 px-3 py-1">
+        <div className="flex items-center gap-1.5 pr-2">
+          <span className="size-2.5 rounded-full bg-[#ff5f57]" />
+          <span className="size-2.5 rounded-full bg-[#febc2e]" />
+          <span className="size-2.5 rounded-full bg-[#28c840]" />
+        </div>
+        <span className="text-[11px] uppercase tracking-widest text-neutral-500">terminal</span>
+        {scriptChips.length > 0 && (
+          <>
+            <span className="mx-1 text-neutral-700">·</span>
+            <div className="flex flex-wrap items-center gap-0.5">
+              {scriptChips.map(script => (
+                <ChipButton
+                  key={script.name}
+                  title={script.command}
+                  disabled={running}
+                  onClick={() => void run(`npm run ${script.name}`)}
                 >
-                  {candidate}
-                </button>
+                  {script.name}
+                </ChipButton>
               ))}
             </div>
-          )}
-        </div>
-        {running ? (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Stop command (Ctrl+C)"
-            title="Stop command (Ctrl+C)"
-            disabled={stop.isPending}
-            onClick={stopRun}
-          >
-            <Square size={14} />
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Run command"
-            title="Run command (Enter)"
-            disabled={!command.trim() || start.isPending}
-            onClick={() => void run()}
-          >
-            {start.isPending ? <Spinner className="size-4" /> : <Play size={14} />}
-          </Button>
+          </>
         )}
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Clear output"
-          title="Clear output (Ctrl+L)"
-          disabled={!rawOutput}
-          onClick={() => setClearAt(rawOutput.length)}
-        >
-          <Eraser size={14} />
-        </Button>
-        <Button type="button" size="icon-sm" variant="ghost" aria-label="Close runner" onClick={onClose}>
-          <X size={14} />
-        </Button>
+        {detectedPorts.length > 0 && (
+          <>
+            <span className="mx-1 text-neutral-700">·</span>
+            <div className="flex flex-wrap items-center gap-0.5">
+              {detectedPorts.map(port => (
+                <PreviewChip key={`preview-${port}`} port={port} previewBase={previewBase} />
+              ))}
+            </div>
+          </>
+        )}
+        <div className="ml-auto flex items-center gap-0.5">
+          {running && (
+            <IconButton
+              onClick={stopRun}
+              disabled={stop.isPending}
+              ariaLabel="Stop command (Ctrl+C)"
+              title="Stop (Ctrl+C)"
+            >
+              <Square size={12} />
+            </IconButton>
+          )}
+          <IconButton
+            onClick={() => setClearAt(rawOutput.length)}
+            disabled={!rawOutput}
+            ariaLabel="Clear output (Ctrl+L)"
+            title="Clear (Ctrl+L)"
+          >
+            <Eraser size={12} />
+          </IconButton>
+          <IconButton onClick={onClose} ariaLabel="Close terminal" title="Close">
+            <X size={12} />
+          </IconButton>
+        </div>
       </div>
+
+      {/* Terminal body — scrollback with the prompt anchored at the bottom of
+          the same scroll region, so the input scrolls with output the way a
+          real terminal does. */}
       <div
         ref={outputRef}
         onScroll={event => {
           const el = event.currentTarget;
           stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
-        className="text-caption min-h-0 flex-1 overflow-y-auto px-2 py-1.5 font-mono"
+        onClick={event => {
+          // Click anywhere in the scrollback to focus the prompt, but let
+          // text selection (drag) and inner anchor clicks keep their default.
+          if ((event.target as HTMLElement).closest('a, button')) return;
+          if (window.getSelection()?.toString()) return;
+          inputRef.current?.focus();
+        }}
+        className="min-h-0 flex-1 cursor-text overflow-y-auto px-3 py-2"
       >
-        {!runId ? (
-          <div className="grid h-full place-items-center px-3">
-            {startError ? (
-              <Txt variant="caption" className="text-notice-destructive text-center">
-                {startError}
-              </Txt>
-            ) : (
-              <div className="text-muted-foreground flex flex-col items-center gap-2 text-center">
-                <TerminalSquare size={20} className="opacity-40" aria-hidden />
-                <Txt variant="caption" className="text-muted-foreground">
-                  Output shows here. file:line refs and localhost URLs are clickable.
-                </Txt>
-                <div className="text-meta text-muted-foreground/80 flex items-center gap-3">
-                  <span>
-                    <kbd className="border-border bg-fill-subtle rounded border px-1 font-mono">Tab</kbd> complete
-                  </span>
-                  <span>
-                    <kbd className="border-border bg-fill-subtle rounded border px-1 font-mono">↑</kbd> history
-                  </span>
-                  <span>
-                    <kbd className="border-border bg-fill-subtle rounded border px-1 font-mono">Ctrl+L</kbd> clear
-                  </span>
-                </div>
+        {startError && (
+          <div className="text-rose-400">
+            <span className="text-rose-500">✗</span> {startError}
+          </div>
+        )}
+        {runId && (
+          <>
+            {/* Echo the command that was run at the top, so scrollback reads
+                like a normal terminal session: prompt + output + next prompt. */}
+            {echoedCommand && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-emerald-400 select-none">{PROMPT}</span>
+                <span className="whitespace-pre-wrap text-neutral-200">{echoedCommand}</span>
               </div>
             )}
-          </div>
-        ) : (
-          <>
             {visibleOutput.split('\n').map((line, index) => (
               <OutputLine key={index} line={line} onJump={onJump} previewBase={previewBase} />
             ))}
-            <div
-              className={cn(
-                'text-meta pt-1',
-                running
-                  ? 'text-muted-foreground'
-                  : exitCode === 0
-                    ? 'text-notice-success'
-                    : 'text-notice-destructive',
-              )}
-            >
-              {running ? (
-                <span className="flex items-center gap-1.5">
-                  <Spinner className="size-3" /> Running {poll.data?.command ?? command}…
-                </span>
-              ) : (
-                `Exited with code ${exitCode ?? '?'}.`
-              )}
-            </div>
+            {running ? (
+              <div className="flex items-center gap-1.5 pt-0.5 text-[11px] text-neutral-500">
+                <span className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                running…
+              </div>
+            ) : (
+              <div className="pt-0.5 text-[11px] text-neutral-500">
+                <span className={exitCode === 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  {exitCode === 0 ? '✓' : '✗'}
+                </span>{' '}
+                exit {exitCode ?? '?'}
+              </div>
+            )}
           </>
         )}
+        {/* Prompt line — always visible at the bottom, inside the scroll
+            region so the caret follows the output like tmux/xterm. */}
+        <div className="relative flex items-baseline gap-2 pt-1">
+          <span className="text-emerald-400 select-none">{PROMPT}</span>
+          <div className="relative min-w-0 flex-1">
+            <input
+              ref={inputRef}
+              value={command}
+              onChange={event => {
+                setCommand(event.target.value);
+                setHistoryCursor(null);
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={running ? '' : ''}
+              spellCheck={false}
+              autoComplete="off"
+              aria-autocomplete="list"
+              aria-expanded={completionOpen}
+              aria-label="Terminal command"
+              className="w-full bg-transparent font-mono text-neutral-100 caret-emerald-400 placeholder:text-neutral-600 outline-none"
+            />
+            {completionOpen && completions.length > 0 && (
+              <div
+                role="listbox"
+                className="absolute bottom-full left-0 z-20 mb-1 max-h-56 w-72 max-w-full overflow-auto rounded border border-white/10 bg-[#111418] py-1 shadow-2xl"
+              >
+                <div className="mb-1 flex items-center justify-between border-b border-white/5 px-2 pb-1 text-[10px] uppercase tracking-wider text-neutral-500">
+                  <span>Suggestions</span>
+                  <span>
+                    <kbd className="rounded border border-white/10 bg-white/5 px-1 font-mono text-neutral-300">Tab</kbd>{' '}
+                    accept
+                  </span>
+                </div>
+                {completions.map((candidate, index) => (
+                  <button
+                    key={candidate}
+                    type="button"
+                    role="option"
+                    aria-selected={index === completionIndex}
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => acceptCompletion(candidate)}
+                    className={cn(
+                      'block w-full truncate px-2 py-1 text-left font-mono text-[12px]',
+                      index === completionIndex
+                        ? 'bg-emerald-400/15 text-neutral-100'
+                        : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100',
+                    )}
+                  >
+                    {candidate}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
