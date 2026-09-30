@@ -13,6 +13,7 @@ const contextValue = {
   approveNetworkToolcall: fn(),
   declineNetworkToolcall: fn(),
   isRunning: false,
+  isContinuationBlocked: false,
   toolCallApprovals: {},
   networkToolCallApprovals: {},
 } satisfies ToolCallContextValue;

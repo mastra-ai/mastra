@@ -534,6 +534,56 @@ jobs:
         working-directory: ./packages/playground
         run: pnpm exec playwright test -c e2e/playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+  e2e-version-labels:
+    name: E2E Studio version labels
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build
+        run: >-
+          pnpm turbo
+          --filter "@mastra/core"
+          --filter "mastra"
+          --filter "@mastra/editor"
+          --filter "@mastra/memory"
+          --filter "@mastra/libsql"
+          --filter "@mastra/loggers"
+          --filter "@mastra/mcp"
+          --filter "@internal/playground"
+          build
+
+      - name: Setup e2e project dependencies
+        working-directory: ./packages/playground
+        run: pnpm test:e2e:setup
+
+      - name: Test version-label persistence and run pinning
+        working-directory: ./packages/playground
+        run: pnpm exec playwright test -c e2e/playwright.version-labels.config.ts
+
+      - name: Upload version-label browser artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: studio-version-labels
+          path: packages/playground/test-results/
+          retention-days: 14
+
   e2e-client-js:
     name: E2E client-js (optional)
     runs-on: starsling-ubuntu-24.04

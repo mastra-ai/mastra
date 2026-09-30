@@ -1,8 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useAllAgentVersions } from '../hooks/use-agent-versions';
 
 export interface AgentVersionComboboxProps {
   agentId: string;
@@ -23,10 +24,13 @@ export function AgentVersionCombobox({
   variant,
   activeVersionId,
 }: AgentVersionComboboxProps) {
-  const { data, isLoading } = useAgentVersions({
-    agentId,
-    params: { orderBy: { direction: 'DESC' } },
-  });
+  const { data, isLoading } = useAllAgentVersions(
+    {
+      agentId,
+      params: { orderBy: { direction: 'DESC' } },
+    },
+    useEntityRequestContext('agent', agentId!)[0],
+  );
 
   const versions = data?.versions ?? [];
 
@@ -36,7 +40,7 @@ export function AgentVersionCombobox({
   const options = [
     { label: 'Latest', value: '' },
     ...versions.map(version => {
-      const isPublished = version.id === activeVersionId;
+      const isProduction = version.id === activeVersionId;
       const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
 
       const trimmedMessage = version.changeMessage?.trim();
@@ -51,8 +55,8 @@ export function AgentVersionCombobox({
         label: `v${version.versionNumber}`,
         value: version.id,
         description,
-        end: isPublished ? (
-          <Badge variant="success">Published</Badge>
+        end: isProduction ? (
+          <Badge variant="success">Production</Badge>
         ) : isDraft ? (
           <Badge variant="info">Draft</Badge>
         ) : undefined,

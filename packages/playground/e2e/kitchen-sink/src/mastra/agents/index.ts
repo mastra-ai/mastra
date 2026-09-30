@@ -4,6 +4,7 @@ import { createBuilderAgent } from '@mastra/editor/ee';
 import { Extractor, Memory } from '@mastra/memory';
 
 export { askUserAgent } from './ask-user-agent';
+export { versionLabelPinningAgent } from './version-label-pinning-agent';
 
 import * as aiTest from 'ai/test';
 import { z } from 'zod';
