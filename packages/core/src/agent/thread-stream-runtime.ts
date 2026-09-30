@@ -529,6 +529,19 @@ type AgentThreadPeerDiscoveryEvent =
   | { type: 'thread-peer-request'; requestId: string; replyTopic: string; sourceId: string; expiresAt?: number }
   | { type: 'thread-peer-response'; requestId: string; peer: AgentThreadPeerInfo; sourceId: string };
 
+/** Top-level `requestContext` wins; `ifIdle.streamOptions.requestContext` is the fallback. */
+export function resolveSignalRequestContext(target: SendAgentSignalOptions<any>): RequestContext | undefined {
+  return target.requestContext ?? target.ifIdle?.streamOptions?.requestContext;
+}
+
+function resolveSignalStreamOptions<OUTPUT>(
+  target: SendAgentSignalOptions<OUTPUT>,
+): AgentExecutionOptions<OUTPUT> | undefined {
+  const streamOptions = target.ifIdle?.streamOptions;
+  if (!target.requestContext) return streamOptions;
+  return { ...streamOptions, requestContext: target.requestContext } as AgentExecutionOptions<OUTPUT>;
+}
+
 function toPublicThreadPeer(peer: AdvertisedThreadPeer): Omit<AdvertisedThreadPeer, 'unsubscribe'> {
   const { unsubscribe: _unsubscribe, ...publicPeer } = peer;
   return publicPeer;
@@ -4758,9 +4771,12 @@ export class AgentThreadStreamRuntime {
     });
     const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
-    const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
-      ...activeRecord?.streamOptions,
-      abortSignal: undefined,
+    // Build a new object so the queued run never inherits the active run's
+    // signal or request context, and the caller's options are not mutated.
+    const queuedStreamOptions = {
+      ...(target.ifIdle?.streamOptions ?? activeRecord?.streamOptions),
+      abortSignal: target.ifIdle?.streamOptions?.abortSignal,
+      requestContext: resolveSignalRequestContext(target),
     };
 
     if (activeRecord || state.activeThreadRunIds.has(key)) {
@@ -4806,7 +4822,7 @@ export class AgentThreadStreamRuntime {
     const resourceId = target.resourceId;
     const threadId = target.threadId;
 
-    const requestContext = target.ifIdle?.streamOptions?.requestContext;
+    const requestContext = resolveSignalRequestContext(target);
     const memoryContext = parseMemoryRequestContext(requestContext);
     const memory = await agent.getMemory({ requestContext });
     if (!memory) {
@@ -4867,6 +4883,7 @@ export class AgentThreadStreamRuntime {
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
+    const idleStreamOptions = resolveSignalStreamOptions(target);
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
     if (target.resourceId && target.threadId) {
@@ -4936,13 +4953,7 @@ export class AgentThreadStreamRuntime {
             accepted: Promise.resolve({ action: 'discard' as const }),
           };
         }
-        const persisted = this.#persistSignal(
-          agent,
-          signal,
-          resourceId,
-          threadId,
-          target.ifIdle?.streamOptions?.requestContext,
-        );
+        const persisted = this.#persistSignal(agent, signal, resourceId, threadId, idleStreamOptions?.requestContext);
         void persisted.catch(() => {});
         return {
           signal,
@@ -5050,7 +5061,7 @@ export class AgentThreadStreamRuntime {
         signal,
         resourceId,
         threadId,
-        target.ifIdle?.streamOptions?.requestContext,
+        idleStreamOptions?.requestContext,
       );
       void persisted.catch(() => {});
       return {
@@ -5087,7 +5098,7 @@ export class AgentThreadStreamRuntime {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
+      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: idleStreamOptions });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -5126,7 +5137,7 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
-          target.ifIdle?.streamOptions,
+          idleStreamOptions,
         );
         if (!localAcceptance) {
           throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
@@ -5212,10 +5223,10 @@ export class AgentThreadStreamRuntime {
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
         const output = await agent.stream(signal, {
-          ...(target.ifIdle?.streamOptions as any),
+          ...(idleStreamOptions as any),
           untilIdle: true,
           runId: reservedRunId,
-          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+          memory: withThreadMemory(idleStreamOptions?.memory, resourceId, threadId),
         });
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
@@ -5232,7 +5243,7 @@ export class AgentThreadStreamRuntime {
         });
         this.#trimFailedRun(pubsub, reservedKey, {
           agent,
-          streamOptions: target.ifIdle?.streamOptions ?? {},
+          streamOptions: idleStreamOptions ?? {},
           runId: reservedRunId,
         });
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);
