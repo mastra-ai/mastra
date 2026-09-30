@@ -2966,9 +2966,10 @@ describe('om-tools', () => {
 
       expect(result.count).toBe(2);
       expect(result.results).toContain('### Current thread memory');
-      expect(result.results).toContain('### Older memory from another thread');
+      expect(result.results).toContain('### Memory from another thread');
       expect(result.results).toContain('This result came from the current thread.');
-      expect(result.results).toContain('This result came from an older memory generation in another thread.');
+      expect(result.results).toContain('This result came from another thread.');
+      expect(result.results).not.toContain('older memory generation');
       expect(result.results).toContain('- thread: thread-a (Setup Help)');
       expect(result.results).toContain('- thread: thread-b (Search Docs)');
       expect(result.results).toContain('- source: raw messages from ID msg-1 through ID msg-3');
@@ -3095,7 +3096,7 @@ describe('om-tools', () => {
       expect(result.results).not.toContain('Filtered Out');
     });
 
-    it('should apply a final token cap to the assembled markdown output', async () => {
+    it('should cap observation text without cutting result metadata', async () => {
       const memory = makeMockMemory({
         searchResults: [
           {
@@ -3657,7 +3658,7 @@ describe('om-tools', () => {
 
       const recall = memory.listTools().recall;
       const schema = getInputJSONSchema(recall);
-      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search', 'observations']);
       expect(recall.description).toContain('mode="search"');
     });
   });

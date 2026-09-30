@@ -1208,7 +1208,31 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 When `retrieval` is truthy, Mastra registers a `recall` tool that pages through raw messages behind observation group ranges. With the default resource scope, the tool can list threads (`mode: "threads"`) and browse another thread through `threadId`. It also supports cross-thread search. Set `retrieval: { vector: true }` for semantic search (`mode: "search"`), or use `scope: 'thread'` to restrict the tool to the current thread. The tool is automatically added to the agent.
 
-Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
+When retrieval is enabled, OM also injects instructions telling the agent how to use recall: when to verify details, how to search and page, and when to read raw messages. They're included from the first turn, including read-only runs, and only describe the modes that are configured. Reflected groups are marked `_kind: reflection_` so the agent treats them as lossy summaries. Use `retrieval: { instructions: '...' }` to append your own guidance after the built-in instructions.
+
+### Observation pages
+
+With vector search configured, `mode: "observations"` reads the original observation groups around a search hit, including groups that reflection condensed away and buffered groups that haven't been activated yet. Copy the hit's `groupId` exactly as shown and, in resource scope, its `threadId`:
+
+```json
+{
+  "mode": "observations",
+  "threadId": "source-thread-id",
+  "groupId": "group-id-from-search",
+  "direction": "after",
+  "limit": 5
+}
+```
+
+Use `direction: "before"` to page backward, or omit `direction` to include the anchor group itself. Pages return `{ results, count, hasMore }` with continuation calls, and say when newer messages haven't been observed yet.
+
+### Search results
+
+Search results are listed by date and share a 2,000-token text allowance, so long groups are shortened, starting at the line that best matches the query. Results already in the agent's context come back as short references, and lower-ranked hits fill the freed space. `limit` counts excerpts, not references, so `count` can exceed `limit`.
+
+### Storage requirements
+
+Group IDs in search results include the record that holds them (`groupId@recordId`), so paging reads a single record. Groups indexed before this change still work, but page by scanning the thread's observation history. Paging needs a storage adapter that supports observation history filters, so upgrade it together with `@mastra/memory`. Convex users need to redeploy their Mastra server functions.
 
 ### Parameters
 
@@ -1216,11 +1240,25 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
   content={[
   {
     name: 'mode',
-    type: "'messages' | 'threads' | 'search'",
+    type: "'messages' | 'threads' | 'search' | 'observations'",
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists all threads for the current user. `"search"` finds messages by semantic similarity across all threads (requires vector store and embedder).',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires vector store and embedder). `"observations"` pages original observation groups around a search hit.',
+  },
+  {
+    name: 'groupId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Required for observations mode. Copy the observation group ID exactly from a search result or continuation call. IDs shown as `groupId@recordId` let paging read the record directly; a plain group ID also works.',
+  },
+  {
+    name: 'direction',
+    type: "'before' | 'after'",
+    isOptional: true,
+    description:
+      'For observations mode: return groups strictly before or after the anchor group. Omit to include the anchor and following groups.',
   },
   {
     name: 'query',
@@ -1264,7 +1302,8 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     type: 'number',
     isOptional: true,
     defaultValue: '20',
-    description: 'Maximum number of items to return per page.',
+    description:
+      'Page size, from 1 to 20. Defaults to 20 for messages and 5 groups for observations. Search defaults to 10 excerpts, plus compact references for evidence already in context. Bounded backfill can return fewer excerpts.',
   },
   {
     name: 'detail',
@@ -1315,14 +1354,14 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created before this date. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
+      'Filter to threads created before this date in threads mode, or observations dated before it in search mode. Accepts ISO 8601 format (e.g. `"2026-03-15"`, `"2026-03-10T00:00:00Z"`).',
   },
   {
     name: 'after',
     type: 'string',
     isOptional: true,
     description:
-      'For `mode: "threads"` only. Filter to threads created after this date. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
+      'Filter to threads created after this date in threads mode, or observations dated after it in search mode. Accepts ISO 8601 format (e.g. `"2026-03-01"`, `"2026-03-10T00:00:00Z"`).',
   },
 ]}
 />
@@ -1443,12 +1482,13 @@ Mastra also injects scope-aware usage instructions into the agent's context. For
     name: 'results',
     type: 'string',
     description:
-      'Formatted search results grouped by thread. Each result shows the thread title, thread ID, relevance score, message preview, and a cursor ID for browsing into that thread.',
+      'Search hits displayed by observation date, with excerpts or compact references for evidence already in context. Full entries include thread details, a relevance score, an observation group ID, and source message ranges.',
   },
   {
     name: 'count',
     type: 'number',
-    description: 'Number of matching messages found.',
+    description:
+      'Number of displayed observation groups, including compact references. Can exceed limit when search fills covered hits with additional excerpts.',
   },
 ]}
 />
