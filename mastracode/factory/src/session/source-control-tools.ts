@@ -8,6 +8,7 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserI
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { pushRepositoryBranch, refreshMergeRequestCheckout } from '../integrations/github/sandbox.js';
+import { normalizedVerdictLine } from '../review-verdict.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
@@ -44,9 +45,9 @@ type ReviewEvent = 'approve' | 'request-changes' | 'comment';
 
 /** Returns why a review's leading `Verdict:` line contradicts the submitted event, if it does. */
 export function verdictEventMismatch(event: ReviewEvent, body: string | undefined): string | undefined {
-  const firstLine = body?.trimStart().split('\n', 1)[0] ?? '';
-  const verdict = /^verdict:\s*(approve|request changes)\b/i.exec(firstLine)?.[1]?.toLowerCase();
-  if (!verdict) return undefined;
+  const match = /^verdict: ?(approve|request changes|changes requested)\b/.exec(normalizedVerdictLine(body) ?? '');
+  if (!match) return undefined;
+  const verdict = match[1] === 'approve' ? 'approve' : 'request changes';
   // GitLab has no request-changes state, so a blocking verdict is published as a comment review.
   const allowed: ReviewEvent[] = verdict === 'approve' ? ['approve'] : ['request-changes', 'comment'];
   if (allowed.includes(event)) return undefined;

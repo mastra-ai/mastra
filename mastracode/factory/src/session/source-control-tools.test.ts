@@ -453,6 +453,23 @@ describe('createSourceControlTools', () => {
       ).toMatch(/same full 40- or 64-character commit SHA/);
     });
 
+    it.each([
+      '**Verdict: request changes**',
+      '**Verdict:** request changes',
+      '# Verdict: request changes',
+      'Verdict: changes requested',
+    ])('rejects an approval whose markdown-wrapped first line requests changes: %s', async firstLine => {
+      expect(await schemaError({ event: 'approve', body: `${firstLine}\n\nFindings` })).toMatch(
+        /Verdict: request changes.*event is "approve"/,
+      );
+    });
+
+    it('rejects a request-changes review whose markdown-wrapped first line approves', async () => {
+      expect(await schemaError({ event: 'request-changes', body: '**Verdict:** approve\n' })).toMatch(
+        /Verdict: approve.*event is "request-changes"/,
+      );
+    });
+
     it('accepts consistent verdict and full-SHA bodies in the schema', async () => {
       const { setup } = await submit({});
       const tools = createSourceControlTools({
