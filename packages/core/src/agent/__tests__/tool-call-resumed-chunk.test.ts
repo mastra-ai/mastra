@@ -209,6 +209,41 @@ describe('tool-call-resumed chunk (#24280)', () => {
     expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
   });
 
+  it('applies the tool payload transform to the resume ack', async () => {
+    const agent = buildAgentCallingTool(
+      'redacted-approver',
+      'tc-red',
+      'doThing',
+      { value: 'hunter2' },
+      {
+        tools: {
+          doThing: createTool({
+            id: 'do-thing',
+            description: 'Does a thing.',
+            inputSchema: z.object({ value: z.string() }),
+            requireApproval: true,
+            execute: async (input: { value: string }) => ({ done: input.value }),
+          }),
+        },
+      },
+    );
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+    const transform = { targets: ['display'], transformToolPayload: (ctx: any) => `[redacted ${ctx.phase}]` };
+    const stream = await agent.stream('go', { maxSteps: 3, transform } as any);
+    await collect(stream);
+
+    const chunks = await collect(
+      await agent.approveToolCall({ runId: stream.runId, toolCallId: 'tc-red', transform } as any),
+    );
+    const ack = chunks.find(c => c.type === 'tool-call-resumed');
+    expect(ack, chunks.map(c => c.type).join(',')).toBeDefined();
+    const display = ack.metadata?.mastra?.toolPayloadTransform?.display;
+    expect(display, JSON.stringify(ack.metadata)).toBeDefined();
+    expect(JSON.stringify(display)).toContain('[redacted');
+    expect(JSON.stringify(display)).not.toContain('hunter2');
+  });
+
   it('acks the originally suspended delegation id when auto-resume re-calls it under a new id', async () => {
     const subAgent = buildAgentCallingTool(
       'sub-agent',
