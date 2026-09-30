@@ -1,12 +1,9 @@
-import { Radio as RadioPrimitive } from '@base-ui/react/radio';
-import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import { Monitor, Moon, Sun } from 'lucide-react';
 
+import { SegmentedControl } from '../SegmentedControl';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import type { ControlSize } from '@/ds/primitives/control-size';
 
 export interface ThemeToggleOption {
   value: Theme;
@@ -20,115 +17,46 @@ const DEFAULT_OPTIONS: ReadonlyArray<ThemeToggleOption> = [
   { value: 'dark', label: 'Dark', icon: <Moon /> },
 ];
 
-const SIZE_CONFIG = {
-  md: {
-    itemGap: 2,
-    itemWidth: 28,
-    root: 'gap-0.5 p-0.5',
-    indicator: 'inset-y-0.5 left-0.5',
-    item: 'h-6 [&_svg]:size-3.5',
-  },
-  xs: {
-    itemGap: 1,
-    itemWidth: 20,
-    root: 'gap-px p-px',
-    indicator: 'inset-y-px left-px',
-    item: 'h-4 [&_svg]:size-icon-xs',
-  },
-  sm: {
-    itemGap: 1,
-    itemWidth: 24,
-    root: 'gap-px p-px',
-    indicator: 'inset-y-px left-px',
-    item: 'h-5 [&_svg]:size-icon-xs',
-  },
-} as const;
-
-type RadioRootProps = Omit<
-  RadioGroupPrimitive.Props,
-  'value' | 'onChange' | 'onValueChange' | 'defaultValue' | 'className'
-> & {
-  className?: string;
-};
-
 type ControlledProps = { value: Theme; onChange: (next: Theme) => void };
 type UncontrolledProps = { value?: undefined; onChange?: undefined };
 
-export type ThemeToggleProps = RadioRootProps & {
+export type ThemeToggleProps = {
   options?: ReadonlyArray<ThemeToggleOption>;
-  size?: keyof typeof SIZE_CONFIG;
+  /**
+   * Control rung, shared with Button and Select. `xs` is deprecated: the control can no longer
+   * be shorter than the smallest rung, so it renders as `sm`.
+   */
+  size?: ControlSize | 'xs';
+  'aria-label'?: string;
+  disabled?: boolean;
+  className?: string;
 } & (ControlledProps | UncontrolledProps);
 
+/** Icon-only `SegmentedControl` bound to the active theme, or to `value`/`onChange` when controlled. */
 export const ThemeToggle = ({
   value,
   onChange,
   options = DEFAULT_OPTIONS,
   size = 'md',
   className,
+  disabled,
   'aria-label': ariaLabel = 'Theme',
-  ...rest
 }: ThemeToggleProps) => {
   const { theme, setTheme } = useTheme();
   const current = value ?? theme;
   const commit = onChange ?? setTheme;
   const effectiveCurrent = options.some(option => option.value === current) ? current : (options[0]?.value ?? 'system');
 
-  const handleChange = (next: unknown) => {
-    const match = options.find(opt => opt.value === next);
-    if (match) commit(match.value);
-  };
-
-  const activeIndex = Math.max(
-    0,
-    options.findIndex(option => option.value === effectiveCurrent),
-  );
-  const sizeConfig = SIZE_CONFIG[size];
-  const indicatorOffset = activeIndex * (sizeConfig.itemWidth + sizeConfig.itemGap);
-
   return (
-    <RadioGroupPrimitive
-      {...rest}
-      value={effectiveCurrent}
-      onValueChange={handleChange}
+    <SegmentedControl
       aria-label={ariaLabel}
-      className={cn(
-        raisedSurfaceStyle,
-        'relative inline-flex w-fit items-center rounded-full',
-        sizeConfig.root,
-        className,
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'pointer-events-none absolute rounded-full bg-fill-hover motion-reduce:transition-none',
-          transitions.transform,
-          sizeConfig.indicator,
-        )}
-        style={{ width: sizeConfig.itemWidth, transform: `translateX(${indicatorOffset}px)` }}
-      />
-      {options.map(option => (
-        <RadioPrimitive.Root
-          key={option.value}
-          value={option.value}
-          aria-label={option.label}
-          style={{ width: sizeConfig.itemWidth }}
-          className={cn(
-            'relative inline-flex cursor-pointer items-center justify-center rounded-full',
-            // Base UI exposes `data-checked` instead of Radix's `data-state="checked"`.
-            'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
-            sizeConfig.item,
-            'focus-visible:outline-hidden',
-            'active:scale-90 motion-reduce:transition-none',
-            transitions.colors,
-            transitions.transform,
-          )}
-        >
-          <span aria-hidden="true" className="pointer-events-none inline-flex items-center justify-center">
-            {option.icon}
-          </span>
-        </RadioPrimitive.Root>
-      ))}
-    </RadioGroupPrimitive>
+      iconOnly
+      size={size === 'xs' ? 'sm' : size}
+      options={options}
+      value={effectiveCurrent}
+      onValueChange={commit}
+      disabled={disabled}
+      className={className}
+    />
   );
 };

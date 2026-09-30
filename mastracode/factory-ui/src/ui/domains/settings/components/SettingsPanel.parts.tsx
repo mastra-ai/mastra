@@ -4,6 +4,7 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
+import { SegmentedControl } from '@mastra/playground-ui/components/SegmentedControl';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import { useState } from 'react';
@@ -13,7 +14,7 @@ import type { DoneSound } from '../services/doneSound';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
-import { Segmented, SoundPicker, ThinkingLevelPicker } from './SettingsFields';
+import { SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
 type NotificationMode = AgentControllerSessionSettings['notifications'];
 const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
@@ -67,7 +68,6 @@ interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
   permissions: PermissionRules | null;
-  pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
@@ -75,7 +75,6 @@ export function BehaviorSettings({
   settings,
   onBehaviorChange,
   permissions,
-  pendingPermissionCategory,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
   const notificationMode = settings?.notifications ?? 'off';
@@ -104,21 +103,17 @@ export function BehaviorSettings({
             />
           </SettingsRow>
           <SettingsRow label="Notifications" description="How completion alerts are delivered">
-            <Segmented
-              ariaLabel="Notifications"
+            <SegmentedControl
+              aria-label="Notifications"
               value={notificationMode}
               disabled={!settings}
               options={NOTIFICATION_MODES}
-              onChange={v => onBehaviorChange({ notifications: v })}
+              onValueChange={v => onBehaviorChange({ notifications: v })}
             />
           </SettingsRow>
         </SettingsContainer>
       </SettingsSubsection>
-      <PermissionsSection
-        permissions={permissions}
-        pendingPermissionCategory={pendingPermissionCategory}
-        setPermissionForCategory={setPermissionForCategory}
-      />
+      <PermissionsSection permissions={permissions} setPermissionForCategory={setPermissionForCategory} />
     </div>
   );
 }
@@ -138,9 +133,8 @@ const PERMISSION_POLICIES: { value: PermissionPolicy; label: string }[] = [
 
 function PermissionsSection({
   permissions,
-  pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'setPermissionForCategory'>) {
   return (
     <SettingsSubsection
       scope="factory"
@@ -150,12 +144,12 @@ function PermissionsSection({
       <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
           <SettingsRow key={value} label={label} description={hint}>
-            <Segmented
-              ariaLabel={`${label} permission`}
+            <SegmentedControl
+              aria-label={`${label} permission`}
               value={permissions?.categories?.[value] ?? 'ask'}
-              disabled={!permissions || pendingPermissionCategory === value}
+              disabled={!permissions}
               options={PERMISSION_POLICIES}
-              onChange={policy => void setPermissionForCategory(value, policy)}
+              onValueChange={policy => void setPermissionForCategory(value, policy)}
             />
           </SettingsRow>
         ))}

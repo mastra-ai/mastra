@@ -1,4 +1,4 @@
-import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import type { PermissionPolicy, PermissionRules, ToolCategory } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
@@ -31,12 +31,30 @@ export function useSetPermissionForCategoryMutation({
     enabled,
   });
 
+  const permissionsQueryKey = queryKeys.agentControllerPermissions(agentControllerId, resourceId, scope);
+
   return useMutation({
     mutationFn: ({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }) =>
       requireAgentControllerSession(session).setPermissionForCategory(category, policy),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId, scope),
-      }),
+    // Optimistic: the control moves on click instead of waiting for the refetch.
+    onMutate: async ({ category, policy }) => {
+      await queryClient.cancelQueries({ queryKey: permissionsQueryKey });
+      const previousPermissions = queryClient.getQueryData<PermissionRules>(permissionsQueryKey);
+
+      if (previousPermissions) {
+        queryClient.setQueryData<PermissionRules>(permissionsQueryKey, {
+          ...previousPermissions,
+          categories: { ...previousPermissions.categories, [category]: policy },
+        });
+      }
+
+      return { previousPermissions };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousPermissions !== undefined) {
+        queryClient.setQueryData(permissionsQueryKey, context.previousPermissions);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: permissionsQueryKey }),
   });
 }

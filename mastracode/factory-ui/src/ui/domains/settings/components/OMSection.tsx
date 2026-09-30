@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SegmentedControl } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
-import { Segmented } from './SettingsFields';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -199,12 +199,12 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
-        <Segmented
-          ariaLabel="Observe attachments"
+        <SegmentedControl
+          aria-label="Observe attachments"
           value={attachmentChoice}
           options={ATTACHMENT_OPTIONS}
           disabled={busy || !config}
-          onChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
         />
       </SettingsRow>
     </>
