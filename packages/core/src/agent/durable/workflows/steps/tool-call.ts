@@ -243,7 +243,10 @@ async function processChunkThroughOutputProcessors(
       : undefined,
     emitChunk: async c => {
       if (pubsub) {
-        await emitChunkEvent(pubsub, runId, c);
+        // Mark chunks the processors ran on so the stream consumer doesn't run
+        // them again. Without a runner (no processors, or none in this process)
+        // the chunk goes out unmarked and the consumer processes it.
+        await emitChunkEvent(pubsub, runId, c, !!runner);
       }
     },
     onProcessorError: error => {
@@ -553,22 +556,12 @@ export function createDurableToolCallStep() {
           message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
-          // Runs through output processors (tripwire/blocking/redaction) and emits
-          await processChunkThroughOutputProcessors(
-            {
-              type: 'tool-error',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, error },
-            } as ChunkType,
-            registryEntry,
-            pubsub,
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
             runId,
-            initData.agentId,
-            logger,
-            undefined,
-            processorObservabilityContext,
-          );
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args, error },
+          });
         }
         return {
           ...typedInput,
