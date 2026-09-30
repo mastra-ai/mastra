@@ -12,7 +12,6 @@ import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
-import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
