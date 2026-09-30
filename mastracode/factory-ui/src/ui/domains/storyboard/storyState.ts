@@ -108,6 +108,11 @@ export function factoryKeys(state: StoryState): Plan[] {
   return state.sharedAccount ? [state.sharedAccount, ...state.providerKeys] : [];
 }
 
+export function addFactoryKey(state: StoryState, key: Plan): Partial<StoryState> {
+  if (factoryKeys(state).some(existing => existing.provider === key.provider)) return {};
+  return state.sharedAccount === null ? { sharedAccount: key } : { providerKeys: [...state.providerKeys, key] };
+}
+
 export function factoryKeyFor(state: StoryState, model: string): Plan | null {
   const provider = providerOf(model);
   return factoryKeys(state).find(key => key.provider === provider) ?? null;

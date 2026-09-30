@@ -109,7 +109,11 @@ const MODEL_PROVIDERS: Record<string, Provider> = {
 export const MODEL_OPTIONS = Object.keys(MODEL_PROVIDERS);
 
 export function providerOf(model: string): Provider | undefined {
-  return MODEL_PROVIDERS[model];
+  return MODEL_PROVIDERS[model] ?? (model.includes('/') ? model.slice(0, model.indexOf('/')) : undefined);
+}
+
+export function modelLabel(model: string): string {
+  return model.includes('/') ? model.slice(model.lastIndexOf('/') + 1) : model;
 }
 
 export function modelsFrom(provider: Provider): string[] {

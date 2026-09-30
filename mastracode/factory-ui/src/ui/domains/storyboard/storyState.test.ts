@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PLANS } from './cast';
+import { companyKeyFor, PLANS } from './cast';
 import { STORIES, storyState } from './stories';
 import type { CardFacts, StoryState } from './storyState';
 import {
@@ -9,6 +9,8 @@ import {
   billingFor,
   COMPANY_KEYS_ONLY,
   composerGate,
+  addFactoryKey,
+  factoryKeyFor,
   factoryKeys,
   moveToFactory,
   moveToMyPlan,
@@ -219,6 +221,15 @@ describe('what can pay for work', () => {
     const state: StoryState = { ...BASE_STATE, ...COMPANY_KEYS_ONLY, laneFunding: { triage: 'owner' } };
     expect(billingFor(state, wardsCard, 'triage')).toMatchObject({ payer: 'factory' });
     expect(billingFor(state, { ...wardsCard, funding: 'ward', surface: 'chat' })).toMatchObject({ payer: 'factory' });
+  });
+});
+
+describe('connecting a provider from a lane', () => {
+  it('bills a registry model to its provider and never adds the same provider twice', () => {
+    const drun = companyKeyFor('drun');
+    const withDrun = { ...BASE_STATE, ...addFactoryKey(BASE_STATE, drun) };
+    expect(factoryKeyFor(withDrun, 'drun/public/deepseek-r1')).toBe(drun);
+    expect(addFactoryKey(withDrun, companyKeyFor('drun'))).toEqual({});
   });
 });
 

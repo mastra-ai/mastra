@@ -1,12 +1,14 @@
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ProviderLogo } from '@mastra/playground-ui/domains/llm/provider-logo';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, CornerDownRight, Pin, PlugZap, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import type { Plan } from './cast';
-import { actorName, PERSONA_IDS, providerOf } from './cast';
+import { actorName, modelLabel, PERSONA_IDS, providerOf } from './cast';
 import type { Storyboard } from './StoryboardProvider';
 import { useStoryboard } from './StoryboardProvider';
 import { storyLane } from './storyBoards';
@@ -14,7 +16,7 @@ import { thinkingLabel } from './storyBillingCopy';
 import { resolveLaneRunner } from './laneRunner';
 import { StoryAdminLocked } from './StoryAdminLocked';
 import { StoryLaneAutomations } from './StoryLaneAutomations';
-import { factorySource, LanePayerPicker, LanePickers, OWNER_SOURCE } from './StoryLanePickers';
+import { factorySource, LaneField, LaneModelFields, LanePayerFields, ownerSource } from './StoryLanePickers';
 import { StoryLaneRunner } from './StoryLaneRunner';
 import { StoryLaneSkills } from './StoryLaneSkills';
 import { storySettingsPath } from './storyLinks';
@@ -31,7 +33,7 @@ function laneModelLabel(state: StoryState, stageId: string, board: string): Lane
     const billing = 'Each card bills whoever owns it';
     if (lane) {
       const origin = [override, "Default on each owner's plan"].filter(Boolean).join(' · ');
-      return { model: `${lane.model} · ${thinkingLabel(lane.thinking)}`, origin, billing };
+      return { model: `${modelLabel(lane.model)} · ${thinkingLabel(lane.thinking)}`, origin, billing };
     }
     const skill = skillsOnLane(stageId)[0]?.name;
     return { model: skill ? `Owner's model · ${skill} skill` : "Owner's model", origin: override, billing };
@@ -42,8 +44,8 @@ function laneModelLabel(state: StoryState, stageId: string, board: string): Lane
   const lane = laneModelFor(state, stageId, board);
   const billing = `billed to ${(lane && factoryKeyFor(state, lane.model))?.label ?? account.label}`;
   const origin = (modelOrigin: string) => [override, modelOrigin].filter(Boolean).join(' · ');
-  if (!lane) return { model: account.model, origin: origin('Inherits Factory default'), billing };
-  const model = `${lane.model} · ${thinkingLabel(lane.thinking)}`;
+  if (!lane) return { model: modelLabel(account.model), origin: origin('Inherits Factory default'), billing };
+  const model = `${modelLabel(lane.model)} · ${thinkingLabel(lane.thinking)}`;
   const runner = resolveLaneRunner(state, stageId);
   if (runner.kind === 'agent') return { model, origin: origin(`Set by ${runner.agent.name}`), billing };
   const own = state.laneModels[stageId];
@@ -53,7 +55,7 @@ function laneModelLabel(state: StoryState, stageId: string, board: string): Lane
 
 function OwnerPlanRows({ state, stageId }: { state: StoryState; stageId: string }) {
   return PERSONA_IDS.map(persona => (
-    <Txt key={persona} variant="meta" tone="muted" className="flex justify-between gap-2 px-2 py-1">
+    <Txt key={persona} variant="meta" tone="muted" className="flex justify-between gap-2 py-0.5">
       <span className="text-foreground">{actorName(persona)}</span>
       <span className="truncate">{memberPlanLine(state, state.memberPlans[persona], stageId)}</span>
     </Txt>
@@ -67,18 +69,22 @@ function memberPlanLine(state: StoryState, plan: Plan | null, stageId: string): 
   return `${plan.label} · ${model}${fallbackFrom ? `, can't run ${fallbackFrom}` : ''}`;
 }
 
-function ConnectAccountItem({ onConnect }: { onConnect: () => void }) {
+function ConnectAccountCallout({ onConnect }: { onConnect: () => void }) {
   return (
-    <DropdownMenu.Item
-      onClick={onConnect}
-      className="bg-warning-subtle text-warning-subtle-foreground not-disabled:hover:bg-warning-subtle not-disabled:hover:text-warning-subtle-foreground data-highlighted:bg-warning-subtle [&_svg]:text-warning-indicator mb-1 h-auto items-start py-2"
-    >
-      <PlugZap aria-hidden />
-      <span className="flex flex-col items-start gap-0.5">
-        <span className="font-medium">Connect a Factory account</span>
-        <span className="text-xs">Cards in this lane wait until one pays</span>
+    <div className="bg-warning-subtle text-warning-subtle-foreground flex items-center gap-3 rounded-lg p-3">
+      <PlugZap size={16} aria-hidden className="text-warning-indicator shrink-0" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <Txt as="span" variant="label">
+          No Factory account yet
+        </Txt>
+        <Txt as="span" variant="meta">
+          Cards in this lane wait until one pays
+        </Txt>
       </span>
-    </DropdownMenu.Item>
+      <Button size="sm" variant="primary" onClick={onConnect}>
+        Connect
+      </Button>
+    </div>
   );
 }
 
@@ -129,39 +135,60 @@ function LaneModelMenu({
   const openSettings = () => navigate(storySettingsPath(factoryId, 'factory-work'));
 
   return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger variant="ghost" size="sm" aria-label={label} className="-ml-2">
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2')}
+          />
+        }
+      >
         <LaneModelFace state={state} stageId={stageId} model={model} board={board} />
         <ChevronDown aria-hidden />
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" className="w-72">
-        {factoryPays && !state.sharedAccount && <ConnectAccountItem onConnect={openSettings} />}
-        <LanePayerPicker storyboard={storyboard} stageId={stageId} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="flex w-80 flex-col gap-5 p-4">
+        {factoryPays && !account && <ConnectAccountCallout onConnect={openSettings} />}
+        <LanePayerFields storyboard={storyboard} stageId={stageId} />
         {account && runner.kind !== 'agent' && (
-          <LanePickers storyboard={storyboard} stageId={stageId} source={factorySource(state, account)} lockable />
-        )}
-        {!factoryPays && (
-          <LanePickers storyboard={storyboard} stageId={stageId} source={OWNER_SOURCE} lockable={false} />
+          <LaneModelFields
+            storyboard={storyboard}
+            stageId={stageId}
+            source={factorySource(state, account)}
+            factoryPays
+          />
         )}
         {account && runner.kind === 'agent' && (
-          <DropdownMenu.Label>
-            {runner.agent.name} picks its own model: {runner.agent.model}. Switch the runner to change it.
-          </DropdownMenu.Label>
+          <LaneField label="Model">
+            <Txt as="p" variant="meta" tone="muted">
+              {runner.agent.name} picks its own model: {runner.agent.model}. Switch the runner to change it.
+            </Txt>
+          </LaneField>
         )}
         {!factoryPays && (
           <>
-            <DropdownMenu.Label>What each owner runs here</DropdownMenu.Label>
-            <OwnerPlanRows state={state} stageId={stageId} />
+            <LaneModelFields
+              storyboard={storyboard}
+              stageId={stageId}
+              source={ownerSource(state)}
+              factoryPays={false}
+            />
+            <LaneField label="What each owner runs here">
+              <div className="flex flex-col">
+                <OwnerPlanRows state={state} stageId={stageId} />
+              </div>
+            </LaneField>
           </>
         )}
-        {state.sharedAccount && (
-          <DropdownMenu.Item onClick={openSettings}>
+        {account && (
+          <Button size="sm" variant="ghost" className="-ml-2 self-start" onClick={openSettings}>
             <Settings aria-hidden />
-            Factory keys in Settings
-          </DropdownMenu.Item>
+            Factory accounts in Settings
+          </Button>
         )}
-      </DropdownMenu.Content>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 }
 

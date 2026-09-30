@@ -13,7 +13,7 @@ import type { Storyboard } from './StoryboardProvider';
 import { PolicyBlock } from './StorySettingControls';
 import { StoryProviderPicker } from './StoryProviderPicker';
 import { settingsAnchorId } from './storyLinks';
-import { factoryKeys, ownPlansAllowed } from './storyState';
+import { addFactoryKey, factoryKeys, ownPlansAllowed } from './storyState';
 import type { StoryState } from './storyState';
 
 const DOLLARS = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -112,10 +112,6 @@ function MyPlanAction({ storyboard: { state, patch } }: { storyboard: Storyboard
       {disconnected ? 'Reconnect' : 'Disconnect'}
     </Button>
   );
-}
-
-function addFactoryKey(state: StoryState, key: Plan): Partial<StoryState> {
-  return state.sharedAccount === null ? { sharedAccount: key } : { providerKeys: [...state.providerKeys, key] };
 }
 
 function removeFactoryKey(state: StoryState, key: Plan): Partial<StoryState> {

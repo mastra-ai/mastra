@@ -22,11 +22,15 @@ export function StoryProviderPicker({
   kind,
   state,
   value,
+  label = PICKER_LABELS[kind],
+  className = 'w-56',
   onPick,
 }: {
   kind: Plan['kind'];
   state: StoryState;
   value?: Provider;
+  label?: string;
+  className?: string;
   onPick: (plan: Plan) => void;
 }) {
   const providersQuery = useProvidersQuery();
@@ -40,7 +44,6 @@ export function StoryProviderPicker({
       start: <ProviderLogo providerId={provider} size={14} />,
     }))
     .toSorted((left, right) => left.label.localeCompare(right.label));
-  const label = PICKER_LABELS[kind];
   return (
     <Combobox
       aria-label={label}
@@ -54,7 +57,7 @@ export function StoryProviderPicker({
       }
       searchPlaceholder="Search providers…"
       emptyText={providersQuery.isPending ? 'Loading providers…' : 'No provider found.'}
-      className="w-56"
+      className={className}
     />
   );
 }
