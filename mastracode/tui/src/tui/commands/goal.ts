@@ -22,6 +22,7 @@ import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { stripControlChars } from '../sanitize-ansi.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
@@ -52,7 +53,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     await goalManager.saveToThread(state);
     ctx.updateStatusLine();
     ctx.showInfo(
-      `Goal paused: "${goal.objective}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
+      `Goal paused: "${stripControlChars(goal.objective)}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
     );
     return;
   }
@@ -90,7 +91,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
         return;
       }
       ctx.showError(
-        `Goal paused — failed to send continuation for "${goal.objective}": ${err instanceof Error ? err.message : String(err)}`,
+        `Goal paused — failed to send continuation for "${stripControlChars(goal.objective)}": ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
       );
     }
     return;
@@ -99,8 +100,15 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
+    if (!(await goalManager.deleteFromThread(state))) {
+      // Loading retries the delete once; only a retry that lands counts as cleared.
+      if (!(await goalManager.loadFromThread(state))) {
+        ctx.updateStatusLine();
+        ctx.showError('Could not clear the goal; it may still be active. Try /goal clear again.');
+        return;
+      }
+    }
     state.planStartedGoalId = undefined;
-    await goalManager.saveToThread(state);
     // Abort any in-flight turn. The cleared objective stops the core loop from
     // driving *new* goal continuations, but a turn that was already running when
     // the user cleared keeps going to completion — which reads as "it's still
@@ -131,7 +139,10 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
 }
 
 function formatGoalStatus(goal: GoalState): string {
-  return `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]`;
+  const reason = goal.status === 'paused' && goal.pausedReason ? ` — paused: ${goal.pausedReason}` : '';
+  return stripControlChars(
+    `Goal (${goal.status}): "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used [judge: ${goal.judgeModelId}]${reason}`,
+  );
 }
 
 function formatGoalStatusRow(goal: GoalState): string {
@@ -375,7 +386,9 @@ async function startGoal(
       ctx.showInfo('Interrupted');
       return;
     }
-    ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    ctx.showError(
+      `Goal paused — failed to start: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
+    );
   }
 }
 

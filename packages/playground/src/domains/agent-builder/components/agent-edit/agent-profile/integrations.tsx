@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
@@ -125,7 +126,8 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       data-testid={`integration-card-${platform.id}`}
       className={cn(
         raisedSurfaceStyle,
-        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
+        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center disabled:cursor-not-allowed disabled:opacity-60',
+        surfaceRimFocus,
       )}
     >
       <div className="grid size-14 place-items-center rounded-xl bg-muted">

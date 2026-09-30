@@ -8,6 +8,7 @@ import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserI
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { pushRepositoryBranch, refreshMergeRequestCheckout } from '../integrations/github/sandbox.js';
+import { normalizedVerdictLine } from '../review-verdict.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
@@ -38,6 +39,39 @@ interface SessionTarget {
   repository: SourceControlRepository;
   orgId: string;
   userId: string;
+}
+
+type ReviewEvent = 'approve' | 'request-changes' | 'comment';
+
+/** Returns why a review's leading `Verdict:` line contradicts the submitted event, if it does. */
+export function verdictEventMismatch(event: ReviewEvent, body: string | undefined): string | undefined {
+  const match = /^verdict: ?(approve|request changes|changes requested)\b/.exec(normalizedVerdictLine(body) ?? '');
+  if (!match) return undefined;
+  const verdict = match[1] === 'approve' ? 'approve' : 'request changes';
+  // GitLab has no request-changes state, so a blocking verdict is published as a comment review.
+  const allowed: ReviewEvent[] = verdict === 'approve' ? ['approve'] : ['request-changes', 'comment'];
+  if (allowed.includes(event)) return undefined;
+  return `Review body opens with "Verdict: ${verdict}" but event is "${event}". Nothing was posted. Use event ${allowed
+    .map(e => `"${e}"`)
+    .join(' or ')} for this body, or regenerate the body for the verdict you intend.`;
+}
+
+const REVIEWED_HEAD_LINE = /^[\s*_>-]*reviewed head[*_]*:[*_]*\s*(.*)$/gim;
+const FULL_SHA = /^`?([0-9a-f]{40}|[0-9a-f]{64})`?(?:\s|$)/i;
+
+/**
+ * Returns the full SHA named by the body's `Reviewed head:` lines, `null` when any line is malformed or the lines
+ * disagree, or `undefined` when absent.
+ */
+export function reviewedHeadFromBody(body: string | undefined): string | null | undefined {
+  const shas = new Set(
+    [...(body ?? '').matchAll(REVIEWED_HEAD_LINE)].map(
+      line => FULL_SHA.exec(line[1]!.trim())?.[1]?.toLowerCase() ?? null,
+    ),
+  );
+  if (shas.size === 0) return undefined;
+  if (shas.size > 1) return null;
+  return [...shas][0];
 }
 
 function authIdentity(requestContext: RequestContext) {
@@ -473,13 +507,50 @@ export function createSourceControlTools({
         .refine(input => input.event === 'approve' || Boolean(input.body?.trim()), {
           path: ['body'],
           message: 'request-changes and comment reviews require a body.',
+        })
+        .superRefine((input, ctx) => {
+          const mismatch = verdictEventMismatch(input.event, input.body);
+          if (mismatch) ctx.addIssue({ code: 'custom', path: ['body'], message: mismatch });
+          const reviewedHead = reviewedHeadFromBody(input.body);
+          if (reviewedHead === null) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['body'],
+              message: 'Every "Reviewed head:" line must name the same full 40- or 64-character commit SHA.',
+            });
+          } else if (reviewedHead && input.commitId && input.commitId.toLowerCase() !== reviewedHead) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['commitId'],
+              message: `Review body says "Reviewed head: ${reviewedHead}" but commitId is ${input.commitId}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
+            });
+          }
         }),
       execute: async input => {
         const target = await withTarget();
+        const reviewedHead = reviewedHeadFromBody(input.body);
+        if (reviewedHead) {
+          const pullRequest = await target.provider.versionControl.getPullRequest({
+            ...(await reference(target)),
+            pullRequestId: changeRequestId(input.changeRequestId),
+          });
+          if (!pullRequest) {
+            throw new Error(`Change request ${input.changeRequestId} was not found; nothing was posted.`);
+          }
+          if (pullRequest.headSha && pullRequest.headSha.toLowerCase() !== reviewedHead) {
+            throw new Error(
+              `Review body says "Reviewed head: ${reviewedHead}" but the current change-request head is ${pullRequest.headSha}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
+            );
+          }
+        }
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
-          ...(input.commitId !== undefined ? { commitId: input.commitId } : {}),
+          ...(input.commitId !== undefined
+            ? { commitId: input.commitId }
+            : reviewedHead
+              ? { commitId: reviewedHead }
+              : {}),
         };
         if (input.event === 'approve') {
           return target.provider.versionControl.createReview({

@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { assignOrganizationRolePermissionTool } from './tools/assign-organization-role-permission.js';
 import { createEmailAddressTool } from './tools/create-email-address.js';
 import { createOrganizationDomainTool } from './tools/create-organization-domain.js';
@@ -91,5 +91,5 @@ export function createClerkTools(options?: ProviderToolsOptions) {
     clerk_update_user: updateUserTool(platformProxy),
     clerk_verify_organization_domain: verifyOrganizationDomainTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

@@ -8,7 +8,7 @@ Finding a policy or reconciling conflicting documents often means searching seve
 
 ## Demo
 
-<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1790332288/organization_inteligence_template_wo7ycp.mp4"></video>
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1790690836/organization-inteligence-v2_gshd6j.mp4"></video>
 
 This demo runs in Mastra Studio, HTTP API or via MCP, but you can connect this workflow to your React, Next.js, or Vue app using the Mastra Client SDK or agentic UI libraries like AI SDK UI, CopilotKit, or Assistant UI.
 

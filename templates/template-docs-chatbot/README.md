@@ -1,4 +1,4 @@
-# Docs Chatbot Template
+# Docs Chatbot
 
 This template contains two main components:
 

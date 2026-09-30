@@ -81,7 +81,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 className={cn(
                   'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
                   group.operator === 'OR'
-                    ? 'bg-badge-yellow-subtle text-badge-yellow-foreground hover:bg-badge-yellow-strong'
+                    ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
                     : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >

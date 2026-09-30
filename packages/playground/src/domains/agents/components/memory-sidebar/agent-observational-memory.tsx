@@ -79,7 +79,7 @@ const ProgressBar = ({
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
   const textColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-white';
+  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
 
@@ -125,7 +125,7 @@ const ProgressBar = ({
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-badge-yellow-indicator">Adaptive</span>{' '}
+                    <span className="text-badge-amber-indicator">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
@@ -181,11 +181,11 @@ const ProgressBar = ({
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-badge-yellow-indicator">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-badge-amber-indicator">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-caption">
-                  <span className="text-badge-yellow-indicator">{formatTokens(baseThreshold)}</span>
+                  <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.

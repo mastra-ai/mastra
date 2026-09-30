@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { cancelMessageBatchTool } from './tools/cancel-message-batch.js';
 import { countMessageTokensTool } from './tools/count-message-tokens.js';
 import { createMessageBatchTool } from './tools/create-message-batch.js';
@@ -31,5 +31,5 @@ export function createAnthropicTools(options?: ProviderToolsOptions) {
     anthropic_list_message_batches: listMessageBatchesTool(platformProxy),
     anthropic_list_models: listModelsTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

@@ -2,7 +2,6 @@ import type { EntityLearningProgressResponse, SignalCatalogEntry } from '@mastra
 import { CpuIcon, ExternalLink } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
-import './signals-empty-state.css';
 import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
 import type { LinkComponent } from '../../../ds/types/link-component';
@@ -26,7 +25,7 @@ const signalStyle = (label: string): CSSProperties => ({
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
     <div className="w-full border-t border-dashed border-border" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green shadow-[0_0_12px_currentColor]" />
+    <span className="absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-brand-green-indicator" />
   </div>
 );
 
@@ -199,7 +198,7 @@ export const SignalsEmptyState = ({
       <div className="mx-auto w-full max-w-260">
         <header>
           <Txt variant="caption" tone="muted" font="mono" className="flex items-center gap-2 tracking-wider uppercase">
-            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-brand-green-indicator" />
             Trace Intelligence
           </Txt>
           <Txt as="h1" variant="display" tone="ink" className="mt-2 tracking-tight">
@@ -255,11 +254,11 @@ export const SignalsEmptyState = ({
             <Txt variant="caption" tone="muted" className="mt-0.5">
               Finds recurring themes
             </Txt>
-            <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-brand-green" />
-              <span className="absolute size-14 rounded-full border border-brand-green" />
-              <span className="absolute size-9 rounded-full border border-brand-green bg-fill-subtle" />
-              <CpuIcon className="relative size-4 text-brand-green" />
+            <div
+              aria-hidden="true"
+              className="mt-5 flex size-14 items-center justify-center rounded-full border border-brand-green-indicator bg-fill-subtle"
+            >
+              <CpuIcon className="size-4 text-brand-green-indicator" />
             </div>
             <Txt variant="meta" tone="muted" className="mt-3 max-w-40">
               Clusters similar trace signals into themes for each dimension
@@ -283,11 +282,11 @@ export const SignalsEmptyState = ({
                 <Txt
                   as="span"
                   variant="column"
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5"
+                  className="inline-flex items-center gap-2 rounded border border-border bg-card px-2.5 py-1.5"
                   key={signal.key}
                   style={signalStyle(signal.key)}
                 >
-                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current shadow-[0_0_7px_currentColor]" />
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
                   {signal.label}
                 </Txt>
               ))}
@@ -317,10 +316,7 @@ export const SignalsEmptyState = ({
 
         <aside className="mt-9 rounded-md border border-border bg-background px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
-            <span
-              aria-hidden="true"
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator shadow-[0_0_9px_currentColor]"
-            />
+            <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator" />
             <div className="min-w-0 flex-1">
               <Txt variant="caption" tone="muted">
                 <strong className="font-medium text-foreground">{copy.title}</strong> {copy.body}

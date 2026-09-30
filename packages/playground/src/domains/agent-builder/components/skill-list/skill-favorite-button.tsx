@@ -67,7 +67,7 @@ export const SkillFavoriteButton = ({
       className={cn(
         'shrink-0',
         signedIn ? 'cursor-pointer' : 'cursor-not-allowed',
-        isFavorited && '[&_svg]:text-badge-yellow-indicator',
+        isFavorited && '[&_svg]:text-badge-amber-indicator',
         className,
       )}
     >

@@ -699,7 +699,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['transform']",
     isOptional: true,
     description:
-      'Per-invocation tool payload transform policy. The `transformToolPayload` closure lives on the in-process run registry; only the JSON-safe `targets` shadow is serialized.',
+      'Per-invocation tool payload transform policy. The `transformToolPayload` closure lives on the in-process run registry; only the JSON-safe `targets` shadow is serialized. Recovery after a process restart cannot restore the closure. For crash-survivable transcript transforms, configure `transform.transcript` on the tool with `createTool()` so the durable worker can re-resolve it from the registered tool.',
   },
   {
     name: 'prepareStep',

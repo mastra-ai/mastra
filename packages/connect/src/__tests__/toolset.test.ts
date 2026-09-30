@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { MastraConnectError } from '../errors.js';
-import { applyAllowTools, defineProxyTool, resolveConnectionId } from '../toolset.js';
+import {
+  applyAllowTools,
+  applyDisallowTools,
+  applyToolFilter,
+  defineProxyTool,
+  resolveConnectionId,
+} from '../toolset.js';
 
 const TOKEN = 'fake-test-token';
 
@@ -47,6 +53,61 @@ describe('applyAllowTools', () => {
 
   it('throws at build time on unknown names', () => {
     expect(() => applyAllowTools(tools, ['a', 'typo'])).toThrow(/typo/);
+  });
+});
+
+describe('applyDisallowTools', () => {
+  const tools = { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' } } as never;
+
+  it('returns the toolset unchanged without a filter', () => {
+    expect(applyDisallowTools(tools)).toBe(tools);
+  });
+
+  it('returns the toolset unchanged for an empty filter', () => {
+    expect(applyDisallowTools(tools, [])).toBe(tools);
+  });
+
+  it('removes the listed tool keys', () => {
+    expect(Object.keys(applyDisallowTools(tools, ['b'])).sort()).toEqual(['a', 'c']);
+  });
+
+  it('preserves insertion order of the remaining keys', () => {
+    expect(Object.keys(applyDisallowTools(tools, ['a']))).toEqual(['b', 'c']);
+  });
+
+  it('throws at build time on unknown names', () => {
+    expect(() => applyDisallowTools(tools, ['a', 'typo'])).toThrow(/typo/);
+  });
+});
+
+describe('applyToolFilter', () => {
+  const tools = { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' } } as never;
+
+  it('returns the toolset unchanged when neither filter is set', () => {
+    expect(applyToolFilter(tools, {})).toBe(tools);
+  });
+
+  it('applies allowTools when only allowTools is set', () => {
+    expect(Object.keys(applyToolFilter(tools, { allowTools: ['a'] }))).toEqual(['a']);
+  });
+
+  it('applies disallowTools when only disallowTools is set', () => {
+    expect(Object.keys(applyToolFilter(tools, { disallowTools: ['a'] })).sort()).toEqual(['b', 'c']);
+  });
+
+  it('treats an empty disallowTools array as no filter', () => {
+    expect(applyToolFilter(tools, { disallowTools: [] })).toBe(tools);
+  });
+
+  it('throws invalid_options when both filters are set', () => {
+    try {
+      applyToolFilter(tools, { allowTools: ['a'], disallowTools: ['b'] });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(MastraConnectError);
+      expect((error as MastraConnectError).code).toBe('invalid_options');
+      expect((error as Error).message).toMatch(/mutually exclusive/);
+    }
   });
 });
 

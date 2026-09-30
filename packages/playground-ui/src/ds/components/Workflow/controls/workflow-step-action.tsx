@@ -32,7 +32,7 @@ export function WorkflowStepAction({ action, isActive, onSelect }: WorkflowStepA
   const ActionIcon = definition.icon;
   const label = isActive && 'activeLabel' in definition ? definition.activeLabel : definition.label;
   return (
-    <DropdownMenu.Item onSelect={onSelect} className={action === 'tripwire' ? 'text-warning-indicator' : undefined}>
+    <DropdownMenu.Item onSelect={onSelect} className={action === 'tripwire' ? 'text-warning-foreground' : undefined}>
       <ActionIcon />
       <span>{label}</span>
     </DropdownMenu.Item>

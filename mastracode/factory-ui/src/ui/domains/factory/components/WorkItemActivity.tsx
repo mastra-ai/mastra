@@ -2,6 +2,7 @@ import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
@@ -119,7 +120,7 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-meta text-muted-foreground hover:text-foreground focus-visible:outline-border-focus relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className={`text-meta text-muted-foreground hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`}
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >

@@ -31,7 +31,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
               !isCollapsed && 'ml-auto',
               'hover:bg-fill-subtle hover:text-foreground',
               'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
-              focusRing.visible,
+              focusRing,
               '[&_svg]:size-4 [&_svg]:text-muted-foreground [&:hover_svg]:text-foreground',
               className,
             )}

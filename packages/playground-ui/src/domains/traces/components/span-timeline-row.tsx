@@ -6,6 +6,7 @@ import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { formatDurationPrecise } from '@/utils/duration';
 
@@ -70,7 +71,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           type="button"
           className={cn(
             'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-caption text-foreground',
-            'focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:ring-inset',
+            focusRingInset,
           )}
         >
           {spanUI?.color && (
@@ -105,7 +106,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               className={cn(
                 'flex size-5 cursor-pointer items-center justify-center rounded-md',
                 'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-border-focus',
+                focusRing,
               )}
             >
               {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}

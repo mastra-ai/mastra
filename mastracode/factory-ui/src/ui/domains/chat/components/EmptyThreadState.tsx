@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -65,7 +66,9 @@ export function EmptyThreadState() {
       </div>
 
       <details className="group text-caption text-muted-foreground mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-foreground focus-visible:outline-border-focus flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+        <summary
+          className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
+        >
           <span>
             Working in <span className="text-foreground font-medium">{activeFactory.name}</span>
           </span>

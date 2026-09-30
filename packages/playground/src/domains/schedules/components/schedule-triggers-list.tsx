@@ -73,13 +73,7 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <Txt
-            as="span"
-            variant="caption"
-            font="mono"
-            tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-success-indicator' : 'whitespace-nowrap'}
-          >
+          <Txt as="span" variant="caption" font="mono" tone={isLinked ? 'ink' : 'muted'} className="whitespace-nowrap">
             {t.runId}
           </Txt>
         );
@@ -94,7 +88,7 @@ export function ScheduleTriggersList({
                   <Txt
                     as="span"
                     variant="caption"
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-indicator"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
                   >
                     <AlertTriangleIcon size={14} />
                     publish failed
@@ -114,7 +108,7 @@ export function ScheduleTriggersList({
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex text-destructive-indicator">
+                      <span className="inline-flex text-destructive-foreground">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

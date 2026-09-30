@@ -10,7 +10,7 @@ export function MetricsCardError({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
-      <Txt variant="caption" className="text-destructive-indicator">
+      <Txt variant="caption" className="text-destructive-foreground">
         {message}
       </Txt>
     </div>

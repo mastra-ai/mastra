@@ -7,7 +7,7 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
@@ -161,7 +161,8 @@ export function ToolsPage() {
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground focus:outline-1 focus:outline-white focus:outline-solid focus-visible:outline-1 focus-visible:outline-white focus-visible:outline-solid',
+                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground',
+                focusRing,
                 canEditToolDescriptions && 'hover:bg-fill-subtle focus:bg-fill-subtle',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -183,11 +184,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className={cn(
-              'rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
-              quietTextHover,
-              controlStateColorTransition,
-            )}
+            className={cn('rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="xs">

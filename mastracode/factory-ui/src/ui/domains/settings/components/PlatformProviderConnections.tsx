@@ -175,7 +175,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
               {connectionName(connection)}
             </Txt>
             {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="meta" className="text-destructive-indicator">
+              <Txt as="span" variant="meta" className="text-destructive-foreground">
                 Needs reauthorization
               </Txt>
             )}

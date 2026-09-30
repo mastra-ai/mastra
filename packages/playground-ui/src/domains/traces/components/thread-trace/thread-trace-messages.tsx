@@ -29,7 +29,7 @@ export function ThreadTraceMessages({ className, innerClassName, children, ...pr
   return (
     <div
       data-slot="thread-trace-messages"
-      className={cn('relative min-w-0 border-r border-border', className)}
+      className={cn('relative min-w-0 overflow-x-clip border-r border-border', className)}
       {...props}
       style={{ minHeight, ...props.style }}
     >
@@ -75,5 +75,5 @@ export type ThreadTraceTabContentProps = TabContentProps;
 
 /** One view of the messages column; keeps a gutter before the column's right border. */
 export function ThreadTraceTabContent({ className, ...props }: ThreadTraceTabContentProps) {
-  return <TabContent className={cn('px-4', className)} {...props} />;
+  return <TabContent className={cn('overflow-x-hidden px-4', className)} {...props} />;
 }

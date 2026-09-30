@@ -21,7 +21,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -146,11 +146,7 @@ export function AgentPlaygroundVersionBar({
         <Tooltip>
           <TooltipTrigger
             aria-label="Version information"
-            className={cn(
-              'shrink-0 rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
-              quietTextHover,
-              controlStateColorTransition,
-            )}
+            className={cn('shrink-0 rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
           >
             <Icon size="xs">
               <Info />

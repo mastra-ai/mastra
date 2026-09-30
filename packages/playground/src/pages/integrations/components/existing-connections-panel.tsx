@@ -26,7 +26,7 @@ function ConnectionRow({
       </div>
       <button
         type="button"
-        className="text-destructive-indicator underline disabled:opacity-50"
+        className="text-destructive-foreground underline disabled:opacity-50"
         onClick={onDisconnect}
         disabled={disconnectPending}
       >
@@ -127,7 +127,7 @@ export function ExistingConnectionsPanel({
       ) : isLoading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : error ? (
-        <p className="text-destructive-indicator">{String(error)}</p>
+        <p className="text-destructive-foreground">{String(error)}</p>
       ) : connections.length === 0 ? (
         <p className="text-muted-foreground">No connections.</p>
       ) : groupedByAuthor ? (
@@ -145,7 +145,7 @@ export function ExistingConnectionsPanel({
           onDisconnect={onDisconnect}
         />
       )}
-      {disconnectError ? <p className="text-destructive-indicator">{String(disconnectError)}</p> : null}
+      {disconnectError ? <p className="text-destructive-foreground">{String(disconnectError)}</p> : null}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -161,7 +160,9 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  const contentHash = createHash('sha1').update(fs.readFileSync(entryPath)).digest('hex');
+  const contentHash = Buffer.from(await globalThis.crypto.subtle.digest('SHA-1', fs.readFileSync(entryPath))).toString(
+    'hex',
+  );
   const stat = fs.statSync(entryPath, { bigint: true });
   url.searchParams.set('contentHash', contentHash);
   url.searchParams.set('mtimeNs', stat.mtimeNs.toString());

@@ -9,7 +9,7 @@ import {
   parseTraceQueryRequest,
   planTraceQuery,
 } from '@mastra/core/storage';
-import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
+import { AGGREGATE_TRACES, QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
 import { HTTPException as MastraHTTPException, MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -313,6 +313,95 @@ describe('Hono Server Adapter', () => {
     expect(response.headers.get('content-type')).toContain('application/json');
     await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
     expect(getStorage).not.toHaveBeenCalled();
+  });
+
+  describe('Trace aggregate error responses over HTTP', () => {
+    async function requestTraceAggregate(mastra: Mastra, body: string) {
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+      return app.request('/api/observability/traces/aggregate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+    }
+
+    async function expectDeclaredError(response: Response, status: 400 | 413 | 422 | 501) {
+      expect(response.status).toBe(status);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      const schema = AGGREGATE_TRACES.openapi?.responses[status]?.content?.['application/json']?.schema;
+      if (!schema) throw new Error(`Missing trace-aggregate error schema for ${status}`);
+      const body = await response.json();
+      expect(schema.safeParse(body).success).toBe(true);
+      return body;
+    }
+
+    it('returns the documented malformed-body response', async () => {
+      const body = await expectDeclaredError(
+        await requestTraceAggregate(new Mastra({ logger: false }), '{"timeRange":'),
+        400,
+      );
+      expect(body).toEqual({ error: 'Invalid request body', issues: [{ field: 'body', message: expect.any(String) }] });
+    });
+
+    it('rejects an oversized body before storage access', async () => {
+      const mastra = new Mastra({ logger: false });
+      const getStorage = vi.spyOn(mastra, 'getStorage');
+      const response = await requestTraceAggregate(mastra, JSON.stringify({ padding: 'x'.repeat(256 * 1024) }));
+
+      expect(await expectDeclaredError(response, 413)).toEqual({ error: 'Request body too large' });
+      expect(getStorage).not.toHaveBeenCalled();
+    });
+
+    it('returns structured 422s for schema and planner failures without echoing values', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+      const schemaFailure = await expectDeclaredError(
+        await requestTraceAggregate(
+          new Mastra({ logger: false }),
+          JSON.stringify({ timeRange, measures: ['count'], sql: 'sensitive-sql' }),
+        ),
+        422,
+      );
+      expect(schemaFailure).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'invalid_request' }] });
+      expect(JSON.stringify(schemaFailure)).not.toContain('sensitive-sql');
+
+      const plannerFailure = await expectDeclaredError(
+        await requestTraceAggregate(
+          new Mastra({ logger: false }),
+          JSON.stringify({ timeRange, interval: '1m', measures: ['count'] }),
+        ),
+        422,
+      );
+      expect(plannerFailure).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'too_many_buckets', path: ['interval'] }],
+      });
+    });
+
+    it('returns a structured 501 for stores without trace-aggregate', async () => {
+      const mastra = new Mastra({ logger: false });
+      const aggregateTraces = vi.fn();
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getFeatures: () => ['trace-query'], aggregateTraces }),
+      } as unknown as NonNullable<ReturnType<Mastra['getStorage']>>);
+      const body = await expectDeclaredError(
+        await requestTraceAggregate(
+          mastra,
+          JSON.stringify({
+            timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+            measures: ['count'],
+          }),
+        ),
+        501,
+      );
+
+      expect(body).toEqual({
+        code: 'TRACE_AGGREGATE_UNSUPPORTED',
+        message: 'Trace aggregation is not supported by the configured observability store',
+      });
+      expect(aggregateTraces).not.toHaveBeenCalled();
+    });
   });
 
   it('registers createRoute routes from server.apiRoutes with runtime validation', async () => {

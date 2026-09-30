@@ -1,3 +1,4 @@
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 export function FilterChip({
@@ -17,7 +18,8 @@ export function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'text-meta focus-visible:ring-border-focus flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold outline-none transition-colors focus-visible:ring-1',
+        'text-meta flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold transition-colors',
+        focusRing,
         pressed
           ? 'bg-fill-active text-foreground'
           : 'text-muted-foreground hover:bg-fill hover:text-foreground focus-visible:bg-fill focus-visible:text-foreground',
