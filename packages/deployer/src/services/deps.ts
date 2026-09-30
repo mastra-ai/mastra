@@ -543,7 +543,8 @@ export class Deps extends MastraBase {
           ).some(spec => spec.startsWith('file:./workspace-module/'));
 
         if (packedBunWorkspaces) {
-          // The source lock still resolves workspace packages by their original paths, not the packed tarballs.
+          // Bun cannot reuse the source workspace lockfile with packed tarballs; removing its workspace entries
+          // makes Bun ignore it and regenerate the lockfile anyway. Start with a clean lockfile instead.
           await fsPromises.rm(destination, { force: true });
         } else {
           await fsPromises.copyFile(this.lockFile.path, destination);
