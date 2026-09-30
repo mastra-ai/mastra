@@ -1,7 +1,7 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { editorThemeStyle, loadEditorTheme } from '../../editor/editor-themes';
+import { loadEditorTheme } from '../../editor/editor-themes';
 import { HighlightedCode } from '../../editor/HighlightedCode';
 
 /** A user message produced by the editor's "send selection" composer. */
@@ -40,7 +40,6 @@ export function SelectionMessage({ message }: { message: EditorSelectionMessage 
       </Txt>
       <pre
         data-editor-theme={theme}
-        style={editorThemeStyle(theme)}
         className="border-border-strong/40 bg-background text-caption text-foreground max-h-64 overflow-auto rounded-2xl border p-3 font-mono [contain:inline-size]"
       >
         <HighlightedCode code={message.snippet} path={message.path} />

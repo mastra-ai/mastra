@@ -44,6 +44,7 @@
     "@mastra/react": "workspace:*",
     "@nangohq/frontend": "0.71.6",
     "@pierre/diffs": "^1.5.1",
+    "@pierre/theme": "^2.0.0",
     "@pierre/trees": "1.0.0-beta.6",
     "@tanstack/react-query": "^5.90.21",
     "@xyflow/react": "^12.10.1",

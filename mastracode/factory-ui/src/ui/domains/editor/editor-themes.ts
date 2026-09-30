@@ -1,51 +1,96 @@
-import type { CSSProperties } from 'react';
-
 /**
- * Editor theme presets. Each preset (except the default) redefines the CSS
- * variables the editor's chrome and `.tok-*` syntax palette are built from,
- * scoped by a `data-editor-theme` attribute (see editor-syntax.css). The
- * default preset leaves the design-system tokens untouched.
+ * Editor theme presets sourced from `@pierre/theme`. Each preset is a light +
+ * dark pair; Pierre auto-picks the right one based on the active color scheme.
+ *
+ * The bundled palette covers everyday use plus soft/vibrant and colorblind
+ * variants — no more hand-rolled `.tok-*` presets. Loaders are registered
+ * lazily in PierreFileSurface so unused themes never enter the bundle.
  */
-export type EditorThemeId = 'factory-settings' | 'synthwave-overdose' | 'goblin-mode' | 'beige-cubicle';
+
+export type EditorThemeId =
+  | 'pierre'
+  | 'pierre-soft'
+  | 'pierre-vibrant'
+  | 'pierre-protanopia-deuteranopia'
+  | 'pierre-tritanopia';
 
 export interface EditorThemePreset {
   id: EditorThemeId;
   name: string;
   description: string;
-  /** Editor pane background. Applied inline so it beats utility classes. */
-  background?: string;
+  /** Shiki theme names Pierre resolves to registered loaders. */
+  light: string;
+  dark: string;
+  /** Preview swatch (chrome bg / accent) so the picker can render a chip. */
+  swatch: {
+    light: { bg: string; fg: string; accent: string };
+    dark: { bg: string; fg: string; accent: string };
+  };
 }
 
 export const EDITOR_THEMES: EditorThemePreset[] = [
   {
-    id: 'factory-settings',
-    name: 'Factory Settings',
-    description: 'The tokens the design team fought for. Flips with light and dark mode.',
+    id: 'pierre',
+    name: 'Pierre',
+    description: 'The default pair. Balanced contrast, follows your OS color scheme.',
+    light: 'pierre-light',
+    dark: 'pierre-dark',
+    swatch: {
+      light: { bg: '#ffffff', fg: '#1f2328', accent: '#0969da' },
+      dark: { bg: '#0d1117', fg: '#e6edf3', accent: '#7ee787' },
+    },
   },
   {
-    id: 'synthwave-overdose',
-    name: 'Synthwave Overdose',
-    description: 'Neon everything. Your retinas signed the waiver.',
-    background: '#231733',
+    id: 'pierre-soft',
+    name: 'Pierre Soft',
+    description: 'Muted tones for long sessions. Same palette, lower voltage.',
+    light: 'pierre-light-soft',
+    dark: 'pierre-dark-soft',
+    swatch: {
+      light: { bg: '#f6f5f2', fg: '#33322f', accent: '#3d7bb3' },
+      dark: { bg: '#1a1a1d', fg: '#cbd0d6', accent: '#84c26f' },
+    },
   },
   {
-    id: 'goblin-mode',
-    name: 'Goblin Mode',
-    description: 'Green on black. Hoard code in your cave at 3am.',
-    background: '#04100a',
+    id: 'pierre-vibrant',
+    name: 'Pierre Vibrant',
+    description: 'Cranked-up saturation. When you need every token to shout.',
+    light: 'pierre-light-vibrant',
+    dark: 'pierre-dark-vibrant',
+    swatch: {
+      light: { bg: '#ffffff', fg: '#111827', accent: '#e11d48' },
+      dark: { bg: '#080a10', fg: '#f8fafc', accent: '#f472b6' },
+    },
   },
   {
-    id: 'beige-cubicle',
-    name: 'Beige Cubicle',
-    description: 'TPS-report chic. Somehow smells like toner.',
-    background: '#efe9dc',
+    id: 'pierre-protanopia-deuteranopia',
+    name: 'Pierre Red-Green Safe',
+    description: 'Palette shifted for protanopia and deuteranopia.',
+    light: 'pierre-light-protanopia-deuteranopia',
+    dark: 'pierre-dark-protanopia-deuteranopia',
+    swatch: {
+      light: { bg: '#ffffff', fg: '#1f2328', accent: '#2563eb' },
+      dark: { bg: '#0d1117', fg: '#e6edf3', accent: '#60a5fa' },
+    },
+  },
+  {
+    id: 'pierre-tritanopia',
+    name: 'Pierre Blue-Yellow Safe',
+    description: 'Palette shifted for tritanopia.',
+    light: 'pierre-light-tritanopia',
+    dark: 'pierre-dark-tritanopia',
+    swatch: {
+      light: { bg: '#ffffff', fg: '#1f2328', accent: '#c026d3' },
+      dark: { bg: '#0d1117', fg: '#e6edf3', accent: '#f472b6' },
+    },
   },
 ];
 
-export const DEFAULT_EDITOR_THEME: EditorThemeId = 'factory-settings';
+export const DEFAULT_EDITOR_THEME: EditorThemeId = 'pierre';
 
 const STORAGE_KEY = 'mastra-editor-theme';
 
+/** Older theme ids (factory-settings/synthwave-overdose/etc.) fall back to 'pierre'. */
 export function loadEditorTheme(): EditorThemeId {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -64,8 +109,6 @@ export function saveEditorTheme(id: EditorThemeId): void {
   }
 }
 
-/** Inline style for a themed surface (background only; vars come from CSS). */
-export function editorThemeStyle(id: EditorThemeId): CSSProperties | undefined {
-  const preset = EDITOR_THEMES.find(theme => theme.id === id);
-  return preset?.background ? { background: preset.background } : undefined;
+export function getEditorThemePreset(id: EditorThemeId): EditorThemePreset {
+  return EDITOR_THEMES.find(theme => theme.id === id) ?? EDITOR_THEMES[0]!;
 }

@@ -47,7 +47,7 @@ import { EditorContextMenu } from './EditorContextMenu';
 import { EditorTabs } from './EditorTabs';
 import { EditorSettingsDialog } from './EditorSettingsDialog';
 import { loadEditorSettings, saveEditorSettings, type EditorSettings } from './editor-settings';
-import { editorThemeStyle, loadEditorTheme, saveEditorTheme, type EditorThemeId } from './editor-themes';
+import { getEditorThemePreset, loadEditorTheme, saveEditorTheme, type EditorThemeId } from './editor-themes';
 import { QuickOpenDialog, type QuickOpenCommand } from './QuickOpenDialog';
 import { useAgentActiveFiles } from './use-agent-activity';
 import { useBlame } from '../../../hooks/use-blame';
@@ -972,7 +972,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
             <div
               className="bg-background relative min-h-0 flex-1"
               data-editor-theme={editorTheme}
-              style={editorThemeStyle(editorTheme)}
             >
               {lspNotice && (
                 <div
@@ -1051,6 +1050,10 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     lspQuery={activeIsExternal ? undefined : lspQuery}
                     onEditor={setPierreEditor}
                     onDocumentChange={pierreCollab.forwardLocalChanges}
+                    theme={{
+                      light: getEditorThemePreset(editorTheme).light,
+                      dark: getEditorThemePreset(editorTheme).dark,
+                    }}
                   />
                 ) : (
                   <CodeMirrorSurface

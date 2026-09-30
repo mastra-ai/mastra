@@ -6,7 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Paintbrush, SlidersHorizontal, Sparkles, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { EDITOR_THEMES, editorThemeStyle, type EditorThemeId } from './editor-themes';
+import { EDITOR_THEMES, type EditorThemePreset, type EditorThemeId } from './editor-themes';
 import { FONT_SIZES, TAB_SIZES, type EditorSettings } from './editor-settings';
 
 type SectionId = 'appearance' | 'editor' | 'intelligence' | 'collaboration';
@@ -28,23 +28,37 @@ interface EditorSettingsDialogProps {
 }
 
 /**
- * Static sample rendered with the shared `.tok-*` palette. Because presets are
- * scoped CSS-variable overrides, wrapping the sample in `data-editor-theme`
- * previews each theme live without mounting an editor.
+ * Compact side-by-side swatch of a Pierre theme pair. Renders the light + dark
+ * chrome background and an accent stripe so the picker previews the palette
+ * without mounting the full Pierre highlighter.
  */
-function ThemeSample() {
+function ThemeSwatch({ preset }: { preset: EditorThemePreset }) {
   return (
-    <pre className="text-caption overflow-hidden rounded-md px-3 py-2 font-mono leading-relaxed">
-      <span className="tok-comment">{'// hello\n'}</span>
-      <span className="tok-keyword">const</span> <span className="tok-variable">answer</span>{' '}
-      <span className="tok-operator">=</span> <span className="tok-number">42</span>
-      <span className="tok-punctuation">;</span>
-      {'\n'}
-      <span className="tok-controlKeyword">return</span> <span className="tok-function">greet</span>
-      <span className="tok-punctuation">(</span>
-      <span className="tok-string">'world'</span>
-      <span className="tok-punctuation">)</span>
-    </pre>
+    <div className="border-border grid grid-cols-2 overflow-hidden rounded-md border">
+      {(['light', 'dark'] as const).map(mode => {
+        const swatch = preset.swatch[mode];
+        return (
+          <div
+            key={mode}
+            className="flex flex-col gap-1.5 px-3 py-2 font-mono"
+            style={{ background: swatch.bg, color: swatch.fg }}
+          >
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider opacity-70">
+              <span
+                className="inline-block size-2 rounded-full"
+                style={{ background: swatch.accent }}
+                aria-hidden
+              />
+              {mode}
+            </div>
+            <div className="text-[11px] leading-none">
+              <span style={{ color: swatch.accent }}>const</span> answer <span style={{ color: swatch.accent }}>=</span>{' '}
+              42
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -160,12 +174,8 @@ export function EditorSettingsDialog({
                           <Txt variant="caption" className="text-muted-foreground mt-0.5 block">
                             {preset.description}
                           </Txt>
-                          <div
-                            data-editor-theme={preset.id}
-                            style={editorThemeStyle(preset.id)}
-                            className="border-border mt-2 rounded-md border"
-                          >
-                            <ThemeSample />
+                          <div className="mt-2">
+                            <ThemeSwatch preset={preset} />
                           </div>
                         </button>
                       );

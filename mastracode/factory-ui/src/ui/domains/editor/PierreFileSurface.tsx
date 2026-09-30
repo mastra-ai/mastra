@@ -1,6 +1,6 @@
 import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
-import { preloadHighlighter } from '@pierre/diffs';
+import { preloadHighlighter, registerCustomTheme } from '@pierre/diffs';
 import {
   Editor,
   type EditorChange,
@@ -63,15 +63,68 @@ interface PierreFileSurfaceProps {
   codeLenses?: CodeLensEntry[];
   onCodeLensAction?: CodeLensActionHandler;
   blame?: BlameLine[] | null;
+  /**
+   * Shiki theme pair Pierre uses to tokenize + paint the file. Names must be
+   * registered via `registerCustomTheme` (Pierre themes registered above).
+   */
+  theme?: { light: string; dark: string };
 }
 
 const createEditor: EditorFactory<SurfaceAnnotation, undefined> = (type, options, editStateKey) =>
   new Editor(type, options, editStateKey);
 
-// Preload the shared highlighter once with the languages we're most likely to
-// render. Additional languages resolve lazily as files are opened. Without a
-// preloaded highlighter (or a worker pool provider) Pierre falls back to plain
-// text on first render, which is why our editor showed no syntax highlighting.
+// Register every Pierre theme up front as a lazy Shiki loader. Registration
+// costs nothing — the actual theme JSON only loads when the highlighter is
+// asked to resolve that name. Without this step, Shiki can't find any
+// `pierre-*` theme and silently falls back to plain text.
+const PIERRE_THEMES = [
+  'pierre-light',
+  'pierre-dark',
+  'pierre-light-soft',
+  'pierre-dark-soft',
+  'pierre-light-vibrant',
+  'pierre-dark-vibrant',
+  'pierre-light-protanopia-deuteranopia',
+  'pierre-dark-protanopia-deuteranopia',
+  'pierre-light-tritanopia',
+  'pierre-dark-tritanopia',
+] as const;
+
+let themesRegistered = false;
+function ensureThemesRegistered(): void {
+  if (themesRegistered) return;
+  themesRegistered = true;
+  // Vite pattern for per-name dynamic import — one chunk per theme so unused
+  // variants stay out of the initial bundle.
+  const loaders: Record<string, () => Promise<{ default: unknown }>> = {
+    'pierre-light': () => import('@pierre/theme/pierre-light'),
+    'pierre-dark': () => import('@pierre/theme/pierre-dark'),
+    'pierre-light-soft': () => import('@pierre/theme/pierre-light-soft'),
+    'pierre-dark-soft': () => import('@pierre/theme/pierre-dark-soft'),
+    'pierre-light-vibrant': () => import('@pierre/theme/pierre-light-vibrant'),
+    'pierre-dark-vibrant': () => import('@pierre/theme/pierre-dark-vibrant'),
+    'pierre-light-protanopia-deuteranopia': () =>
+      import('@pierre/theme/pierre-light-protanopia-deuteranopia'),
+    'pierre-dark-protanopia-deuteranopia': () =>
+      import('@pierre/theme/pierre-dark-protanopia-deuteranopia'),
+    'pierre-light-tritanopia': () => import('@pierre/theme/pierre-light-tritanopia'),
+    'pierre-dark-tritanopia': () => import('@pierre/theme/pierre-dark-tritanopia'),
+  };
+  for (const name of PIERRE_THEMES) {
+    // `registerCustomTheme` wants a loader that resolves the theme registration
+    // object. `@pierre/theme` exposes it as a default export.
+    registerCustomTheme(name, async () => {
+      const mod = await loaders[name]!();
+      return mod.default as never;
+    });
+  }
+}
+ensureThemesRegistered();
+
+// Preload the shared highlighter with the languages we're most likely to
+// render + the default theme pair. Additional languages/themes resolve lazily
+// as files are opened or themes are swapped. Without a preloaded highlighter
+// (or a worker pool provider) Pierre falls back to plain text on first render.
 const PRELOADED_LANGS = [
   'typescript',
   'tsx',
@@ -265,6 +318,7 @@ export function PierreFileSurface({
   lspQuery,
   onEditor,
   onDocumentChange,
+  theme,
 }: PierreFileSurfaceProps) {
   const lspQueryRef = useRef(lspQuery);
   const onEditorRef = useRef(onEditor);
@@ -390,9 +444,11 @@ export function PierreFileSurface({
   // is set, which was leaving an empty column beside the line numbers.
   const hasAnnotations = lineAnnotations.length > 0;
 
+  const activeTheme = theme ?? { light: 'pierre-light', dark: 'pierre-dark' };
+
   const options = useMemo<FileOptions<SurfaceAnnotation, undefined>>(
     () => ({
-      theme: { light: 'pierre-light', dark: 'pierre-dark' },
+      theme: { light: activeTheme.light, dark: activeTheme.dark },
       disableFileHeader: true,
       disableLineNumbers: !settings.lineNumbers,
       overflow: settings.wordWrap ? 'wrap' : 'scroll',
@@ -430,7 +486,16 @@ export function PierreFileSurface({
         cancelHover();
       },
     }),
-    [settings.lineNumbers, settings.wordWrap, path, initialContent, cancelHover, hasAnnotations],
+    [
+      settings.lineNumbers,
+      settings.wordWrap,
+      path,
+      initialContent,
+      cancelHover,
+      hasAnnotations,
+      activeTheme.light,
+      activeTheme.dark,
+    ],
   );
 
   // Autocomplete popover state — driven off document edits.
