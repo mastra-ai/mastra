@@ -73,19 +73,6 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
     if (!modelSettingsProp || modelSettingsProp.value?.type !== 'ObjectExpression') return;
     if (modelSettingsIndex === -1) return;
 
-    // A top-level abortSignal already exists; promoting the nested one would create a duplicate key
-    // and silently change which signal wins, so leave the call for the user to resolve.
-    const hasTopLevelAbortSignal = optionsArg.properties.some(
-      prop =>
-        (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-        prop.key?.type === 'Identifier' &&
-        prop.key.name === 'abortSignal',
-    );
-    if (hasTopLevelAbortSignal) {
-      conflicts++;
-      return;
-    }
-
     const modelSettingsValue = modelSettingsProp.value as ObjectExpression;
 
     // Find abortSignal property inside modelSettings
@@ -103,6 +90,19 @@ export default createTransformer((_fileInfo, _api, _options, context) => {
     });
 
     if (!abortSignalProp) return;
+
+    // A top-level abortSignal already exists; promoting the nested one would create a duplicate key
+    // and silently change which signal wins, so leave the call for the user to resolve.
+    const hasTopLevelAbortSignal = optionsArg.properties.some(
+      prop =>
+        (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+        ((prop.key?.type === 'Identifier' && prop.key.name === 'abortSignal') ||
+          ((prop.key?.type === 'StringLiteral' || prop.key?.type === 'Literal') && prop.key.value === 'abortSignal')),
+    );
+    if (hasTopLevelAbortSignal) {
+      conflicts++;
+      return;
+    }
 
     // Update modelSettings to not include abortSignal
     modelSettingsValue.properties = filteredProperties;

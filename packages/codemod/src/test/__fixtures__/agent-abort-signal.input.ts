@@ -21,3 +21,17 @@ const conflicting = await agent.generate('Hello World', {
     abortSignal: otherSignal,
   },
 });
+
+const quoted = await agent.generate('Hello World', {
+  "abortSignal": abortController.signal,
+  modelSettings: {
+    abortSignal: otherSignal,
+  },
+});
+
+const alreadyMigrated = await agent.generate('Hello World', {
+  abortSignal: abortController.signal,
+  modelSettings: {
+    setting: 'value1',
+  },
+});
