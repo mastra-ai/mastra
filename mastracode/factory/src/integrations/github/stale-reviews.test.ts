@@ -67,6 +67,13 @@ describe('selectStaleFactoryReviews', () => {
     expect(select([stale], approval())).toEqual([]);
   });
 
+  it('selects nothing when the approver later requests changes', () => {
+    const stale = review({});
+    const approve = approval();
+    const reversal = review({ author: 'factory-reviewer', body: 'Verdict: request changes' });
+    expect(select([stale, approve, reversal], approve)).toEqual([]);
+  });
+
   it('ignores dismissed reviews', () => {
     const dismissed = review({ state: 'dismissed' });
     const approve = approval();

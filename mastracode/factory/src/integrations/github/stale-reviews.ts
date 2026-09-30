@@ -37,6 +37,8 @@ export function selectStaleFactoryReviews(
     if (!previous || (review.submittedAt ?? '') >= (previous.submittedAt ?? '')) latestByAuthor.set(key, review);
   }
   const approvingAuthor = approving.author.toLowerCase();
+  // A later verdict from the same approver supersedes the approval.
+  if (latestByAuthor.get(approvingAuthor)?.id !== approval.id) return [];
   return [...latestByAuthor.values()].filter(
     review =>
       review.id !== approving.reviewId &&
