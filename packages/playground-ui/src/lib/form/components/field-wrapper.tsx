@@ -9,9 +9,10 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   const isDisabled = DISABLED_LABELS.includes(field.type);
 
   return (
-    <div className="pb-4 last:pb-0">
+    // Stack the label over the control so inline controls (select, date) fill the row like inputs do.
+    <div className="flex flex-col gap-1 pb-4 last:pb-0">
       {!isDisabled && (
-        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="pb-1">
+        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="self-start">
           {label}
         </FieldBlock.Label>
       )}

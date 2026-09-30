@@ -8,7 +8,12 @@ import { z } from 'zod';
 import { useAgent } from '../hooks/use-agent';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { ToolOverview } from '@/domains/tools/components/tool-overview';
+import { ToolUsedBy } from '@/domains/tools/components/tool-used-by';
+import { ToolView } from '@/domains/tools/components/tool-view';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
+import { ToolInformation } from '@/domains/tools/components/ToolInformation';
+import { parseToolSchema } from '@/domains/tools/utils/parse-tool-schema';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -27,7 +32,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
-  const { mutateAsync: executeTool, isPending: isExecutingTool, data: result } = useExecuteAgentTool();
+  const { mutateAsync: executeTool } = useExecuteAgentTool();
 
   useEffect(() => {
     if (error) {
@@ -36,16 +41,13 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
-    if (!tool) return;
-
-    await executeTool({
-      agentId: agentId!,
-      toolId: tool.id,
+  const handleExecuteTool = (data: unknown, requestContext?: Record<string, unknown>) =>
+    executeTool({
+      agentId,
+      toolId,
       input: data,
       playgroundRequestContext: requestContext,
     });
-  };
 
   const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});
 
@@ -60,25 +62,33 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       </div>
     );
 
-  if (!canExecuteTool)
-    return (
-      <div className="px-4 py-8 text-center">
-        <Txt variant="caption" tone="muted">
-          You don't have permission to execute tools.
-        </Txt>
-      </div>
-    );
-
   return (
-    <ToolExecutor
-      executionResult={result}
-      isExecutingTool={isExecutingTool}
-      zodInputSchema={zodInputSchema}
-      handleExecuteTool={handleExecuteTool}
-      toolDescription={tool.description ?? ''}
-      toolId={tool.id}
-      requestContextEntityType="agent-tool"
-      requestContextEntityId={`${agentId}:${tool.id}`}
+    <ToolView
+      header={
+        <ToolInformation
+          toolId={tool.id}
+          toolDescription={tool.description ?? ''}
+          requiresApproval={tool.requireApproval}
+        />
+      }
+      overview={
+        <ToolOverview
+          inputSchema={parseToolSchema(tool.inputSchema)}
+          outputSchema={parseToolSchema(tool.outputSchema)}
+          requestContextSchema={parseToolSchema(tool.requestContextSchema)}
+          aside={<ToolUsedBy toolId={tool.id} currentAgentId={agentId} />}
+        />
+      }
+      playground={
+        canExecuteTool ? (
+          <ToolExecutor
+            zodInputSchema={zodInputSchema}
+            handleExecuteTool={handleExecuteTool}
+            requestContextEntityType="agent-tool"
+            requestContextEntityId={`${agentId}:${tool.id}`}
+          />
+        ) : undefined
+      }
     />
   );
 };

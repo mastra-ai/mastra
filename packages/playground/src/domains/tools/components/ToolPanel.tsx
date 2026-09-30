@@ -5,7 +5,12 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
+import { parseToolSchema } from '../utils/parse-tool-schema';
+import { ToolOverview } from './tool-overview';
+import { ToolUsedBy } from './tool-used-by';
+import { ToolView } from './tool-view';
 import ToolExecutor from './ToolExecutor';
+import { ToolInformation } from './ToolInformation';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useTool } from '@/domains/tools/hooks';
@@ -37,9 +42,9 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   // Only fetch from API if tool not found in agents
   const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
 
-  const tool: any = agentTool || apiTool;
+  const tool = agentTool ?? apiTool;
 
-  const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
+  const { mutateAsync: executeTool } = useExecuteTool();
 
   useEffect(() => {
     if (error) {
@@ -48,17 +53,10 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
-    if (!tool) return;
+  const handleExecuteTool = (data: unknown, requestContext?: Record<string, unknown>) =>
+    executeTool({ toolId, input: data, requestContext });
 
-    return executeTool({
-      toolId: tool.id,
-      input: data,
-      requestContext,
-    });
-  };
-
-  const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});
+  const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool.inputSchema)) : z.object({});
 
   if (isLoading) {
     return (
@@ -80,25 +78,33 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       </div>
     );
 
-  if (!canExecuteTool)
-    return (
-      <div className="px-4 py-8 text-center">
-        <Txt variant="caption" tone="muted">
-          You don't have permission to execute tools.
-        </Txt>
-      </div>
-    );
-
   return (
-    <ToolExecutor
-      executionResult={result}
-      isExecutingTool={isExecuting}
-      zodInputSchema={zodInputSchema}
-      handleExecuteTool={handleExecuteTool}
-      toolDescription={tool.description}
-      toolId={tool.id}
-      requestContextEntityType="tool"
-      requestContextEntityId={tool.id}
+    <ToolView
+      header={
+        <ToolInformation
+          toolId={tool.id}
+          toolDescription={tool.description ?? ''}
+          requiresApproval={tool.requireApproval}
+        />
+      }
+      overview={
+        <ToolOverview
+          inputSchema={parseToolSchema(tool.inputSchema)}
+          outputSchema={parseToolSchema(tool.outputSchema)}
+          requestContextSchema={parseToolSchema(tool.requestContextSchema)}
+          aside={<ToolUsedBy toolId={tool.id} />}
+        />
+      }
+      playground={
+        canExecuteTool ? (
+          <ToolExecutor
+            zodInputSchema={zodInputSchema}
+            handleExecuteTool={handleExecuteTool}
+            requestContextEntityType="tool"
+            requestContextEntityId={tool.id}
+          />
+        ) : undefined
+      }
     />
   );
 };

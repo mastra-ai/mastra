@@ -11,7 +11,10 @@ import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
+import { ToolOverview } from '@/domains/tools/components/tool-overview';
+import { ToolView } from '@/domains/tools/components/tool-view';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
+import { ToolInformation } from '@/domains/tools/components/ToolInformation';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -37,23 +40,13 @@ function isSuspendedResult(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as { status?: unknown }).status === 'suspended';
 }
 
-/** Execution failures are shown in the result panel instead of leaving it empty. */
-function describeExecutionError(error: unknown): string {
-  return JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2);
-}
-
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   const { canExecute } = usePermissions();
   const canExecuteTool = canExecute('tools');
   const client = useMastraClient();
 
   const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
-  const {
-    mutateAsync: executeTool,
-    isPending: isExecuting,
-    data: result,
-    error: executionError,
-  } = useExecuteMCPTool(serverId, toolId);
+  const { mutateAsync: executeTool, data: result } = useExecuteMCPTool(serverId, toolId);
 
   const appResourceUri = tool ? getAppResourceUri(tool._meta) : undefined;
 
@@ -84,12 +77,8 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
-    if (!tool) return;
-
-    // Failures are rendered in the result panel via `executionError`.
-    return await executeTool({ data, requestContext }).catch(() => undefined);
-  };
+  const handleExecuteTool = (data: unknown, requestContext?: Record<string, unknown>) =>
+    executeTool({ data, requestContext });
 
   if (isLoading) {
     return (
@@ -111,15 +100,6 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
       </div>
     );
 
-  if (!canExecuteTool)
-    return (
-      <div className="px-4 py-8 text-center">
-        <Txt variant="caption" tone="muted">
-          You don't have permission to execute tools.
-        </Txt>
-      </div>
-    );
-
   let zodInputSchema;
   try {
     zodInputSchema = jsonSchemaToZodRuntime(tool.inputSchema as unknown as JsonSchema);
@@ -130,31 +110,28 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {appHtml && (
-        <div className="border-b border-border p-4">
-          <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />
-        </div>
-      )}
-      {isSuspendedResult(result) && (
-        <div className="px-4 pt-4">
-          <Notice variant="warning">
-            This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it needs.
-            Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
-          </Notice>
-        </div>
-      )}
-      <ToolExecutor
-        executionResult={result}
-        errorString={executionError ? describeExecutionError(executionError) : undefined}
-        isExecutingTool={isExecuting}
-        zodInputSchema={zodInputSchema}
-        handleExecuteTool={handleExecuteTool}
-        toolDescription={tool.description || ''}
-        toolId={tool.name}
-        requestContextEntityType="mcp-tool"
-        requestContextEntityId={`${serverId}:${tool.name}`}
-      />
-    </div>
+    <ToolView
+      header={<ToolInformation toolId={tool.name} toolDescription={tool.description || ''} />}
+      overview={<ToolOverview inputSchema={tool.inputSchema} />}
+      playground={
+        canExecuteTool ? (
+          <div className="grid gap-4">
+            {appHtml && <McpAppViewer html={appHtml} toolName={tool.name} onToolCall={handleToolCall} />}
+            {isSuspendedResult(result) && (
+              <Notice variant="warning">
+                This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it
+                needs. Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
+              </Notice>
+            )}
+            <ToolExecutor
+              zodInputSchema={zodInputSchema}
+              handleExecuteTool={handleExecuteTool}
+              requestContextEntityType="mcp-tool"
+              requestContextEntityId={`${serverId}:${tool.name}`}
+            />
+          </div>
+        ) : undefined
+      }
+    />
   );
 };

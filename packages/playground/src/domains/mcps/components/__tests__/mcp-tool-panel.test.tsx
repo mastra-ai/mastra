@@ -11,6 +11,12 @@ const TOOL_URL = `${TEST_BASE_URL}/api/mcp/v2/tools/echo`;
 
 const renderPanel = () => renderWithProviders(<MCPToolPanel serverId="v2" toolId="echo" />);
 
+/** Execution lives on the Playground tab, apart from the Overview the page opens on. */
+const runTool = async () => {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Playground' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Run' }));
+};
+
 const useBaseHandlers = () => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
@@ -30,7 +36,7 @@ describe('MCPToolPanel execution results', () => {
     );
     const { container, queryClient } = renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await runTool();
 
     await waitFor(() => expect(onExecute).toHaveBeenCalledTimes(1));
     // The result editor tokenises JSON, so assert on the rendered text as a whole.
@@ -51,7 +57,7 @@ describe('MCPToolPanel execution results', () => {
     );
     const { container, queryClient } = renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await runTool();
 
     // Studio cannot answer the input request, so it explains that instead of presenting the payload as output.
     await waitFor(() => expect(screen.getByText(/asked for more input, which Studio cannot provide/)).not.toBeNull());
@@ -65,7 +71,7 @@ describe('MCPToolPanel execution results', () => {
     server.use(http.post(`${TOOL_URL}/execute`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     const { container, queryClient } = renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+    await runTool();
 
     await waitFor(() => expect(container.textContent).toContain('HTTP error! status: 500'));
     await waitForMutationsIdle(queryClient);

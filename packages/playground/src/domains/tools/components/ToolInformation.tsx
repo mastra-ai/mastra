@@ -1,4 +1,5 @@
 import type { MCPToolType } from '@mastra/core/mcp';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ClampedText } from '@mastra/playground-ui/components/ClampedText';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -8,9 +9,10 @@ export interface ToolInformationProps {
   toolDescription: string;
   toolId: string;
   toolType?: MCPToolType;
+  requiresApproval?: boolean;
 }
 
-export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInformationProps) => {
+export const ToolInformation = ({ toolDescription, toolId, toolType, requiresApproval }: ToolInformationProps) => {
   const ToolIconComponent = ToolIconMap[toolType || 'tool'];
 
   return (
@@ -26,6 +28,13 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
         <ClampedText variant="caption" className="text-muted-foreground">
           {toolDescription}
         </ClampedText>
+        {requiresApproval && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Badge variant="warning" emphasis="subtle">
+              Requires approval
+            </Badge>
+          </div>
+        )}
       </div>
     </div>
   );
