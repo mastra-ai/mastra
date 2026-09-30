@@ -9,7 +9,7 @@ import { SegmentedControl, SegmentedControlItem } from './segmented-control';
 // Base UI synthesizes a PointerEvent on click, which jsdom does not implement.
 beforeAll(() => {
   if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
   }
 });
 

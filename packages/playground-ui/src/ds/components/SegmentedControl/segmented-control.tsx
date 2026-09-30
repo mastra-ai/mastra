@@ -57,47 +57,57 @@ export function SegmentedControl<T extends string = string>({
   ...props
 }: SegmentedControlProps<T>) {
   const itemRefs = React.useRef(new Map<string, HTMLElement>());
-  const [thumb, setThumb] = React.useState<{ left: number; width: number } | null>(null);
-  // The first placement snaps; only later moves animate.
-  const [animate, setAnimate] = React.useState(false);
+  const thumbRef = React.useRef<HTMLSpanElement>(null);
 
-  const context = React.useMemo<SegmentedControlContextValue>(
-    () => ({
-      iconOnly,
-      registerItem: (itemValue, element) => {
-        if (element) itemRefs.current.set(itemValue, element);
-        else itemRefs.current.delete(itemValue);
-      },
-    }),
-    [iconOnly],
-  );
+  const context: SegmentedControlContextValue = {
+    iconOnly,
+    registerItem: (itemValue, element) => {
+      if (element) itemRefs.current.set(itemValue, element);
+      else itemRefs.current.delete(itemValue);
+    },
+  };
 
+  // Base UI reports the chosen value as `unknown`; accept only a value one of our items carries.
+  const isItemValue = (next: unknown): next is T => typeof next === 'string' && itemRefs.current.has(next);
+
+  // Measuring is layout work, so the thumb is positioned straight on the DOM instead of through
+  // state: no extra render, and it is in place before paint.
   React.useLayoutEffect(() => {
+    const thumb = thumbRef.current;
     const item = itemRefs.current.get(value);
+    if (!thumb) return;
     if (!item) {
-      setThumb(null);
+      thumb.hidden = true;
       return;
     }
-    const measure = () => setThumb({ left: item.offsetLeft, width: item.offsetWidth });
+    const measure = () => {
+      thumb.style.width = `${item.offsetWidth}px`;
+      thumb.style.transform = `translateX(${item.offsetLeft}px)`;
+    };
     measure();
-    if (typeof ResizeObserver === 'undefined') return;
+    let frame: number | undefined;
+    if (thumb.hidden) {
+      // The first placement snaps; transitions switch on after it has painted.
+      thumb.hidden = false;
+      frame = requestAnimationFrame(() => thumb.setAttribute('data-ready', ''));
+    }
     // Labels reflow when fonts load or the text changes; a sibling's resize moves this item too.
-    const observer = new ResizeObserver(measure);
-    itemRefs.current.forEach(element => observer.observe(element));
-    return () => observer.disconnect();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    itemRefs.current.forEach(element => observer?.observe(element));
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
   }, [value, children]);
-
-  React.useEffect(() => {
-    if (thumb && !animate) setAnimate(true);
-  }, [thumb, animate]);
 
   return (
     <SegmentedControlContext.Provider value={context}>
       <RadioGroupPrimitive
         {...props}
         value={value}
-        // Items carry the values the caller typed as `T`.
-        onValueChange={next => onValueChange(next as T)}
+        onValueChange={next => {
+          if (isItemValue(next)) onValueChange(next);
+        }}
         aria-label={ariaLabel}
         data-slot="segmented-control"
         data-size={size}
@@ -111,17 +121,16 @@ export function SegmentedControl<T extends string = string>({
           className,
         )}
       >
-        {thumb && (
-          <span
-            aria-hidden="true"
-            data-slot="segmented-control-thumb"
-            className={cn(
-              'pointer-events-none absolute inset-y-0.5 left-0 rounded-full bg-fill-hover ring-1 ring-border ring-inset',
-              animate && 'transition-[transform,width] duration-normal ease-out-custom motion-reduce:transition-none',
-            )}
-            style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
-          />
-        )}
+        <span
+          ref={thumbRef}
+          hidden
+          aria-hidden="true"
+          data-slot="segmented-control-thumb"
+          className={cn(
+            'pointer-events-none absolute inset-y-0.5 left-0 rounded-full bg-fill-hover ring-1 ring-border ring-inset',
+            'motion-safe:data-[ready]:transition-[transform,width] motion-safe:data-[ready]:duration-normal motion-safe:data-[ready]:ease-out-custom',
+          )}
+        />
         {children}
       </RadioGroupPrimitive>
     </SegmentedControlContext.Provider>
@@ -144,17 +153,12 @@ export function SegmentedControlItem({
   ...props
 }: SegmentedControlItemProps) {
   const context = React.useContext(SegmentedControlContext);
-  const registerItem = context?.registerItem;
-  const itemRef = React.useMemo(
-    () =>
-      mergeRefs<HTMLElement>(ref, element => {
-        registerItem?.(value, element);
-        return () => registerItem?.(value, null);
-      }),
-    [ref, registerItem, value],
-  );
   if (!context) throw new Error('SegmentedControlItem must be used inside a SegmentedControl');
-  const { iconOnly } = context;
+  const { iconOnly, registerItem } = context;
+  const itemRef = mergeRefs<HTMLElement>(ref, element => {
+    registerItem(value, element);
+    return () => registerItem(value, null);
+  });
 
   return (
     <RadioPrimitive.Root

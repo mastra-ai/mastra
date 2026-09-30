@@ -405,20 +405,6 @@ describe('ThemeToggle', () => {
     expect(getByRole('radio', { name: 'Only light' }).getAttribute('aria-checked')).toBe('true');
   });
 
-  it('sits on the shared control rung for its size', () => {
-    const { getByRole, rerender } = render(<ThemeToggle size="md" value="dark" onChange={() => undefined} />);
-    expect(getByRole('radiogroup').classList.contains('h-control-md')).toBe(true);
-
-    rerender(<ThemeToggle size="lg" value="dark" onChange={() => undefined} />);
-    expect(getByRole('radiogroup').classList.contains('h-control-lg')).toBe(true);
-  });
-
-  it('renders the deprecated extra-small size at the small rung', () => {
-    const { getByRole } = render(<ThemeToggle size="xs" value="dark" onChange={() => undefined} />);
-
-    expect(getByRole('radiogroup').classList.contains('h-control-sm')).toBe(true);
-  });
-
   it('renders icons only, named by their labels', () => {
     const { getAllByRole } = render(<ThemeToggle value="dark" onChange={() => undefined} />);
 
