@@ -1,6 +1,6 @@
 ---
 title: "Alerts | Mastra platform"
-description: "Configure Mastra platform alerts for failed deploys, service outages, and usage thresholds, then send notifications to Slack, email, a webhook, PagerDuty, or incident.io."
+description: "Configure Mastra platform alerts for failed deploys, service outages, and usage thresholds, then send notifications to Slack, Discord, Microsoft Teams, email, a webhook, PagerDuty, or incident.io."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -17,7 +17,7 @@ Organization admins can create and manage alerts. Other organization roles have 
 Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**. The page has three tabs:
 
 - **Alerts** lists each alert with its scope, destinations, status, and enable or pause switch.
-- **Destinations** lists the Slack channels, email groups, webhook endpoints, PagerDuty services, and incident.io alert sources that can receive notifications.
+- **Destinations** lists the Slack channels, Discord channels, Microsoft Teams channels, email groups, webhook endpoints, PagerDuty services, and incident.io alert sources that can receive notifications.
 - **Activity** shows incidents and the notification attempts associated with them.
 
 ## Add a destination
@@ -27,6 +27,8 @@ A destination defines where Mastra sends notifications. Add at least one destina
 | Destination | Configuration |
 | - | - |
 | **Slack** | Connect a Slack workspace and select one or more channels. Mastra creates a separate destination for each selected channel. |
+| **Discord** | Enter a Discord channel webhook URL. See [Send alerts to Discord](#send-alerts-to-discord). |
+| **Microsoft Teams** | Enter the URL of a Teams workflow that posts to a channel. See [Send alerts to Microsoft Teams](#send-alerts-to-microsoft-teams). |
 | **Email** | Select organization roles, individual members, or up to 10 email addresses. Role-based recipient groups update when organization membership changes. |
 | **Webhook** | Enter an HTTPS endpoint. Mastra signs each request and shows the signing secret once after the destination is created. |
 | **PagerDuty** | Enter the integration key of a PagerDuty Events API v2 integration. See [Send alerts to PagerDuty](#send-alerts-to-pagerduty). |
@@ -38,13 +40,15 @@ A destination defines where Mastra sends notifications. Add at least one destina
   </StepItem>
 
   <StepItem>
-    Select **Slack**, **Email**, **Webhook**, **PagerDuty**, or **Incident.io**, then enter a name for the destination.
+    Select **Slack**, **Discord**, **Microsoft Teams**, **Email**, **Webhook**, **PagerDuty**, or **Incident.io**, then enter a name for the destination.
   </StepItem>
 
   <StepItem>
     Configure the selected destination:
 
     - For Slack, connect or select a workspace and choose the channels that should receive alerts. The Mastra Alerts app joins public channels automatically. Invite `@Mastra Alerts` before selecting a private channel.
+    - For Discord, enter the channel's webhook URL.
+    - For Microsoft Teams, enter the workflow's webhook URL.
     - For email, choose **All organization members**, one or more roles, individual members, or external email addresses.
     - For a webhook, enter an endpoint that starts with `https://`.
     - For PagerDuty, enter the **Integration key**.
@@ -56,11 +60,13 @@ A destination defines where Mastra sends notifications. Add at least one destina
   </StepItem>
 </Steps>
 
-The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. PagerDuty and incident.io destinations require the credentials from their integration. Every destination also requires a name that identifies it in alert configuration and activity history.
+The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Discord and Microsoft Teams destinations require a webhook URL. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. PagerDuty and incident.io destinations require the credentials from their integration. Every destination also requires a name that identifies it in alert configuration and activity history.
 
 Use the destination's actions menu to send a test notification. You can also edit, pause, or delete a destination. Pausing a destination stops notifications without removing it from existing alerts.
 
 For webhook destinations, **Rotate secret** replaces the current signing secret immediately. Update the receiving endpoint with the new secret before sending another alert.
+
+Discord and Microsoft Teams webhook URLs contain their own credentials, so Mastra stores them encrypted and shows only the last four characters after the destination is created. To rotate the URL, edit the destination and paste a new one. Leaving the URL field blank keeps the stored URL.
 
 ## Create an alert
 
@@ -119,6 +125,48 @@ Open an alert's actions menu to:
 The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers, except for usage threshold incidents, which don't resolve automatically.
 
 Expand an incident to inspect the notification sent to each destination. Each incident row shows when the event occurred, the event type, its project or environment scope, and its current status. Nested delivery rows show the trigger, destination, and delivery status for each notification attempt. Delivery attempts can be **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
+
+## Send alerts to Discord
+
+A Discord destination posts an embed to a channel through a Discord webhook. A triggered incident posts a red embed, and a recovery posts a separate green **Resolved** embed. Discord webhooks can't update earlier messages, so the resolved notice is a new message rather than an edit.
+
+<Steps>
+  <StepItem>
+    In Discord, open the channel that should receive alerts, then select **Edit Channel**, **Integrations**, **Webhooks**, and **New Webhook**. Copy the webhook URL. See [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) in the Discord documentation.
+  </StepItem>
+
+  <StepItem>
+    In Mastra, add a destination, select **Discord**, and paste the URL into **Webhook URL**. The URL must have the form `https://discord.com/api/webhooks/<id>/<token>`.
+  </StepItem>
+
+  <StepItem>
+    Send a test notification from the destination's actions menu.
+  </StepItem>
+</Steps>
+
+The embed shows the event and project in its title, which links to the deployment logs, followed by the error excerpt and the environment, branch, and error code when the event includes them. If Discord rejects the webhook URL, the delivery shows **Config error**.
+
+## Send alerts to Microsoft Teams
+
+A Microsoft Teams destination posts an Adaptive Card to a channel through a Teams workflow. A triggered incident posts a red card, and a recovery posts a separate green **Resolved** card.
+
+<Steps>
+  <StepItem>
+    In Teams, open the channel that should receive alerts, select **More options** and then **Workflows**, and choose the template **Send webhook alerts to a channel**. Select the team and channel, create the workflow, then copy the workflow URL. See [Create incoming webhooks with Workflows](https://support.microsoft.com/en-us/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498) in the Microsoft documentation.
+  </StepItem>
+
+  <StepItem>
+    In Mastra, add a destination, select **Microsoft Teams**, and paste the URL into **Webhook URL**.
+  </StepItem>
+
+  <StepItem>
+    Send a test notification from the destination's actions menu.
+  </StepItem>
+</Steps>
+
+Microsoft retired classic Office 365 connectors, so use a Teams workflow rather than the older **Incoming Webhook** connector. Mastra still accepts legacy `webhook.office.com` URLs for tenants that haven't migrated.
+
+The card shows the event and project in its title, followed by the environment, branch, and error code when the event includes them, the error excerpt, and a button that opens the deployment logs. If Teams rejects the workflow URL, the delivery shows **Config error**.
 
 ## Send alerts to PagerDuty
 
@@ -340,6 +388,6 @@ When a request fails, Mastra retries based on the response:
 - **`4xx` response:** Mastra stops and marks the delivery **Config error**. Fix the endpoint, then use **Test** on the destination to confirm it works.
 - **`5xx` response, timeout, or network error:** Mastra retries twice within a few seconds. If those requests also fail, the delivery shows **Retrying** and Mastra tries again after about 30 seconds, doubling the wait each time up to 15 minutes. After 6 failed attempts, the delivery shows **Exhausted**.
 
-PagerDuty and incident.io destinations follow the same schedule. For those destinations, Mastra also retries `408` and `429` responses.
+Discord, Microsoft Teams, PagerDuty, and incident.io destinations follow the same schedule. For those destinations, Mastra also retries `408` and `429` responses.
 
 Retries can deliver the same notification more than once. Store the `x-mastra-idempotency-key` value of each processed request and skip requests with a key you've already seen. Use `fingerprint` to group notifications that belong to the same incident.
