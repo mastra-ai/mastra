@@ -7,6 +7,8 @@ import { MessageList } from '../../agent/message-list';
 import { signalToXmlMarkup } from '../../agent/signals';
 import { ConsoleLogger } from '../../logger';
 import { ProcessorRunner } from '../../processors/runner';
+import { STABILITY_ERROR_PROCESSOR_IDS } from '../../processors/stability-defaults';
+import { StreamErrorRetryProcessor } from '../../processors/stream-error-retry-processor';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
 import { buildBasePrompt, createCodingAgent } from '../index';
@@ -321,6 +323,36 @@ describe('createCodingAgent', () => {
       }),
     );
     expect(agent).toBeInstanceOf(Agent);
+  });
+
+  it('supplies no error processors when errorProcessorDefaults is false', async () => {
+    const agent = createCodingAgent(baseConfig({ errorProcessorDefaults: false }));
+
+    expect(await agent.listErrorProcessors()).toEqual([]);
+  });
+
+  it('defaults error processors to the shared stability stack with CyberRefusalHandler first', async () => {
+    const agent = createCodingAgent(baseConfig());
+    const ids = (await agent.listErrorProcessors()).map(p => p.id);
+
+    // CyberRefusalHandler runs first so the retryable OpenAI refusal gets the `continue`
+    // nudge instead of the blind retry claiming it.
+    expect(ids).toEqual(['cyber-refusal-handler', ...STABILITY_ERROR_PROCESSOR_IDS]);
+  });
+
+  it('keeps a caller-provided error processor list and adds only missing defaults', async () => {
+    const customRetry = new StreamErrorRetryProcessor({ maxRetries: 7 });
+    const agent = createCodingAgent(baseConfig({ errorProcessors: [customRetry] }));
+
+    const resolved = await agent.listErrorProcessors();
+    const ids = resolved.map(processor => processor.id);
+
+    // The added defaults are placed at their own positions, so both repairs still run before the
+    // retry processor even though the caller named only the latter.
+    expect(ids).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
+    // The caller's tuned instance is the one that runs — the default is not added alongside it.
+    expect(resolved[2]).toBe(customRetry);
+    expect(resolved.filter(processor => processor.id === 'stream-error-retry-processor')).toHaveLength(1);
   });
 
   it('does not include TaskSignalProvider when no memory is configured', async () => {

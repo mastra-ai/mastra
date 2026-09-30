@@ -453,7 +453,7 @@ describe('Structured output with memory - assistant message in final position (#
     expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'Continue.' }] });
   });
 
-  it('preserves the trailing assistant turn for Anthropic without structured output (valid prefill)', async () => {
+  it('guards the trailing assistant turn for Claude 4.6+ without structured output', async () => {
     const capturedPrompts: any[] = [];
     const mockModel = new MockLanguageModelV2({
       provider: 'anthropic.messages',
@@ -482,7 +482,11 @@ describe('Structured output with memory - assistant message in final position (#
     ]);
 
     const nonSystemMessages = capturedPrompts[0].filter((message: any) => message.role !== 'system');
-    expect(nonSystemMessages.at(-1)).toMatchObject({ role: 'assistant' });
+    expect(nonSystemMessages.at(-2)).toMatchObject({ role: 'assistant' });
+    expect(nonSystemMessages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: 'Continue.' }],
+    });
   });
 
   it('preserves the trailing assistant turn for Gemini 2.5', async () => {

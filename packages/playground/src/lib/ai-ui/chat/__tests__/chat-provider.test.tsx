@@ -334,16 +334,12 @@ describe('ChatProvider', () => {
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Approve ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
-              expect(
-                within(cards[index])
-                  .getByRole('button', { name: `Decline ${toolName}` })
-                  .hasAttribute('disabled'),
-              ).toBe(true);
+              const otherAction = action === 'Approve' ? 'Decline' : 'Approve';
+              for (const decidedName of [`${action}d ${toolName}`, `${otherAction} ${toolName}`]) {
+                expect(within(cards[index]).getByRole('button', { name: decidedName }).hasAttribute('disabled')).toBe(
+                  true,
+                );
+              }
               if (index === 0)
                 expect(
                   within(cards[1])

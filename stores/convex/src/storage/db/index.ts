@@ -300,13 +300,22 @@ export class ConvexDB extends MastraBase {
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    const snapshot = await this.client.callStorage<string>({
-      op: 'mergeWorkflowState',
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      workflowName,
-      runId,
-      opts: JSON.stringify(opts),
-    });
+    let snapshot: string;
+    try {
+      snapshot = await this.client.callStorage<string>({
+        op: 'mergeWorkflowState',
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        workflowName,
+        runId,
+        opts: JSON.stringify(opts),
+      });
+    } catch (error) {
+      // Missing run resolves to undefined, matching the other storage adapters.
+      if (error instanceof Error && error.message.startsWith('Workflow snapshot not found for runId')) {
+        return undefined;
+      }
+      throw error;
+    }
     if (snapshot === '') {
       // The `expectedStatus` guard did not match, so the server applied nothing.
       return undefined;

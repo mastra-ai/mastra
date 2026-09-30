@@ -652,9 +652,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         ...(observability.getFeatures() ?? []),
         'trace-query',
         'trace-query-discovery',
+        'trace-aggregate',
         'thread-query',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });
+      vi.spyOn(observability, 'aggregateTraces').mockResolvedValue({ rows: [], truncated: false });
       vi.spyOn(observability, 'getTraceQueryObservedFields').mockResolvedValue({
         observedFields: [],
         observedFieldsTruncated: false,

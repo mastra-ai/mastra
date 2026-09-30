@@ -248,6 +248,7 @@ export function serializeDurableOptions(options: {
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
   hasErrorProcessors?: boolean;
+  emptyErrorProcessorOverride?: boolean;
   providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
@@ -289,6 +290,7 @@ export function serializeDurableOptions(options: {
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
     hasErrorProcessors: options.hasErrorProcessors,
+    emptyErrorProcessorOverride: options.emptyErrorProcessorOverride,
     providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,

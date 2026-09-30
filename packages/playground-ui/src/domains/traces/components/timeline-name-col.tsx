@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { TimelineStructureSign } from './timeline-structure-sign';
+import { Txt } from '@/ds/components/Txt';
+import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 type TimelineNameColProps = {
@@ -71,7 +73,7 @@ export function TimelineNameCol({
         type="button"
         className={cn(
           'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
-          'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
+          focusRingInset,
         )}
       >
         {spanUI?.color && (
@@ -95,7 +97,11 @@ export function TimelineNameCol({
           >
             {span.name}
           </span>
-          {meta && <span className="shrink-0 text-meta text-muted-foreground lg:tabular-nums">{meta}</span>}
+          {meta && (
+            <Txt as="span" variant="meta" tone="muted" className="shrink-0 lg:tabular-nums">
+              {meta}
+            </Txt>
+          )}
         </span>
       </button>
 
@@ -113,7 +119,7 @@ export function TimelineNameCol({
             className={cn(
               'flex size-5 cursor-pointer items-center justify-center rounded-md',
               'hover:bg-fill [&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:opacity-50',
-              'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1',
+              focusRing,
             )}
           >
             {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}

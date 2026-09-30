@@ -2222,7 +2222,7 @@ export class AgentController<TState = {}> {
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: (modelId: string) => modelId,
+        resolveModel: this.config.resolveSubagentModel ?? ((modelId: string) => modelId),
         mastra: this.getMastra(),
         controllerTools: resolvedControllerTools,
         fallbackModelId: currentMode?.defaultModelId,
