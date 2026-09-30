@@ -6,6 +6,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
+import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,6 +30,12 @@ describe('SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
       const prompts: string[] = [];
       const record = (props: { prompt: unknown }) => prompts.push(JSON.stringify(props.prompt));
       const agent = new Agent({
+        inputProcessors: [
+          new WorkspaceAttachmentsProcessor({
+            extensions: ['.xlsx'],
+            mimeTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+          }),
+        ],
         id: 'sheet-agent',
         name: 'sheet-agent',
         instructions: 'Analyse spreadsheets',

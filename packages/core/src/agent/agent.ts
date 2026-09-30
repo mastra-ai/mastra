@@ -1648,22 +1648,6 @@ export class Agent<
   }
 
   /**
-   * Gets the workspace-attachments processor. Always added (unless already configured) so
-   * spreadsheet attachments are either written to the workspace or abort the run.
-   * @internal
-   */
-  private getWorkspaceAttachmentsProcessors(
-    configuredProcessors: InputProcessorOrWorkflow[],
-    workspace: AnyWorkspace | undefined,
-  ): InputProcessorOrWorkflow[] {
-    const hasProcessor = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-attachments-processor',
-    );
-    if (hasProcessor) return [];
-    return [new WorkspaceAttachmentsProcessor({ workspace })];
-  }
-
-  /**
    * Validates the request context against the agent's requestContextSchema.
    * Throws an error if validation fails.
    */
@@ -2197,9 +2181,6 @@ export class Agent<
       ? runWorkspace.workspace
       : await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
 
-    // Spreadsheet attachments are routed to the workspace before anything else reads them
-    const attachmentProcessors = this.getWorkspaceAttachmentsProcessors(configuredProcessors, workspace);
-
     // Get workspace instructions processors (with deduplication)
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, workspace);
 
@@ -2222,12 +2203,12 @@ export class Agent<
     // User-configured processors run after auto-derived layers to allow customization
     return [
       ...effectiveMemoryProcessors,
-      ...attachmentProcessors,
       ...workspaceProcessors,
       ...skillsProcessors,
       ...channelProcessors,
       ...browserProcessors,
-      ...configuredProcessors,
+      // Bind attachment processors to the run's workspace so uploads land where tools read
+      ...configuredProcessors.map(p => (p instanceof WorkspaceAttachmentsProcessor ? p.withWorkspace(workspace) : p)),
     ];
   }
 

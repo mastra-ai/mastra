@@ -21,6 +21,9 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0xff]);
 const BASE64 = Buffer.from(BYTES).toString('base64');
 
+const SHEETS = { extensions: ['.xlsx', '.xls'], mimeTypes: [XLSX, 'application/vnd.ms-excel'] };
+const sheets = () => new WorkspaceAttachmentsProcessor(SHEETS);
+
 const tempDirectories: string[] = [];
 async function tempDir() {
   const dir = await mkdtemp(join(tmpdir(), 'mastra-attachments-'));
@@ -78,6 +81,7 @@ function agentWith(workspace: AnyWorkspace | (() => AnyWorkspace) | undefined, e
     instructions: 'test',
     model,
     workspace: workspace as any,
+    inputProcessors: [sheets()],
     ...extra,
   });
   return { agent, prompts };
@@ -239,6 +243,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
         instructions: 'test',
         model,
         workspace: factory as any,
+        inputProcessors: [sheets()],
         tools: { readUpload: readTool },
       });
 
@@ -352,6 +357,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
         instructions: 'test',
         model,
         workspace: factory as any,
+        inputProcessors: [sheets()],
       });
       return { agent, prompts, factory };
     }
@@ -398,14 +404,19 @@ describe('WorkspaceAttachmentsProcessor', () => {
   });
 
   describe('processInputStep', () => {
-    async function run(workspace: AnyWorkspace | undefined, parts: any[], requestContext = new RequestContext()) {
+    async function run(
+      workspace: AnyWorkspace | undefined,
+      parts: any[],
+      requestContext = new RequestContext(),
+      options: { extensions?: string[]; mimeTypes?: string[] } = SHEETS,
+    ) {
       const { MessageList } = await import('../../agent/message-list');
       const messageList = new MessageList();
       messageList.add([{ role: 'user', content: parts }], 'input');
       const abort = vi.fn((reason: string, options?: any) => {
         throw Object.assign(new Error(reason), { options });
       }) as any;
-      await new WorkspaceAttachmentsProcessor({ workspace }).processInputStep({
+      await new WorkspaceAttachmentsProcessor({ ...options, workspace }).processInputStep({
         messageList,
         requestContext,
         abort,
@@ -436,14 +447,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
       ]);
       expect(parts.map(p => p.type)).toEqual(['text', 'text', 'text']);
       expect(parts[0].text).toContain('uploads/');
-      expect(parts[2].text).toContain('"b.xls" (application/vnd.ms-excel)');
-    });
-
-    it('leaves a CSV reported as application/vnd.ms-excel untouched', async () => {
-      const { basePath, workspace } = await localWorkspace();
-      const { parts } = await run(workspace, [file(BASE64, 'data.csv', 'application/vnd.ms-excel')]);
-      expect(parts[0].type).toBe('file');
-      expect(await readdir(basePath)).toEqual([]);
+      expect(parts[2].text).toContain('"b.xls" (application/octet-stream)');
     });
 
     it.each([
@@ -704,7 +708,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
       const { MessageList } = await import('../../agent/message-list');
       const messageList = new MessageList();
       messageList.add([{ role: 'user', content: [file(BASE64) as any] }], 'input');
-      const processor = new WorkspaceAttachmentsProcessor({ workspace });
+      const processor = new WorkspaceAttachmentsProcessor({ ...SHEETS, workspace });
       const write = vi.spyOn(workspace.filesystem!, 'writeFile');
       const args = { messageList, requestContext: new RequestContext(), abort: vi.fn() } as any;
       await processor.processInputStep(args);
@@ -749,12 +753,67 @@ describe('WorkspaceAttachmentsProcessor', () => {
     expect(JSON.parse(note.match(/^\[Attachment ("(?:[^"\\]|\\.)*")/)![1]!)).toBe(name);
   });
 
-  it('skips auto-wiring when the processor is already configured', async () => {
-    const { workspace } = await localWorkspace();
-    const custom = new WorkspaceAttachmentsProcessor({ workspace });
-    const { agent } = agentWith(workspace, { inputProcessors: [custom] });
-    const processors = await agent.listInputProcessors();
-    const ids = JSON.stringify(processors, (_k, v) => (v instanceof Workspace ? undefined : v));
-    expect(ids.match(/workspace-attachments-processor/g)?.length ?? 0).toBeGreaterThan(0);
+  describe('configuration', () => {
+    async function runWith(options: { extensions?: string[]; mimeTypes?: string[] }, parts: any[]) {
+      const { basePath, workspace } = await localWorkspace();
+      const { MessageList } = await import('../../agent/message-list');
+      const messageList = new MessageList();
+      messageList.add([{ role: 'user', content: parts }], 'input');
+      await new WorkspaceAttachmentsProcessor({ ...options, workspace }).processInputStep({
+        messageList,
+        requestContext: new RequestContext(),
+        abort: vi.fn(),
+      } as any);
+      return { basePath, parts: messageList.get.all.db()[0]!.content.parts as any[] };
+    }
+    const part = (filename: string | undefined, mediaType: string) => ({
+      type: 'file',
+      data: BASE64,
+      mediaType,
+      ...(filename ? { filename } : {}),
+    });
+
+    it('passes every attachment through when nothing is configured', async () => {
+      const { basePath, parts } = await runWith({}, [part('report.xlsx', XLSX)]);
+      expect(parts[0].type).toBe('file');
+      expect(await readdir(basePath)).toEqual([]);
+    });
+
+    it('routes by extension only', async () => {
+      const { parts } = await runWith({ extensions: ['xlsx'] }, [part('Report.XLSX', 'application/zip')]);
+      expect(parts[0].text).toContain('"Report.XLSX" (application/zip)');
+    });
+
+    it('routes by MIME type only', async () => {
+      const { parts } = await runWith({ mimeTypes: [XLSX.toUpperCase()] }, [part(undefined, XLSX)]);
+      expect(parts[0].text).toContain(`(${XLSX})`);
+    });
+
+    it('routes a CSV reported as application/vnd.ms-excel only when that MIME type is configured', async () => {
+      const csv = part('data.csv', 'application/vnd.ms-excel');
+      expect((await runWith({ extensions: ['.xlsx', '.xls'] }, [csv])).parts[0].type).toBe('file');
+      expect((await runWith({ mimeTypes: ['application/vnd.ms-excel'] }, [csv])).parts[0].type).toBe('text');
+    });
+
+    it('routes custom types such as .docx', async () => {
+      const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const { basePath, parts } = await runWith({ extensions: ['.docx'] }, [part('notes.docx', docx)]);
+      expect(new Uint8Array(await readFile(join(basePath, uploadedPath(parts[0].text))))).toEqual(BYTES);
+    });
+
+    it.each([[{ extensions: [''] }], [{ extensions: ['.'] }], [{ mimeTypes: ['  '] }]])(
+      'rejects invalid config %j',
+      options => {
+        expect(() => new WorkspaceAttachmentsProcessor(options)).toThrow(/non-empty strings/);
+      },
+    );
+
+    it('sends attachments to the model unchanged when the agent does not configure the processor', async () => {
+      const { basePath, workspace } = await localWorkspace();
+      const { agent, prompts } = agentWith(workspace, { inputProcessors: [] });
+      await (await agent.stream([xlsxMessage()])).consumeStream();
+      expect(spreadsheetFileParts(prompts[0])).toHaveLength(1);
+      expect(await readdir(basePath)).toEqual([]);
+    });
   });
 });

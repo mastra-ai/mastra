@@ -1,13 +1,15 @@
 /**
  * WorkspaceAttachmentsProcessor
  *
- * Models reject spreadsheet binaries (.xlsx / .xls). This processor writes those
- * attachments into the agent's workspace and replaces them with a text note that
- * points at the uploaded path, so the agent can read them with workspace tools
- * or skills.
+ * Writes attachments the model can't read (for example .xlsx) into the agent's
+ * workspace and replaces them with a text note that points at the uploaded path,
+ * so the agent can read them with workspace tools or skills.
  *
- * Auto-wired by Agent for every run. Without a writable workspace destination the
- * run is aborted instead of sending the binary to the model.
+ * Opt-in: add it to the agent's `inputProcessors` with the `extensions` and/or
+ * `mimeTypes` to route. With neither, every attachment goes to the model. It must
+ * be listed directly in `inputProcessors` (not inside a processor workflow) so the
+ * agent can bind it to the run's workspace. Without a writable workspace
+ * destination the run is aborted instead of sending the file to the model.
  */
 
 import type { MastraDBMessage, MastraMessageContentV2 } from '../../agent/message-list';
@@ -22,15 +24,18 @@ export const WORKSPACE_REQUIRED_FOR_ATTACHMENT = 'WORKSPACE_REQUIRED_FOR_ATTACHM
 export const ATTACHMENT_NOT_INLINE = 'ATTACHMENT_NOT_INLINE';
 export const ATTACHMENT_INVALID_DATA = 'ATTACHMENT_INVALID_DATA';
 
-const UNSUPPORTED_TYPES_BY_EXTENSION: Record<string, string> = {
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.xls': 'application/vnd.ms-excel',
-};
-const UNSUPPORTED_MEDIA_TYPES = new Set(Object.values(UNSUPPORTED_TYPES_BY_EXTENSION));
+const FALLBACK_MEDIA_TYPE = 'application/octet-stream';
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 export interface WorkspaceAttachmentsProcessorOptions {
-  /** Workspace used by the current run. When absent, spreadsheet attachments abort the run. */
+  /** Filename extensions to route to the workspace, e.g. `['.xlsx', '.xls']`. */
+  extensions?: string[];
+  /** Media types to route to the workspace, e.g. `['application/vnd.ms-excel']`. */
+  mimeTypes?: string[];
+  /**
+   * Workspace used by the current run. The agent sets it; when absent, routed attachments abort the run.
+   * @internal
+   */
   workspace?: AnyWorkspace;
 }
 
@@ -39,17 +44,32 @@ export interface WorkspaceAttachmentsTripwireMetadata {
   mediaType?: string;
 }
 
-/**
- * Media type of an attachment the model can't read. The extension decides when there is a filename,
- * because browsers report CSV files as application/vnd.ms-excel; the MIME type decides otherwise.
- */
-function unsupportedMediaType(mediaType: unknown, filename: unknown): string | undefined {
-  if (typeof filename === 'string' && filename) {
-    const extension = filename.toLowerCase().match(/\.[^.]+$/)?.[0];
-    return extension ? UNSUPPORTED_TYPES_BY_EXTENSION[extension] : undefined;
-  }
-  const type = typeof mediaType === 'string' ? mediaType.toLowerCase() : undefined;
-  return type && UNSUPPORTED_MEDIA_TYPES.has(type) ? type : undefined;
+/** Returns the media type to report for an attachment that must be routed, or undefined to leave it alone. */
+type RouteMatcher = (mediaType: unknown, filename: unknown) => string | undefined;
+
+function normalizeList(values: string[] | undefined, option: string, normalize: (value: string) => string) {
+  return new Set(
+    (values ?? []).map(value => {
+      const trimmed = typeof value === 'string' ? value.trim().toLowerCase() : '';
+      if (!trimmed || trimmed === '.') {
+        throw new Error(`WorkspaceAttachmentsProcessor: \`${option}\` entries must be non-empty strings`);
+      }
+      return normalize(trimmed);
+    }),
+  );
+}
+
+function createRouteMatcher(options: WorkspaceAttachmentsProcessorOptions): RouteMatcher | undefined {
+  const extensions = normalizeList(options.extensions, 'extensions', ext => (ext.startsWith('.') ? ext : `.${ext}`));
+  const mimeTypes = normalizeList(options.mimeTypes, 'mimeTypes', type => type);
+  if (!extensions.size && !mimeTypes.size) return undefined;
+
+  return (mediaType, filename) => {
+    const type = typeof mediaType === 'string' && mediaType ? mediaType.toLowerCase() : undefined;
+    const extension = typeof filename === 'string' ? filename.toLowerCase().match(/\.[^.]+$/)?.[0] : undefined;
+    const matches = (extension && extensions.has(extension)) || (type && mimeTypes.has(type));
+    return matches ? (type ?? FALLBACK_MEDIA_TYPE) : undefined;
+  };
 }
 
 function isCompositeFilesystem(fs: unknown): fs is CompositeFilesystem {
@@ -62,7 +82,7 @@ function sanitizeFilename(filename: unknown): string {
     .replace(/\.\.+/g, '.')
     .replace(/^\.+/, '')
     .replace(/[\x00-\x1f]/g, '');
-  return cleaned || 'attachment.xlsx';
+  return cleaned || 'attachment';
 }
 
 function decodeBase64(value: string): Uint8Array | undefined {
@@ -118,7 +138,7 @@ function removeMirroredAttachment(content: MastraMessageContentV2, matches: (url
  * or as `experimental_attachments`. MessageList mirrors file parts into
  * `experimental_attachments`, so those mirrors are skipped to avoid uploading twice.
  */
-function findUnsupportedAttachments(messages: MastraDBMessage[]): UnsupportedAttachment[] {
+function findUnsupportedAttachments(messages: MastraDBMessage[], match: RouteMatcher): UnsupportedAttachment[] {
   const found: UnsupportedAttachment[] = [];
 
   for (const message of messages) {
@@ -141,7 +161,7 @@ function findUnsupportedAttachments(messages: MastraDBMessage[]): UnsupportedAtt
       // MessageList mirrors file parts into experimental_attachments without the filename; skip those mirrors.
       const data = file.data ?? file.url;
       fromParts.add(data);
-      const mediaType = unsupportedMediaType(file.mimeType ?? file.mediaType, file.filename);
+      const mediaType = match(file.mimeType ?? file.mediaType, file.filename);
       if (!mediaType) return;
 
       found.push({
@@ -156,7 +176,7 @@ function findUnsupportedAttachments(messages: MastraDBMessage[]): UnsupportedAtt
     });
 
     for (const attachment of content.experimental_attachments ?? []) {
-      const mediaType = unsupportedMediaType(attachment.contentType, attachment.name);
+      const mediaType = match(attachment.contentType, attachment.name);
       if (!mediaType || fromParts.has(attachment.url)) continue;
       found.push({
         mediaType,
@@ -319,10 +339,20 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
   readonly spanName = 'workspace:filesystem:attachments';
   readonly spanAttributes = { category: 'filesystem' } as const;
 
-  private readonly _workspace?: AnyWorkspace;
+  private readonly options: WorkspaceAttachmentsProcessorOptions;
+  private readonly match: RouteMatcher | undefined;
 
-  constructor(opts: WorkspaceAttachmentsProcessorOptions = {}) {
-    this._workspace = opts.workspace;
+  constructor(options: WorkspaceAttachmentsProcessorOptions = {}) {
+    this.options = options;
+    this.match = createRouteMatcher(options);
+  }
+
+  /**
+   * Returns a copy bound to the run's workspace, keeping the configured types.
+   * @internal
+   */
+  withWorkspace(workspace: AnyWorkspace | undefined): WorkspaceAttachmentsProcessor {
+    return new WorkspaceAttachmentsProcessor({ ...this.options, workspace });
   }
 
   async processInputStep({
@@ -332,7 +362,8 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     tracingContext,
   }: ProcessInputStepArgs<WorkspaceAttachmentsTripwireMetadata>) {
     // 1. Find attachments the model can't read.
-    const attachments = findUnsupportedAttachments(messageList.get.all.db());
+    if (!this.match) return { messageList };
+    const attachments = findUnsupportedAttachments(messageList.get.all.db(), this.match);
     if (!attachments.length) return { messageList };
 
     // 2. Turn each attachment's transport encoding (base64 / data URL) back into its original bytes.
@@ -340,7 +371,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
       const bytes = decodeData(attachment.data);
       if (bytes === ATTACHMENT_NOT_INLINE) {
         return abort(
-          `Spreadsheet attachment "${attachment.filename ?? 'attachment'}" was sent by URL. Send its content inline as base64 or a data URL`,
+          `Attachment "${attachment.filename ?? 'attachment'}" was sent by URL. Send its content inline as base64 or a data URL`,
           {
             metadata: { code: ATTACHMENT_NOT_INLINE, mediaType: attachment.mediaType },
           },
@@ -348,7 +379,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
       }
       if (bytes === ATTACHMENT_INVALID_DATA) {
         return abort(
-          `Spreadsheet attachment "${attachment.filename ?? 'attachment'}" has invalid data: expected base64 or a base64 data URL`,
+          `Attachment "${attachment.filename ?? 'attachment'}" has invalid data: expected base64 or a base64 data URL`,
           {
             metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType },
           },
@@ -358,7 +389,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     });
 
     // 3. Find a writable place in the workspace, or abort instead of sending the binary to the model.
-    const workspace = this._workspace;
+    const workspace = this.options.workspace;
     const target = await resolveUploadTarget(workspace, requestContext ?? new RequestContext());
     tracingContext?.currentSpan?.update({
       attributes: { workspaceId: workspace?.id, workspaceName: workspace?.name, success: !('unavailable' in target) },
@@ -366,7 +397,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     if ('unavailable' in target) {
       const { mediaType, filename } = attachments[0]!;
       return abort(
-        `Spreadsheet attachment "${filename ?? 'attachment'}" (${mediaType}) can't be sent to the model and must be stored in a writable workspace, but ${target.unavailable}.`,
+        `Attachment "${filename ?? 'attachment'}" (${mediaType}) can't be sent to the model and must be stored in a writable workspace, but ${target.unavailable}.`,
         { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType } },
       );
     }

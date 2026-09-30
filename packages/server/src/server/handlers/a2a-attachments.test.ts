@@ -5,6 +5,7 @@ import type { MessageSendParams } from '@mastra/core/a2a';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
+import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
@@ -26,6 +27,12 @@ async function setup() {
   const prompts: string[] = [];
   const record = (props: { prompt: unknown }) => prompts.push(JSON.stringify(props.prompt));
   const agent = new Agent({
+    inputProcessors: [
+      new WorkspaceAttachmentsProcessor({
+        extensions: ['.xlsx'],
+        mimeTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      }),
+    ],
     id: 'sheet-agent',
     name: 'sheet-agent',
     instructions: 'Analyse spreadsheets',

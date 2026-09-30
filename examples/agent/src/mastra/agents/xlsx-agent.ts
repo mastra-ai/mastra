@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
 import { Workspace } from '@mastra/core/workspace';
 import { E2BSandbox } from '@mastra/e2b';
 import { Memory } from '@mastra/memory';
@@ -26,6 +27,13 @@ export const xlsxAgent = new Agent({
   `,
   model: 'openai/gpt-5-mini',
   workspace,
+  // Models can't read spreadsheet binaries: route them to the workspace instead.
+  inputProcessors: [
+    new WorkspaceAttachmentsProcessor({
+      extensions: ['.xlsx', '.xls'],
+      mimeTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
+    }),
+  ],
   memory: new Memory({
     options: {
       lastMessages: 20,

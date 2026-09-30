@@ -366,10 +366,7 @@ describe('durable error-processor resolution', () => {
     const { registryEntry, workflowInput } = await durableAgent.prepare('hello');
 
     expect(resolver).toHaveBeenCalledTimes(1);
-    expect(registryEntry.llmRequestInputProcessors).toEqual([
-      expect.objectContaining({ id: 'workspace-attachments-processor' }),
-      registryEntry.errorProcessors![0],
-    ]);
+    expect(registryEntry.llmRequestInputProcessors).toEqual([registryEntry.errorProcessors![0]]);
     expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
   });
 
@@ -399,9 +396,7 @@ describe('durable error-processor resolution', () => {
       const rebuilt = await prepareThenEvict(agent, { errorProcessors: [] });
 
       expect(rebuilt.errorProcessors).toEqual([]);
-      expect(rebuilt.llmRequestInputProcessors).toEqual([
-        expect.objectContaining({ id: 'workspace-attachments-processor' }),
-      ]);
+      expect(rebuilt.llmRequestInputProcessors).toEqual([]);
     });
 
     it("rebuilds the wrapped agent's error processors, not the defaults", async () => {
@@ -418,10 +413,7 @@ describe('durable error-processor resolution', () => {
       const rebuilt = await prepareThenEvict(agent);
 
       expect(rebuilt.errorProcessors).toEqual([custom]);
-      expect(rebuilt.llmRequestInputProcessors).toEqual([
-        expect.objectContaining({ id: 'workspace-attachments-processor' }),
-        custom,
-      ]);
+      expect(rebuilt.llmRequestInputProcessors).toEqual([custom]);
     });
 
     it('resolves the defaults without an override', async () => {
