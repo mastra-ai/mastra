@@ -523,8 +523,17 @@ export class MemoryStorageD1 extends MemoryStorage {
         ...(metadata as Record<string, any>),
       };
 
-      const columns = ['title', 'metadata'];
-      const values: (string | null)[] = [title ?? thread.title ?? null, JSON.stringify(mergedMetadata)];
+      // Only write supplied fields so an update based on a stale read can't revert concurrent changes.
+      const columns: string[] = [];
+      const values: (string | null)[] = [];
+      if (title !== undefined) {
+        columns.push('title');
+        values.push(title);
+      }
+      if (metadata !== undefined) {
+        columns.push('metadata');
+        values.push(JSON.stringify(mergedMetadata));
+      }
       // Archiving alone must not reorder thread lists, so updatedAt only moves on content changes.
       const updatedAt = title !== undefined || metadata !== undefined ? new Date() : thread.updatedAt;
       if (updatedAt !== thread.updatedAt) {
@@ -536,11 +545,10 @@ export class MemoryStorageD1 extends MemoryStorage {
         values.push(archivedAt ? archivedAt.toISOString() : null);
       }
 
-      const query = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id);
-
-      const { sql, params } = query.build();
-
-      await this.#db.executeQuery({ sql, params });
+      if (columns.length > 0) {
+        const { sql, params } = createSqlBuilder().update(fullTableName, columns, values).where('id = ?', id).build();
+        await this.#db.executeQuery({ sql, params });
+      }
 
       return {
         ...thread,

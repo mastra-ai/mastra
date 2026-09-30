@@ -861,9 +861,10 @@ export class MemoryMySQL extends MemoryStorage {
       await this.operations.update({
         tableName: TABLE_THREADS,
         keys: { id },
+        // Only write supplied fields so an update based on a stale read can't revert concurrent changes.
         data: {
-          title: title ?? existing.title,
-          metadata: JSON.stringify(mergedMetadata),
+          ...(title !== undefined ? { title } : {}),
+          ...(metadata !== undefined ? { metadata: JSON.stringify(mergedMetadata) } : {}),
           updatedAt,
           ...(archivedAt !== undefined ? { archivedAt } : {}),
         },

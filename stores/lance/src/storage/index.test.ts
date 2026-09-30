@@ -20,7 +20,8 @@ vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 const storage = await LanceStorage.create('lance-test-storage', 'LanceTestStorage', 'test');
 const testClient = await connect('test-factory-db');
 
-createTestSuite(storage);
+// Lance rewrites the whole row via mergeInsert, so a stale read can revert concurrent changes.
+createTestSuite(storage, { staleReadSafeThreadUpdates: false });
 
 // Pre-configured client acceptance tests
 createClientAcceptanceTests({
