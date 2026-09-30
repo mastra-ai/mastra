@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addIssueCommentTool } from './tools/add-issue-comment.js';
 import { createBranchTool } from './tools/create-branch.js';
 import { createIssueTool } from './tools/create-issue.js';
@@ -99,5 +99,5 @@ export function createGithubTools(options?: ProviderToolsOptions) {
     github_update_pull_request: updatePullRequestTool(platformProxy),
     github_update_release: updateReleaseTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

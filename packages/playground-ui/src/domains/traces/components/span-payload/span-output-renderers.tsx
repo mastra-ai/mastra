@@ -18,7 +18,7 @@ import {
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { Reasoning } from '@/domains/chat/messages/reasoning';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { InlineCode } from '@/ds/components/InlineCode/inline-code';
@@ -96,7 +96,7 @@ function SpanModelGenerationResultRenderer({ value }: { value: ModelGenerationRe
       {typeof value.text === 'string' && value.text.length > 0 && (
         <SpanPayloadMarkdown>{value.text}</SpanPayloadMarkdown>
       )}
-      {typeof value.reasoningText === 'string' && <Reasoning text={value.reasoningText} />}
+      {typeof value.reasoningText === 'string' && <ReasoningActivity text={value.reasoningText} />}
       {value.reasoning !== undefined && (
         <SpanPayloadCollapsible label="Reasoning details">
           <SpanPayloadJson value={value.reasoning} />

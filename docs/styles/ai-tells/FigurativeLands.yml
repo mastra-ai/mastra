@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the literal action: is merged or is routed to. Disable this rule for aviation or nature prose."
+message: "AI overused verb: '%s'. Use the literal action: is merged or is routed to. Disable this rule for aviation or nature prose."
 level: error
 nonword: true
 ignorecase: true

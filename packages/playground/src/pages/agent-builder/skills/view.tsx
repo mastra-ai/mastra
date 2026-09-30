@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -101,11 +102,13 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto bg-sidebar">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-4 pb-10 md:px-10">
-          <h1 className="text-heading text-foreground">{skill.name}</h1>
+          <Txt as="h1" variant="heading" tone="ink">
+            {skill.name}
+          </Txt>
           {skill.description && (
-            <p className="mt-2 text-body text-muted-foreground" data-testid="skill-view-description">
+            <Txt tone="muted" className="mt-2" data-testid="skill-view-description">
               {skill.description}
-            </p>
+            </Txt>
           )}
           <div className="mt-6" data-testid="skill-view-instructions">
             <MarkdownRenderer>{skill.instructions ?? ''}</MarkdownRenderer>

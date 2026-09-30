@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -34,9 +35,7 @@ describe('Dialog', () => {
             </DialogHeader>
             <DialogBody>Body content</DialogBody>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button>Cancel</Button>
-              </DialogClose>
+              <DialogClose render={<Button>Cancel</Button>} />
             </DialogFooter>
           </DialogContent>
         </Dialog>,
@@ -56,7 +55,7 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
-    expect(document.querySelector('.dialog-overlay-anim')).not.toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
 
     rerender(
       <Dialog defaultOpen>
@@ -66,7 +65,7 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
-    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
   });
 
   it('applies custom classes to the overlay', () => {
@@ -78,35 +77,17 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
-    const overlay = document.querySelector('.dialog-overlay-anim');
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
     expect(overlay?.className).toContain('custom-overlay');
     expect(overlay?.className).toContain('bg-sidebar/40');
     expect(overlay?.className).toContain('backdrop-blur-none');
     expect(overlay?.className).not.toContain('backdrop-blur-xs');
   });
 
-  it('renders an asChild Trigger as the child element without nesting buttons', () => {
-    render(
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button>Open dialog</Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogTitle>Title</DialogTitle>
-        </DialogContent>
-      </Dialog>,
-    );
-
-    const trigger = screen.getByRole('button', { name: 'Open dialog' });
-    expect(trigger.querySelector('button')).toBeNull();
-  });
-
   it('opens the dialog when the trigger is clicked', () => {
     render(
       <Dialog>
-        <DialogTrigger asChild>
-          <Button>Open dialog</Button>
-        </DialogTrigger>
+        <DialogTrigger render={<Button>Open dialog</Button>} />
         <DialogContent>
           <DialogTitle>Revealed title</DialogTitle>
         </DialogContent>
@@ -132,16 +113,14 @@ describe('Dialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
   });
 
-  it('fires onOpenChange when an asChild DialogClose is clicked', () => {
+  it('fires onOpenChange when a rendered DialogClose is clicked', () => {
     const onOpenChange = vi.fn();
     render(
       <Dialog defaultOpen onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogTitle>Title</DialogTitle>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button>Cancel</Button>
-            </DialogClose>
+            <DialogClose render={<Button>Cancel</Button>} />
           </DialogFooter>
         </DialogContent>
       </Dialog>,
@@ -152,12 +131,12 @@ describe('Dialog', () => {
   });
 });
 
-describe('Dialog variant new', () => {
+describe('Dialog confirmation', () => {
   afterEach(() => vi.useRealTimers());
 
   describe('when a destructive confirmation is opened', () => {
     it('renders the consequence copy and named actions', () => {
-      render(<NewVariantFixture />);
+      render(<ConfirmationFixture />);
       expect(screen.getByRole('alertdialog', { name: 'Delete workspace?' })).toBeDefined();
       expect(screen.getByText('Uncommitted changes will be lost.')).toBeDefined();
       expect(screen.getByRole('button', { name: 'Cancel' })).toBeDefined();
@@ -168,7 +147,7 @@ describe('Dialog variant new', () => {
     it('does not confirm', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.keyDown(button, { key: ' ' });
       act(() => vi.advanceTimersByTime(500));
@@ -182,7 +161,7 @@ describe('Dialog variant new', () => {
     it('confirms exactly once despite repeated keydown events', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.keyDown(button, { key: 'Enter' });
       fireEvent.keyDown(button, { key: 'Enter', repeat: true });
@@ -197,7 +176,7 @@ describe('Dialog variant new', () => {
   describe('when a hold action receives a mouse click', () => {
     it('does not bypass the hold', () => {
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }), { detail: 1 });
       expect(onConfirm).not.toHaveBeenCalled();
     });
@@ -207,7 +186,7 @@ describe('Dialog variant new', () => {
     it('confirms on the second activation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.click(button, { detail: 0 });
       expect(onConfirm).not.toHaveBeenCalled();
@@ -219,7 +198,7 @@ describe('Dialog variant new', () => {
     it('disarms when the second activation is late', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.click(button, { detail: 0 });
       act(() => vi.advanceTimersByTime(5000));
@@ -230,16 +209,16 @@ describe('Dialog variant new', () => {
 
   describe('when the confirmation is pending', () => {
     it('disables both actions', () => {
-      render(<NewVariantFixture pending />);
+      render(<ConfirmationFixture pending />);
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
       expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Delete workspace' }).disabled).toBe(true);
     });
   });
 });
 
-function NewVariantFixture({ onConfirm = () => {}, hold = false, pending = false, holdSeconds = 1.5 }) {
+function ConfirmationFixture({ onConfirm = () => {}, hold = false, pending = false, holdSeconds = 1.5 }) {
   return (
-    <Dialog variant="new" intent="destructive" defaultOpen pending={pending}>
+    <Dialog intent="destructive" defaultOpen pending={pending}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete workspace?</DialogTitle>
@@ -256,14 +235,14 @@ function NewVariantFixture({ onConfirm = () => {}, hold = false, pending = false
   );
 }
 
-describe('Dialog variant new hold cancellation', () => {
+describe('Dialog hold cancellation', () => {
   afterEach(() => vi.useRealTimers());
 
   describe.each(['blur', 'pointerLeave', 'pointerCancel'])('when %s interrupts a hold', eventName => {
     it('cancels the pending confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.keyDown(button, { key: ' ' });
       fireEvent[eventName](button);
@@ -276,7 +255,7 @@ describe('Dialog variant new hold cancellation', () => {
     it('cancels the pending confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
       fireEvent(window, new Event('blur'));
       act(() => vi.advanceTimersByTime(1600));
@@ -288,7 +267,7 @@ describe('Dialog variant new hold cancellation', () => {
     it('clears its pending confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      const { unmount } = render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const { unmount } = render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
       unmount();
       act(() => vi.advanceTimersByTime(1600));
@@ -300,9 +279,9 @@ describe('Dialog variant new hold cancellation', () => {
     it('cancels the pending confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      const { rerender } = render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      const { rerender } = render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
-      rerender(<NewVariantFixture onConfirm={onConfirm} hold pending />);
+      rerender(<ConfirmationFixture onConfirm={onConfirm} hold pending />);
       act(() => vi.advanceTimersByTime(1600));
       expect(onConfirm).not.toHaveBeenCalled();
     });
@@ -312,7 +291,7 @@ describe('Dialog variant new hold cancellation', () => {
     it('does not start confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} hold />);
+      render(<ConfirmationFixture onConfirm={onConfirm} hold />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: 'a' });
       act(() => vi.advanceTimersByTime(1600));
       expect(onConfirm).not.toHaveBeenCalled();
@@ -322,7 +301,7 @@ describe('Dialog variant new hold cancellation', () => {
   describe('when a regular action is confirmed', () => {
     it('leaves closing to its caller', () => {
       const onConfirm = vi.fn();
-      render(<NewVariantFixture onConfirm={onConfirm} />);
+      render(<ConfirmationFixture onConfirm={onConfirm} />);
       fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }));
       expect(onConfirm).toHaveBeenCalledTimes(1);
       expect(screen.getByRole('alertdialog')).toBeDefined();
@@ -333,7 +312,7 @@ describe('Dialog variant new hold cancellation', () => {
     it('rejects the dismissal', () => {
       const onOpenChange = vi.fn();
       render(
-        <Dialog variant="new" defaultOpen pending onOpenChange={onOpenChange}>
+        <Dialog defaultOpen pending onOpenChange={onOpenChange}>
           <DialogContent>
             <DialogTitle>Working</DialogTitle>
           </DialogContent>
@@ -346,14 +325,14 @@ describe('Dialog variant new hold cancellation', () => {
   });
 });
 
-describe('Dialog variant new hold duration', () => {
+describe('Dialog hold duration', () => {
   afterEach(() => vi.useRealTimers());
 
   describe('when holdSeconds is 2.5', () => {
     it('confirms only after the configured duration', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture hold holdSeconds={2.5} onConfirm={onConfirm} />);
+      render(<ConfirmationFixture hold holdSeconds={2.5} onConfirm={onConfirm} />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
       act(() => vi.advanceTimersByTime(2499));
       expect(onConfirm).not.toHaveBeenCalled();
@@ -363,7 +342,7 @@ describe('Dialog variant new hold duration', () => {
   });
 });
 
-describe('Dialog variant new pointer confirmation', () => {
+describe('Dialog pointer confirmation', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -377,7 +356,7 @@ describe('Dialog variant new pointer confirmation', () => {
     it('only confirms a primary left-button hold', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      render(<ConfirmationFixture hold onConfirm={onConfirm} />);
       const event = new MouseEvent('pointerdown', { bubbles: true, button });
       Object.defineProperty(event, 'isPrimary', { value: primary });
       fireEvent(screen.getByRole('button', { name: 'Delete workspace' }), event);
@@ -390,7 +369,7 @@ describe('Dialog variant new pointer confirmation', () => {
     it('cancels only when the document is hidden', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      render(<ConfirmationFixture hold onConfirm={onConfirm} />);
       fireEvent.keyDown(screen.getByRole('button', { name: 'Delete workspace' }), { key: ' ' });
       vi.spyOn(document, 'hidden', 'get').mockReturnValue(hidden);
       fireEvent(document, new Event('visibilitychange'));
@@ -403,7 +382,7 @@ describe('Dialog variant new pointer confirmation', () => {
     it('cancels confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      render(<ConfirmationFixture hold onConfirm={onConfirm} />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       const event = new MouseEvent('pointerdown', { bubbles: true, button: 0 });
       Object.defineProperty(event, 'isPrimary', { value: true });
@@ -418,7 +397,7 @@ describe('Dialog variant new pointer confirmation', () => {
     it('cancels confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
-      render(<NewVariantFixture hold onConfirm={onConfirm} />);
+      render(<ConfirmationFixture hold onConfirm={onConfirm} />);
       const button = screen.getByRole('button', { name: 'Delete workspace' });
       fireEvent.keyDown(button, { key: 'Enter' });
       fireEvent.keyUp(button, { key: 'Enter' });
@@ -432,7 +411,7 @@ describe('Dialog variant new pointer confirmation', () => {
       vi.useFakeTimers();
       const onConfirm = vi.fn();
       render(
-        <Dialog variant="new" defaultOpen>
+        <Dialog defaultOpen>
           <DialogContent>
             <DialogTitle>Confirm</DialogTitle>
             <DialogAction confirmation="hold" onConfirm={onConfirm} onKeyDown={event => event.preventDefault()}>
@@ -451,7 +430,7 @@ describe('Dialog variant new pointer confirmation', () => {
     it('notifies the caller that the dialog closed', () => {
       const onOpenChange = vi.fn();
       render(
-        <Dialog variant="new" defaultOpen onOpenChange={onOpenChange}>
+        <Dialog defaultOpen onOpenChange={onOpenChange}>
           <DialogContent>
             <DialogTitle>Confirm</DialogTitle>
             <DialogCancel>Cancel</DialogCancel>
@@ -460,6 +439,45 @@ describe('Dialog variant new pointer confirmation', () => {
       );
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+    });
+  });
+});
+
+describe('Dialog submit action', () => {
+  function SubmitFixture({ onSubmit, pending = false }: { onSubmit: () => void; pending?: boolean }) {
+    return (
+      <Dialog defaultOpen pending={pending}>
+        <DialogContent>
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              onSubmit();
+            }}
+          >
+            <DialogTitle>Rename</DialogTitle>
+            <DialogFooter>
+              <DialogAction type="submit">Save</DialogAction>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  describe('when the submit action is clicked', () => {
+    it('submits the surrounding form and leaves the dialog open', () => {
+      const onSubmit = vi.fn();
+      render(<SubmitFixture onSubmit={onSubmit} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('dialog')).toBeDefined();
+    });
+  });
+
+  describe('when the dialog is pending', () => {
+    it('disables the submit action', () => {
+      render(<SubmitFixture onSubmit={vi.fn()} pending />);
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
     });
   });
 });

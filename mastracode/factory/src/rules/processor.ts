@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
 import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -187,15 +185,14 @@ function currentCompletedToolMessage(
   return undefined;
 }
 
-function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: WorkItemRow[]): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        ...value,
-        linked: linked.map(item => [item.id, item.revision, item.stages[0]]),
-      }),
-    )
-    .digest('hex');
+async function phaseCacheKey(value: ActivePhaseSnapshotValue, linked: WorkItemRow[]): Promise<string> {
+  const serialized = JSON.stringify({
+    ...value,
+    linked: linked.map(item => [item.id, item.revision, item.stages[0]]),
+  });
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))).toString(
+    'hex',
+  );
 }
 
 function escapeText(value: string): string {
@@ -310,7 +307,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       board === 'review'
         ? { ...baseValue, board, ...reviewRuntimeFromRequestContext(args.requestContext) }
         : { ...baseValue, board };
-    const cacheKey = phaseCacheKey(value, linked);
+    const cacheKey = await phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
 

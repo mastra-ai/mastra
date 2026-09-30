@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import '@/test/jsdom-polyfills';
+import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -67,6 +68,84 @@ describe('TraceThreadItemView', () => {
 
       expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
       expect(screen.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when the user input is a skill activation envelope', () => {
+    it('renders the Skill row instead of the raw envelope', async () => {
+      const [root, ...rest] = basicAgentTrace.spans;
+      if (!root) throw new Error('fixture missing root span');
+      const envelope = '<skill name="factory-triage">\nTriage the work item.\n</skill>';
+      const spans = [
+        { ...root, input: { messages: [{ role: 'user', content: [{ type: 'text', text: envelope }] }] } },
+        ...rest,
+      ];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json({ ...basicAgentTrace, spans }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+      );
+
+      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+
+      expect(await screen.findByLabelText('Skill: factory-triage')).not.toBeNull();
+      expect(screen.queryByText(/<skill name=/)).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when the trace contains a reviewed submit_plan and an observational memory cycle', () => {
+    it('shows the plan decision with its feedback and the observation badge', async () => {
+      const [root] = basicAgentTrace.spans;
+      if (!root) throw new Error('fixture missing root span');
+      const spans = [
+        ...basicAgentTrace.spans,
+        {
+          ...root,
+          spanId: 'submit-plan',
+          parentSpanId: root.spanId,
+          name: "tool: 'submit_plan'",
+          spanType: SpanType.TOOL_CALL,
+          entityName: 'submit_plan',
+          attributes: { toolCallId: 'call-plan' },
+          input: { path: '.mastracode/plans/weekend.md' },
+          output: {
+            toolId: 'submit_plan',
+            content: 'Plan was not approved.',
+            submittedPlan: {
+              title: 'Weekend in Paris',
+              path: '.mastracode/plans/weekend.md',
+              plan: '# Weekend in Paris',
+              action: 'rejected',
+              feedback: 'Add a museum on Sunday',
+            },
+          },
+        },
+        {
+          ...root,
+          spanId: 'om-observe',
+          parentSpanId: root.spanId,
+          name: 'memory: observe',
+          spanType: SpanType.MEMORY_OPERATION,
+          attributes: { operationType: 'observe', inputTokens: 1223 },
+          input: null,
+          output: null,
+        },
+      ];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json({ ...basicAgentTrace, spans }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+      );
+
+      const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
+
+      expect(await screen.findByText('Changes requested')).not.toBeNull();
+      expect(screen.getByText('Add a museum on Sunday')).not.toBeNull();
+      expect(screen.getByText(/Observed/)).not.toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });

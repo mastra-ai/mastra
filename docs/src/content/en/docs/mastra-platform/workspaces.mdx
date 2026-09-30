@@ -84,7 +84,7 @@ export async function runInFreshSandbox(command: string) {
 }
 ```
 
-Or clone a configured sandbox as the template for a fleet, so the clones inherit credentials, environment, network isolation, and defaults without repeating them:
+Or clone a configured sandbox as the template for a fleet. The clones inherit credentials, environment, network isolation, and defaults without repeating them:
 
 ```typescript
 const template = new PlatformSandbox({ networkIsolation: 'PRIVATE' })

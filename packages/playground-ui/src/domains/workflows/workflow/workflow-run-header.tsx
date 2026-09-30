@@ -34,15 +34,18 @@ function RunDuration({ span, spansSuspension }: Omit<WorkflowRunTiming, 'waiting
   const elapsed = formatDuration(useTimeDiff(span));
 
   return (
-    <span
-      className="flex items-center gap-1.5 text-meta text-muted-foreground"
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
+      className="flex items-center gap-1.5"
       title={spansSuspension ? 'Run duration, including time spent suspended' : 'Run duration'}
     >
       <Timer aria-hidden className="size-3.5" />
       <Txt as="span" variant="meta" font="mono">
         {elapsed}
       </Txt>
-    </span>
+    </Txt>
   );
 }
 
@@ -50,10 +53,15 @@ function RunWaiting({ since }: { since: number }) {
   const waiting = formatDuration(useTimeDiff({ startedAt: since }));
 
   return (
-    <span className="flex items-center gap-1.5 text-meta text-warning-indicator tabular-nums" title="Waiting for input">
+    <Txt
+      as="span"
+      variant="meta"
+      className="flex items-center gap-1.5 text-warning-indicator tabular-nums"
+      title="Waiting for input"
+    >
       <Pause aria-hidden className="size-3.5" />
       {waiting}
-    </span>
+    </Txt>
   );
 }
 

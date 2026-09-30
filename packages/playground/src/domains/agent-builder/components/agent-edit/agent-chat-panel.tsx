@@ -1,7 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
@@ -205,7 +205,10 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group state-layer flex gap-3 rounded-3xl border border-border bg-background p-4 text-left hover:border-border-strong focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                className={cn(
+                  'starter-chip group state-layer flex gap-3 rounded-3xl border border-border bg-background p-4 text-left hover:border-border-strong',
+                  focusRing,
+                )}
               >
                 <span
                   className={cn(

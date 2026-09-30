@@ -73,13 +73,7 @@ export function ScheduleTriggersList({
         const isLinked = isTriggerLinked(t);
         if (isLinked) interactiveIndex += 1;
         const runIdLabel = (
-          <Txt
-            as="span"
-            variant="caption"
-            font="mono"
-            tone={isLinked ? undefined : 'muted'}
-            className={isLinked ? 'whitespace-nowrap text-success-indicator' : 'whitespace-nowrap'}
-          >
+          <Txt as="span" variant="caption" font="mono" tone={isLinked ? 'ink' : 'muted'} className="whitespace-nowrap">
             {t.runId}
           </Txt>
         );
@@ -91,16 +85,25 @@ export function ScheduleTriggersList({
             <DataList.Cell>
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-destructive-indicator">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-indicator"
+                  >
                     <AlertTriangleIcon size={14} />
                     publish failed
-                  </span>
+                  </Txt>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-caption whitespace-nowrap text-muted-foreground">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                  >
                     pending
-                  </span>
+                  </Txt>
                 )}
                 {errorMessage ? (
                   <Tooltip>

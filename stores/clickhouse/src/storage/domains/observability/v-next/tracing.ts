@@ -10,8 +10,6 @@
  * over the trace data -- since branches are conceptually a subset of traces.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, toTraceSpans, TraceStatus } from '@mastra/core/storage';
 import type {
@@ -239,7 +237,7 @@ export async function batchDeleteTraces(
   if (args.traceIds.length === 0) return;
 
   const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'traces',

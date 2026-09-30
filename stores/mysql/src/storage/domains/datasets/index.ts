@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_DATASETS,
@@ -327,7 +326,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
@@ -661,8 +660,8 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       await connection.beginTransaction();
 
-      const id = randomUUID();
-      const versionId = randomUUID();
+      const id = globalThis.crypto.randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
@@ -746,7 +745,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       await connection.beginTransaction();
 
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
@@ -885,7 +884,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       await connection.beginTransaction();
 
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
@@ -1194,7 +1193,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({
@@ -1309,7 +1308,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         historyRows = rows.map(row => this.mapItemFull(row));
       }
 
-      const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
       const existingItems = new Map<string, DatasetItem>(
         [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
       );
@@ -1364,7 +1363,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       await connection.execute(
         `INSERT INTO ${tableVersionsName} (\`id\`, \`datasetId\`, \`version\`, \`createdAt\`) VALUES (?, ?, ?, ?)`,
-        [randomUUID(), input.datasetId, newVersion, transformToSqlValue(now)],
+        [globalThis.crypto.randomUUID(), input.datasetId, newVersion, transformToSqlValue(now)],
       );
       await connection.commit();
 
@@ -1401,7 +1400,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       await connection.beginTransaction();
 
       const now = new Date();
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);

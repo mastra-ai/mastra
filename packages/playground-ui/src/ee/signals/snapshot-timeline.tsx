@@ -4,6 +4,7 @@ import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
@@ -48,7 +49,7 @@ export function TimelineTrack({
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
             className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-fill-hover'
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-muted-foreground'
             } ${grabbed ? 'ring-2 ring-foreground' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
@@ -59,14 +60,18 @@ export function TimelineTrack({
       })}
       {snapshots.map((snapshot, index) =>
         dayLabels[index] ? (
-          <span
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
+            font="mono"
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="absolute top-7 -translate-x-1/2 font-mono text-meta text-muted-foreground tabular-nums"
+            className="absolute top-7 -translate-x-1/2 tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
-          </span>
+          </Txt>
         ) : null,
       )}
     </div>
@@ -130,9 +135,9 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="font-mono text-caption text-muted-foreground tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" font="mono" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
-        </p>
+        </Txt>
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
