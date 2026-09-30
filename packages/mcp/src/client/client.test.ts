@@ -1102,6 +1102,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect((result as any).validationErrors).toBeDefined();
   });
 
+  it('validates schemas that declare an unsupported dialect such as 2019-09 as 2020-12', async () => {
+    const sdkClient = (client as any).client as Client;
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { $schema, type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            $schema,
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2 }) }],
+      structuredContent: { result: 2 },
+      isError: false,
+    });
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual({ result: 2 });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'nope' }],
+      structuredContent: { result: 'not-a-number' },
+      isError: false,
+    });
+    const invalid = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(invalid).toMatchObject({ error: true });
+    expect((invalid as any).message).toContain('Tool output validation failed for calculate');
+  });
+
   it('passes valid structuredContent through unchanged with content metadata intact', async () => {
     const sdkClient = (client as any).client as Client;
 

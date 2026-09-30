@@ -15,6 +15,7 @@ import { GithubPatBlock } from './GithubPatBlock';
 import { ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -73,9 +74,9 @@ export function RepositoriesSection() {
                 </>
               ))}
             {gitlabStatus?.configured && gitlabStatus.mode === 'direct' && (
-              <span className="text-meta text-muted-foreground">
+              <Txt as="span" variant="meta" tone="muted">
                 GitLab managed by deployment environment variables
-              </span>
+              </Txt>
             )}
           </div>
         }

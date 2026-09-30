@@ -270,6 +270,13 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     ],
   },
   {
+    name: 'resolveSubagentModel',
+    type: '(modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig',
+    description:
+      "Resolves a subagent's model ID into a model config. It receives a copy of the calling run's request context without the parent thread and resource IDs, so tenant credentials and request-scoped providers work for subagents. When unset, the model ID goes to the model gateway router.",
+    isOptional: true,
+  },
+  {
     name: 'gateways',
     type: 'MastraModelGatewayInterface[]',
     description: 'Custom model gateways merged with the built-in gateways.',

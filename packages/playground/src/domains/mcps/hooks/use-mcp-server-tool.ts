@@ -1,10 +1,13 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useMCPServerTool = (serverId: string, toolId: string, options?: { enabled?: boolean }) => {
-  const { requestContext } = usePlaygroundStore();
+export const useMCPServerTool = (
+  serverId: string,
+  toolId: string,
+  options?: { enabled?: boolean },
+  requestContext?: Record<string, any>,
+) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -18,11 +21,10 @@ export const useMCPServerTool = (serverId: string, toolId: string, options?: { e
 };
 
 export const useExecuteMCPTool = (serverId: string, toolId: string) => {
-  const { requestContext } = usePlaygroundStore();
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: (data: any) => {
+    mutationFn: ({ data, requestContext }: { data: any; requestContext?: Record<string, any> }) => {
       const instance = client.getMcpServerTool(serverId, toolId);
       return instance.execute({ data, requestContext: requestContext as RequestContext });
     },

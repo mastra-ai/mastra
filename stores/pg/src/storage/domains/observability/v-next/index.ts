@@ -376,6 +376,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ] as const;
     }
     return [
@@ -394,6 +395,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
     ] as const;
   }
 

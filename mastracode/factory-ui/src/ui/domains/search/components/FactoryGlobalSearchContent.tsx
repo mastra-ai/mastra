@@ -15,6 +15,7 @@ import { candidatePayload } from '../../factory/boardDrag';
 import { cardMoves } from '../../factory/cardPrimaryAction';
 import { useBoardItems } from '../../factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../factory/hooks/useBoardRuns';
+import { RepositoryPickerDialog } from '../../factory/components/RepositoryPickerDialog';
 import { useGlobalSearchIntake } from '../hooks/useGlobalSearchIntake';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
@@ -91,6 +92,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
         rightSlot={<Kbd>Esc</Kbd>}
       />
 
+      {runs.repositorySelection && (
+        <RepositoryPickerDialog
+          repositories={runs.repositories}
+          onClose={runs.closeRepositorySelection}
+          onSelect={async repository => {
+            await runs.selectRepository(repository);
+            closeSearch();
+          }}
+        />
+      )}
       <CommandPaletteBody>
         <GlobalSearchRail activeScope={activeScope} counts={counts} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Factory search" />}>
@@ -108,9 +119,9 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
             <GlobalSearchWorkItemResults
               results={unstartedItems}
               onSelect={result => {
-                closeSearch();
                 const target = result.target;
                 if (target.kind === 'candidate') {
+                  closeSearch();
                   const [move] = cardMoves(target.candidate, target.candidate.column);
                   const board =
                     target.candidate.source === 'github-pr' || target.candidate.source === 'gitlab-pr'
@@ -121,12 +132,16 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                 }
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
+                  closeSearch();
                   const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;
                 }
                 void runs
                   .openOrCreateSession(target.item)
+                  .then(result => {
+                    if (result !== 'repository-selection-required') closeSearch();
+                  })
                   .catch(error =>
                     toast.error(error instanceof Error ? error.message : 'The session could not be started.'),
                   );

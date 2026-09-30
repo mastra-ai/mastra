@@ -7,7 +7,7 @@ description: "Browse Mistral model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 
-Access 35 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 34 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -62,18 +62,6 @@ for await (const chunk of stream) {
     "maxOutput": 16384,
     "inputCost": 2,
     "outputCost": 5
-  },
-  {
-    "model": "mistral/magistral-small",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.5,
-    "outputCost": 1.5
   },
   {
     "model": "mistral/ministral-3b-latest",

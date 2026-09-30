@@ -1,6 +1,7 @@
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -44,24 +45,27 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
       </div>
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
-          <p
-            className={cn('mt-2 mb-4 text-body text-muted-foreground', {
+          <Txt
+            tone="muted"
+            className={cn('mt-2 mb-4', {
               'rounded-lg bg-muted': isLoading,
             })}
           >
             {isLoading ? <>&nbsp;</> : description}
-          </p>
+          </Txt>
 
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
             <div className={cn('mb-4 rounded-lg border border-border bg-background p-4', 'flex items-start gap-3')}>
               <div className="mt-0.5 shrink-0">
-                <InfoIcon className="h-[1.1em] w-[1.1em] text-blue-500" />
+                <InfoIcon className="h-[1.1em] w-[1.1em] text-info-indicator" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
                   <GitBranchIcon className="h-[1em] w-[1em] text-muted-foreground" />
-                  <span className="text-subheading text-foreground">A new Git branch will be created</span>
+                  <Txt as="span" variant="subheading" tone="ink">
+                    A new Git branch will be created
+                  </Txt>
                 </div>
                 <div className="space-y-1 text-caption text-muted-foreground">
                   <div>

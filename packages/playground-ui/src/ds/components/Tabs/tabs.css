@@ -356,7 +356,7 @@
   inset-inline: 10px;
   height: 2px;
   border-radius: 9999px;
-  background: var(--accent1);
+  background: var(--info-indicator);
   animation: tab-attention-pulse 1400ms cubic-bezier(0.4, 0, 0.2, 1) 3;
 }
 

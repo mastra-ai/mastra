@@ -62,7 +62,7 @@
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "@mastra/rag": "latest",
-    "zod": "4.4.3"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@ai-sdk/provider": "2.0.3",

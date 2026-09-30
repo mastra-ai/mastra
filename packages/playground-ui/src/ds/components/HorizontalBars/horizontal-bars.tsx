@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -67,11 +68,15 @@ export function HorizontalBars({
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-caption text-muted-foreground">{seg.label}</span>
+              <Txt as="span" variant="caption" tone="muted">
+                {seg.label}
+              </Txt>
             </div>
           ))}
         </div>
-        <span className="shrink-0 pr-2 text-caption text-placeholder">Total</span>
+        <Txt as="span" variant="caption" tone="faint" className="shrink-0 pr-2">
+          Total
+        </Txt>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -148,22 +153,34 @@ export function HorizontalBars({
                     darkLabelOnFill && 'dark:[clip-path:inset(0_0_0_var(--bar-width))]',
                   )}
                 >
-                  <span className="absolute inset-y-0 left-2.5 flex items-center truncate text-caption text-muted-foreground">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="absolute inset-y-0 left-2.5 flex items-center truncate"
+                  >
                     {d.name}
-                  </span>
+                  </Txt>
                 </div>
                 {darkLabelOnFill && (
                   <div
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-(--bar-width) overflow-hidden dark:block"
                   >
-                    <span className="absolute inset-y-0 left-2.5 flex items-center text-caption whitespace-nowrap text-placeholder">
+                    <Txt
+                      as="span"
+                      variant="caption"
+                      tone="faint"
+                      className="absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap"
+                    >
                       {d.name}
-                    </span>
+                    </Txt>
                   </div>
                 )}
               </div>
-              <span className="shrink-0 pr-3 text-body text-muted-foreground tabular-nums">{fmt(total)}</span>
+              <Txt as="span" tone="muted" className="shrink-0 pr-3 tabular-nums">
+                {fmt(total)}
+              </Txt>
             </>
           );
 

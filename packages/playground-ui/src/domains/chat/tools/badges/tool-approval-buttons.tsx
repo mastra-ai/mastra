@@ -1,5 +1,6 @@
 import { SectionLabel } from '../../components/section-label';
 import { useToolCall } from '../../context/tool-call-context';
+import { awaitsToolApproval } from './awaits-tool-approval';
 import { ToolApprovalActions } from '@/ds/components/ai/tool-approval';
 
 export interface ToolApprovalButtonsProps {
@@ -63,20 +64,18 @@ export const ToolApprovalButtons = ({
         ?.status
     : toolCallApprovals?.[toolCallId]?.status;
 
-  if (toolApprovalMetadata && !toolCalled) {
-    return (
-      <div>
-        <SectionLabel>Approval required</SectionLabel>
-        <ToolApprovalActions
-          onApprove={handleApprove}
-          onDecline={handleDecline}
-          disabled={isRunning}
-          status={toolCallApprovalStatus}
-          toolName={toolName}
-        />
-      </div>
-    );
-  }
+  if (!awaitsToolApproval({ toolApprovalMetadata, toolCalled })) return null;
 
-  return null;
+  return (
+    <div>
+      <SectionLabel>Approval required</SectionLabel>
+      <ToolApprovalActions
+        onApprove={handleApprove}
+        onDecline={handleDecline}
+        disabled={isRunning}
+        status={toolCallApprovalStatus}
+        toolName={toolName}
+      />
+    </div>
+  );
 };

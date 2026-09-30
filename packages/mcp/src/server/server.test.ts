@@ -54,6 +54,17 @@ const createMockAgent = (name: string, description?: string) =>
 
 describe('MCPServer', () => {
   describe('metadata', () => {
+    it('generates a 32-byte continuation key when none is configured', () => {
+      const getRandomValues = vi.spyOn(globalThis.crypto, 'getRandomValues');
+      try {
+        new MCPServer({ name: 'Default Key', version: '1.0.0', tools: {} });
+        expect(getRandomValues).toHaveBeenCalledWith(expect.any(Uint8Array));
+        expect(getRandomValues.mock.calls[0]?.[0]).toHaveLength(32);
+      } finally {
+        getRandomValues.mockRestore();
+      }
+    });
+
     it('derives defaults and exposes provided metadata through server info and detail', () => {
       const defaults = new MCPServer({ name: 'Defaults', version: '1.0.0', tools: {} });
       expect(defaults.id).toMatch(/[0-9a-f-]{36}/);
