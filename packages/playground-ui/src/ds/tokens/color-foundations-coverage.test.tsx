@@ -16,9 +16,11 @@ const themeVariables = themeFiles.flatMap(file =>
   ),
 );
 
+const isBrandColor = (token: string) => token.startsWith('color-brand-') && !themeVariables.includes(token.slice(6));
+
 const themeColorTokens = themeVariables.filter(token => {
   if (!token) return false;
-  if (token.startsWith('color-')) return token.startsWith('color-brand-');
+  if (token.startsWith('color-')) return isBrandColor(token);
   return !token.startsWith('elevation-') && !token.startsWith('shadow-') && token !== 'fill-tint';
 });
 
@@ -42,7 +44,7 @@ describe('color foundations coverage', () => {
     const exportedVariables = new Set([...Object.values(Colors), ...Object.values(BorderColors)]);
     const exposedVariables = themeVariables
       .filter(token => token?.startsWith('color-'))
-      .map(token => `var(--${token?.startsWith('color-brand-') ? token : token?.slice(6)})`);
+      .map(token => `var(--${token && isBrandColor(token) ? token : token?.slice(6)})`);
 
     expect(exportedVariables).toEqual(new Set(exposedVariables));
   });

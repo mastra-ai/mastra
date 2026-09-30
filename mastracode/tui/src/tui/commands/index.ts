@@ -43,6 +43,7 @@ export { handleFeedbackCommand } from './feedback.js';
 export { handleObservabilityCommand } from './observability.js';
 export { handleGithubCommand } from './github.js';
 export { handleGoalCommand, handleJudgeCommand } from './goal.js';
+export { handleSchedulesCommand } from './schedules.js';
 export { handleWorkflowsCommand } from './workflows.js';
 export { handlePruneCommand } from './prune.js';
 export { handleProfileCommand } from './profile.js';

@@ -1236,6 +1236,10 @@ export class Agent<
    * Partially update the options of the active objective. Only provided fields
    * are persisted into the record (so the precedence over agent config is
    * remembered in thread state). No-ops when no objective is set.
+   *
+   * `pausedReason` lasts for one pause: it's cleared when the goal leaves
+   * paused, or when a goal moves into paused from another status without a new
+   * reason. A supplied reason replaces the stored one.
    */
   async updateObjectiveOptions(options: {
     threadId: string;
@@ -1243,6 +1247,7 @@ export class Agent<
     maxRuns?: number;
     prompt?: string;
     status?: GoalObjectiveRecord['status'];
+    pausedReason?: string;
   }): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     const existing = await readObjective(store, options.threadId);
@@ -1255,7 +1260,13 @@ export class Agent<
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
       ...(options.status !== undefined ? { status: options.status } : {}),
+      ...(options.pausedReason !== undefined ? { pausedReason: options.pausedReason } : {}),
     };
+    // A pause cause lasts for one pause. Leaving paused clears it, and entering
+    // paused without a new reason drops any stale one from a non-paused record.
+    if (updated.status !== 'paused' || (existing.status !== 'paused' && options.pausedReason === undefined)) {
+      delete updated.pausedReason;
+    }
     await writeObjective(store, options.threadId, updated);
     return updated;
   }

@@ -40,7 +40,7 @@ const STATUS_OPTIONS: Array<{ value: ReviewListStatus; label: string }> = [
 const FIELD_META: Record<string, { icon: LucideIcon; hue: CategoricalHue }> = {
   [TARGET_TYPE_FIELD_ID]: { icon: BoxIcon, hue: 'purple' },
   [TARGET_ID_FIELD_ID]: { icon: FingerprintIcon, hue: 'pink' },
-  [EXPERIMENT_FIELD_ID]: { icon: FlaskConicalIcon, hue: 'green' },
+  [EXPERIMENT_FIELD_ID]: { icon: FlaskConicalIcon, hue: 'pink' },
   [STATUS_FIELD_ID]: { icon: CheckCircleIcon, hue: 'orange' },
   [TAG_FIELD_ID]: { icon: TagIcon, hue: 'pink' },
 };

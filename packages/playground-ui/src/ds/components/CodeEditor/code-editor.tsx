@@ -148,7 +148,7 @@ function buildLightTheme(): Extension {
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'var(--info-subtle) !important',
+        background: 'var(--info-edge) !important',
       },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',

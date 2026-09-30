@@ -79,7 +79,7 @@ const ProgressBar = ({
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
   const textColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-white';
+  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
 

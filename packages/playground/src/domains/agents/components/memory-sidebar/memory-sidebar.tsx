@@ -40,7 +40,8 @@ export interface MemorySidebarProps {
 
 const barColor = (percent: number): string => {
   if (percent >= 85) return 'bg-warning-indicator';
-  return 'bg-info-indicator';
+  if (percent >= 60) return 'bg-info-indicator';
+  return 'bg-success-indicator';
 };
 
 type ConfigBadgeProps = {
