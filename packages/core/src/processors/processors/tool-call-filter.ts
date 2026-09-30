@@ -137,10 +137,18 @@ export class ToolCallFilter implements Processor {
       // getter: steps restored from a suspend snapshot are plain JSON without class getters.
       const currentRunToolCallIds = new Set<string>();
       for (const step of steps ?? []) {
-        for (const part of step.content ?? []) {
-          if (part.type === 'tool-call' || part.type === 'tool-result') {
-            currentRunToolCallIds.add(part.toolCallId);
+        if (step.content) {
+          for (const part of step.content) {
+            if (part.type === 'tool-call' || part.type === 'tool-result') {
+              currentRunToolCallIds.add(part.toolCallId);
+            }
           }
+          continue;
+        }
+        // Durable engines pass reduced step records with flat `toolCalls`/`toolResults` and no `content`.
+        const record = step as { toolCalls?: { toolCallId: string }[]; toolResults?: { toolCallId: string }[] };
+        for (const call of [...(record.toolCalls ?? []), ...(record.toolResults ?? [])]) {
+          currentRunToolCallIds.add(call.toolCallId);
         }
       }
       return currentRunToolCallIds;
