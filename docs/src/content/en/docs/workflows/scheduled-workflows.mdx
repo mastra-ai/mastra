@@ -158,7 +158,7 @@ Removing a schedule entry from a workflow's `schedule` array deletes its row on 
 
 ## Recovering runs after a restart
 
-Scheduled workflows run on the evented engine. By default, a run that is in progress when the process stops stays `running` after a restart. To have Mastra recover these runs on boot, set `autoRestartActiveRuns: true`:
+Scheduled workflows run on the evented engine. By default, a run that's in progress when the process stops stays `running` after a restart. To have Mastra recover these runs on boot, set `autoRestartActiveRuns: true`:
 
 ```typescript title="src/mastra/workflows/price-check.ts"
 export const priceCheck = createWorkflow({
