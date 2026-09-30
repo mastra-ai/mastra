@@ -106,6 +106,8 @@ export class SchedulesLibSQL extends SchedulesStorage {
   }
 
   async init(): Promise<void> {
+    await this.#migrateLegacyTriggersTable();
+
     await this.#db.createTable({
       tableName: TABLE_SCHEDULES,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
@@ -119,6 +121,21 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+    // Tables created before ownership support lack these columns. Another
+    // process sharing the database may add them between our check and ALTER;
+    // that duplicate-column failure is fine once both columns exist.
+    try {
+      await this.#db.alterTable({
+        tableName: TABLE_SCHEDULES,
+        schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+        ifNotExists: ['owner_type', 'owner_id'],
+      });
+    } catch (error) {
+      const migrated =
+        (await this.#db.hasColumn(TABLE_SCHEDULES, 'owner_type')) &&
+        (await this.#db.hasColumn(TABLE_SCHEDULES, 'owner_id'));
+      if (!migrated) throw error;
+    }
 
     await this.#client.batch(
       [
@@ -133,6 +150,50 @@ export class SchedulesLibSQL extends SchedulesStorage {
       ],
       'write',
     );
+  }
+
+  /**
+   * Trigger tables created before the ownership/audit schema change are keyed
+   * by `run_id` (NOT NULL) and store `status` instead of `outcome`. SQLite
+   * cannot change a primary key or rename-and-retype in place, so the table is
+   * rebuilt in the current shape inside one write transaction. Legacy run ids
+   * are unique, so they become the new row ids.
+   */
+  async #migrateLegacyTriggersTable(): Promise<void> {
+    const isLegacy = async () =>
+      (await this.#db.hasColumn(TABLE_SCHEDULE_TRIGGERS, 'status')) &&
+      !(await this.#db.hasColumn(TABLE_SCHEDULE_TRIGGERS, 'outcome'));
+    if (!(await isLegacy())) return;
+
+    const shadow = `${TABLE_SCHEDULE_TRIGGERS}__legacy_rebuild`;
+    try {
+      await this.#client.batch(
+        [
+          `DROP TABLE IF EXISTS "${shadow}"`,
+          `CREATE TABLE "${shadow}" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "schedule_id" TEXT NOT NULL,
+            "run_id" TEXT,
+            "scheduled_fire_at" INTEGER NOT NULL,
+            "actual_fire_at" INTEGER NOT NULL,
+            "outcome" TEXT NOT NULL,
+            "error" TEXT,
+            "trigger_kind" TEXT NOT NULL,
+            "parent_trigger_id" TEXT,
+            "metadata" TEXT
+          )`,
+          `INSERT INTO "${shadow}" ("id", "schedule_id", "run_id", "scheduled_fire_at", "actual_fire_at", "outcome", "error", "trigger_kind")
+           SELECT "run_id", "schedule_id", "run_id", "scheduled_fire_at", "actual_fire_at", "status", "error", 'schedule-fire'
+           FROM "${TABLE_SCHEDULE_TRIGGERS}"`,
+          `DROP TABLE "${TABLE_SCHEDULE_TRIGGERS}"`,
+          `ALTER TABLE "${shadow}" RENAME TO "${TABLE_SCHEDULE_TRIGGERS}"`,
+        ],
+        'write',
+      );
+    } catch (error) {
+      // Another process sharing this database may have rebuilt the table first.
+      if (await isLegacy()) throw error;
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

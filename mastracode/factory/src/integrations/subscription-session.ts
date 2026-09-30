@@ -74,11 +74,16 @@ export async function prepareSessionRunContext(
   requestContext: RequestContext,
   sessionId: string,
   sourceControl: SubscriptionSessionLookup,
-): Promise<void> {
+  options?: { expectedOrgId?: string },
+): Promise<'prepared' | 'unavailable' | 'organization-mismatch'> {
   const sessionRow = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return;
+  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return 'unavailable';
+  if (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId) {
+    return 'organization-mismatch';
+  }
   requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
   await primeTenantCredentialsForRequestContext(requestContext);
+  return 'prepared';
 }
 
 export async function resolveSubscriptionSession(

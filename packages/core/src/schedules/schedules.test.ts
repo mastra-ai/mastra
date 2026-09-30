@@ -1,8 +1,10 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../agent/agent';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
+import { createStep, createWorkflow } from '../workflows';
 import type { AgentSchedule } from './schedules';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
 
@@ -483,6 +485,81 @@ describe('mastra.schedules canonical service', () => {
       const triggers = await store.listTriggers(wf.id);
       expect(triggers).toHaveLength(1);
       expect(triggers[0]).toMatchObject({ runId: fired.claimId, outcome: 'published', triggerKind: 'manual' });
+    });
+
+    describe('default-engine workflows (#18807)', () => {
+      function makeWorkflowMastra() {
+        const execute = vi.fn(async ({ inputData }: { inputData: { region: string } }) => ({
+          region: inputData.region,
+        }));
+        const wf = createWorkflow({
+          id: 'daily-report',
+          inputSchema: z.object({ region: z.string() }),
+          outputSchema: z.object({ region: z.string() }),
+        })
+          .then(
+            createStep({
+              id: 'report',
+              inputSchema: z.object({ region: z.string() }),
+              outputSchema: z.object({ region: z.string() }),
+              execute,
+            }),
+          )
+          .commit();
+        const mastra = new Mastra({
+          logger: false,
+          storage: new MockStore(),
+          workflows: { wf },
+          notifications: { dispatch: { enabled: false } },
+        });
+        return { mastra, wf, execute };
+      }
+
+      it('run fires in-process through the workflow event processor', async () => {
+        const { mastra, wf, execute } = makeWorkflowMastra();
+        await mastra.startWorkers();
+        try {
+          const schedule = await mastra.schedules.create({
+            workflowId: 'daily-report',
+            cron: '0 6 * * *',
+            inputData: { region: 'eu' },
+          });
+
+          const publishSpy = vi.spyOn(mastra.pubsub, 'publish');
+          const fired = await mastra.schedules.run(schedule.id);
+
+          const workflowStart = publishSpy.mock.calls.find(([topic]) => topic === 'workflows');
+          expect(workflowStart?.[1]).toMatchObject({
+            type: 'workflow.start',
+            runId: fired.claimId,
+            data: {
+              workflowId: 'daily-report',
+              scheduleTrigger: {
+                scheduleId: schedule.id,
+                scheduledFireAt: fired.scheduledFireAt,
+                triggerKind: 'manual',
+              },
+            },
+          });
+
+          await vi.waitFor(async () => expect((await wf.getWorkflowRunById(fired.claimId))?.status).toBe('success'));
+          expect(execute).toHaveBeenCalledTimes(1);
+          expect(execute.mock.calls[0]![0].inputData).toEqual({ region: 'eu' });
+          // Default-engine fires run in-process instead of being stepped by the evented engine.
+          expect(
+            publishSpy.mock.calls.some(
+              ([topic, event]) => topic === 'workflows' && (event as { type?: string }).type === 'workflow.step.run',
+            ),
+          ).toBe(false);
+
+          const store = (await mastra.getStorage()!.getStore('schedules'))!;
+          const triggers = await store.listTriggers(schedule.id);
+          expect(triggers).toHaveLength(1);
+          expect(triggers[0]).toMatchObject({ runId: fired.claimId, outcome: 'published', triggerKind: 'manual' });
+        } finally {
+          await mastra.shutdown();
+        }
+      });
     });
   });
 });

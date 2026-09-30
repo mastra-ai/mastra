@@ -1238,13 +1238,13 @@ describe('Traces page filter bar', () => {
       expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
     });
 
-    it('does not offer Primitive Name in the field step', async () => {
+    it('does not offer Primitive name in the field step', async () => {
       await renderScoped();
 
       focusFilterInput();
       await screen.findByRole('option', { name: 'Trace ID' });
-      expect(screen.queryByRole('option', { name: 'Primitive Name' })).toBeNull();
-      expect(screen.queryByRole('option', { name: 'Primitive Type' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
     });
   });

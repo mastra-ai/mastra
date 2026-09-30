@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
@@ -84,7 +85,7 @@ export function CandidateCard({
           draggable={false}
           aria-label={`Details for ${candidate.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
         />
         <CandidateCardRows

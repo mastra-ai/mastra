@@ -145,7 +145,7 @@ export const agent = new Agent({
 
 Mastra inserts a temporal gap marker when the gap is at least 10 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
 
-The observer also sees these markers when it processes the thread, so the observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
+The observer also sees these markers when it processes the thread. The observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
@@ -208,13 +208,50 @@ const memory = new Memory({
 
 `bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 
+### Retries and failure policy
+
+Observer and Reflector model calls are retried on transient provider errors, and a turn aborts if they still fail. Each stage is controlled independently by:
+
+- `maxRetries`: retries after the initial model call (default `8`).
+- `failurePolicy`: what happens once retries are exhausted, either `'abort'` (default) or `'continue'`.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+      reflection: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+    },
+  },
+})
+```
+
+`maxRetries` governs OM's own retry ladder; the underlying model call is configured with no provider-level retries, so the option is the single retry knob for the stage.
+
+With `failurePolicy: 'continue'`, Mastra retries as configured, reports the failure through the existing OM diagnostics, keeps the failed input pending for a later cycle, and lets the main agent turn continue. It doesn't advance observation boundaries or discard unobserved messages. A Reflector failure under `'continue'` leaves any already-persisted observations committed and defers reflection to the next threshold crossing.
+
+A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
+
+This policy applies only to Observer and Reflector model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+
+<Callout type="warning">
+  `'continue'` has no backstop for a sustained outage. Unobserved messages stay pending and keep accruing in the main
+  agent's context. A long outage moves the failure from the memory layer to the model's context limit.
+</Callout>
+
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
 ## Benefits
 
 - **Prompt caching**: OM's context is stable and observations append over time rather than being retrieved at runtime each turn. This keeps the prompt prefix cacheable, which reduces costs.
 - **Compression**: Raw message history and tool results get compressed into a dense observation log. Smaller context means faster responses and longer coherent conversations.
-- **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, so the agent stays on task over long sessions.
+- **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, which keeps the agent on task over long sessions.
 
 ## How it works
 

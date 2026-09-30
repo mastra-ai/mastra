@@ -269,7 +269,7 @@ function handleSubagentProgress(
       component.addToolEnd(progress.toolName, progress.result, progress.isError ?? false);
       break;
     case 'finish':
-      component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
+      component.finish(progress.isError ?? false, progress.durationMs, progress.result);
       break;
   }
 
@@ -379,19 +379,21 @@ export function handleToolApprovalRequired(
     onAction: (action: ApprovalAction) => {
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
+      // Every response carries the call id of the dialog's own tool call, so it
+      // can only release that gate — never a different pending approval.
       if (action.type === 'approve') {
         firePermissionResult('approved');
-        state.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve', toolCallId });
       } else if (action.type === 'always_allow_category') {
         firePermissionResult('approved');
-        state.session.respondToToolApproval({ decision: 'always_allow_category' });
+        state.session.respondToToolApproval({ decision: 'always_allow_category', toolCallId });
       } else if (action.type === 'yolo') {
         firePermissionResult('auto_approved');
         void state.session.state.set({ yolo: true } as any);
-        state.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve', toolCallId });
       } else {
         firePermissionResult('declined');
-        state.session.respondToToolApproval({ decision: 'decline' });
+        state.session.respondToToolApproval({ decision: 'decline', toolCallId });
       }
     },
   });
@@ -401,7 +403,7 @@ export function handleToolApprovalRequired(
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
     firePermissionResult('dismissed');
-    state.session.respondToToolApproval({ decision: 'decline', declineContext });
+    state.session.respondToToolApproval({ decision: 'decline', toolCallId, declineContext });
   };
 
   // Show the dialog as an overlay
@@ -808,7 +810,7 @@ export function handleToolEnd(
       if (background?.status === 'running' && !isError) {
         flushRender(state);
       } else {
-        subagentComponent.finish(isError, 0, resultText);
+        subagentComponent.finish(isError, undefined, resultText);
         state.pendingSubagents.delete(toolCallId);
         pluginSubagentToolCallIds.delete(toolCallId);
         flushRender(state);

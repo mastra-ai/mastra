@@ -208,7 +208,11 @@ const integrationCatalogResponseSchema = z.object({
 });
 
 export const credentialSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('oauth2'), accessToken: z.string(), expiresAt: z.string().nullable() }),
+  z.object({
+    type: z.literal('oauth2'),
+    accessToken: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
 ]);
 
@@ -294,6 +298,13 @@ export interface ProxyRequestOptions {
   headers?: Record<string, string>;
   baseUrlOverride?: string;
   body?: unknown;
+  /**
+   * How to decode the response body. Defaults to JSON parsing (with a raw
+   * text fallback when JSON parsing fails). Set to `'arraybuffer'` for
+   * providers that return binary payloads (file exports, downloaded assets):
+   * the response body is returned as an ArrayBuffer and never parsed.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /**
@@ -452,6 +463,9 @@ export async function proxyRequestWithResponse(
 
   const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
   if (response.status === 204) return { ...metadata, data: null };
+  if (options.responseType === 'arraybuffer') {
+    return { ...metadata, data: await response.arrayBuffer() };
+  }
   const text = await response.text();
   if (!text) return { ...metadata, data: null };
   try {

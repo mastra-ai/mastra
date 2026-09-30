@@ -89,7 +89,11 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
               <Txt as="span" variant="caption" font="mono">
                 {s.cron ?? (s.runAt ? `once @ ${new Date(s.runAt).toLocaleString()}` : '—')}
               </Txt>
-              {s.timezone ? <span className="text-meta text-muted-foreground">{s.timezone}</span> : null}
+              {s.timezone ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {s.timezone}
+                </Txt>
+              ) : null}
             </span>
           </DataList.Cell>
           <DataList.Cell>

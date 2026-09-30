@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createWorkflow, createEventedWorkflow, cloneWorkflow } from './create';
 import { createStep, Workflow } from './workflow';
@@ -7,8 +7,8 @@ import { createStep, Workflow } from './workflow';
  * Tests for the workflow factory module (create.ts).
  *
  * This module was extracted from workflow.ts to break an ESM init-time cycle.
- * The factories route to the base `Workflow` class or the evented engine
- * based on the presence of a `schedule` property.
+ * `createWorkflow` returns the base `Workflow` class unless the workflow declares
+ * `schedule` while `MASTRA_WORKERS` is set, in which case it uses the evented engine.
  */
 
 const noop = createStep({
@@ -31,16 +31,37 @@ describe('createWorkflow', () => {
     expect(wf.engineType).toBe('default');
   });
 
-  it('returns an evented Workflow when schedule is provided', () => {
-    const wf = createWorkflow({
-      id: 'scheduled-wf',
-      inputSchema: z.object({ v: z.number() }),
-      outputSchema: z.object({ v: z.number() }),
-      schedule: { cron: '0 * * * *' },
-    });
+  it('keeps the default engine when schedule is provided and MASTRA_WORKERS is unset', () => {
+    vi.stubEnv('MASTRA_WORKERS', '');
+    try {
+      const wf = createWorkflow({
+        id: 'scheduled-wf',
+        inputSchema: z.object({ v: z.number() }),
+        outputSchema: z.object({ v: z.number() }),
+        schedule: { cron: '0 * * * *' },
+      });
 
-    expect(wf.id).toBe('scheduled-wf');
-    expect(wf.engineType).toBe('evented');
+      expect(wf.id).toBe('scheduled-wf');
+      expect(wf.engineType).toBe('default');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('returns an evented Workflow when schedule is provided and MASTRA_WORKERS is set', () => {
+    vi.stubEnv('MASTRA_WORKERS', 'scheduler');
+    try {
+      const wf = createWorkflow({
+        id: 'scheduled-split-wf',
+        inputSchema: z.object({ v: z.number() }),
+        outputSchema: z.object({ v: z.number() }),
+        schedule: { cron: '0 * * * *' },
+      });
+
+      expect(wf.engineType).toBe('evented');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('allows chaining .then() and .commit()', () => {

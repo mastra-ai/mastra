@@ -1,5 +1,6 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
-import { formatOmError } from '../error';
+import { formatOmError, isOmModelExecutionFailure } from '../error';
 import { createBufferingFailedMarker, createObservationFailedMarker } from '../markers';
 
 const providerError = () =>
@@ -16,9 +17,95 @@ const providerError = () =>
 
 const diagnostic = 'Bad Request: HTTP 400: Unsupported parameter: temperature';
 
+describe('isOmModelExecutionFailure', () => {
+  const apiCallErrorBrand = Symbol.for('vercel.ai.error.AI_APICallError');
+
+  it('recognizes transient failures through the documented cause chain', () => {
+    expect(isOmModelExecutionFailure(new Error('wrapper', { cause: new TypeError('terminated') }))).toBe(true);
+  });
+
+  it('recognizes AI SDK branded failures through cause and error wrappers', () => {
+    const branded = Object.assign(new Error('permanent provider rejection'), { [apiCallErrorBrand]: true });
+
+    expect(isOmModelExecutionFailure(branded)).toBe(true);
+    expect(isOmModelExecutionFailure({ cause: branded })).toBe(true);
+    expect(isOmModelExecutionFailure({ error: branded })).toBe(true);
+  });
+
+  it('never classifies a wrapped abort as a survivable model failure', () => {
+    const abort = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' });
+    const domStyleAbort = Object.assign(new Error('aborted'), { code: 'ABORT_ERR' });
+    const branded = Object.assign(new Error('provider rejection'), { [apiCallErrorBrand]: true, name: 'AbortError' });
+
+    expect(isOmModelExecutionFailure(abort)).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('request timeout', { cause: abort }))).toBe(false);
+    expect(isOmModelExecutionFailure({ error: { cause: abort } })).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('wrapper', { cause: domStyleAbort }))).toBe(false);
+    expect(isOmModelExecutionFailure(branded)).toBe(false);
+    // Both wrapper branches are traversed, not just `cause`.
+    expect(
+      isOmModelExecutionFailure({ message: 'request timeout', cause: new Error('transport wrapper'), error: abort }),
+    ).toBe(false);
+  });
+
+  it('ignores inherited brands and arbitrary sibling properties', () => {
+    const inheritedBrand = Object.create({ [apiCallErrorBrand]: true });
+    inheritedBrand.message = 'provider rejection';
+
+    expect(isOmModelExecutionFailure(inheritedBrand)).toBe(false);
+    expect(isOmModelExecutionFailure({ details: new TypeError('terminated') })).toBe(false);
+  });
+
+  it('rejects aborts, unclassified failures, and cyclic wrappers', () => {
+    expect(isOmModelExecutionFailure(new DOMException('cancelled', 'AbortError'))).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('schema validation failed'))).toBe(false);
+    expect(
+      isOmModelExecutionFailure(Object.assign(new Error('Tool execution failed'), { name: 'ToolExecutionError' })),
+    ).toBe(false);
+    expect(isOmModelExecutionFailure(new Error('Observer output failed validation', { cause: { issues: [] } }))).toBe(
+      false,
+    );
+
+    const cyclic: { cause?: unknown } = {};
+    cyclic.cause = cyclic;
+    expect(isOmModelExecutionFailure(cyclic)).toBe(false);
+  });
+});
+
 describe('formatOmError', () => {
   it('extracts provider diagnostics without serializing request metadata or the entire response', () => {
     expect(formatOmError(providerError())).toBe(diagnostic);
+  });
+
+  it('preserves the MastraError id when the wrapper inherits the driver message', () => {
+    const error = new MastraError(
+      {
+        id: 'MASTRA_STORAGE_LIBSQL_UPDATE_BUFFERED_OBSERVATIONS_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id: 'om-record-1' },
+      },
+      new Error('SQLITE_CORRUPT: database disk image is malformed'),
+    );
+    const expected =
+      'MASTRA_STORAGE_LIBSQL_UPDATE_BUFFERED_OBSERVATIONS_FAILED: SQLITE_CORRUPT: database disk image is malformed';
+    expect(formatOmError(error)).toBe(expected);
+    expect(formatOmError(error)).not.toContain('om-record-1');
+
+    const marker = createBufferingFailedMarker({
+      cycleId: 'cycle',
+      operationType: 'observation',
+      startedAt: new Date().toISOString(),
+      tokensAttempted: 100,
+      error,
+      recordId: 'record',
+      threadId: 'thread',
+    });
+    expect(JSON.parse(JSON.stringify(marker)).data.error).toBe(expected);
+  });
+
+  it('ignores ids on values that are not MastraErrors', () => {
+    expect(formatOmError({ id: 'resp_123', message: 'x' })).toBe('x');
   });
 
   it.each([

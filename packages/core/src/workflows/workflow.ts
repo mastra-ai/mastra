@@ -75,6 +75,8 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { validateScheduleTiming } from './scheduler/cron';
+import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -1847,6 +1849,8 @@ export class Workflow<
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
 
+  #schedules: WorkflowScheduleConfig[];
+
   constructor({
     mastra,
     id,
@@ -1861,8 +1865,31 @@ export class Workflow<
     steps,
     options = {},
     type,
+    schedule,
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
+    // Stored type-erased: the scheduler reads these as plain records.
+    const schedules = (!schedule ? [] : Array.isArray(schedule) ? schedule : [schedule]) as WorkflowScheduleConfig[];
+    if (Array.isArray(schedule)) {
+      const seenIds = new Set<string>();
+      for (const entry of schedules) {
+        if (!entry.id) {
+          throw new Error(
+            `Workflow "${id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+          );
+        }
+        if (seenIds.has(entry.id)) {
+          throw new Error(`Workflow "${id}" declares duplicate schedule id "${entry.id}".`);
+        }
+        seenIds.add(entry.id);
+      }
+    }
+    for (const entry of schedules) {
+      // Declarative schedules are re-validated on every boot, so a `runAt`
+      // or `endAt` that has already passed must not break construction.
+      validateScheduleTiming(entry, { requireFuture: false });
+    }
+    this.#schedules = schedules.map(cfg => ({ ...cfg }));
     this.id = id;
     this.description = description;
     this.metadata = metadata;
@@ -1918,6 +1945,15 @@ export class Workflow<
 
   get options() {
     return this.#options;
+  }
+
+  /**
+   * Returns the cron schedule configurations declared on this workflow as a
+   * normalized array. Used by the Mastra scheduler to register declarative
+   * schedules at boot. Returns an empty array when no schedule is declared.
+   */
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {
@@ -3136,7 +3172,49 @@ export class Workflow<
 
     let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
 
+    // The parent and nested snapshots are written separately, so a crash can leave them out of
+    // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
+    // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
     try {
+      let restartNested = !!restart;
+      let resumeNested = isResume;
+      if ((restart || isResume) && !isTimeTravel) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId: run.runId,
+        });
+        let nestedStatus = nestedSnapshot?.status;
+        // A crash between the nested run's resume claim and its resumed step starting leaves a
+        // `running` snapshot that still only has suspended steps. Restarting it would drop the
+        // resume data, so hand it back to `suspended` and resume it with the parent's saved data.
+        if (
+          nestedSnapshot &&
+          (nestedStatus === 'running' || nestedStatus === 'waiting') &&
+          Object.keys(nestedSnapshot.activeStepsPath ?? {}).length === 0 &&
+          Object.keys(nestedSnapshot.suspendedPaths ?? {}).length > 0
+        ) {
+          // The resume claim is only written by stores with atomic updates, so a claim-only
+          // snapshot implies one; compare-and-set so a concurrent caller's claim is not re-armed.
+          const released = await workflowsStore!.updateWorkflowState({
+            workflowName: this.id,
+            runId: run.runId,
+            opts: { status: 'suspended', expectedStatus: nestedStatus },
+          });
+          if (released) {
+            nestedStatus = 'suspended';
+            restartNested = false;
+            resumeNested = true;
+          }
+        }
+        if (isResume && (nestedStatus === 'running' || nestedStatus === 'waiting')) {
+          restartNested = true;
+        } else if (restart && nestedStatus === 'suspended') {
+          restartNested = false;
+          resumeNested = true;
+        }
+      }
+
       if (isTimeTravel) {
         res = await run.timeTravel({
           inputData: timeTravel?.inputData,
@@ -3152,18 +3230,18 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         });
-      } else if (restart) {
+      } else if (restartNested) {
         res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
-      } else if (isResume) {
+      } else if (resumeNested) {
         res = await run.resume({
           resumeData,
-          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+          step: resume?.steps?.length ? (resume.steps as any) : undefined,
           requestContext,
           actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
+          label: resume?.label,
           perStep,
         });
       } else {
@@ -3832,42 +3910,45 @@ export class Run<
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
-  protected async _start({
-    inputData,
-    initialState,
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    format,
-    outputOptions,
-    perStep,
-    actor,
-    ...rest
-  }: (TInput extends unknown
-    ? {
-        inputData?: TInput;
-      }
-    : {
-        inputData: TInput;
-      }) &
-    (TState extends unknown
+  protected async _start(
+    {
+      inputData,
+      initialState,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      format,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: (TInput extends unknown
       ? {
-          initialState?: TState;
+          inputData?: TInput;
         }
       : {
-          initialState: TState;
-        }) & {
-      requestContext?: RequestContext<TRequestContext>;
-      outputWriter?: OutputWriter;
-      tracingOptions?: TracingOptions;
-      format?: 'legacy' | 'vnext' | undefined;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      perStep?: boolean;
-      actor?: ActorSignal;
-    } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext<TRequestContext>;
+        outputWriter?: OutputWriter;
+        tracingOptions?: TracingOptions;
+        format?: 'legacy' | 'vnext' | undefined;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+        actor?: ActorSignal;
+      } & Partial<ObservabilityContext>,
+    onDispatched?: () => void,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -3915,6 +3996,47 @@ export class Run<
       workflowSpan?.error({ error: error as Error });
       throw error;
     });
+
+    if (onDispatched) {
+      const shouldPersistSnapshot =
+        this.executionEngine.getRunPersistenceOverride(this.runId) ??
+        this.executionEngine.options.shouldPersistSnapshot;
+      if (
+        this.workflowRunStatus === 'pending' &&
+        shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
+      ) {
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const initialRunSnapshot: WorkflowRunState = {
+          runId: this.runId,
+          status: 'waiting',
+          value: initialStateToUse as Record<string, any>,
+          context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
+          requestContext: (requestContext ?? new RequestContext()).toJSON(),
+          activePaths: [0],
+          activeStepsPath: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        };
+        try {
+          await workflowsStore?.persistWorkflowSnapshot({
+            workflowName: this.workflowId,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            snapshot: this.executionEngine.options.pruneSnapshot
+              ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
+              : initialRunSnapshot,
+          });
+        } catch (error) {
+          workflowSpan?.error({ error: error as Error });
+          throw error;
+        }
+      }
+      this.workflowRunStatus = 'running';
+      onDispatched();
+    }
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3974,10 +4096,12 @@ export class Run<
 
   /**
    * Starts the workflow execution without waiting for completion (fire-and-forget).
-   * Returns immediately with the runId. The workflow executes in the background.
+   * Returns with the runId after startup validation, lifecycle hooks, and durable dispatch complete.
+   * The workflow continues executing in the background.
    * Use this when you don't need to wait for the result or want to avoid polling failures.
    * @param args The input data and configuration for the workflow
-   * @returns A promise that resolves immediately with the runId
+   * @returns A promise that resolves with the runId after startup validation, lifecycle hooks, and durable dispatch,
+   * or rejects if any of those operations fail
    */
   async startAsync(
     args: (TInput extends unknown
@@ -3997,9 +4121,17 @@ export class Run<
         requestContext?: RequestContext<TRequestContext>;
       } & WorkflowRunStartOptions,
   ): Promise<{ runId: string }> {
-    // Fire execution in background, don't await completion
-    this._start(args).catch(err => {
-      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+    let notifyStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      notifyStarted = resolve;
+    });
+    const execution = this._start(args, notifyStarted);
+
+    // Surface startup failures, but don't wait for the workflow to finish.
+    await Promise.race([started, execution]);
+
+    void execution.catch(error => {
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
     });
     return { runId: this.runId };
   }

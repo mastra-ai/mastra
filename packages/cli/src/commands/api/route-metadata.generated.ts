@@ -613,6 +613,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],
@@ -2038,6 +2039,28 @@ export const API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "POST /observability/traces/aggregate": {
+    "method": "POST",
+    "path": "/observability/traces/aggregate",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "groupBy",
+      "having",
+      "interval",
+      "limit",
+      "measures",
+      "orderBy",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rows"
     }
   },
   "POST /observability/threads/query": {
@@ -5886,6 +5909,7 @@ export const API_ROUTE_METADATA = {
       "perPage",
       "resourceId",
       "status",
+      "summary",
       "toDate"
     ],
     "bodyParams": [],

@@ -98,6 +98,9 @@ export const accumulatedUsageSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   totalTokens: z.number(),
+  cachedInputTokens: z.number().optional(),
+  cacheCreationInputTokens: z.number().optional(),
+  reasoningTokens: z.number().optional(),
 });
 
 /**

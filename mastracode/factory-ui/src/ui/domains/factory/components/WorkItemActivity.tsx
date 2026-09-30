@@ -2,6 +2,7 @@ import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
@@ -10,6 +11,7 @@ import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -72,11 +74,11 @@ export function ActivityEvent({
     <div className={cn('flex items-start gap-2', className)}>
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-meta text-foreground truncate">
+        <Txt as="span" variant="meta" tone="ink" className="truncate">
           {actor.name}
           {modelId ? <span className="text-muted-foreground font-normal"> · {modelId}</span> : null}
-        </span>
-        <span className="text-meta text-muted-foreground flex items-baseline justify-between gap-3">
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="flex items-baseline justify-between gap-3">
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>
             {isCreated ? (
               <time dateTime={event.occurredAt}>
@@ -91,7 +93,7 @@ export function ActivityEvent({
               {relativeTime(event.occurredAt)}
             </time>
           )}
-        </span>
+        </Txt>
       </div>
     </div>
   );
@@ -118,7 +120,7 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-meta text-muted-foreground hover:text-foreground focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className={`text-meta text-muted-foreground hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`}
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
@@ -140,8 +142,12 @@ export function WorkItemActivity({
           <div className="flex items-center gap-2">
             <History size={14} className="text-muted-foreground" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-column text-foreground">Activity</span>
-              <span className="text-meta text-muted-foreground truncate">Last worked on by {worker.name}</span>
+              <Txt as="span" variant="column" tone="ink">
+                Activity
+              </Txt>
+              <Txt as="span" variant="meta" tone="muted" className="truncate">
+                Last worked on by {worker.name}
+              </Txt>
             </div>
           </div>
           {timeline.length > 0 ? (
@@ -153,7 +159,9 @@ export function WorkItemActivity({
               ))}
             </ol>
           ) : (
-            <span className="text-meta text-muted-foreground">No recorded activity yet.</span>
+            <Txt as="span" variant="meta" tone="muted">
+              No recorded activity yet.
+            </Txt>
           )}
         </div>
       </HoverCardContent>

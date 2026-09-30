@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
-import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -25,7 +25,7 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
-export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask' | 'viewportRef'> & {
+export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
   columns: string;
   /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
@@ -147,27 +147,26 @@ export function DataListRoot({
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
-  // top — a top fade would fade the opaque sticky header. A virtualizing list
-  // passes `scrollRef`, forwarded as `viewportRef` so it scrolls this viewport.
+  // top — a top fade would fade the opaque sticky header.
   return (
     <ScrollArea
       {...props}
       orientation="both"
       mask={getDataListMask(mask)}
-      viewportRef={scrollRef}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
-      viewPortClassName="min-h-0 flex-1 basis-auto"
       className={cn(
         'flex max-h-full w-full flex-col self-start rounded-xl p-1',
         dataListVariantClasses[variant],
         className,
       )}
     >
-      {grid}
+      <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
+        {grid}
+      </ScrollAreaViewport>
     </ScrollArea>
   );
 }

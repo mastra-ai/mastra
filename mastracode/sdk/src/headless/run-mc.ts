@@ -10,6 +10,7 @@
  * {@link MCRun} is async-iterable over controller events and also resolves to a
  * final result via `result`.
  */
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import { GoalManager } from '../goal-manager.js';
@@ -384,6 +385,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
           await session.thread.switch({ threadId: sorted[0]!.id });
         }
+      } else if (!thread?.clone) {
+        await session.thread.create();
       }
     } catch (err) {
       return fail(`Failed to select thread: ${(err as Error).message}`);
@@ -439,6 +442,12 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         await session.sendMessage({ content: options.prompt });
       }
     } catch (err) {
+      if (
+        isSessionStartupCancelledError(err) ||
+        (err instanceof Error && err.name === 'AbortError' && (aborted || timedOut || options.signal?.aborted))
+      ) {
+        return finish(timedOut ? 'timeout' : maxTurnsExceeded ? 'max_turns' : 'aborted');
+      }
       return fail(`Failed to start run: ${(err as Error).message}`);
     }
   })();

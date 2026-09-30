@@ -37,8 +37,10 @@ export interface LinearIssue {
   assignee: string | null;
   creator?: string | null;
   team: string | null;
-  /** Linear project the issue was read from; matches an intake binding's `sourceId`. */
+  /** Selected intake source (project or team); matches an intake binding's `sourceId`. */
   sourceId?: string | null;
+  /** Actual Linear project, even when the issue was routed through a team. */
+  projectId?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;

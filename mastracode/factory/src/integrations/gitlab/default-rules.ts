@@ -1,8 +1,4 @@
-import type {
-  FactoryGitLabEventName,
-  FactoryGitLabRuleContext,
-  FactoryRuleHandler,
-} from '../../rules/types.js';
+import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>
@@ -10,7 +6,6 @@ export type GitLabRuleOverrides = Partial<
 export type GitLabEventRules = Readonly<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null>
 >;
-
 
 function actorUsername(context: Pick<FactoryGitLabRuleContext, 'actor'>): string | undefined {
   return context.actor.type === 'gitlab' ? context.actor.username : undefined;
@@ -44,7 +39,7 @@ function issueOpened(context: FactoryGitLabRuleContext) {
       gitlabIssueIid: context.issue.number,
       identifier: `${context.repository.fullName}#${context.issue.number}`,
       ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
-      ...(context.issue.author ?? actorUsername(context)
+      ...((context.issue.author ?? actorUsername(context))
         ? { author: context.issue.author ?? actorUsername(context) }
         : {}),
       authorTrusted: context.issue.authorTrusted,
@@ -125,6 +120,8 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   if (!context.item || context.item.source !== 'gitlab-pr' || context.board !== 'review') return;
   if (!context.mergeRequest || context.mergeRequest.state !== 'open' || context.mergeRequest.merged) return;
   if (context.item.stages.some(stage => stage === 'intake')) return;
+  // An untrusted push must not start review passes on demand.
+  if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
   const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
   return {
     type: 'transition',

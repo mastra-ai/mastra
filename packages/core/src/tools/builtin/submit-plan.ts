@@ -91,6 +91,7 @@ export const submitPlanTool = createTool({
               title: resumeData.title,
               path: resumeData.path,
               plan: resumeData.plan,
+              action: 'approved',
             },
           };
         }
@@ -104,6 +105,7 @@ export const submitPlanTool = createTool({
               title: resumeData.title,
               path: resumeData.path,
               plan: resumeData.plan,
+              action: 'rejected',
               feedback: resumeData.feedback,
             },
           };
@@ -120,6 +122,7 @@ export const submitPlanTool = createTool({
             title: resumeData.title,
             path: resumeData.path,
             plan: resumeData.plan,
+            action: 'rejected',
           },
         };
       }
