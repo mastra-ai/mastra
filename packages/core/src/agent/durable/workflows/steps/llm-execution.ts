@@ -421,7 +421,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // errors away from processors (#21738) — durable is immune by
       // construction, don't port that guard here.
       let lastError: Error | undefined;
-      let processorRetryCount = 0;
       const maxProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries: typedInput.options?.maxProcessorRetries,
         hasErrorProcessors: Boolean(globalRunRegistry.get(runId)?.errorProcessors?.length),
@@ -439,10 +438,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // Processor retries are read from the step history: each rejected step is recorded with
       // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
+      // API-error retries happen inside this step and add to the same count, as in Agent.
       const previousSteps = inputData.accumulatedSteps ?? [];
-      let currentProcessorRetryCount = 0;
+      let processorRetryCount = 0;
       for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
-        currentProcessorRetryCount++;
+        processorRetryCount++;
       }
       const lastStep = previousSteps.at(-1);
       const processorRetryFeedback = lastStep?.finishReason === 'retry' ? lastStep.tripwire?.reason : undefined;
@@ -619,7 +619,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   activeTools: currentActiveTools,
                   modelSettings: currentModelSettings,
                   structuredOutput: structuredOutput as any,
-                  retryCount: currentProcessorRetryCount,
+                  retryCount: processorRetryCount,
                   abortSignal: executionAbortSignal,
                   writer: inputStepWriter,
                 });
@@ -861,7 +861,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: inputData.accumulatedSteps ?? [],
-                  retryCount: currentProcessorRetryCount,
+                  retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
@@ -1435,7 +1435,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         result: resultPayload.result,
                         providerExecuted: resultProviderExecuted,
                         requestContext,
-                        retryCount: currentProcessorRetryCount,
+                        retryCount: processorRetryCount,
                         tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                         writer: toolResultChunkWriter,
                         abortSignal: executionAbortSignal,
@@ -2005,7 +2005,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   request,
                   rawResponse,
                   fromCache: false,
-                  retryCount: currentProcessorRetryCount,
+                  retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
@@ -2126,7 +2126,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
-                  retryCount: currentProcessorRetryCount,
+                  retryCount: processorRetryCount,
                 });
               } catch (error) {
                 // No tripwire chunk here: the stream reader closes on one, which would drop
@@ -2139,7 +2139,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const retryRequested = processOutputStepTripwire?.options?.retry === true;
             const canRetry =
               typedInput.options?.maxProcessorRetries !== undefined &&
-              currentProcessorRetryCount < typedInput.options.maxProcessorRetries;
+              processorRetryCount < typedInput.options.maxProcessorRetries;
             const shouldRetry = retryRequested && canRetry;
 
             // Remove the rejected response so the retry doesn't send it back to the model.
