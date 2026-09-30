@@ -88,6 +88,7 @@ export async function createSharedAgent(
     | 'defaultOptions'
     | 'pubsub'
     | 'engine'
+    | 'inputProcessors'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
   return buildScenarioAgent({ llm, ...opts });
