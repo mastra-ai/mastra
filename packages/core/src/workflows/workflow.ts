@@ -3909,6 +3909,36 @@ export class Run<
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
+  protected async _resolveTimetravelInputData(inputData: unknown, steps: string[]) {
+    if (steps.length !== 1) {
+      return inputData;
+    }
+    const step = this.workflowSteps[steps[0]!]!;
+    // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
+    const isForeachEntry = this.executionGraph.steps.some(
+      entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
+    );
+    if (isForeachEntry && this.validateInputs && inputData !== undefined) {
+      if (!Array.isArray(inputData)) {
+        throw new MastraError({
+          category: ErrorCategory.USER,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+          text: 'Invalid inputData: \n- : Expected an array for foreach step',
+          details: { type: 'inputData' },
+        });
+      }
+      if (!step?.inputSchema) {
+        return inputData;
+      }
+      return Promise.all(inputData.map(item => this._validateTimetravelInputData(item, step)));
+    }
+    if (!inputData) {
+      return inputData;
+    }
+    return this._validateTimetravelInputData(inputData, step);
+  }
+
   protected async _start(
     {
       inputData,
@@ -5328,33 +5358,7 @@ export class Run<
       typeof step === 'string' ? step : step?.id,
     );
 
-    let inputDataToUse = inputData;
-
-    if (steps.length === 1) {
-      const step = this.workflowSteps[steps[0]!]!;
-      // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
-      const isForeachEntry = this.executionGraph.steps.some(
-        entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
-      );
-      if (isForeachEntry && this.validateInputs && inputData !== undefined) {
-        if (!Array.isArray(inputData)) {
-          throw new MastraError({
-            category: ErrorCategory.USER,
-            domain: ErrorDomain.MASTRA_WORKFLOW,
-            id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
-            text: 'Invalid inputData: \n- : Expected an array for foreach step',
-            details: { type: 'inputData' },
-          });
-        }
-        if (step?.inputSchema) {
-          inputDataToUse = (await Promise.all(
-            inputData.map(item => this._validateTimetravelInputData(item, step)),
-          )) as typeof inputData;
-        }
-      } else if (inputDataToUse) {
-        inputDataToUse = await this._validateTimetravelInputData(inputData, step);
-      }
-    }
+    const inputDataToUse = (await this._resolveTimetravelInputData(inputData, steps)) as typeof inputData;
 
     const timeTravelData = createTimeTravelExecutionParams({
       steps,
