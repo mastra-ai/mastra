@@ -277,7 +277,7 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
   });
 
-  it('should use the configured validator for hydrated tool input', async () => {
+  it('should lazily cache the configured validator for hydrated tool input', async () => {
     const validate = vi.fn((input: unknown) => {
       if (typeof input === 'object' && input !== null && 'city' in input && typeof input.city === 'string') {
         return { valid: true as const, data: input };
@@ -292,21 +292,25 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
         jsonSchemaValidator: customValidator,
       },
     });
-    const tool = client.toolFromDefinition({
-      definition: {
-        name: 'weather',
-        inputSchema: {
-          type: 'object',
-          properties: { city: { type: 'string' } },
-          required: ['city'],
-          additionalProperties: false,
-        },
-        server: { name: 'hydrated-input-validator-client' },
+    const definition = {
+      name: 'weather',
+      inputSchema: {
+        type: 'object' as const,
+        properties: { city: { type: 'string' as const } },
+        required: ['city'],
+        additionalProperties: false,
       },
-    });
+      server: { name: 'hydrated-input-validator-client' },
+    };
+    const tool = client.toolFromDefinition({ definition });
+    const duplicateTool = client.toolFromDefinition({ definition: structuredClone(definition) });
 
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
     await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toEqual({
       value: { city: 'Utrecht' },
+    });
+    await expect(Promise.resolve(duplicateTool.inputSchema?.['~standard'].validate({ city: 'Leiden' }))).resolves.toEqual({
+      value: { city: 'Leiden' },
     });
     await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
       issues: [{ message: 'city must be a string' }],
@@ -319,6 +323,35 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       required: ['city'],
       additionalProperties: false,
     });
+  });
+
+  it('should report validator compilation errors during input validation', async () => {
+    const customValidator = {
+      getValidator: vi.fn(() => {
+        throw new Error("can't resolve reference missing-schema");
+      }),
+    };
+    const client = new InternalMastraMCPClient({
+      name: 'invalid-input-schema-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'invalid-schema',
+        inputSchema: { $ref: '#/$defs/missing-schema' },
+        server: { name: 'invalid-input-schema-client' },
+      },
+    });
+
+    expect(customValidator.getValidator).not.toHaveBeenCalled();
+    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({}))).resolves.toEqual({
+      issues: [{ message: "Schema validation error: can't resolve reference missing-schema" }],
+    });
+    expect(customValidator.getValidator).toHaveBeenCalledOnce();
   });
 
   it('should use the configured validator for hydrated tool output', async () => {

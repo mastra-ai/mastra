@@ -161,6 +161,19 @@ function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
   if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
   return toJsonSchema2020(schema) ?? schema;
 }
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([first], [second]) => (first < second ? -1 : first > second ? 1 : 0))
+      .map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
 
@@ -429,6 +442,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
   private jsonSchemaValidator?: jsonSchemaValidator;
+  private readonly inputSchemaValidators = new Map<string, ReturnType<jsonSchemaValidator['getValidator']>>();
 
   /** Provides access to resource operations (list, read, notifications) */
   public readonly resources: ResourceClientActions;
@@ -1258,6 +1272,16 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.jsonSchemaValidator;
   }
 
+  private getInputSchemaValidator(schema: JSONSchema7): ReturnType<jsonSchemaValidator['getValidator']> {
+    const cacheKey = canonicalJson(schema);
+    const cachedValidator = this.inputSchemaValidators.get(cacheKey);
+    if (cachedValidator) return cachedValidator;
+
+    const validator = this.getJsonSchemaValidator().getValidator(schema);
+    this.inputSchemaValidators.set(cacheKey, validator);
+    return validator;
+  }
+
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
     const standardSchema = toStandardSchema(schema);
@@ -1271,15 +1295,19 @@ export class InternalMastraMCPClient extends MastraBase {
       };
     }
 
-    const validateInput = this.getJsonSchemaValidator().getValidator(schema);
     return {
       '~standard': {
         ...standardSchema['~standard'],
         validate: value => {
-          const result = validateInput(value);
-          return result.valid
-            ? { value: result.data }
-            : { issues: [{ message: result.errorMessage || 'JSON Schema validation failed' }] };
+          try {
+            const result = this.getInputSchemaValidator(schema)(value);
+            return result.valid
+              ? { value: result.data }
+              : { issues: [{ message: result.errorMessage || 'JSON Schema validation failed' }] };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return { issues: [{ message: `Schema validation error: ${message}` }] };
+          }
         },
       },
     };
