@@ -1,14 +1,22 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { describeSchemaType, getSchemaFields, isEmptySchema, isObjectSchema } from '../utils/get-schema-fields';
+import {
+  describeSchemaType,
+  getSchemaFields,
+  isDictionarySchema,
+  isEmptySchema,
+  isObjectSchema,
+} from '../utils/get-schema-fields';
 import { ToolSchemaFieldRow } from './tool-schema-field-row';
 
 export interface ToolSchemaFieldsProps {
   schema: unknown;
   /** Shown when there is no schema, or an object schema has no fields. */
   emptyMessage: string;
+  /** Mark defaulted fields optional; set for schemas the caller fills in (input, request context). */
+  defaultsAreOptional?: boolean;
 }
 
-export function ToolSchemaFields({ schema, emptyMessage }: ToolSchemaFieldsProps) {
+export function ToolSchemaFields({ schema, emptyMessage, defaultsAreOptional }: ToolSchemaFieldsProps) {
   if (isEmptySchema(schema)) {
     return (
       <Txt variant="caption" tone="muted">
@@ -17,7 +25,8 @@ export function ToolSchemaFields({ schema, emptyMessage }: ToolSchemaFieldsProps
     );
   }
 
-  if (!isObjectSchema(schema)) {
+  // A dictionary has no named fields, so it reads as its type, e.g. `Record<string, string>`.
+  if (!isObjectSchema(schema) || isDictionarySchema(schema)) {
     return (
       <Txt variant="caption" tone="muted">
         Type{' '}
@@ -28,7 +37,7 @@ export function ToolSchemaFields({ schema, emptyMessage }: ToolSchemaFieldsProps
     );
   }
 
-  const fields = getSchemaFields(schema);
+  const fields = getSchemaFields(schema, { defaultsAreOptional });
   if (fields.length === 0) {
     return (
       <Txt variant="caption" tone="muted">

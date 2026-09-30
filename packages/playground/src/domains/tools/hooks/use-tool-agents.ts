@@ -7,7 +7,7 @@ export interface ToolAgent {
 
 /** Agents that have this tool, with `currentAgentId` (the agent the page was opened from) first. */
 export function useToolAgents(toolId: string, currentAgentId?: string) {
-  const { data: agents = {}, isLoading } = useAgents();
+  const { data: agents = {}, isLoading, isError } = useAgents();
 
   const toolAgents: ToolAgent[] = Object.entries(agents)
     .filter(([, agent]) => Object.values(agent.tools ?? {}).some(tool => tool.id === toolId))
@@ -18,5 +18,5 @@ export function useToolAgents(toolId: string, currentAgentId?: string) {
     ...toolAgents.filter(agent => agent.id !== currentAgentId),
   ];
 
-  return { agents: sortedAgents, isLoading };
+  return { agents: sortedAgents, isLoading, isError };
 }

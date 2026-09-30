@@ -15,14 +15,18 @@ export function ToolOverview({ inputSchema, outputSchema, requestContextSchema, 
     <div className="grid content-start items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
       <div className="grid min-w-0 gap-4">
         <SectionCard title="Input" description="What the tool expects when it's called.">
-          <ToolSchemaFields schema={inputSchema} emptyMessage="This tool takes no input." />
+          <ToolSchemaFields schema={inputSchema} emptyMessage="This tool takes no input." defaultsAreOptional />
         </SectionCard>
         <SectionCard title="Output" description="What the tool returns.">
           <ToolSchemaFields schema={outputSchema} emptyMessage="No output schema defined." />
         </SectionCard>
         {requestContextSchema !== undefined && (
           <SectionCard title="Request context" description="Runtime values the tool reads, like the current user.">
-            <ToolSchemaFields schema={requestContextSchema} emptyMessage="No request context fields." />
+            <ToolSchemaFields
+              schema={requestContextSchema}
+              emptyMessage="No request context fields."
+              defaultsAreOptional
+            />
           </SectionCard>
         )}
       </div>

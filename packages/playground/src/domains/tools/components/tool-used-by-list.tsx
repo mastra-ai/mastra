@@ -10,9 +10,18 @@ export interface ToolUsedByListProps {
 }
 
 export function ToolUsedByList({ toolId, currentAgentId }: ToolUsedByListProps) {
-  const { agents, isLoading } = useToolAgents(toolId, currentAgentId);
+  const { agents, isLoading, isError } = useToolAgents(toolId, currentAgentId);
 
   if (isLoading) return <Skeleton className="h-8 w-full" />;
+
+  // Checked before the empty state: a failed request says nothing about which agents use the tool.
+  if (isError) {
+    return (
+      <Txt variant="caption" tone="muted">
+        Couldn't load the agents that use this tool.
+      </Txt>
+    );
+  }
 
   if (agents.length === 0) {
     return (

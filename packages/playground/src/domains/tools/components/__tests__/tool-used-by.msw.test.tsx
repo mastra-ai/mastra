@@ -58,4 +58,14 @@ describe('ToolUsedBy', () => {
       expect(await screen.findByText('No agents use this tool.')).not.toBeNull();
     });
   });
+
+  describe('when the agents request fails', () => {
+    it('says the agents could not be loaded instead of claiming none use the tool', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+      renderUsedBy();
+
+      expect(await screen.findByText("Couldn't load the agents that use this tool.")).not.toBeNull();
+      expect(screen.queryByText('No agents use this tool.')).toBeNull();
+    });
+  });
 });

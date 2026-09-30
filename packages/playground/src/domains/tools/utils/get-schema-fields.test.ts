@@ -21,14 +21,22 @@ describe('getSchemaFields', () => {
   });
 
   describe('when a required field has a default', () => {
-    it('treats the field as optional', () => {
-      const [field] = getSchemaFields({
-        type: 'object',
-        properties: { userId: { type: 'string', default: 'default-user-id' } },
-        required: ['userId'],
-      });
+    const schema = {
+      type: 'object',
+      properties: { userId: { type: 'string', default: 'default-user-id' } },
+      required: ['userId'],
+    };
+
+    it('treats the field as optional for a schema the caller fills in', () => {
+      const [field] = getSchemaFields(schema, { defaultsAreOptional: true });
 
       expect(field?.required).toBe(false);
+    });
+
+    it('keeps the field required for an output schema', () => {
+      const [field] = getSchemaFields(schema);
+
+      expect(field?.required).toBe(true);
     });
   });
 
@@ -49,6 +57,14 @@ describe('describeSchemaType', () => {
   describe('when the schema is an enum', () => {
     it('lists the allowed values', () => {
       expect(describeSchemaType({ type: 'string', enum: ['mild', 'hot'] })).toBe('"mild" | "hot"');
+    });
+  });
+
+  describe('when the schema is a dictionary', () => {
+    it('describes the entry type', () => {
+      expect(describeSchemaType({ type: 'object', additionalProperties: { type: 'string' } })).toBe(
+        'Record<string, string>',
+      );
     });
   });
 
