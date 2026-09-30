@@ -272,7 +272,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
       const mediaType = attachments[0]!.mediaType;
       return abort(
         workspace
-          ? `Attachments of type "${mediaType}" require a writable workspace, but this agent's workspace has no writable filesystem or sandbox`
+          ? `Attachments of type "${mediaType}" require a writable workspace, but this agent's workspace has no writable filesystem or sandbox supporting writeFiles. Add a writable filesystem to the workspace`
           : `Attachments of type "${mediaType}" are not supported by the model and require a workspace, but none is configured for this agent`,
         { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType } },
       );
