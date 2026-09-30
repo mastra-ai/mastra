@@ -121,7 +121,12 @@ describe('client-file generation', () => {
     expect(await readFile(join(directory, 'generated.ts'), 'utf8')).toBe(source);
     const log = await events();
     expect(log.filter(item => item.event === 'call')).toHaveLength(0);
-    expect(log.filter(item => item.event === 'exit')).toHaveLength(2);
+    // Negotiated connects probe `server/discover` on a disposable sibling process per
+    // connection, so count spawns instead of hard-coding how many the client opens.
+    const spawned = log.filter(item => item.event === 'start').map(item => item.pid);
+    const exited = new Set(log.filter(item => item.event === 'exit').map(item => item.pid));
+    expect(spawned.length).toBeGreaterThanOrEqual(2);
+    expect(spawned.filter(pid => !exited.has(pid))).toEqual([]);
   });
 
   it.each(['fail', 'invalid', 'stall'])('preserves all outputs and cleans up on %s', async mode => {
