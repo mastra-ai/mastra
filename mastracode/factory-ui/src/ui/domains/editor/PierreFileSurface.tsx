@@ -1,7 +1,6 @@
 import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
 import { preloadHighlighter, registerCustomTheme } from '@pierre/diffs';
-import { normalizeTheme } from 'shiki/core';
 import {
   Editor,
   type EditorChange,
@@ -112,17 +111,16 @@ function ensureThemesRegistered(): void {
     'pierre-dark-tritanopia': () => import('@pierre/theme/pierre-dark-tritanopia'),
   };
   for (const name of PIERRE_THEMES) {
-    // `registerCustomTheme` wants a loader that resolves a theme registration
-    // Shiki can consume. `@pierre/theme` exposes a raw VS Code / TextMate JSON
-    // as its default export, which Shiki requires us to run through
-    // `normalizeTheme` (matching the wrapper `@pierre/theming/createTheme`
-    // uses internally). Without normalization Shiki silently rejects the
-    // theme and the file renders as plain text.
-    registerCustomTheme(name, async () => {
-      const mod = await loaders[name]!();
-      const raw = mod.default as Parameters<typeof normalizeTheme>[0];
-      return normalizeTheme(raw) as never;
-    });
+    // Pierre's `registerCustomTheme` internally wraps loaders with
+    // `createTheme` from `@pierre/theming`, which pipes the loader's result
+    // through `unwrapDefault(...)` and `normalizeTheme(...)` before caching.
+    // So the correct thing to hand it is the module object as-returned by
+    // Vite's dynamic import — Pierre will unwrap `.default` and normalize
+    // the raw VS Code / TextMate JSON itself. Doing normalization on our
+    // side (previous code) double-normalizes and mutates the object shape
+    // Pierre expects at cache time, which manifested in-browser as themes
+    // registered but never producing coloured spans in the shadow DOM.
+    registerCustomTheme(name, (() => loaders[name]!()) as never);
   }
 }
 ensureThemesRegistered();
