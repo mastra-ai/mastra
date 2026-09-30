@@ -30,6 +30,7 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import * as jsonSchemaValidatorModule from '@modelcontextprotocol/client/validators/ajv';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
@@ -428,7 +429,6 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
   private jsonSchemaValidator?: jsonSchemaValidator;
-  private jsonSchemaValidatorPromise?: Promise<jsonSchemaValidator>;
 
   /** Provides access to resource operations (list, read, notifications) */
   public readonly resources: ResourceClientActions;
@@ -1246,13 +1246,15 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  private async getJsonSchemaValidator(): Promise<jsonSchemaValidator> {
-    if (this.jsonSchemaValidator) return this.jsonSchemaValidator;
-
-    this.jsonSchemaValidatorPromise ??= import('@modelcontextprotocol/client/validators/ajv').then(
-      ({ AjvJsonSchemaValidator }) => new AjvJsonSchemaValidator(),
-    );
-    this.jsonSchemaValidator = await this.jsonSchemaValidatorPromise;
+  private getJsonSchemaValidator(): jsonSchemaValidator {
+    if (!this.jsonSchemaValidator) {
+      const validators = jsonSchemaValidatorModule as unknown as {
+        AjvJsonSchemaValidator?: new () => jsonSchemaValidator;
+        CfWorkerJsonSchemaValidator?: new () => jsonSchemaValidator;
+      };
+      const ValidatorClass = (validators.AjvJsonSchemaValidator ?? validators.CfWorkerJsonSchemaValidator)!;
+      this.jsonSchemaValidator = new ValidatorClass();
+    }
     return this.jsonSchemaValidator;
   }
 
@@ -1260,12 +1262,25 @@ export class InternalMastraMCPClient extends MastraBase {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
     const standardSchema = toStandardSchema(schema);
     const complexityError = getJsonSchemaComplexityError(schema);
-    if (!complexityError) return standardSchema;
+    if (complexityError) {
+      return {
+        '~standard': {
+          ...standardSchema['~standard'],
+          validate: () => ({ issues: [{ message: complexityError }] }),
+        },
+      };
+    }
 
+    const validateInput = this.getJsonSchemaValidator().getValidator(schema);
     return {
       '~standard': {
         ...standardSchema['~standard'],
-        validate: () => ({ issues: [{ message: complexityError }] }),
+        validate: value => {
+          const result = validateInput(value);
+          return result.valid
+            ? { value: result.data }
+            : { issues: [{ message: result.errorMessage || 'JSON Schema validation failed' }] };
+        },
       },
     };
   }
@@ -1441,7 +1456,7 @@ export class InternalMastraMCPClient extends MastraBase {
           });
         }
         if (!outputValidationSchema) {
-          const validator = (await this.getJsonSchemaValidator()).getValidator(outputSchema);
+          const validator = this.getJsonSchemaValidator().getValidator(outputSchema);
           const standardSchema = toStandardSchema(outputSchema)['~standard'];
           outputValidationSchema = {
             '~standard': {

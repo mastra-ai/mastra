@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { builtinModules } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
 import { join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
@@ -11,6 +11,8 @@ import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 const nodeBuiltins = new Set(builtinModules);
+const mcpAjvValidatorSpecifier = '@modelcontextprotocol/client/validators/ajv';
+const mcpCfWorkerValidatorSpecifier = '@modelcontextprotocol/client/validators/cf-worker';
 
 /**
  * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
@@ -200,6 +202,7 @@ export default { createRequire };
         'readable-stream': `./${readableStreamStubPath}`,
         module: `./${moduleStubPath}`,
         'node:module': `./${moduleStubPath}`,
+        [mcpAjvValidatorSpecifier]: mcpCfWorkerValidatorSpecifier,
         ...userAlias,
       },
     };
@@ -311,12 +314,36 @@ try {
     return inputOptions;
   }
 
+  private getMcpValidatorAlias(projectRoot: string): Record<string, string> {
+    try {
+      const projectRequire = createRequire(join(projectRoot, 'package.json'));
+      const mcpPackagePath = projectRequire.resolve('@mastra/mcp/package.json');
+      const mcpRequire = createRequire(mcpPackagePath);
+
+      return {
+        [mcpAjvValidatorSpecifier]: mcpRequire.resolve(mcpCfWorkerValidatorSpecifier),
+      };
+    } catch {
+      return {};
+    }
+  }
+
   async bundle(
     entryFile: string,
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
+    return this._bundle(
+      this.getEntry(),
+      entryFile,
+      {
+        outputDirectory,
+        projectRoot,
+        enableEsmShim: false,
+        alias: this.getMcpValidatorAlias(projectRoot),
+      },
+      toolsPaths,
+    );
   }
 
   async deploy(): Promise<void> {

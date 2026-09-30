@@ -43,6 +43,54 @@ describe('CloudflareDeployer', () => {
     });
   });
 
+  describe('MCP JSON Schema validator compatibility', () => {
+    it('uses the Workers validator during Mastra bundling', async () => {
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+      // @ts-expect-error - accessing protected method for testing
+      const bundle = vi.spyOn(deployer, '_bundle').mockResolvedValue(undefined);
+      vi.spyOn(deployer as any, 'getMcpValidatorAlias').mockReturnValue({
+        '@modelcontextprotocol/client/validators/ajv': '/resolved/validators/cfWorker.js',
+      });
+
+      await deployer.bundle(join(tempDir, 'src', 'mastra', 'index.ts'), tempDir, {
+        toolsPaths: [],
+        projectRoot: tempDir,
+      });
+
+      expect(bundle).toHaveBeenCalledWith(
+        expect.any(String),
+        join(tempDir, 'src', 'mastra', 'index.ts'),
+        expect.objectContaining({
+          alias: {
+            '@modelcontextprotocol/client/validators/ajv': '/resolved/validators/cfWorker.js',
+          },
+        }),
+        [],
+      );
+    });
+
+    it('writes the Workers validator alias to Wrangler configuration', async () => {
+      const outputDirectory = join(tempDir, '.mastra');
+      await mkdir(join(outputDirectory, 'output'), { recursive: true });
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+      vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+      await deployer.writeFiles(outputDirectory);
+
+      const outputConfig = JSON.parse(await readFile(join(outputDirectory, 'output', 'wrangler.json'), 'utf-8'));
+      const rootConfig = JSON.parse(
+        (await readFile(join(tempDir, 'wrangler.jsonc'), 'utf-8')).replace(/\/\*[\s\S]*?\*\//, ''),
+      );
+
+      expect(outputConfig.alias['@modelcontextprotocol/client/validators/ajv']).toBe(
+        '@modelcontextprotocol/client/validators/cf-worker',
+      );
+      expect(rootConfig.alias['@modelcontextprotocol/client/validators/ajv']).toBe(
+        '@modelcontextprotocol/client/validators/cf-worker',
+      );
+    });
+  });
+
   describe('writeFiles', () => {
     describe('environment variable handling', () => {
       it('should exclude .env variables from wrangler config vars', async () => {

@@ -22,6 +22,7 @@
     "@mastra/deployer-cloudflare": "deployers-e2e-test",
     "@mastra/pg": "deployers-e2e-test",
     "@mastra/loggers": "deployers-e2e-test",
+    "@mastra/mcp": "deployers-e2e-test",
     "zod": "^3.25.76"
   },
   "devDependencies": {

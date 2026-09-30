@@ -277,13 +277,61 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     expect(sdkClient._jsonSchemaValidator).toBe(customValidator);
   });
 
+  it('should use the configured validator for hydrated tool input', async () => {
+    const validate = vi.fn((input: unknown) => {
+      if (typeof input === 'object' && input !== null && 'city' in input && typeof input.city === 'string') {
+        return { valid: true as const, data: input };
+      }
+      return { valid: false as const, errorMessage: 'city must be a string' };
+    });
+    const customValidator = { getValidator: vi.fn(() => validate) };
+    const client = new InternalMastraMCPClient({
+      name: 'hydrated-input-validator-client',
+      server: {
+        url: new URL('http://127.0.0.1:0/mcp'),
+        jsonSchemaValidator: customValidator,
+      },
+    });
+    const tool = client.toolFromDefinition({
+      definition: {
+        name: 'weather',
+        inputSchema: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+          additionalProperties: false,
+        },
+        server: { name: 'hydrated-input-validator-client' },
+      },
+    });
+
+    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 'Utrecht' }))).resolves.toEqual({
+      value: { city: 'Utrecht' },
+    });
+    await expect(Promise.resolve(tool.inputSchema?.['~standard'].validate({ city: 42 }))).resolves.toEqual({
+      issues: [{ message: 'city must be a string' }],
+    });
+    expect(customValidator.getValidator).toHaveBeenCalledOnce();
+    expect(customValidator.getValidator).toHaveBeenCalledWith({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: { city: { type: 'string' } },
+      required: ['city'],
+      additionalProperties: false,
+    });
+  });
+
   it('should use the configured validator for hydrated tool output', async () => {
     const validate = vi.fn((input: unknown) => ({
       valid: input === 'valid',
       data: input === 'valid' ? input : undefined,
       errorMessage: input === 'valid' ? undefined : 'expected valid',
     }));
-    const customValidator = { getValidator: vi.fn(() => validate) };
+    const customValidator = {
+      getValidator: vi.fn((schema: { type?: string }) =>
+        schema.type === 'string' ? validate : (input: unknown) => ({ valid: true as const, data: input }),
+      ),
+    };
     const client = new InternalMastraMCPClient({
       name: 'hydrated-validator-client',
       server: {
@@ -320,7 +368,9 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
   });
 
   it('should not validate structuredContent from an error result', async () => {
-    const customValidator = { getValidator: vi.fn() };
+    const customValidator = {
+      getValidator: vi.fn(() => (input: unknown) => ({ valid: true as const, data: input })),
+    };
     const client = new InternalMastraMCPClient({
       name: 'error-result-validator-client',
       server: {
@@ -347,7 +397,11 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
     });
 
     await expect(tool.execute?.({})).resolves.toBe(42);
-    expect(customValidator.getValidator).not.toHaveBeenCalled();
+    expect(customValidator.getValidator).toHaveBeenCalledOnce();
+    expect(customValidator.getValidator).not.toHaveBeenCalledWith({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'string',
+    });
   });
   it('should leave the SDK Client default validator in place when omitted', () => {
     const client = new InternalMastraMCPClient({

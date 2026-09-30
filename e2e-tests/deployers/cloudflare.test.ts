@@ -17,8 +17,7 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-cloudflare-deployer-test-${pkgManager}-`));
-      process.env.pnpm_config_registry = registry;
-      await setupDeployerProject(fixturePath, tag, pkgManager, 'cloudflare');
+      await setupDeployerProject(fixturePath, tag, pkgManager, 'cloudflare', registry);
     },
     10 * 60 * 1000,
   );
@@ -43,6 +42,35 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(Object.keys(body)).toEqual(['weatherTool']);
+    });
+
+    it('should validate hydrated MCP tool input without dynamic code generation', async () => {
+      const res = await fetch(`http://localhost:${port}/mcp-input-validation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ city: 'Utrecht' }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ valid: true, value: { city: 'Utrecht' } });
+    });
+
+    it('should reject invalid hydrated MCP tool input', async () => {
+      const invalidType = await fetch(`http://localhost:${port}/mcp-input-validation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ city: 42 }),
+      });
+      const unexpectedProperty = await fetch(`http://localhost:${port}/mcp-input-validation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ city: 'Utrecht', country: 'NL' }),
+      });
+
+      expect(invalidType.status).toBe(400);
+      expect(unexpectedProperty.status).toBe(400);
+      expect(await invalidType.json()).toMatchObject({ valid: false, issues: expect.any(Array) });
+      expect(await unexpectedProperty.json()).toMatchObject({ valid: false, issues: expect.any(Array) });
     });
   }
 
