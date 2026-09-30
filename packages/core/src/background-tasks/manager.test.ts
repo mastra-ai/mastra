@@ -5,6 +5,7 @@ import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
+import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -2024,6 +2025,13 @@ describe('BackgroundTaskManager', () => {
       });
 
       abortController.abort();
+    });
+
+    it('drops nested output past the wrapper depth limit instead of publishing it unslimmed', () => {
+      const leaf = { type: 'step-start', payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } } };
+      let chunk: unknown = leaf;
+      for (let i = 0; i < 30; i++) chunk = { type: 'tool-output', payload: { output: chunk } };
+      expect(JSON.stringify(slimProgressChunk(chunk)).length).toBeLessThan(5_000);
     });
 
     it('publishes nested agent step/finish chunks without request snapshots or repeated args', async () => {
