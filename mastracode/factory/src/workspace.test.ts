@@ -2384,6 +2384,30 @@ describe('GitHub session workspace preparation', () => {
     await expect(tool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
   });
 
+  it('rejects deferred refresh access after the session workspace is retired and recreated', async () => {
+    mocks.githubPat = 'ghp_original';
+    const registry = new FactoryWorkspaceRegistry();
+    const { resolver, github } = await createLocalFactory('mastracode-web-local-retired-refresh-', registry);
+    addProject();
+    addSession({ id: 'session-a' });
+    const retiredContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    await resolver({ requestContext: retiredContext });
+    const retiredTool = createGithubSubscriptionTools(retiredContext, integration).github_refresh_token!;
+    await registry.invalidateSession('session-a');
+
+    const replacementContext = createGithubRequestContext('project-1', 'session-a');
+    const replacementWorkspace = await resolver({ requestContext: replacementContext });
+    await replacementWorkspace.sandbox.getInfo();
+    mocks.githubPat = 'ghp_replaced';
+    const replacementTool = createGithubSubscriptionTools(replacementContext, integration).github_refresh_token!;
+
+    await expect(retiredTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+    expect(await replacementTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+  });
+
   it('does not offer refresh to a chat-only session', async () => {
     const { resolver, github } = await createLocalFactory();
     const requestContext = createGithubRequestContext('project-1', 'chat-only');

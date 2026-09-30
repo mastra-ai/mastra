@@ -724,6 +724,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         registerGithubTokenContext(registered);
       } else {
         registerGithubTokenInjectorResolver(requestContext, () => {
+          if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+            throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+          }
           const active = githubTokenInjectors.get(workspaceId);
           if (!active) {
             throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
