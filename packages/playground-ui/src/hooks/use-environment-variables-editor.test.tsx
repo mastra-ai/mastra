@@ -78,6 +78,26 @@ describe('useEnvironmentVariablesEditor', () => {
     ]);
   });
 
+  it('treats a single-line KEY=value pasted into a value field as the literal value', () => {
+    const { result } = renderHook(() =>
+      useEnvironmentVariablesEditor({ initialRows: [{ key: 'DATABASE_URL', value: '' }] }),
+    );
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'PGOPTIONS=-c search_path=app', 'value')).toBe(false);
+    });
+    expect(result.current.rows).toEqual([{ key: 'DATABASE_URL', value: '' }]);
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'A=1\nB=2', 'value')).toBe(true);
+    });
+    expect(result.current.rows).toEqual([
+      { key: 'DATABASE_URL', value: '' },
+      { key: 'A', value: '1' },
+      { key: 'B', value: '2' },
+    ]);
+  });
+
   it('tracks dirty rows, reset state, and revealed values independently from the UI', () => {
     const { result } = renderHook(() =>
       useEnvironmentVariablesEditor({
