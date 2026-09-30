@@ -1788,8 +1788,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -1835,15 +1834,21 @@ export class Agent<
     outputProcessorOverrides,
     errorProcessorOverrides,
     processorStates,
+    runWorkspace,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
+    runWorkspace?: { workspace: AnyWorkspace | undefined };
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
-    const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
+    const inputProcessors = await this.listResolvedInputProcessors(
+      requestContext,
+      inputProcessorOverrides,
+      runWorkspace,
+    );
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
     const errorProcessors =
       errorProcessorOverrides ??
@@ -2364,8 +2369,7 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
-      | undefined;
+      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -2767,8 +2771,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -2905,9 +2908,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -2941,6 +2942,7 @@ export class Agent<
         },
         getLLM: this.getLLM.bind(this) as any,
         getMemory: this.getMemory.bind(this),
+        getWorkspace: this.getWorkspace.bind(this),
         convertTools: this.convertTools.bind(this),
         getMemoryMessages: (...args) => this.getMemoryMessages(...args),
         __runInputProcessors: this.__runInputProcessors.bind(this),
@@ -3051,8 +3053,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3095,8 +3096,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -4150,6 +4150,7 @@ export class Agent<
    * @internal
    */
   private async listWorkspaceTools({
+    runWorkspace,
     runId,
     resourceId,
     threadId,
@@ -4168,6 +4169,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
     getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    runWorkspace?: { workspace: AnyWorkspace | undefined };
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -4178,7 +4180,7 @@ export class Agent<
     }
 
     // Get workspace tools if available
-    const workspace = await this.getWorkspace({ requestContext });
+    const workspace = runWorkspace ? runWorkspace.workspace : await this.getWorkspace({ requestContext });
 
     if (!workspace) {
       return convertedWorkspaceTools;
@@ -4243,6 +4245,7 @@ export class Agent<
    * @internal
    */
   private async listSkillTools({
+    runWorkspace,
     runId,
     resourceId,
     threadId,
@@ -4263,6 +4266,7 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     suppressEagerSkillTools: boolean;
     getModel: () => Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
+    runWorkspace?: { workspace: AnyWorkspace | undefined };
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -4271,7 +4275,7 @@ export class Agent<
       return convertedSkillTools;
     }
 
-    const workspace = await this.getWorkspace({ requestContext });
+    const workspace = runWorkspace ? runWorkspace.workspace : await this.getWorkspace({ requestContext });
 
     // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
     const skills = await this.resolveSkills(
@@ -4512,12 +4516,15 @@ export class Agent<
     messageList,
     inputProcessorOverrides,
     processorStates,
+    runWorkspace,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
+    /** Workspace already resolved for this run, so processors and tools share one instance. */
+    runWorkspace?: { workspace: AnyWorkspace | undefined };
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -4543,6 +4550,7 @@ export class Agent<
         requestContext,
         inputProcessorOverrides,
         processorStates,
+        runWorkspace,
       });
       try {
         messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
@@ -4601,6 +4609,8 @@ export class Agent<
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
       providerOptions?: ProviderOptions;
+      /** Workspace already resolved for this run, so processors and tools share one instance. */
+      runWorkspace?: { workspace: AnyWorkspace | undefined };
     },
   ): Promise<{
     messageList: MessageList;
@@ -4626,6 +4636,7 @@ export class Agent<
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
       providerOptions,
+      runWorkspace,
       ...rest
     } = args;
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4637,12 +4648,15 @@ export class Agent<
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
       this.#hasEffectiveMemory(requestContext) ||
-      this.#skills
+      this.#skills ||
+      this.#workspace ||
+      this.#mastra?.getWorkspace()
     ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
         processorStates,
+        runWorkspace,
       });
       try {
         const llm = await this.getLLM({ requestContext });
@@ -6584,6 +6598,7 @@ export class Agent<
     inputProcessors,
     hooks,
     model,
+    runWorkspace,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -6605,6 +6620,8 @@ export class Agent<
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    /** Workspace already resolved for this run, so tools and processors share one instance. */
+    runWorkspace?: { workspace: AnyWorkspace | undefined };
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -6722,6 +6739,7 @@ export class Agent<
     });
 
     const workspaceTools = await this.listWorkspaceTools({
+      runWorkspace,
       runId,
       resourceId,
       threadId,
@@ -6738,6 +6756,7 @@ export class Agent<
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
 
     const skillTools = await this.listSkillTools({
+      runWorkspace,
       runId,
       resourceId,
       threadId,
@@ -7734,8 +7753,7 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -8636,8 +8654,7 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      | AgentExecutionOptions<OUTPUT>
-      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to

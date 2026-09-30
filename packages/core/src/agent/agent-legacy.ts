@@ -3,6 +3,7 @@ import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { AnyWorkspace } from '../workspace';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -92,6 +93,8 @@ export interface AgentLegacyCapabilities {
   getLLM(options: { requestContext: RequestContext; model?: DynamicArgument<MastraModelConfig> }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
+  /** Resolve the workspace for this request */
+  getWorkspace(options: { requestContext: RequestContext }): Promise<AnyWorkspace | undefined>;
   /** Get memory messages (deprecated - use input processors) */
   getMemoryMessages(args: {
     resourceId?: string;
@@ -114,6 +117,7 @@ export interface AgentLegacyCapabilities {
       memoryConfig?: MemoryConfigInternal;
       inputProcessors?: InputProcessorOrWorkflow[];
       hooks?: ToolHooks;
+      runWorkspace?: { workspace: AnyWorkspace | undefined };
     } & ObservabilityContext,
   ): Promise<Record<string, CoreTool>>;
 
@@ -123,6 +127,7 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      runWorkspace?: { workspace: AnyWorkspace | undefined };
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
@@ -148,6 +153,7 @@ export interface AgentLegacyCapabilities {
       autoResumeSuspendedTools?: boolean;
       backgroundTaskEnabled?: boolean;
       providerOptions?: ProviderOptions;
+      runWorkspace?: { workspace: AnyWorkspace | undefined };
     },
   ): Promise<{
     messageList: MessageList;
@@ -312,10 +318,13 @@ export class AgentLegacyHandler {
         const innerObservabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
         const memory = await this.capabilities.getMemory({ requestContext });
+        // Resolve once so processors (e.g. attachment uploads) and workspace tools share one instance.
+        const runWorkspace = { workspace: await this.capabilities.getWorkspace({ requestContext }) };
 
         const threadId = thread?.id;
 
         let convertedTools = await this.capabilities.convertTools({
+          runWorkspace,
           toolsets,
           clientTools,
           threadId,
@@ -365,6 +374,7 @@ export class AgentLegacyHandler {
             ...innerObservabilityContext,
             messageList,
             inputProcessorOverrides: inputProcessors,
+            runWorkspace,
           });
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
@@ -379,6 +389,7 @@ export class AgentLegacyHandler {
               runId,
               threadId,
               resourceId,
+              runWorkspace,
             });
             if (inputStepResult.tools) {
               convertedTools = inputStepResult.tools;
@@ -486,6 +497,7 @@ export class AgentLegacyHandler {
           ...innerObservabilityContext,
           messageList,
           inputProcessorOverrides: inputProcessors,
+          runWorkspace,
         });
         messageList = processedMessageList;
 
@@ -505,6 +517,7 @@ export class AgentLegacyHandler {
             runId,
             threadId,
             resourceId,
+            runWorkspace,
           });
           if (inputStepResult.tools) {
             convertedTools = inputStepResult.tools;

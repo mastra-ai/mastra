@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -284,6 +285,115 @@ describe('WorkspaceAttachmentsProcessor', () => {
       expect(prompts).toHaveLength(0);
       expect((await result.tripwire)?.metadata).toMatchObject({ code: WORKSPACE_REQUIRED_FOR_ATTACHMENT });
       expect(await readdir(basePath)).toEqual([]);
+    });
+  });
+
+  describe('through the legacy generate/stream APIs', () => {
+    const CONTENT = 'hello-sheet';
+    const readFileTool = 'mastra_workspace_read_file';
+
+    // Every factory call returns a workspace over a different directory, so a file written
+    // to one instance is invisible to tools bound to another instance.
+    async function freshInstanceAgent() {
+      const dirs: string[] = [];
+      const factory = vi.fn(async () => {
+        const basePath = await tempDir();
+        dirs.push(basePath);
+        return new Workspace({ filesystem: new LocalFilesystem({ basePath }) });
+      });
+      const prompts: any[] = [];
+      const respond = async ({ prompt }: any) => {
+        prompts.push(prompt);
+        if (prompts.length === 1) {
+          const path = uploadedPath(legacyNoteText(prompt));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { promptTokens: 1, completionTokens: 1 },
+            toolCalls: [
+              {
+                toolCallType: 'function' as const,
+                toolCallId: 'c1',
+                toolName: readFileTool,
+                args: JSON.stringify({ path }),
+              },
+            ],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { promptTokens: 1, completionTokens: 1 },
+          text: 'done',
+        };
+      };
+      const model = new MockLanguageModelV1({
+        doGenerate: respond,
+        doStream: async args => {
+          const result = await respond(args);
+          const chunks: any[] = result.toolCalls
+            ? result.toolCalls.map(call => ({ type: 'tool-call', ...call }))
+            : [{ type: 'text-delta', textDelta: result.text }];
+          chunks.push({ type: 'finish', finishReason: result.finishReason, usage: result.usage });
+          return {
+            rawCall: result.rawCall,
+            stream: new ReadableStream({
+              start(controller) {
+                chunks.forEach(chunk => controller.enqueue(chunk));
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'legacy-agent',
+        name: 'legacy-agent',
+        instructions: 'test',
+        model,
+        workspace: factory as any,
+      });
+      return { agent, prompts, factory };
+    }
+
+    function legacyNoteText(prompt: any[]): string {
+      const note = prompt
+        .filter(m => m.role === 'user')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : []))
+        .find(p => p.type === 'text' && p.text.startsWith('[Attachment'));
+      if (!note) throw new Error(`No attachment note in ${JSON.stringify(prompt)}`);
+      return note.text;
+    }
+    function toolResult(prompt: any[]): string {
+      const part = prompt.filter(m => m.role === 'tool').flatMap(m => m.content)[0];
+      return JSON.stringify(part?.result);
+    }
+    const legacyMessage = {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: 'Summarize this' },
+        {
+          type: 'file' as const,
+          data: Buffer.from(CONTENT).toString('base64'),
+          mimeType: XLSX,
+          filename: 'report.xlsx',
+        },
+      ],
+    };
+
+    it('generateLegacy writes to the workspace instance its tools read from', async () => {
+      const { agent, prompts } = await freshInstanceAgent();
+      await agent.generateLegacy([legacyMessage] as any, { maxSteps: 2 });
+      expect(prompts).toHaveLength(2);
+      expect(toolResult(prompts[1])).toContain(`report.xlsx (${CONTENT.length} bytes`);
+    });
+
+    it('streamLegacy writes to the workspace instance its tools read from', async () => {
+      const { agent, prompts } = await freshInstanceAgent();
+      const result = await agent.streamLegacy([legacyMessage] as any, { maxSteps: 2 });
+      await result.consumeStream();
+      expect(prompts).toHaveLength(2);
+      expect(toolResult(prompts[1])).toContain(`report.xlsx (${CONTENT.length} bytes`);
     });
   });
 
