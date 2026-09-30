@@ -21,6 +21,7 @@ export interface RenderOptions {
   rootTask?: TaskPolicy;
   stepDefaults?: TaskPolicy;
   requestContextKeys?: readonly string[];
+  /** Polling delay in milliseconds, from 10 through Node's maximum timer delay of 2147483647. */
   pollIntervalMs?: number;
   /** Per-coordinator dispatch bound; each nested coordinator has its own limiter. */
   maxConcurrentSteps?: number;
@@ -40,8 +41,11 @@ export class RenderProvider {
   constructor(readonly options: RenderOptions) {
     if (!options.workflowSlug || !options.buildId)
       throw new RenderProtocolError('workflowSlug and buildId are required');
-    if (options.pollIntervalMs !== undefined && options.pollIntervalMs < 10)
-      throw new RenderProtocolError('pollIntervalMs must be at least 10');
+    if (
+      options.pollIntervalMs !== undefined &&
+      (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 10 || options.pollIntervalMs > 2147483647)
+    )
+      throw new RenderProtocolError('pollIntervalMs must be finite and between 10 and 2147483647');
     if (
       options.maxConcurrentSteps !== undefined &&
       (!Number.isInteger(options.maxConcurrentSteps) || options.maxConcurrentSteps < 1)
