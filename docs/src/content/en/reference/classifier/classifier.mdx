@@ -408,16 +408,16 @@ import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
 import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
-export const mastra = new Mastra({
-  classifiers: {
-    safety: new Classifier({
-      id: 'safety',
-      model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
-      questions: {
-        unsafe: { type: 'boolean' },
-      },
-    }),
+export const safety = new Classifier({
+  id: 'safety',
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  questions: {
+    unsafe: { type: 'boolean' },
   },
+})
+
+export const mastra = new Mastra({
+  classifiers: { safety },
 })
 
 mastra.getClassifier('safety')
@@ -430,6 +430,8 @@ mastra.listClassifiers()
 A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains complete typed `answers` and normalized `usage`.
 
 ```typescript
+import { safety } from './mastra'
+
 const workflow = createWorkflow({
   id: 'ticket-triage',
   inputSchema: z.object({ message: z.string() }),
