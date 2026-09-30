@@ -83,8 +83,6 @@ import type {
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
-import { validateCron } from '../scheduler/cron';
-import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -1716,26 +1714,6 @@ export function createWorkflow<
   >[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
 >(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
-  if (params.schedule) {
-    const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
-    if (Array.isArray(params.schedule)) {
-      const seenIds = new Set<string>();
-      for (const entry of schedules) {
-        if (!entry.id) {
-          throw new Error(
-            `Workflow "${params.id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
-          );
-        }
-        if (seenIds.has(entry.id)) {
-          throw new Error(`Workflow "${params.id}" declares duplicate schedule id "${entry.id}".`);
-        }
-        seenIds.add(entry.id);
-      }
-    }
-    for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
-    }
-  }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1773,27 +1751,9 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  #schedules: WorkflowScheduleConfig[];
-
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
-    if (!params.schedule) {
-      this.#schedules = [];
-    } else if (Array.isArray(params.schedule)) {
-      this.#schedules = params.schedule.map(cfg => ({ ...cfg }));
-    } else {
-      this.#schedules = [{ ...params.schedule }];
-    }
-  }
-
-  /**
-   * Returns the cron schedule configurations declared on this workflow as a
-   * normalized array. Used by the Mastra scheduler to register declarative
-   * schedules at boot. Returns an empty array when no schedule is declared.
-   */
-  getScheduleConfigs(): WorkflowScheduleConfig[] {
-    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   __registerMastra(mastra: Mastra) {
@@ -1848,7 +1808,7 @@ export class EventedWorkflow<
         text:
           `Workflow "${this.id}" runs on the evented execution engine, which advances steps from concurrent workers and therefore requires a storage adapter whose workflows domain applies concurrent updates atomically (\`supportsConcurrentUpdates()\`). ${storageName} storage reports that it does not. ` +
           `Storage adapters that do: @mastra/libsql, @mastra/pg, @mastra/mysql, @mastra/mssql, @mastra/oracledb, @mastra/mongodb, @mastra/dynamodb, @mastra/spanner, @mastra/dsql, @mastra/upstash and @mastra/convex. ` +
-          `A workflow runs on this engine when it declares a \`schedule\`. Durable agents on such a store fall back to the in-process engine with a warning instead of failing here.`,
+          `Workflows created with \`createWorkflow\` from \`@mastra/core/workflows/evented\` run on this engine, as do workflows that declare \`schedule\` while \`MASTRA_WORKERS\` is set. Durable agents on such a store fall back to the in-process engine with a warning instead of failing here.`,
         details: { workflowId: this.id, storage: storageName },
       });
     }

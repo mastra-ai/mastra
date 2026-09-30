@@ -170,6 +170,36 @@ describe('Tracing', () => {
           expect(span.input).toBe(input);
         });
       });
+      it('redacts sensitive keys inside a provider error body recorded as an object', () => {
+        const mockSpan = {
+          id: 'test-span-err',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          errorInfo: {
+            message: 'Unauthorized',
+            name: 'AI_APICallError',
+            details: {
+              statusCode: 401,
+              responseBody: { error: { message: 'bad key', api_key: 'sk-live-123' } },
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = new SensitiveDataFilter().process(mockSpan);
+
+        expect(filtered!.errorInfo?.details?.responseBody).toEqual({
+          error: { message: 'bad key', api_key: '[REDACTED]' },
+        });
+      });
+
       it('should redact default sensitive fields (case-insensitive)', () => {
         const processor = new SensitiveDataFilter();
 

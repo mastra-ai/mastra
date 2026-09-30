@@ -8,7 +8,11 @@ export type MastraConnectErrorCode =
   | 'proxy_error'
   | 'unsupported_credential_type'
   | 'no_active_connection'
-  | 'platform_error';
+  | 'platform_error'
+  // Raised at tool-execute time when the caller supplies a connection_name
+  // that does not match any active connection for the provider. Recovery is
+  // to call `<provider>__list_connections` and retry with a valid name.
+  | 'unknown_connection';
 
 const MAX_DETAIL_LENGTH = 2000;
 
@@ -35,7 +39,7 @@ interface ProblemJson {
   status?: number;
   detail?: string;
   code?: string;
-  error?: string;
+  error?: string | { message?: unknown };
 }
 
 /**
@@ -60,6 +64,13 @@ export async function extractProblemDetail(
         const value = data[field];
         if (typeof value === 'string' && value) {
           return { detail: truncate(value), code, isProblemJson };
+        }
+        // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
+        if (field === 'error' && value && typeof value === 'object') {
+          const message = value.message;
+          if (typeof message === 'string' && message) {
+            return { detail: truncate(message), code, isProblemJson };
+          }
         }
       }
       return { code, isProblemJson };

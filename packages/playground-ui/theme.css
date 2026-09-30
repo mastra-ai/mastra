@@ -36,7 +36,7 @@
   --field: var(--card);
   --field-disabled: var(--fill-subtle);
   --field-rim: var(--surface-rim);
-  --field-rim-focus: var(--surface-rim-focus);
+  --field-rim-focus: var(--border-focus);
   --muted: var(--gray-1);
   --foreground: var(--gray-10);
   /* Supporting text, measured against Linear's sidebar label: `lch(37.78)` light,

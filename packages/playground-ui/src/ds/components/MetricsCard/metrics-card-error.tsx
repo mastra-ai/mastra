@@ -1,3 +1,4 @@
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export function MetricsCardError({
@@ -9,7 +10,9 @@ export function MetricsCardError({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
-      <p className="text-caption text-destructive-indicator">{message}</p>
+      <Txt variant="caption" className="text-destructive-indicator">
+        {message}
+      </Txt>
     </div>
   );
 }

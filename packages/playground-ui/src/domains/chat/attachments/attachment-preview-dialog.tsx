@@ -1,14 +1,7 @@
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-} from '@/ds/components/Dialog';
+import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
 
 interface PdfEntryProps {
   data: string;
@@ -49,10 +42,9 @@ interface PdfPreviewDialogProps {
 export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>PDF preview</DialogTitle>
-          <DialogDescription>Preview of the PDF document</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
       </DialogContent>
@@ -123,10 +115,9 @@ interface ImagePreviewDialogProps {
 export const ImagePreviewDialog = ({ src, open, onOpenChange }: ImagePreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl motion-reduce:animate-none!" overlayClassName="motion-reduce:animate-none!">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Image preview</DialogTitle>
-          <DialogDescription>Preview of the image</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <img src={src} alt="Image" />}</DialogBody>
       </DialogContent>
@@ -181,13 +172,9 @@ interface TxtPreviewDialogProps {
 export const TxtPreviewDialog = ({ data, title, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="h-[80vh] max-w-4xl motion-reduce:animate-none!"
-        overlayClassName="motion-reduce:animate-none!"
-      >
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>{title ?? 'Text preview'}</DialogTitle>
-          <DialogDescription>Preview of the text file</DialogDescription>
         </DialogHeader>
         <DialogBody>{open && <div className="whitespace-pre-wrap">{data}</div>}</DialogBody>
       </DialogContent>

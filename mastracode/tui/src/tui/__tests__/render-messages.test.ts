@@ -10,6 +10,7 @@ import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { NotificationSummaryComponent } from '../components/notification-summary.js';
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
+import { ScheduleFireComponent } from '../components/schedule-fire.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
@@ -1029,6 +1030,70 @@ describe('addUserMessage', () => {
     expect(rendered).toContain('╭ steer ');
   });
 
+  it('renders schedule fires as a system entry with a compact header, even when delivered while active', () => {
+    const state = createState();
+    const output = ['Output of ./check.sh (exit 3):', 'line 1', 'line 2', 'line 3', 'line 4', 'line 5'].join('\n');
+
+    addUserMessage(
+      state,
+      createUserMessage(output, 'signal-1', {
+        source: 'schedule',
+        scheduleId: '0f75d166-0763-4c11-9fdc-9280aa16535c',
+        scheduleCadence: '5m',
+        scheduleSource: 'run ./check.sh',
+        scheduleOutcome: 'exit 3',
+        scheduleCreatedBy: 'agent',
+        delivery: 'while-active',
+      }),
+    );
+
+    const component = state.chatContainer.children[0];
+    expect(component).toBeInstanceOf(ScheduleFireComponent);
+    expect(component).not.toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('signal-1')).toBe(component);
+    expect(state.allToolComponents).toContain(component);
+
+    const collapsed = stripAnsi((component as ScheduleFireComponent).render(100).join('\n'));
+    expect(collapsed).toContain('⏱ schedule 0f75d166 · every 5m · run ./check.sh · exit 3 · created by agent');
+    expect(collapsed).toContain('line 3');
+    expect(collapsed).not.toContain('line 4');
+    expect(collapsed).toContain('… 2 more lines (ctrl+e to expand)');
+    expect(collapsed).not.toContain('steer');
+
+    (component as ScheduleFireComponent).setExpanded(true);
+    const expanded = stripAnsi((component as ScheduleFireComponent).render(100).join('\n'));
+    expect(expanded).toContain('line 5');
+    expect(expanded).not.toContain('more line');
+  });
+
+  it('trims schedule fire prompts to the quiet preview limit in quiet mode', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 1;
+    addUserMessage(
+      state,
+      createUserMessage('first\nsecond\nthird', 'signal-q', { source: 'schedule', scheduleId: 'abcdef1234' }),
+    );
+    const rendered = stripAnsi((state.chatContainer.children[0] as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('⏱ schedule abcdef12');
+    expect(rendered).toContain('first');
+    expect(rendered).not.toContain('second');
+    expect(rendered).toContain('… 2 more lines');
+  });
+
+  it('shows a schedule fire line instead of hiding it behind a one-line hint', () => {
+    const state = createState();
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 0;
+    addUserMessage(
+      state,
+      createUserMessage('test test', 'signal-one', { source: 'schedule', scheduleId: 'abcdef1234' }),
+    );
+    const rendered = stripAnsi((state.chatContainer.children[0] as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('test test');
+    expect(rendered).not.toContain('more line');
+  });
+
   it('confirms pending active signals with the steer label', () => {
     const state = createState();
 
@@ -1152,6 +1217,36 @@ describe('renderExistingMessages signals', () => {
     expect(rendered).toContain('╭ steer ');
     expect(rendered).toContain('continue from history');
     expect(rendered).not.toContain('stale preview');
+  });
+});
+
+describe('renderExistingMessages schedule fires', () => {
+  it('renders reloaded schedule fires from their signal attributes alone', async () => {
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockResolvedValue([
+          createUserMessage('ping', 'schedule-history-1', {
+            source: 'schedule',
+            scheduleId: '0f75d166-0763-4c11-9fdc-9280aa16535c',
+            scheduleCadence: '1h',
+            scheduleSource: '"ping"',
+          }),
+        ]),
+      },
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: { displayState: { get: () => ({ isRunning: false }) } },
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const component = state.chatContainer.children.find(child => child instanceof ScheduleFireComponent);
+    expect(component).toBeDefined();
+    const rendered = stripAnsi((component as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('⏱ schedule 0f75d166 · every 1h · "ping"');
+    expect(rendered).toContain('ping');
   });
 });
 

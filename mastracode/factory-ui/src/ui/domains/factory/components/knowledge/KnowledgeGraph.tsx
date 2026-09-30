@@ -45,7 +45,7 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 
 const RUNG_RING: Record<KnowledgeRung, string> = {
   org: 'border-badge-purple-indicator',
-  resource: 'border-badge-purple-edge',
+  resource: 'border-chart-sequential-4',
   thread: 'border-badge-cyan-indicator',
 };
 

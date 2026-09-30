@@ -1,6 +1,7 @@
 import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -35,7 +36,8 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           <button
             type="button"
             className={cn(
-              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden',
+              'flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-fill-subtle focus-visible:opacity-100',
+              focusRing,
               quietTextHover,
             )}
           >

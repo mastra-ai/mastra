@@ -66,7 +66,7 @@ const DeleteAgentDialog = ({
             undone.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <AlertDialog.Body className="pt-0">
+        <AlertDialog.Body>
           <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
         </AlertDialog.Body>
         <AlertDialog.Footer>
@@ -79,8 +79,6 @@ const DeleteAgentDialog = ({
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
-              // Use a plain button (not AlertDialog.Close) so the dialog stays
-              // open while the request is in flight and on error.
               onConfirm();
             }}
           >

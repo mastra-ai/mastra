@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
@@ -69,7 +69,7 @@ const processGlobals = globalThis as typeof globalThis & {
   [PROCESS_NONCE_KEY]?: string;
   [LEASE_RECOVERY_OWNERS_KEY]?: Set<string>;
 };
-const PROCESS_NONCE = (processGlobals[PROCESS_NONCE_KEY] ??= randomUUID());
+const PROCESS_NONCE = (processGlobals[PROCESS_NONCE_KEY] ??= globalThis.crypto.randomUUID());
 const LIVE_LEASE_RECOVERY_OWNERS = (processGlobals[LEASE_RECOVERY_OWNERS_KEY] ??= new Set());
 
 type FileLeaseRecord = {
@@ -286,7 +286,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly #leaseDirectory: string;
   readonly #leaseMutationDirectory: string;
   readonly #leaseProcessDirectory: string;
-  readonly #leaseRecoveryOwnerToken = randomUUID();
+  readonly #leaseRecoveryOwnerToken = globalThis.crypto.randomUUID();
   #server?: net.Server;
   #clientSocket?: net.Socket;
   #isBroker = false;
@@ -589,14 +589,14 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     const lockRecord: FileLeaseMutationLock = {
       pid: process.pid,
       processNonce: PROCESS_NONCE,
-      token: randomUUID(),
+      token: globalThis.crypto.randomUUID(),
     };
 
     while (true) {
       this.#throwIfClosed();
       await this.#completeLeaseMutationRecoveries(lockPath);
       this.#throwIfClosed();
-      const candidatePath = `${lockPath}.${process.pid}.${randomUUID()}.tmp`;
+      const candidatePath = `${lockPath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
       await writeFile(candidatePath, JSON.stringify(lockRecord), { flag: 'wx' });
       let installed = false;
       try {
@@ -664,9 +664,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   /** Returns a stable generation name for both current and pre-token mutation-lock records. */
-  #leaseMutationLockGeneration(lock: FileLeaseMutationLock): string {
+  async #leaseMutationLockGeneration(lock: FileLeaseMutationLock): Promise<string> {
     if (typeof lock.token === 'string') return lock.token;
-    return createHash('sha256').update(JSON.stringify(lock)).digest('hex');
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(lock)));
+    return Buffer.from(digest).toString('hex');
   }
 
   #leaseMutationRecoveryOwner(): FileLeaseRecoveryOwner {
@@ -696,7 +697,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   async #publishLeaseRecoveryOwner(ownerPath: string, owner: FileLeaseRecoveryOwner): Promise<boolean> {
-    const candidatePath = `${ownerPath}.${process.pid}.${randomUUID()}.tmp`;
+    const candidatePath = `${ownerPath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
     try {
       await writeFile(candidatePath, JSON.stringify(owner), { flag: 'wx' });
       await link(candidatePath, ownerPath);
@@ -767,7 +768,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   /** Creates the immutable recovery marker before electing the generation's recovery owner. */
   async #startLeaseMutationRecovery(lockPath: string, expected: FileLeaseMutationLock): Promise<void> {
     const recoveryDirectory = `${lockPath}.recoveries`;
-    const recoveryPath = join(recoveryDirectory, `${this.#leaseMutationLockGeneration(expected)}.marker`);
+    const recoveryPath = join(recoveryDirectory, `${await this.#leaseMutationLockGeneration(expected)}.marker`);
     await mkdir(recoveryDirectory, { recursive: true });
 
     const current = await this.#readJson<FileLeaseMutationLock>(lockPath);
@@ -789,7 +790,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     const expected = await this.#readJson<FileLeaseMutationLock>(recoveryPath);
     if (
       !expected ||
-      this.#leaseMutationLockGeneration(expected) !== expectedGeneration ||
+      (await this.#leaseMutationLockGeneration(expected)) !== expectedGeneration ||
       !(await this.#isLeaseMutationLockStale(expected))
     ) {
       await this.#removeLeaseMutationRecovery(recoveryPath);
@@ -911,7 +912,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   /** Replaces a JSON file atomically so readers never observe partial contents. */
   async #writeJsonAtomically(path: string, value: unknown): Promise<void> {
-    const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+    const tempPath = `${path}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
     await writeFile(tempPath, JSON.stringify(value), { flag: 'wx' });
     try {
       await rename(tempPath, path);

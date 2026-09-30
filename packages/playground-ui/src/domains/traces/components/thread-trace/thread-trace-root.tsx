@@ -126,7 +126,7 @@ export function ThreadTraceRoot({
           // The span cell always exists and collapses to zero so opening/closing it animates
           // via `grid-template-columns`, like the trace panel's columns.
           'grid h-full min-h-0 transition-[grid-template-columns] duration-300 ease-in-out',
-          selected ? 'grid-cols-[minmax(0,1fr)_40%]' : 'grid-cols-[minmax(0,1fr)_0%]',
+          selected ? 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,2fr)_minmax(0,0fr)]',
           className,
         )}
         {...props}

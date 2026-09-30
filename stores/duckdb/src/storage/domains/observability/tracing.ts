@@ -158,6 +158,8 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('entityType')},
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
+    ${argMaxNonNull('threadId')},
+    ${argMaxNonNull('resourceId')},
     ${argMaxNonNull('error')},
     ${argMaxNonNull('metadata')},
     ${argMaxNonNull('input')}
@@ -272,6 +274,8 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
   return {
     ...record,
     status: computeTraceStatus(record),
+    threadId: (row.threadId as string) ?? null,
+    resourceId: (row.resourceId as string) ?? null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
     inputPreview: buildInputPreview(row.input),
   };

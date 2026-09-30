@@ -7,6 +7,7 @@ import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { Txt } from '@/ds/components/Txt';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -42,7 +43,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
         <CollapsibleTrigger
           ref={triggerRef}
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:shadow-none focus-visible:ring-inset"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:-outline-offset-1"
         >
           <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="shrink-0 text-muted-foreground">Item {index + 1}</span>
@@ -51,7 +52,11 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               {summary}
             </span>
           )}
-          {invalid && <span className="ml-auto shrink-0 text-meta text-destructive-indicator">Needs input</span>}
+          {invalid && (
+            <Txt as="span" variant="meta" className="ml-auto shrink-0 text-destructive-indicator">
+              Needs input
+            </Txt>
+          )}
         </CollapsibleTrigger>
         {!readOnly && (
           <Button

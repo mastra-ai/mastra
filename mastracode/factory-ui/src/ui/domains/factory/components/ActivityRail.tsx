@@ -143,7 +143,11 @@ function StageChain({ stages }: { stages: string[] }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {folded > 0 ? <span className="text-meta text-muted-foreground tabular-nums">+{folded}</span> : null}
+      {folded > 0 ? (
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+          +{folded}
+        </Txt>
+      ) : null}
       {shown.map((stage, index) => (
         <span key={`${stage}-${index}`} className="flex items-center gap-1">
           {index > 0 || folded > 0 ? (
@@ -241,7 +245,9 @@ function Block({
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
             {grouped ? (
-              <span className="text-meta text-muted-foreground shrink-0 tabular-nums">+{block.entries.length - 1}</span>
+              <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+                +{block.entries.length - 1}
+              </Txt>
             ) : null}
           </>
         )}

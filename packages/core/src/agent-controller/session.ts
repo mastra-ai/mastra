@@ -2803,6 +2803,7 @@ export class SessionDisplayState {
           toolCalls: [],
           textDelta: '',
           status: 'running',
+          startedAt: Date.now(),
         });
         break;
       }

@@ -3,7 +3,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
@@ -103,7 +103,8 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       rel="noopener noreferrer"
       className={cn(
         'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
-        'hover:bg-fill-subtle focus-visible:ring-1 focus-visible:ring-border-strong focus-visible:outline-none',
+        'hover:bg-fill-subtle',
+        focusRing,
         quietTextHover,
         controlStateColorTransition,
       )}
@@ -312,7 +313,8 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
             type="button"
             data-testid="agent-capabilities-footer"
             className={cn(
-              'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle focus-visible:ring-1 focus-visible:ring-border-strong focus-visible:outline-none focus-visible:ring-inset active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
+              'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
+              focusRingInset,
               quietTextHover,
               controlStateColorTransition,
             )}

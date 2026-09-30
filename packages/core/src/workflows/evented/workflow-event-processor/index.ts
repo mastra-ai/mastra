@@ -20,6 +20,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { computeScheduleDefinitionHash } from '../../scheduler/definition-hash';
+import type { ScheduledWorkflowTrigger } from '../../scheduler/types';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -516,6 +517,58 @@ export class WorkflowEventProcessor extends EventProcessor {
     return false;
   }
 
+  async #runScheduledDefaultWorkflow(
+    workflow: Workflow,
+    workflowData: Omit<ProcessorArgs, 'workflow'> & { initialState?: Record<string, any> },
+    trigger: ScheduledWorkflowTrigger,
+    currentState: WorkflowRunState | null | undefined,
+  ): Promise<void> {
+    const { runId, resourceId, prevResult, initialState, requestContext } = workflowData;
+    const logger = this.mastra.getLogger();
+
+    // The claim id is the run id and `createRun` persists a snapshot, so an
+    // existing snapshot means this fire was already started (redelivery).
+    if (currentState) {
+      logger?.debug?.('Scheduled workflow run already exists for claim, skipping', {
+        scheduleId: trigger.scheduleId,
+        runId,
+      });
+      return;
+    }
+
+    // Errors before the run exists propagate so the delivery is retried.
+    const run = await workflow.createRun({ runId, resourceId });
+
+    // From here on the run exists and a redelivery would be skipped, so record
+    // the failure instead of rethrowing (which would publish `workflow.fail`
+    // for a run the evented engine does not own).
+    try {
+      await run.start({
+        inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
+        initialState,
+        requestContext: new RequestContext(Object.entries(requestContext ?? {})),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger?.error?.('Scheduled workflow run threw', { scheduleId: trigger.scheduleId, runId, error: err });
+      try {
+        const schedulesStore = await this.mastra.getStorage()?.getStore('schedules');
+        await schedulesStore?.recordTrigger({
+          scheduleId: trigger.scheduleId,
+          runId,
+          scheduledFireAt: trigger.scheduledFireAt,
+          actualFireAt: Date.now(),
+          outcome: 'failed',
+          error: message,
+          triggerKind: trigger.triggerKind,
+        });
+      } catch (recordErr) {
+        // History is diagnostic — never let it turn a handled fire into a retry.
+        logger?.warn?.('Failed to record failed schedule trigger', { runId, error: recordErr });
+      }
+    }
+  }
+
   private async errorWorkflow(
     {
       parentWorkflow,
@@ -629,11 +682,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
-        activePaths: [],
+        activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
@@ -699,7 +752,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
@@ -1763,9 +1816,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           })) ?? ({ context: {} } as WorkflowRunState);
 
         const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
-
-        const nestedPrevStepId = getStepId(nestedWorkflow, snapshot.activePaths);
-        const nestedPrevResult = restartParams.stepResults[nestedPrevStepId ?? 'input'];
+        const nestedPrevStepId = getStepId(nestedWorkflow, restartParams.activePaths);
+        const nestedPrevResult =
+          restartParams.stepResults[restartParams.isPreFirstStepRestart ? 'input' : (nestedPrevStepId ?? 'input')];
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -1789,7 +1842,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: restartParams.activePaths,
             runId: nestedRunId,
             stepResults: restartParams.stepResults,
-            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: restartParams.isPreFirstStepRestart ? nestedPrevResult : nestedPrevResult?.payload,
+            },
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,
@@ -3347,6 +3403,21 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (type === 'workflow.start' && workflow && !(await this.#ensureScheduledDefinitionMatches(data, workflow))) {
+      return;
+    }
+
+    // Scheduled fires for default-engine workflows run in-process, the same way
+    // a direct `run.start()` does. This must happen before the watch publish
+    // below: the default engine streams on its own run-scoped pubsub, so an
+    // evented `workflow-start` here would never be followed by a finish event.
+    const scheduleTrigger = (data as { scheduleTrigger?: ScheduledWorkflowTrigger } | undefined)?.scheduleTrigger;
+    if (
+      type === 'workflow.start' &&
+      workflow?.engineType === 'default' &&
+      !workflowData.parentWorkflow &&
+      scheduleTrigger
+    ) {
+      await this.#runScheduledDefaultWorkflow(workflow, workflowData, scheduleTrigger, currentState);
       return;
     }
 
