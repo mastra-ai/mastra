@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
@@ -306,7 +304,7 @@ export async function ensureFactorySourceSession(
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
   const session = await sourceControl.sessions.create({
-    sessionId: randomUUID(),
+    sessionId: globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     orgId,
     userId,
@@ -389,6 +387,20 @@ export async function hydrateFactorySession(session: FactorySession, args: Hydra
         modelId: args.defaultModelId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+    // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+    // default), which may name a provider this factory has no credentials for.
+    // Each role is independent, so one failure doesn't strand the others.
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      try {
+        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
+      } catch (error) {
+        console.warn('[Factory Start] Failed to apply factory default subagent model', {
+          agentType,
+          modelId: args.defaultModelId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 }

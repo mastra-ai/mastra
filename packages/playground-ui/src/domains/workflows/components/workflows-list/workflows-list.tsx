@@ -9,11 +9,7 @@ import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows'
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
 import { Badge } from '@/ds/components/Badge';
 import type { DataListSort } from '@/ds/components/DataList';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@/ds/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
@@ -110,15 +106,15 @@ function SortHeader({
   onSortChange,
   children,
 }: Pick<WorkflowsListProps, 'sort' | 'onSortChange'> & { sortKey: WorkflowsSortKey; children: string }) {
-  if (!onSortChange) return <EntityList.TopCell>{children}</EntityList.TopCell>;
+  if (!onSortChange) return <DataList.TopCell>{children}</DataList.TopCell>;
   return (
-    <EntityList.SortableTopCell
+    <DataList.SortableTopCell
       sortKey={sortKey}
       sort={sort?.key === sortKey ? sort.direction : undefined}
       onSortChange={direction => onSortChange(direction, sortKey)}
     >
       {children}
-    </EntityList.SortableTopCell>
+    </DataList.SortableTopCell>
   );
 }
 
@@ -151,9 +147,9 @@ function WorkflowRow({
   const hasNested = nestedIds.length > 0;
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+    <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
       <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={onToggle} />
-      <EntityList.RowLink
+      <DataList.RowLink
         ref={linkRef}
         colStart={2}
         to={paths.workflowLink(wf.id)}
@@ -161,7 +157,7 @@ function WorkflowRow({
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.NameCell>
+        <DataList.NameCell>
           <span className="flex items-center gap-1.5">
             {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
             <span className="truncate">{name}</span>
@@ -183,9 +179,9 @@ function WorkflowRow({
               </Txt>
             ) : null}
           </span>
-        </EntityList.NameCell>
-        <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-        <EntityList.TextCell className="text-center">
+        </DataList.NameCell>
+        <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
+        <DataList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
               className="inline-flex items-center gap-1.5 text-info-indicator"
@@ -197,8 +193,8 @@ function WorkflowRow({
           ) : (
             ''
           )}
-        </EntityList.TextCell>
-        <EntityList.TextCell className="text-center">
+        </DataList.TextCell>
+        <DataList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
               className="inline-flex items-center gap-1.5 text-warning-indicator"
@@ -210,10 +206,10 @@ function WorkflowRow({
           ) : (
             ''
           )}
-        </EntityList.TextCell>
-        <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
-      </EntityList.RowLink>
-    </EntityList.RowWrapper>
+        </DataList.TextCell>
+        <DataList.TextCell className="text-center">{stepsCount || ''}</DataList.TextCell>
+      </DataList.RowLink>
+    </DataList.RowWrapper>
   );
 }
 
@@ -276,19 +272,19 @@ export function WorkflowsList({
   };
 
   if (isLoading) {
-    return <EntityListSkeleton columns={GRID_COLUMNS} fit="container" />;
+    return <DataListSkeleton columns={GRID_COLUMNS} fit="container" />;
   }
 
   return (
-    <EntityList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
-      <EntityList.Top>
-        <EntityList.TopCell>
+    <DataList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
+      <DataList.Top>
+        <DataList.TopCell>
           <span className="sr-only">Expand</span>
-        </EntityList.TopCell>
+        </DataList.TopCell>
         <SortHeader sortKey="name" sort={sort} onSortChange={onSortChange}>
           Name
         </SortHeader>
-        <EntityList.TopCell>Description</EntityList.TopCell>
+        <DataList.TopCell>Description</DataList.TopCell>
         <SortHeader sortKey="running" sort={sort} onSortChange={onSortChange}>
           Running
         </SortHeader>
@@ -298,9 +294,9 @@ export function WorkflowsList({
         <SortHeader sortKey="steps" sort={sort} onSortChange={onSortChange}>
           Number of steps
         </SortHeader>
-      </EntityList.Top>
+      </DataList.Top>
 
-      {rows.length === 0 && search ? <EntityList.NoMatch message="No Workflows match your search" /> : null}
+      {rows.length === 0 && search ? <DataList.NoMatch message="No Workflows match your search" /> : null}
 
       {rows.map(row => {
         const isExpanded = expandedPaths.has(row.pathKey);
@@ -309,10 +305,10 @@ export function WorkflowsList({
         if (row.kind === 'unregistered') {
           // Mirrors WorkflowRow's RowWrapper + RowLink layout, minus hover and press states.
           return (
-            <EntityList.RowStatic key={`workflow-${row.pathKey}`} className="gap-0 px-0">
+            <DataList.RowStatic key={`workflow-${row.pathKey}`} className="gap-0 px-0">
               <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
               <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-4 px-3">
-                <EntityList.NameCell>
+                <DataList.NameCell>
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
@@ -331,13 +327,13 @@ export function WorkflowsList({
                       </TooltipContent>
                     </Tooltip>
                   </span>
-                </EntityList.NameCell>
-                <EntityList.DescriptionCell>{truncateString(row.description ?? '', 200)}</EntityList.DescriptionCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
+                </DataList.NameCell>
+                <DataList.DescriptionCell>{truncateString(row.description ?? '', 200)}</DataList.DescriptionCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
               </div>
-            </EntityList.RowStatic>
+            </DataList.RowStatic>
           );
         }
 
@@ -352,6 +348,6 @@ export function WorkflowsList({
           />
         );
       })}
-    </EntityList>
+    </DataList>
   );
 }

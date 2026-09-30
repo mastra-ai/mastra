@@ -72,7 +72,7 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <AmazonIcon className="h-4 w-4 text-badge-orange-indicator" />;
+      return <AmazonIcon className="h-4 w-4 text-foreground" />;
     case 'google-cloud':
     case 'google-cloud-storage':
     case 'gcs':

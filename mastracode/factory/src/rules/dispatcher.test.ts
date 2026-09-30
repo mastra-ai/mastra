@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -2219,6 +2219,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');
         await dispatch;
+        await waitForSessionRunAudit(session);
         expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
       } finally {
         vi.useRealTimers();
