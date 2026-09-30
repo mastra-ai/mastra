@@ -30,7 +30,7 @@ import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderB
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 
 // ============================================================================
@@ -156,13 +156,25 @@ function toSeriesName(values: unknown[]): string {
   return values.map(v => (v == null ? '' : String(v))).join('|');
 }
 
-async function queryJson<T>(client: ClickHouseClient, query: string, params: Record<string, unknown>): Promise<T[]> {
+/**
+ * Lets `FINAL` reads use skip indexes on older servers, where it defaults off.
+ * Only for lookups on a column shared by every version of a sort key (so a
+ * skipped granule can never hold a newer version of a matching row).
+ */
+const FINAL_SKIP_INDEX_SETTINGS = { use_skip_indexes_if_final: 1 } as const;
+
+async function queryJson<T>(
+  client: ClickHouseClient,
+  query: string,
+  params: Record<string, unknown>,
+  settings: Record<string, string | number> = {},
+): Promise<T[]> {
   return (await (
     await client.query({
       query,
       query_params: params,
       format: 'JSONEachRow',
-      clickhouse_settings: CH_SETTINGS,
+      clickhouse_settings: { ...CH_SETTINGS, ...settings },
     })
   ).json()) as T[];
 }
@@ -311,6 +323,7 @@ async function hasFeedbackDeletionRequest(
        AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
     { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
+    FINAL_SKIP_INDEX_SETTINGS,
   );
   return rows.length > 0;
 }
@@ -343,6 +356,7 @@ export async function updateFeedbackReviewStatus(
      ORDER BY writeVersion DESC, timestamp DESC
      LIMIT 1`,
     { feedbackId },
+    FINAL_SKIP_INDEX_SETTINGS,
   );
   const existingRow = existing[0];
   if (!existingRow) {
@@ -459,6 +473,11 @@ async function queryFeedbackAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<FeedbackDeltaRow[]> {
+  // feedback_events drives the scan and is narrowed to the delta rows before
+  // FINAL merges; only the small delta slice is built into the hash table.
+  // traceId is Nullable, so the key filter uses (timestamp, feedbackId) —
+  // tuple IN never matches NULL — and the join matches traceId NULL-safely.
+  const deltaKeys = `SELECT timestamp, feedbackId FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return await queryJson<FeedbackDeltaRow>(
     client,
     `
@@ -468,12 +487,20 @@ async function queryFeedbackAfterCursor(
         f.timestamp AS timestamp,
         f.feedbackId AS feedbackId,
         toString(d.cursorId) AS cursorId
-      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
-        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+      FROM ${TABLE_FEEDBACK_EVENTS} f FINAL
+      INNER JOIN (
+        SELECT cursorId, traceId, timestamp, feedbackId
+        FROM ${TABLE_FEEDBACK_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+      ) d
+        ON isNotDistinctFrom(f.traceId, d.traceId)
        AND f.timestamp = d.timestamp
        AND f.feedbackId = d.feedbackId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ${appendWhere(
+        whereClause,
+        `f.timestamp >= (SELECT min(timestamp) FROM ${TABLE_FEEDBACK_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64})`,
+        `(f.timestamp, f.feedbackId) IN (${deltaKeys})`,
+      )}
       ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
@@ -481,21 +508,28 @@ async function queryFeedbackAfterCursor(
   );
 }
 
+/**
+ * Newest delta cursor whose feedback matches the filters. Without filters
+ * this is the stream head; with filters, the feedback scan is bounded below by
+ * the oldest `timestamp` still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f FINAL
-        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
-       AND f.timestamp = d.timestamp
-       AND f.feedbackId = d.feedbackId
-      ${whereClause}
+      WHERE (d.timestamp, d.feedbackId) IN (
+        SELECT f.timestamp, f.feedbackId
+        FROM ${TABLE_FEEDBACK_EVENTS} f FINAL
+        ${appendWhere(whereClause, `f.timestamp >= (SELECT min(timestamp) FROM ${TABLE_FEEDBACK_EVENTS_DELTA})`)}
+      )
     `,
     params,
   );
@@ -505,13 +539,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = await queryJson<{ cursorId?: string | null }>(
-    client,
-    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
-    {},
-  );
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
@@ -700,29 +728,30 @@ export async function getFeedbackPercentiles(
     throw new Error('Percentiles must include at least one value between 0 and 1.');
   }
 
-  const series = [];
   for (const p of args.percentiles) {
     if (!Number.isFinite(p) || p < 0 || p > 1) {
       throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
     }
-    const sql = `
-      SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
-             quantile(${p})(valueNumber) AS pvalue
-      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
-      ${whereClause}
-      GROUP BY bucket
-      ORDER BY bucket
-    `;
-    const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
-
-    series.push({
-      percentile: p,
-      points: rows.map(row => ({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row.pvalue ?? 0),
-      })),
-    });
   }
+
+  // One scan for every requested level instead of one query per percentile.
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           quantiles(${args.percentiles.join(', ')})(valueNumber) AS pvalues
+    FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+    ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  const series = args.percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+      value: Number((row.pvalues as unknown[] | undefined)?.[index] ?? 0),
+    })),
+  }));
 
   return { series };
 }

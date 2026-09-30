@@ -29,7 +29,7 @@ import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderBy
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -336,6 +336,9 @@ async function queryMetricsAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<MetricDeltaRow[]> {
+  // metric_events drives the scan and is narrowed to the delta keys by its
+  // full sort key; only the small delta slice is built into the hash table.
+  const deltaKeys = `SELECT name, timestamp, metricId FROM ${TABLE_METRIC_EVENTS_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return await queryJson<MetricDeltaRow>(
     client,
     `
@@ -345,12 +348,16 @@ async function queryMetricsAfterCursor(
         m.timestamp AS timestamp,
         m.metricId AS metricId,
         toString(d.cursorId) AS cursorId
-      FROM ${TABLE_METRIC_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_METRIC_EVENTS} m
+      FROM ${TABLE_METRIC_EVENTS} m
+      INNER JOIN (
+        SELECT cursorId, name, timestamp, metricId
+        FROM ${TABLE_METRIC_EVENTS_DELTA}
+        WHERE cursorId > {afterCursor:UInt64}
+      ) d
         ON m.name = d.name
        AND m.timestamp = d.timestamp
        AND m.metricId = d.metricId
-      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ${appendWhere(whereClause, `(m.name, m.timestamp, m.metricId) IN (${deltaKeys})`)}
       ORDER BY d.cursorId ASC
       LIMIT {fetchLimit:UInt32}
     `,
@@ -358,21 +365,28 @@ async function queryMetricsAfterCursor(
   );
 }
 
+/**
+ * Newest delta cursor whose metric matches the filters. Without filters this
+ * is the stream head; with filters, the metric scan is bounded below by the
+ * oldest `timestamp` still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = await queryJson<{ cursorId?: string | null }>(
     client,
     `
       SELECT toString(max(d.cursorId)) AS cursorId
       FROM ${TABLE_METRIC_EVENTS_DELTA} d
-      INNER JOIN ${TABLE_METRIC_EVENTS} m
-        ON m.name = d.name
-       AND m.timestamp = d.timestamp
-       AND m.metricId = d.metricId
-      ${whereClause}
+      WHERE (d.name, d.timestamp, d.metricId) IN (
+        SELECT m.name, m.timestamp, m.metricId
+        FROM ${TABLE_METRIC_EVENTS} m
+        ${appendWhere(whereClause, `m.timestamp >= (SELECT min(timestamp) FROM ${TABLE_METRIC_EVENTS_DELTA})`)}
+      )
     `,
     params,
   );
@@ -382,13 +396,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = await queryJson<{ cursorId?: string | null }>(
-    client,
-    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_METRIC_EVENTS_DELTA}`,
-    {},
-  );
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
@@ -676,29 +684,31 @@ export async function getMetricPercentiles(
   const combined = mergeFilters(nameFilter, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const series = [];
   for (const p of args.percentiles) {
     if (p < 0 || p > 1) {
       throw new Error(`Percentile value must be between 0 and 1, got ${p}`);
     }
-    const sql = `
-      SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
-             quantile(${p})(value) AS pvalue
-      FROM ${TABLE_METRIC_EVENTS}
-      ${whereClause}
-      GROUP BY bucket
-      ORDER BY bucket
-    `;
-    const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
-
-    series.push({
-      percentile: p,
-      points: rows.map(row => ({
-        timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
-        value: Number(row.pvalue ?? 0),
-      })),
-    });
   }
+  if (args.percentiles.length === 0) return { series: [] };
+
+  // One scan for every requested level instead of one query per percentile.
+  const sql = `
+    SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
+           quantiles(${args.percentiles.join(', ')})(value) AS pvalues
+    FROM ${TABLE_METRIC_EVENTS}
+    ${whereClause}
+    GROUP BY bucket
+    ORDER BY bucket
+  `;
+  const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
+
+  const series = args.percentiles.map((percentile, index) => ({
+    percentile,
+    points: rows.map(row => ({
+      timestamp: row.bucket instanceof Date ? row.bucket : new Date(String(row.bucket)),
+      value: Number((row.pvalues as unknown[] | undefined)?.[index] ?? 0),
+    })),
+  }));
 
   return { series };
 }
@@ -715,7 +725,9 @@ export async function getMetricNames(
   client: ClickHouseClient,
   args: GetMetricNamesArgs,
 ): Promise<GetMetricNamesResponse> {
-  const conditions: string[] = [`kind = 'metricName'`];
+  // key1 is always '' for metric names; pinning it lets the prefix LIKE use the
+  // (kind, key1, value) sort key.
+  const conditions: string[] = [`kind = 'metricName'`, `key1 = ''`];
   const params: Record<string, unknown> = {};
 
   if (args.prefix) {
