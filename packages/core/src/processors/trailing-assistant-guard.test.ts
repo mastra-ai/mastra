@@ -30,6 +30,7 @@ const makeArgs = (
 
 const gemini3 = { provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' } as ProcessInputStepArgs['model'];
 const gemini2 = { provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' } as ProcessInputStepArgs['model'];
+const claude45 = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' } as ProcessInputStepArgs['model'];
 
 describe('TrailingAssistantGuard', () => {
   it('has the expected id and name', () => {
@@ -82,15 +83,18 @@ describe('TrailingAssistantGuard', () => {
     expect(appended!.createdAt.getTime()).toBeGreaterThan(assistant.createdAt.getTime());
   });
 
-  it('does not append a message when structured output has no schema', () => {
+  it('appends a generic continuation when structured output has no schema', () => {
     const guard = new TrailingAssistantGuard();
 
     const result = guard.processInputStep(makeArgs({ structuredOutput: undefined }));
 
-    expect(result).toBeUndefined();
+    expect(result?.messages?.at(-1)).toMatchObject({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Continue.' }] },
+    });
   });
 
-  it('does not append a message when structured output uses a separate model', () => {
+  it('appends a generic continuation when structured output uses a separate model', () => {
     const guard = new TrailingAssistantGuard();
 
     const result = guard.processInputStep(
@@ -102,10 +106,13 @@ describe('TrailingAssistantGuard', () => {
       }),
     );
 
-    expect(result).toBeUndefined();
+    expect(result?.messages?.at(-1)).toMatchObject({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Continue.' }] },
+    });
   });
 
-  it('does not append a message when JSON prompt injection is enabled', () => {
+  it('appends a generic continuation when JSON prompt injection is enabled', () => {
     const guard = new TrailingAssistantGuard();
 
     const result = guard.processInputStep(
@@ -117,7 +124,10 @@ describe('TrailingAssistantGuard', () => {
       }),
     );
 
-    expect(result).toBeUndefined();
+    expect(result?.messages?.at(-1)).toMatchObject({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Continue.' }] },
+    });
   });
 
   it('appends a generic continuation for Gemini 3+ even without structured output', () => {
@@ -178,10 +188,23 @@ describe('TrailingAssistantGuard', () => {
     expect(result).toBeUndefined();
   });
 
-  it('does not touch a trailing assistant message for Anthropic without structured output (valid prefill)', () => {
+  it('appends a generic continuation for a string-form Claude 4.6+ model without structured output', () => {
     const guard = new TrailingAssistantGuard();
 
-    const result = guard.processInputStep(makeArgs({ structuredOutput: undefined }));
+    const result = guard.processInputStep(
+      makeArgs({ structuredOutput: undefined, model: 'anthropic/claude-opus-4-6' }),
+    );
+
+    expect(result?.messages?.at(-1)).toMatchObject({
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Continue.' }] },
+    });
+  });
+
+  it('does not touch a trailing assistant message for Claude versions that support prefill', () => {
+    const guard = new TrailingAssistantGuard();
+
+    const result = guard.processInputStep(makeArgs({ structuredOutput: undefined, model: claude45 }));
 
     expect(result).toBeUndefined();
   });

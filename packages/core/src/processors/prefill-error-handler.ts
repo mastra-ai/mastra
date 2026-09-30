@@ -48,9 +48,9 @@ function isPrefillError(error: unknown): boolean {
  *
  * This is a reactive complement to {@link TrailingAssistantGuard}, which
  * proactively appends a user turn for providers it can identify up front
- * (Anthropic under native structured output, Gemini 3+). `PrefillErrorHandler`
- * catches the rejection whenever that identification falls short, e.g. Anthropic
- * outside structured output or a gateway whose model id hides the provider.
+ * (Claude 4.6+, Gemini 3+). `PrefillErrorHandler` catches the rejection whenever
+ * that identification falls short, for example when a gateway hides the provider
+ * or model version.
  *
  * @see https://github.com/mastra-ai/mastra/issues/13969
  */
