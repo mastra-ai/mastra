@@ -428,7 +428,7 @@ Keep these limits in mind:
 - **Low-priority signals:** Signals that are persisted instead of delivered are written to the sender's storage. Projects that share the default Mastra Code database see them. A project with its own storage doesn't.
 - **Many instances:** Every instance with the setting on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
 
-To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Keep the path short, because macOS limits Unix socket paths to 104 bytes.
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
 ## Distributed and serverless deployments
 

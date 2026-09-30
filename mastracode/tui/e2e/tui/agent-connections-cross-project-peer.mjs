@@ -18,8 +18,14 @@ const agent = new Agent({
     baseURL: process.env.OPENAI_BASE_URL,
     apiKey: process.env.OPENAI_API_KEY,
     fetch: async (input, init) => {
-      emit({ type: 'model-request', body: typeof init?.body === 'string' ? init.body : '' });
-      return fetch(input, init);
+      const response = await fetch(input, init);
+      emit({
+        type: 'model-call',
+        url: String(input instanceof Request ? input.url : input),
+        status: response.status,
+        body: typeof init?.body === 'string' ? init.body : '',
+      });
+      return response;
     },
   })('gpt-5.4-mini'),
   pubsub,
