@@ -193,14 +193,28 @@ function jsonSchemaValidationIssues(errorMessage: string): Array<{ message: stri
     : errorMessage.split(/, (?=data(?:\/| ))/);
 
   return errors.map(error => {
-    const cfWorkerError = error.match(/^([^:]*):\s*(.+)$/);
-    if (cfWorkerError) {
-      return { message: cfWorkerError[2]!, path: jsonPointerToPath(cfWorkerError[1]!) };
+    const cfWorkerSeparator = error.indexOf(': ');
+    if (cfWorkerSeparator >= 0) {
+      const pointer = error.slice(0, cfWorkerSeparator);
+      if (pointer === '#' || pointer.startsWith('#/') || pointer.startsWith('/')) {
+        return {
+          message: error.slice(cfWorkerSeparator + 2),
+          path: jsonPointerToPath(pointer),
+        };
+      }
     }
 
-    const ajvError = error.match(/^data((?:\/\S+)*)\s+(.+)$/);
-    if (ajvError) {
-      return { message: ajvError[2]!, path: jsonPointerToPath(ajvError[1]!) };
+    if (error.startsWith('data')) {
+      const ajvSeparator = error.indexOf(' ', 4);
+      if (ajvSeparator >= 0) {
+        const pointer = error.slice(4, ajvSeparator);
+        if (!pointer || pointer.startsWith('/')) {
+          return {
+            message: error.slice(ajvSeparator + 1),
+            path: jsonPointerToPath(pointer),
+          };
+        }
+      }
     }
 
     return { message: error };
