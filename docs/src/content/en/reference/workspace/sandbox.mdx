@@ -94,7 +94,7 @@ new E2BSandbox({
 
 Semantics:
 
-- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`. A caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
 - `outcome` distinguishes the branches: `'created'` means this start provisioned a fresh VM (run setup), `'connected'` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
 - Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `outcome: 'created'`.
 - The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.

@@ -2,6 +2,7 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GaugeIcon } from 'lucide-react';
@@ -86,7 +87,9 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
             </LinkComponent>
             <strong className="text-subheading text-muted-foreground">
               {avg.toFixed(3)}
-              <span className="ml-1.5 text-caption text-muted-foreground">avg score</span>
+              <Txt as="span" variant="caption" tone="muted" className="ml-1.5">
+                avg score
+              </Txt>
             </strong>
           </MetricsKpiCard>
         );

@@ -682,11 +682,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
-        activePaths: [],
+        activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
@@ -752,7 +752,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: {},
+        activeStepsPath: restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
@@ -1816,9 +1816,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           })) ?? ({ context: {} } as WorkflowRunState);
 
         const restartParams = createRestartExecutionParams({ snapshot, graph: nestedWorkflow.buildExecutionGraph() });
-
-        const nestedPrevStepId = getStepId(nestedWorkflow, snapshot.activePaths);
-        const nestedPrevResult = restartParams.stepResults[nestedPrevStepId ?? 'input'];
+        const nestedPrevStepId = getStepId(nestedWorkflow, restartParams.activePaths);
+        const nestedPrevResult =
+          restartParams.stepResults[restartParams.isPreFirstStepRestart ? 'input' : (nestedPrevStepId ?? 'input')];
 
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.start',
@@ -1842,7 +1842,10 @@ export class WorkflowEventProcessor extends EventProcessor {
             executionPath: restartParams.activePaths,
             runId: nestedRunId,
             stepResults: restartParams.stepResults,
-            prevResult: { status: 'success', output: nestedPrevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: restartParams.isPreFirstStepRestart ? nestedPrevResult : nestedPrevResult?.payload,
+            },
             restart: restartParams,
             activeStepsPath: restartParams.activeStepsPath,
             requestContext,

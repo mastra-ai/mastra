@@ -4,6 +4,7 @@ import { signalLabel } from './signal-formatting';
 import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -27,10 +28,8 @@ export function TraceInsightView({ traceId, onBack }: TraceInsightViewProps) {
           Open full trace
         </Button>
       </div>
-      {insightQuery.isPending && <p className="text-body text-muted-foreground">Loading trace insight…</p>}
-      {insightQuery.isError && (
-        <p className="text-body text-destructive-indicator">Unable to load the trace insight.</p>
-      )}
+      {insightQuery.isPending && <Txt tone="muted">Loading trace insight…</Txt>}
+      {insightQuery.isError && <Txt className="text-destructive-indicator">Unable to load the trace insight.</Txt>}
       {insightQuery.data && <TraceInsightBody insight={insightQuery.data} />}
     </div>
   );
@@ -78,15 +77,15 @@ function ObservationItem({ observation }: { observation: string }) {
   return (
     <li className={`rounded-md p-3 text-body ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <p className="font-mono text-meta tracking-wider text-muted-foreground uppercase">
+        <Txt variant="meta" tone="muted" font="mono" className="tracking-wider uppercase">
           {severity === 'problem' && (
             <>
-              <span className="text-destructive-subtle-foreground">problem</span>
+              <span className="text-destructive-indicator">problem</span>
               <span aria-hidden="true"> · </span>
             </>
           )}
           <span>{kind}</span>
-        </p>
+        </Txt>
       )}
       <p className={`text-foreground ${kind === undefined ? '' : 'mt-1'}`}>{text}</p>
     </li>
@@ -98,16 +97,22 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
   return (
     <>
       {insight.summary === undefined ? (
-        <p className="text-body text-muted-foreground">No insight available yet for this trace.</p>
+        <Txt tone="muted">No insight available yet for this trace.</Txt>
       ) : (
         <section aria-labelledby="trace-insight-summary-heading">
-          <h2
+          <Txt
+            as="h2"
+            variant="caption"
+            tone="muted"
+            font="mono"
             id="trace-insight-summary-heading"
-            className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
+            className="tracking-wider uppercase"
           >
             Trace summary
-          </h2>
-          <p className="mt-3 text-body text-foreground">{insight.summary.summary}</p>
+          </Txt>
+          <Txt tone="ink" className="mt-3">
+            {insight.summary.summary}
+          </Txt>
           {insight.summary.currentTask !== undefined && (
             <dl className="mt-4 text-body">
               <dt className="text-muted-foreground">Current task</dt>
@@ -115,18 +120,20 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             </dl>
           )}
           {insight.summary.degenerate === true && (
-            <p className="mt-4 text-body text-destructive-indicator">
-              This trace was flagged as degenerate or looping.
-            </p>
+            <Txt className="mt-4 text-destructive-indicator">This trace was flagged as degenerate or looping.</Txt>
           )}
           {insight.summary.observations.length > 0 && (
             <>
-              <h3
+              <Txt
+                as="h3"
+                variant="caption"
+                tone="muted"
+                font="mono"
                 id="trace-insight-observations-heading"
-                className="mt-4 font-mono text-caption tracking-wider text-muted-foreground uppercase"
+                className="mt-4 tracking-wider uppercase"
               >
                 Observations
-              </h3>
+              </Txt>
               <ul aria-labelledby="trace-insight-observations-heading" className="mt-3 space-y-2">
                 {insight.summary.observations.map((observation, index) => (
                   <ObservationItem key={`${observation}:${index}`} observation={observation} />
@@ -138,12 +145,16 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
       )}
       {insight.signals.length > 0 && (
         <section aria-labelledby="trace-insight-signals-heading">
-          <h2
+          <Txt
+            as="h2"
+            variant="caption"
+            tone="muted"
+            font="mono"
             id="trace-insight-signals-heading"
-            className="font-mono text-caption tracking-wider text-muted-foreground uppercase"
+            className="tracking-wider uppercase"
           >
             Trace signal summaries
-          </h2>
+          </Txt>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
               <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'rounded-md p-3 text-body')}>

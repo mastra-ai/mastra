@@ -6,6 +6,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -133,16 +134,21 @@ export function SlackConnectionSettings() {
               type="button"
               disabled={!canConnect}
               onClick={connectSlack}
-              className="group hover:bg-fill focus-visible:ring-border-focus block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
             >
               <SettingsRow
                 label="Slack"
                 description={canConnect ? 'Not connected' : 'Slack connection is not configured'}
               >
-                <span className="text-caption text-muted-foreground group-hover:text-foreground flex items-center gap-2">
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  className="group-hover:text-foreground flex items-center gap-2"
+                >
                   Connect Slack
                   <ChevronRight aria-hidden="true" />
-                </span>
+                </Txt>
               </SettingsRow>
             </button>
           </SettingsContainer>

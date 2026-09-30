@@ -2,6 +2,7 @@ import type { StoredAgentResponse } from '@mastra/client-js';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { LockIcon } from 'lucide-react';
@@ -47,7 +48,9 @@ function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; classNa
   return (
     <div className={cn('flex min-w-0 items-center gap-1.5', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
-      <span className="truncate text-meta text-muted-foreground">{label}</span>
+      <Txt as="span" variant="meta" tone="muted" className="truncate">
+        {label}
+      </Txt>
     </div>
   );
 }
@@ -113,9 +116,9 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="line-clamp-1 text-caption text-muted-foreground">
+                <Txt as="span" variant="caption" tone="muted" className="line-clamp-1">
                   {agent.description || 'No description'}
-                </span>
+                </Txt>
               </div>
               <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (

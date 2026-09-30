@@ -93,12 +93,15 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
           <ol className="flex flex-col">
             {steps.map((step, index) => (
               <li key={index} className="flex items-center gap-3 py-3">
-                <span
+                <Txt
+                  as="span"
+                  variant="meta"
+                  tone="ink"
                   aria-hidden="true"
-                  className="bg-fill text-foreground text-meta flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
+                  className="bg-fill flex size-6 shrink-0 items-center justify-center rounded-full tabular-nums"
                 >
                   {index + 1}
-                </span>
+                </Txt>
                 <Txt as="span" variant="body" className="text-foreground min-w-0 flex-1">
                   {step.label}
                 </Txt>

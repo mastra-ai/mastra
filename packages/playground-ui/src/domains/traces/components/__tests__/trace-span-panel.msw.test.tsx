@@ -3,6 +3,7 @@ import '@/test/jsdom-polyfills';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
+import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
@@ -88,9 +89,12 @@ function Harness({
   );
 }
 
-const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {}) =>
+const renderPanel = (
+  props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {},
+  paths?: ComponentProps<typeof TestLinkProvider>['paths'],
+) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider paths={paths}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -311,7 +315,7 @@ describe('TraceSpanPanel', () => {
     // appears as the span-type badge in the tree, so allow multiple matches.)
     expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
     const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
-    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
+    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
 
     // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
@@ -333,7 +337,28 @@ describe('TraceSpanPanel', () => {
     });
 
     const entityLink = await screen.findByRole('link', { name: /Daily report/ });
-    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report/graph');
+    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report');
+  });
+
+  const withRootEntity = (entityType: string, entityId: string, entityName: string) =>
+    panelTraceSpans.spans.map(span =>
+      span.parentSpanId == null ? { ...span, entityType, entityId, entityName } : span,
+    );
+
+  it('given the app has no agent route, then the agent entity is shown without a link', async () => {
+    installHandlers();
+    renderPanel({ spans: withRootEntity('agent_run', 'chef', 'Chef agent') }, { agentLink: () => '' });
+
+    expect(await screen.findByText(/Chef agent/)).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /Chef agent/ })).toBeNull();
+  });
+
+  it('given the app has no workflow route, then the workflow entity is shown without a link', async () => {
+    installHandlers();
+    renderPanel({ spans: withRootEntity('workflow_run', 'daily-report', 'Daily report') }, { workflowLink: () => '' });
+
+    expect(await screen.findByText(/Daily report/)).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /Daily report/ })).toBeNull();
   });
 
   it('given anchorSpanId (branches mode), then the selected anchor span shows trace-level metadata', async () => {

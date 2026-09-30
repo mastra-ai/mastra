@@ -3,6 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Check, Hammer, Map, Plus, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -42,7 +43,7 @@ function ModelAssignment({ description, icon: Icon, label, model }: ModelAssignm
           render={
             <span
               aria-label={`${label}: ${description}`}
-              className="focus-visible:ring-border-focus inline-flex size-5 shrink-0 items-center justify-center rounded-md outline-hidden focus-visible:ring-2"
+              className={`inline-flex size-5 shrink-0 items-center justify-center rounded-md ${focusRing}`}
               tabIndex={0}
             >
               <Icon aria-hidden size={12} className="text-muted-foreground" />

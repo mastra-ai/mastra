@@ -1,5 +1,11 @@
 # @mastra/auth-workos
 
+## 1.6.6
+
+### Patch Changes
+
+- Fixed cookie sessions losing their organization on re-authentication. With `fetchMemberships: true`, a cookie session that has no selected organization now keeps the organization of the user's only membership. A selected session organization still takes precedence, and users with no memberships or several stay without an organization. ([#25264](https://github.com/mastra-ai/mastra/pull/25264))
+
 ## 1.6.6-alpha.0
 
 ### Patch Changes

@@ -2,6 +2,7 @@
 
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorerSelector } from '../experiment-trigger/scorer-selector';
 
 export interface DatasetItemScorerSelectorProps {
@@ -30,11 +31,11 @@ export function DatasetItemScorerSelector({
         />
         <Label htmlFor="override-dataset-scorers">Override dataset scorers</Label>
       </div>
-      <p className="text-caption text-muted-foreground">
+      <Txt variant="caption" tone="muted">
         {overrideEnabled
           ? 'Only selected scorers run for this item. Leave empty to run no scorers.'
           : 'Use scorers attached to the dataset.'}
-      </p>
+      </Txt>
       {overrideEnabled ? (
         <ScorerSelector
           selectedScorers={selectedScorerIds}

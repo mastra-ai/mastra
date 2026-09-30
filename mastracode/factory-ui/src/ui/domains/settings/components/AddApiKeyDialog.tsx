@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogAction,
@@ -10,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -95,29 +94,21 @@ export function AddApiKeyDialog({
               <Txt as="span" variant="caption" tone="muted">
                 Who can use this key
               </Txt>
-              <ButtonsGroup size="sm" role="group" aria-label="API key access">
-                {(
-                  [
-                    { value: 'user', label: 'Just me' },
-                    { value: 'org', label: 'Everyone in org' },
-                  ] as const
-                ).map(option => (
-                  <Button
-                    key={option.value}
-                    variant={scope === option.value ? 'primary' : 'default'}
-                    aria-pressed={scope === option.value}
-                    disabled={saveKeyMutation.isPending || (option.value === 'org' && !canWriteOrgKey)}
-                    title={
-                      option.value === 'org' && !canWriteOrgKey
-                        ? 'Only org admins can share a key with everyone'
-                        : undefined
-                    }
-                    onClick={() => setScope(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </ButtonsGroup>
+              <SegmentedControl
+                aria-label="API key access"
+                value={scope}
+                onValueChange={setScope}
+                disabled={saveKeyMutation.isPending}
+              >
+                <SegmentedControlItem value="user">Just me</SegmentedControlItem>
+                <SegmentedControlItem
+                  value="org"
+                  disabled={!canWriteOrgKey}
+                  title={canWriteOrgKey ? undefined : 'Only org admins can share a key with everyone'}
+                >
+                  Everyone in org
+                </SegmentedControlItem>
+              </SegmentedControl>
             </div>
           )}
           {personalOnlyWarning && (

@@ -54,7 +54,7 @@ export function SettingsPanel() {
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
   const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const { permissions, setPermissionForCategory } = useChatPermissions();
   const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -112,7 +112,6 @@ export function SettingsPanel() {
           settings={settings}
           onBehaviorChange={onBehaviorChange}
           permissions={permissions ?? null}
-          pendingPermissionCategory={pendingPermissionCategory}
           setPermissionForCategory={setPermissionForCategory}
         />
       )}

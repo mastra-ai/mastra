@@ -6,6 +6,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -635,15 +636,15 @@ function WorkspaceSearchPanel({
     <div className="space-y-4 rounded-lg border border-border bg-fill-subtle p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink" className="mb-3 flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Search Indexed Files
-          </h3>
+          </Txt>
           {showInitWarning && (
-            <p className="mb-3 text-caption text-warning-indicator">
+            <Txt variant="caption" className="mb-3 text-warning-indicator">
               File search requires <code className="text-warning-indicator">workspace.init()</code> to index files from
               your configured <code className="text-warning-indicator">autoIndexPaths</code>.
-            </p>
+            </Txt>
           )}
           <SearchWorkspacePanel
             onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
@@ -665,10 +666,10 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink" className="mb-3 flex items-center gap-2">
             <Wand2 className="h-4 w-4" />
             Search Skills
-          </h3>
+          </Txt>
           <SearchSkillsPanel
             onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
             results={searchSkills.data?.results ?? []}

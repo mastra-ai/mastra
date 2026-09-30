@@ -158,7 +158,7 @@ describeSpanError(span) // SpanErrorInfo | undefined
 
 ### Processor spans
 
-A processor span records which pipeline phase produced it, so a reader narrows its
+A processor span records which pipeline phase produced it. A reader narrows its
 payloads on that phase instead of on the payload's shape. The recorded phase is finer
 than the one a processor declares: `outputStream` and `outputResult` are separate
 here, because they record different payloads.

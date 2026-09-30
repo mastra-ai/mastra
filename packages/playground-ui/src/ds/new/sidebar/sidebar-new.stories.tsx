@@ -34,8 +34,10 @@ import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
+import { focusRing } from '@/ds/primitives/transitions';
 import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@/lib/keyboard/use-keydown';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof SidebarNew> = {
   title: 'New/SidebarNew',
@@ -122,11 +124,7 @@ function SidebarNewStory({ header = 'default', version, variant = 'default' }: S
       <SidebarNew variant={variant} className={variant === 'default' ? 'border-r border-border' : undefined}>
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
-            <a
-              href="/projects"
-              aria-label="Project list"
-              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
-            >
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <SidebarNew.Brand
                 logo={<LogoWithoutText className="size-6" />}
                 title={
@@ -142,29 +140,14 @@ function SidebarNewStory({ header = 'default', version, variant = 'default' }: S
             <SidebarSearchDialog />
           </SidebarNew.CommandHeader>
         ) : (
-          <SidebarNew.Header>
-            {state === 'collapsed' ? (
-              <div className="group/brand relative mx-auto grid size-9 place-items-center">
-                <LogoWithoutText className="size-6 transition-opacity duration-normal group-hover/brand:opacity-0 motion-reduce:transition-none" />
-                <div className="absolute inset-0 opacity-0 transition-opacity duration-normal group-hover/brand:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-                  <SidebarNew.Trigger />
-                </div>
-              </div>
-            ) : (
-              <>
-                <a
-                  href="/projects"
-                  aria-label="Project list"
-                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
-                >
-                  <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
-                </a>
-                <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
-                  Staging
-                </span>
-                <SidebarNew.Trigger />
-              </>
-            )}
+          <SidebarNew.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
+              <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
+            </a>
+            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
+              Staging
+            </span>
+            <SidebarNew.Trigger />
           </SidebarNew.Header>
         )}
 
