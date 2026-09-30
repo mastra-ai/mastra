@@ -23,6 +23,7 @@ export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSc
       'tool-input-delta',
       'tool-call-approval',
       'tool-call-suspended',
+      'tool-call-resumed',
       'tool-call',
       'tool-result',
       'tool-error',

@@ -312,6 +312,39 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
+    case 'tool-call-resumed':
+      if (chunk.payload.kind === 'approval') {
+        return {
+          type: 'data-tool-call-approval',
+          id: chunk.payload.toolCallId,
+          data: {
+            state: 'data-tool-call-approval',
+            runId: chunk.runId,
+            toolCallId: chunk.payload.toolCallId,
+            toolName: chunk.payload.toolName,
+            args: hasTransformedToolPayload(displayApprovalTransform)
+              ? displayApprovalTransform.transformed
+              : chunk.payload.args,
+            resumeSchema: chunk.payload.resumeSchema,
+            resumed: true,
+          },
+        } satisfies DataChunkType;
+      }
+      return {
+        type: 'data-tool-call-suspended',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-suspended',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          suspendPayload: hasTransformedToolPayload(displaySuspendTransform)
+            ? displaySuspendTransform.transformed
+            : chunk.payload.suspendPayload,
+          resumeSchema: chunk.payload.resumeSchema,
+          resumed: true,
+        },
+      } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
