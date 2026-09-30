@@ -1,10 +1,16 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'node:crypto';
 
-export function createThreadsTest({ storage }: { storage: MastraStorage }) {
+export function createThreadsTest({
+  storage,
+  staleReadSafeThreadUpdates = true,
+}: {
+  storage: MastraStorage;
+  staleReadSafeThreadUpdates?: boolean;
+}) {
   let memoryStorage: MemoryStorage;
 
   beforeAll(async () => {
@@ -1191,6 +1197,48 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrieved?.title).toBe('Renamed');
       expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
     });
+
+    it.runIf(staleReadSafeThreadUpdates)(
+      'given a concurrent archive, when a title update runs from a stale read, then both changes persist',
+      async () => {
+        const thread = await givenThread();
+        const stale = await memoryStorage.getThreadById({ threadId: thread.id });
+        const archivedAt = new Date('2026-03-04T05:06:07.000Z');
+        await memoryStorage.updateThread({ id: thread.id, archivedAt });
+
+        const spy = vi.spyOn(memoryStorage, 'getThreadById').mockResolvedValueOnce(stale);
+        try {
+          await memoryStorage.updateThread({ id: thread.id, title: 'Renamed concurrently' });
+        } finally {
+          spy.mockRestore();
+        }
+        const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+        expect(retrieved?.title).toBe('Renamed concurrently');
+        expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
+      },
+    );
+
+    it.runIf(staleReadSafeThreadUpdates)(
+      'given a concurrent title update, when archiving runs from a stale read, then both changes persist',
+      async () => {
+        const thread = await givenThread();
+        const stale = await memoryStorage.getThreadById({ threadId: thread.id });
+        await memoryStorage.updateThread({ id: thread.id, title: 'Renamed first' });
+
+        const spy = vi.spyOn(memoryStorage, 'getThreadById').mockResolvedValueOnce(stale);
+        const archivedAt = new Date('2026-03-05T05:06:07.000Z');
+        try {
+          await memoryStorage.updateThread({ id: thread.id, archivedAt });
+        } finally {
+          spy.mockRestore();
+        }
+        const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+        expect(retrieved?.title).toBe('Renamed first');
+        expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
+      },
+    );
 
     describe('listThreads archived filter', () => {
       let resourceId: string;

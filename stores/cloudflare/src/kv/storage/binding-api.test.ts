@@ -75,7 +75,7 @@ const TEST_CONFIG: CloudflareWorkersConfig = {
   keyPrefix: 'mastra-test',
 };
 
-createTestSuite(new CloudflareStore(TEST_CONFIG));
+createTestSuite(new CloudflareStore(TEST_CONFIG), { staleReadSafeThreadUpdates: false });
 
 // Pre-configured client acceptance tests (using bindings)
 createClientAcceptanceTests({

@@ -8,7 +8,13 @@ import { createObservationalMemoryTest } from './observational-memory';
 import { beforeAll } from 'vitest';
 import { createMessagesListTest } from './messages-list';
 
-export function createMemoryTest({ storage }: { storage: MastraStorage }) {
+export function createMemoryTest({
+  storage,
+  staleReadSafeThreadUpdates = true,
+}: {
+  storage: MastraStorage;
+  staleReadSafeThreadUpdates?: boolean;
+}) {
   let memoryStorage: MemoryStorage;
 
   beforeAll(async () => {
@@ -25,7 +31,7 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
     console.log(`Memory domain cleared in ${end - start}ms`);
   });
 
-  createThreadsTest({ storage });
+  createThreadsTest({ storage, staleReadSafeThreadUpdates });
 
   createMessagesListTest({ storage });
 

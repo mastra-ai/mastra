@@ -52,6 +52,12 @@ export type TestCapabilities = {
    * columns must reject scoped calls; the suite asserts that rejection.
    */
   scopedTraceDeletion?: boolean;
+  /**
+   * Whether updateThread only writes the fields it was given, so an update based on a
+   * stale read can't revert a concurrent change to another field (defaults to true).
+   * Insert-only (ClickHouse) and non-atomic (Cloudflare KV) adapters set this to false.
+   */
+  staleReadSafeThreadUpdates?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -136,7 +142,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     // Tests are registered unconditionally - each test internally handles
     // checking if the storage domain is available
     createWorkflowsTests({ storage });
-    createMemoryTest({ storage });
+    createMemoryTest({ storage, staleReadSafeThreadUpdates: capabilities.staleReadSafeThreadUpdates ?? true });
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage, capabilities });
     createAgentsTests({ storage });

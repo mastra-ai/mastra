@@ -1200,32 +1200,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
-    const bumpUpdatedAt = title !== undefined || metadata !== undefined;
-    const updatedAt = bumpUpdatedAt ? new Date() : thread.updatedAt;
-    const updatedThread = {
-      ...thread,
-      title: title ?? thread.title,
-      metadata: {
-        ...thread.metadata,
-        ...metadata,
-      },
-      updatedAt,
-      ...(archivedAt !== undefined ? { archivedAt } : {}),
-    };
+    // Only write supplied fields so an update based on a stale read can't revert concurrent changes.
+    const $set: Record<string, unknown> = {};
+    if (title !== undefined) $set.title = title;
+    if (metadata !== undefined) $set.metadata = { ...thread.metadata, ...metadata };
+    if (title !== undefined || metadata !== undefined) $set.updatedAt = new Date();
+    if (archivedAt !== undefined) $set.archivedAt = archivedAt;
 
     try {
-      const collection = await this.getCollection(TABLE_THREADS);
-      await collection.updateOne(
-        { id },
-        {
-          $set: {
-            title: updatedThread.title,
-            metadata: updatedThread.metadata,
-            updatedAt,
-            ...(archivedAt !== undefined ? { archivedAt } : {}),
-          },
-        },
-      );
+      if (Object.keys($set).length > 0) {
+        const collection = await this.getCollection(TABLE_THREADS);
+        await collection.updateOne({ id }, { $set });
+      }
+      const updatedThread = await this.getThreadById({ threadId: id });
+      if (updatedThread) return updatedThread;
     } catch (error) {
       throw new MastraError(
         {
@@ -1238,7 +1226,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       );
     }
 
-    return updatedThread;
+    return { ...thread, ...$set } as StorageThreadType;
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
