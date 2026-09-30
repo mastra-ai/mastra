@@ -21,7 +21,6 @@ export const METRICS_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
  *  equivalent dimensions into metrics). */
 export const METRICS_PROPERTY_FILTER_PARAM_BY_FIELD = {
   tags: 'filterTags',
-  entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
@@ -273,7 +272,6 @@ export function applyMetricsPropertyFilterTokens(params: URLSearchParams, tokens
 export type MetricsDimensionalFilter = {
   rootEntityType?: EntityType;
   entityName?: string;
-  entityId?: string;
   tags?: string[];
   serviceName?: string;
   environment?: string;
