@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
+import { resolveExperimentalAgent } from '../../experimental-agent.js';
 import { applyOMDefaultIfUnconfigured, hasExplicitOMConfiguration } from '../om-settings.js';
 import {
   createBrowserFromSettings,
@@ -87,6 +88,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
+    experimentalAgent: null,
     backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
@@ -1476,6 +1478,102 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
+  });
+});
+
+describe('experimental agent settings', () => {
+  it.each([
+    [{}, null],
+    [{ experimentalAgent: null }, null],
+    [{ experimentalAgent: 'durable' }, 'durable'],
+    [{ experimentalAgent: 'evented' }, 'evented'],
+  ] as const)('loads %j as %s', (raw, expected) => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify(raw), 'utf-8');
+      expect(loadSettings(filePath).experimentalAgent).toBe(expected);
+    });
+  });
+
+  it('round-trips the persisted selection', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings({ experimentalAgent: 'evented' }), filePath);
+      expect(loadSettings(filePath).experimentalAgent).toBe('evented');
+    });
+  });
+
+  it('loads invalid persisted values without discarding unrelated settings', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          experimentalAgent: 'default',
+          storage: { backend: 'pg', pg: { connectionString: 'postgresql://localhost/mastracode' } },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.experimentalAgent).toBe('default');
+      expect(settings.storage).toMatchObject({
+        backend: 'pg',
+        pg: { connectionString: 'postgresql://localhost/mastracode' },
+      });
+      expect(settings._experimentalAgentSettingsPath).toBe(filePath);
+    });
+  });
+
+  it('rejects invalid persisted values when resolving the runtime', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      expect(() => resolveExperimentalAgent(settings, {})).toThrow(
+        `Invalid "experimentalAgent" setting in ${filePath}: "default". ` +
+          `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+      );
+    });
+  });
+
+  it('lets a valid environment value override an invalid persisted value', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      expect(resolveExperimentalAgent(settings, { MASTRACODE_EXPERIMENTAL_AGENT: 'evented' })).toBe('evented');
+    });
+  });
+
+  it.each([
+    ['the loaded settings', (settings: GlobalSettings) => settings],
+    ['a structured clone', (settings: GlobalSettings) => structuredClone(settings)],
+  ] as const)('preserves an invalid persisted value when saving %s', (_label, deriveSettings) => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = deriveSettings(loadSettings(filePath));
+
+      saveSettings(settings, filePath);
+
+      expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toMatchObject({ experimentalAgent: 'default' });
+      expect(() => resolveExperimentalAgent(loadSettings(filePath), {})).toThrow(
+        `Invalid "experimentalAgent" setting in ${filePath}: "default".`,
+      );
+    });
+  });
+
+  it.each([
+    ['durable', 'durable'],
+    ['off', null],
+  ] as const)('lets an explicit %s selection replace an invalid persisted value', (_label, selection) => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ experimentalAgent: 'default' }), 'utf-8');
+      const settings = loadSettings(filePath);
+
+      settings.experimentalAgent = selection;
+      saveSettings(settings, filePath);
+
+      expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toMatchObject({ experimentalAgent: selection });
+    });
   });
 });
 

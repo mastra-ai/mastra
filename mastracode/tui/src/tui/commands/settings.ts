@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ExperimentalAgent, StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -18,6 +18,10 @@ import type { SlashCommandContext } from './types.js';
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
   const color = ctx.state.session.mode.resolve().metadata?.color;
   return typeof color === 'string' ? color : undefined;
+}
+
+function resolveExperimentalAgentSetting(value: unknown): ExperimentalAgent | null {
+  return value === 'durable' || value === 'evented' ? value : null;
 }
 
 function commandExists(command: string): Promise<boolean> {
@@ -197,6 +201,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
     experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
+    experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so
@@ -284,6 +289,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.signals.experimentalScheduleTools = enabled;
         saveSettings(current);
         ctx.showInfo(`Experimental schedule tools: ${enabled ? 'on' : 'off'} (restart required)`);
+      },
+      onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
+        const current = loadSettings();
+        current.experimentalAgent = agent;
+        saveSettings(current);
+        ctx.showInfo(`Experimental agent: ${agent ?? 'off'} (restart required)`);
       },
       onBackgroundToolsChange: enabled => {
         const current = loadSettings();

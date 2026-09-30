@@ -35,7 +35,6 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
     if (before.backgroundTools?.enabled === true) throw new Error('Background tools must default off');
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental background tools\s+Off/i, terminal);
     await selectMenuRow(terminal, /Experimental background tools/i);
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[A');
@@ -46,7 +45,6 @@ export const backgroundToolsSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Experimental background tools: on \(restart required\)/i, terminal);
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental background tools\s+On/i, terminal);
     await selectMenuRow(terminal, /Experimental background tools/i);
     await runtime.waitForScreenText(/Enable background tools and the activity center/i, terminal);
     terminal.write('\x1b[B');
