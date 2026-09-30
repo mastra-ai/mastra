@@ -192,6 +192,7 @@ async function validateDurableToolCallAccess({
   toolCallId,
   requestContext,
   threadId,
+  abortSignal,
 }: {
   mastra: any;
   agent: Agent;
@@ -199,6 +200,7 @@ async function validateDurableToolCallAccess({
   toolCallId?: string;
   requestContext: RequestContext;
   threadId?: string;
+  abortSignal?: AbortSignal;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
@@ -245,7 +247,7 @@ async function validateDurableToolCallAccess({
       snapshot.status === 'suspended' &&
       (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
 
-    if (ready || Date.now() >= deadline) {
+    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
       if (!workflowRun) {
         throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
       }
@@ -2721,6 +2723,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.approveToolCall({
@@ -2922,6 +2925,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.declineToolCall({
@@ -3024,6 +3028,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3226,6 +3231,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3293,6 +3299,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.approveToolCallGenerate({
@@ -3345,6 +3352,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.declineToolCallGenerate({

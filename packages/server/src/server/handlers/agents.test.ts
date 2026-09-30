@@ -1793,6 +1793,25 @@ describe('Agent Routes Authorization', () => {
       expect(execution).not.toHaveBeenCalled();
     });
 
+    it('stops waiting for a missing durable run once the request is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const started = Date.now();
+      await expect(
+        (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: controller.signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
     const resumeRoutes = [
       { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
       { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
