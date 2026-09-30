@@ -111,6 +111,8 @@ export interface GithubTriageCommentUpsertInput {
   repository: string;
   issueNumber: number;
   body: string;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
   attribution?: FactoryArtifactAttribution;
 }
 

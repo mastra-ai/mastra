@@ -1,5 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { factoryGithubIdempotencyKey } from '../../session/agent-write-idempotency.js';
 import type { GithubIntegration } from './integration.js';
 
 const mocks = vi.hoisted(() => ({
@@ -377,6 +378,7 @@ describe('GitHub subscription entry points', () => {
         authenticatedRequestContext(),
         { issueNumber: 7, body: '<!-- mastra-factory-triage -->\nPending' },
         githubStub,
+        'triage-call-1',
       ),
     ).resolves.toMatchObject({ action: 'created', commentId: '42' });
 
@@ -395,6 +397,15 @@ describe('GitHub subscription entry points', () => {
           runId: 'thread-1',
         },
       },
+      idempotencyKey: factoryGithubIdempotencyKey({
+        orgId: 'org-1',
+        factoryProjectId: 'resource-1',
+        projectRepositoryId: 'project-repository-1',
+        repositoryId: '99',
+        threadId: 'thread-1',
+        operation: 'upsert-issue-triage-comment',
+        operationId: 'triage-call-1',
+      }),
     });
   });
 
@@ -404,6 +415,7 @@ describe('GitHub subscription entry points', () => {
         authenticatedRequestContext(),
         { issueNumber: 7, body: 'This issue has now been marked as done.' },
         githubStub,
+        'issue-comment-call-1',
       ),
     ).resolves.toMatchObject({ id: '84' });
 
@@ -423,6 +435,15 @@ describe('GitHub subscription entry points', () => {
           runId: 'thread-1',
         },
       },
+      idempotencyKey: factoryGithubIdempotencyKey({
+        orgId: 'org-1',
+        factoryProjectId: 'resource-1',
+        projectRepositoryId: 'project-repository-1',
+        repositoryId: '99',
+        threadId: 'thread-1',
+        operation: 'comment-issue',
+        operationId: 'issue-comment-call-1',
+      }),
     });
   });
 

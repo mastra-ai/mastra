@@ -1000,6 +1000,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const requestOptions = {
       actingUserId: input.attribution?.kind === 'human' ? input.attribution.userId : undefined,
       factoryAttributionApplied: input.attribution !== undefined,
+      idempotencyKey: input.idempotencyKey,
     };
     if (existing) {
       const comment = await this.#client.request<GithubComment>(
@@ -1275,7 +1276,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
         { body: appendArtifactAttributionFooter(input.body, attribution) },
-        { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+        {
+          actingUserId: input.actingUserId,
+          factoryAttributionApplied: true,
+          idempotencyKey: input.idempotencyKey,
+        },
       );
       this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
@@ -1328,7 +1333,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         body: appendPullRequestAttribution(input.body, input.attribution),
         draft: input.draft,
       },
-      { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+      {
+        actingUserId: input.actingUserId,
+        factoryAttributionApplied: true,
+        idempotencyKey: input.idempotencyKey,
+      },
     );
     const created = parsePullRequest(result);
     if (input.actingUserId && input.connection.type === 'app-installation') {
@@ -1391,7 +1400,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
       { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
   }
 
@@ -1412,7 +1421,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
       { body: appendArtifactAttributionFooter(input.body, input.attribution) },
-      { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+      {
+        actingUserId: input.actingUserId,
+        factoryAttributionApplied: true,
+        idempotencyKey: input.idempotencyKey,
+      },
     );
     this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
@@ -1474,7 +1487,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         commitId: input.commitId,
         event: input.event ? reviewEvent(input.event) : undefined,
       },
-      { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+      {
+        actingUserId: input.actingUserId,
+        factoryAttributionApplied: true,
+        idempotencyKey: input.idempotencyKey,
+      },
     );
     return parseReview(review);
   }
@@ -1497,7 +1514,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
       { body: appendArtifactAttributionFooter(input.body, input.attribution), event: reviewEvent(input.event) },
-      { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+      {
+        actingUserId: input.actingUserId,
+        factoryAttributionApplied: true,
+        idempotencyKey: input.idempotencyKey,
+      },
     );
     return parseReview(review);
   }
@@ -1562,7 +1583,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
         body,
-        { actingUserId: input.actingUserId, factoryAttributionApplied: true },
+        {
+          actingUserId: input.actingUserId,
+          factoryAttributionApplied: true,
+          idempotencyKey: input.idempotencyKey,
+        },
       ),
     );
   }

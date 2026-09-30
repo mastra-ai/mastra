@@ -85,7 +85,12 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string; factoryAttributionApplied?: boolean },
+    options?: {
+      signal?: AbortSignal;
+      actingUserId?: string;
+      factoryAttributionApplied?: boolean;
+      idempotencyKey?: string;
+    },
   ): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
@@ -130,7 +135,12 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string; factoryAttributionApplied?: boolean },
+    options?: {
+      signal?: AbortSignal;
+      actingUserId?: string;
+      factoryAttributionApplied?: boolean;
+      idempotencyKey?: string;
+    },
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
@@ -152,6 +162,9 @@ export class PlatformApiClient {
     // API-key authentication is what makes this marker trustworthy upstream.
     if (options?.factoryAttributionApplied) {
       headers['x-mastra-factory-attribution'] = 'applied';
+    }
+    if (options?.idempotencyKey) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
     }
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {

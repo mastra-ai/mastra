@@ -103,6 +103,8 @@ export interface GetIntakeIssueInput {
 
 export interface CreateIntakeCommentInput extends GetIntakeIssueInput {
   body: string;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
   /** End user the comment should be attributed to, when the provider supports acting on a user's behalf. */
   actingUserId?: string;
   /** Server-resolved provenance required by source-control issue adapters. */

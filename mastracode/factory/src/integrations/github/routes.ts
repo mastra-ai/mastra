@@ -27,6 +27,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
+import { factoryGithubIdempotencyKey } from '../../session/agent-write-idempotency.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -1478,12 +1479,7 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
-            const result = await commitAll(
-              sessionSandbox,
-              workdir,
-              body.message as string,
-              FACTORY_COMMIT_IDENTITY,
-            );
+            const result = await commitAll(sessionSandbox, workdir, body.message as string, FACTORY_COMMIT_IDENTITY);
             if (result.committed) {
               await emitAudit?.({
                 context: loose(c),
@@ -1563,8 +1559,7 @@ function buildProjectGitRoutes({
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
             const authenticatedUser = (await auth.ensureUser(loose(c))) as
-              | { name?: string; email?: string }
-              | undefined;
+              { name?: string; email?: string } | undefined;
             const attribution = resolveFactoryArtifactAttribution({
               user: authenticatedUser,
               userId,
@@ -1651,6 +1646,15 @@ function buildProjectGitRoutes({
               title,
               body: prBody,
               actingUserId: userId,
+              idempotencyKey: factoryGithubIdempotencyKey({
+                orgId,
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                repositoryId: project.repository.externalId,
+                threadId: sessionWorkspace.session.sessionId,
+                operation: 'manual-create-pull-request',
+                operationId: JSON.stringify([head, base, title, prBody ?? null]),
+              }),
               attribution: resolveFactoryArtifactAttribution({
                 user: authenticatedUser,
                 userId,

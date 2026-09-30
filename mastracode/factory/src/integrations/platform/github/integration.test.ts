@@ -136,8 +136,7 @@ describe('PlatformGithubIntegration', () => {
       'PATCH /v1/server/github/repos/acme/app/issues/comments/10',
     ]);
     expect(JSON.parse(String(fetchImpl.mock.calls[2]![1]?.body))).toEqual({
-      body:
-        '<!-- mastra-factory-triage -->\nFinal\n\n— via Mastra Factory · actor: Ada Lovelace',
+      body: '<!-- mastra-factory-triage -->\nFinal\n\n— via Mastra Factory · actor: Ada Lovelace',
     });
     expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('x-acting-user-id')).toBe('user-42');
     expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('x-mastra-factory-attribution')).toBe('applied');
@@ -182,8 +181,7 @@ describe('PlatformGithubIntegration', () => {
       'POST /v1/server/github/repos/acme/app/issues/7/comments',
     ]);
     expect(JSON.parse(String(fetchImpl.mock.calls[1]![1]?.body))).toEqual({
-      body:
-        '<!-- mastra-factory-triage -->\nPending\n\n— via Mastra Factory · actor: Ada Lovelace',
+      body: '<!-- mastra-factory-triage -->\nPending\n\n— via Mastra Factory · actor: Ada Lovelace',
     });
     expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('x-acting-user-id')).toBe('user-42');
     expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get('x-mastra-factory-attribution')).toBe('applied');
@@ -199,7 +197,10 @@ describe('PlatformGithubIntegration', () => {
       updatedAt: '2026-07-01T00:00:00Z',
     };
     const integration = createIntegration(
-      vi.fn<typeof fetch>().mockResolvedValueOnce(json({ comments: [] })).mockResolvedValueOnce(json(human)),
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ comments: [] }))
+        .mockResolvedValueOnce(json(human)),
     );
 
     await integration.upsertFactoryTriageComment({
@@ -582,6 +583,7 @@ describe('PlatformGithubIntegration', () => {
       title: 'Ship intake',
       baseBranch: 'main',
       headBranch: 'feat/intake',
+      idempotencyKey: 'acting-pr-key',
       actingUserId: 'user-42',
       attribution: ATTRIBUTION,
     });
@@ -590,12 +592,17 @@ describe('PlatformGithubIntegration', () => {
       sourceId: 'acme/app',
       issueId: '12',
       body: 'Done',
+      idempotencyKey: 'issue-comment-key',
       actingUserId: 'user-42',
       attribution: ATTRIBUTION,
     });
 
     expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
     expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+    expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'Idempotency-Key': 'acting-pr-key' });
+    expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({
+      'Idempotency-Key': 'issue-comment-key',
+    });
   });
 
   it('assigns a PR to the verified GitHub account of its opener', async () => {
@@ -735,19 +742,31 @@ describe('PlatformGithubIntegration', () => {
       title: 'Ship intake',
       baseBranch: 'main',
       headBranch: 'feat/intake',
+      idempotencyKey: 'create-pr-key',
     });
     await integration.versionControl.updatePullRequest({ ...ref, title: 'Ship all intake' });
     await integration.versionControl.closePullRequest(ref);
-    await integration.versionControl.mergePullRequest({ ...ref, method: 'squash' });
+    await integration.versionControl.mergePullRequest({ ...ref, method: 'squash', idempotencyKey: 'merge-key' });
     await integration.versionControl.listComments(ref);
-    await integration.versionControl.createComment({ ...ref, body: 'Looks good' });
+    await integration.versionControl.createComment({ ...ref, body: 'Looks good', idempotencyKey: 'comment-key' });
     await integration.versionControl.updateComment({ connection, sourceId, commentId: '91', body: 'Updated' });
     await integration.versionControl.deleteComment({ connection, sourceId, commentId: '91' });
     await integration.versionControl.listReviews(ref);
     await integration.versionControl.getReview({ ...ref, reviewId: '55' });
-    await integration.versionControl.createReview({ ...ref, event: 'approve', body: 'Ship it' });
+    await integration.versionControl.createReview({
+      ...ref,
+      event: 'approve',
+      body: 'Ship it',
+      idempotencyKey: 'review-key',
+    });
     await integration.versionControl.updateReview({ ...ref, reviewId: '55', body: 'Updated' });
-    await integration.versionControl.submitReview({ ...ref, reviewId: '55', event: 'approve', body: 'Ship it' });
+    await integration.versionControl.submitReview({
+      ...ref,
+      reviewId: '55',
+      event: 'approve',
+      body: 'Ship it',
+      idempotencyKey: 'submit-review-key',
+    });
     await integration.versionControl.dismissReview({ ...ref, reviewId: '55', message: 'Outdated' });
     await integration.versionControl.deletePendingReview({ ...ref, reviewId: '55' });
     await integration.versionControl.listReviewComments(ref);
@@ -758,6 +777,7 @@ describe('PlatformGithubIntegration', () => {
       path: 'src/a.ts',
       line: 10,
       side: 'right',
+      idempotencyKey: 'diff-comment-key',
     });
     await integration.versionControl.updateReviewComment({
       connection,
@@ -798,6 +818,16 @@ describe('PlatformGithubIntegration', () => {
       'POST /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
       'DELETE /v1/server/github/repos/acme/app/pulls/34/requested-reviewers',
     ]);
+    for (const [index, key] of [
+      [2, 'create-pr-key'],
+      [5, 'merge-key'],
+      [7, 'comment-key'],
+      [12, 'review-key'],
+      [14, 'submit-review-key'],
+      [18, 'diff-comment-key'],
+    ] as const) {
+      expect((fetchImpl.mock.calls[index]![1] as RequestInit).headers).toMatchObject({ 'Idempotency-Key': key });
+    }
   });
 
   it('mints a repository-scoped platform token for git access', async () => {

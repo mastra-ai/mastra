@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
+import { factoryGithubIdempotencyKey } from './agent-write-idempotency.js';
 import { createSourceControlTools } from './source-control-tools.js';
 
 const ATTRIBUTION = {
@@ -194,10 +195,18 @@ describe('createSourceControlTools', () => {
       audit: setup.audit,
     });
 
-    const result = await (tools.source_control_create_change_request!.execute as any)({
-      title: 'Ship it',
-      body: 'Body',
-    });
+    expect(
+      (tools.source_control_create_change_request as any).inputSchema.safeParse({
+        title: 'Ship it',
+        idempotencyKey: 'model-supplied-key',
+      }),
+    ).toMatchObject({ success: true, data: { title: 'Ship it' } });
+
+    const callId = 'tool-call-pr-1';
+    const result = await (tools.source_control_create_change_request!.execute as any)(
+      { title: 'Ship it', body: 'Body', idempotencyKey: 'agent-chosen-key' },
+      { agent: { toolCallId: callId } },
+    );
 
     expect(result).toMatchObject({ id: '17', title: 'Ship it' });
     expect(setup.getRepositoryTarget).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-1' });
@@ -210,6 +219,15 @@ describe('createSourceControlTools', () => {
       body: 'Body',
       baseBranch: 'main',
       headBranch: 'factory/issue-1',
+      idempotencyKey: factoryGithubIdempotencyKey({
+        orgId: 'org-1',
+        factoryProjectId: 'project-1',
+        projectRepositoryId: 'repo-link-1',
+        repositoryId: 'project-1',
+        threadId: 'thread-1',
+        operation: 'create-pull-request',
+        operationId: callId,
+      }),
     });
     expect(setup.emitAgent).toHaveBeenCalledWith(
       expect.objectContaining({
