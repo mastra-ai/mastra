@@ -512,14 +512,14 @@ describe('createSourceControlTools', () => {
       expect(setup.createReview).not.toHaveBeenCalled();
     });
 
-    it('rejects a body whose reviewed head disagrees with commitId', async () => {
-      const { setup, run } = await submit({
-        event: 'approve',
-        commitId: 'ce79aaafad',
-        body: `Verdict: approve\n**Reviewed head:** ${head}\n`,
-      });
-      await expect(run).rejects.toThrow(/commitId is ce79aaafad/);
-      expect(setup.createReview).not.toHaveBeenCalled();
+    it('rejects a body whose reviewed head disagrees with commitId in the schema', async () => {
+      expect(
+        await schemaError({
+          event: 'approve',
+          commitId: 'ce79aaafad',
+          body: `Verdict: approve\n**Reviewed head:** ${head}\n`,
+        }),
+      ).toMatch(/commitId is ce79aaafad/);
     });
 
     it('publishes when the reviewed head matches the current head', async () => {

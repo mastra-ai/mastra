@@ -511,11 +511,18 @@ export function createSourceControlTools({
         .superRefine((input, ctx) => {
           const mismatch = verdictEventMismatch(input.event, input.body);
           if (mismatch) ctx.addIssue({ code: 'custom', path: ['body'], message: mismatch });
-          if (reviewedHeadFromBody(input.body) === null) {
+          const reviewedHead = reviewedHeadFromBody(input.body);
+          if (reviewedHead === null) {
             ctx.addIssue({
               code: 'custom',
               path: ['body'],
               message: 'Every "Reviewed head:" line must name the same full 40- or 64-character commit SHA.',
+            });
+          } else if (reviewedHead && input.commitId && input.commitId.toLowerCase() !== reviewedHead) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['commitId'],
+              message: `Review body says "Reviewed head: ${reviewedHead}" but commitId is ${input.commitId}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
             });
           }
         }),
@@ -530,15 +537,10 @@ export function createSourceControlTools({
           if (!pullRequest) {
             throw new Error(`Change request ${input.changeRequestId} was not found; nothing was posted.`);
           }
-          for (const [label, sha] of [
-            ['current change-request head', pullRequest.headSha],
-            ['commitId', input.commitId],
-          ] as const) {
-            if (sha && sha.toLowerCase() !== reviewedHead) {
-              throw new Error(
-                `Review body says "Reviewed head: ${reviewedHead}" but the ${label} is ${sha}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
-              );
-            }
+          if (pullRequest.headSha && pullRequest.headSha.toLowerCase() !== reviewedHead) {
+            throw new Error(
+              `Review body says "Reviewed head: ${reviewedHead}" but the current change-request head is ${pullRequest.headSha}. Nothing was posted. Re-review the current head and regenerate the body before publishing.`,
+            );
           }
         }
         const base = {
