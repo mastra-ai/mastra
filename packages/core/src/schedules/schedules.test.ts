@@ -215,6 +215,31 @@ describe('mastra.schedules canonical service', () => {
     expect(typeof resumed.nextFireAt).toBe('number');
   });
 
+  it('rejects pause/resume on completed schedules but reactivates on a timing change', async () => {
+    const { mastra } = makeMastra(['a']);
+    const schedule = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(schedule.id, { status: 'completed' });
+
+    await expect(mastra.schedules.pause(schedule.id)).rejects.toMatchObject({ details: { status: 409 } });
+    await expect(mastra.schedules.resume(schedule.id)).rejects.toMatchObject({ details: { status: 409 } });
+
+    const updated = await mastra.schedules.update(schedule.id, { timezone: 'UTC' });
+    expect(updated.status).toBe('active');
+    expect(typeof updated.nextFireAt).toBe('number');
+  });
+
+  it('list hides completed schedules unless explicitly filtered by status', async () => {
+    const { mastra } = makeMastra(['a']);
+    const completed = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
+    await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(completed.id, { status: 'completed' });
+
+    expect((await mastra.schedules.list()).map(schedule => schedule.id)).not.toContain(completed.id);
+    expect((await mastra.schedules.list({ status: 'completed' })).map(schedule => schedule.id)).toEqual([completed.id]);
+  });
+
   it('update({ status: active }) on a paused schedule recomputes nextFireAt like resume()', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-23T12:30:00.000Z'));

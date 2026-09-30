@@ -1,7 +1,7 @@
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
-import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
+import type { Schedule, ScheduleStatus, SchedulesStorage } from '../storage/domains/schedules/base';
 import { slugify } from '../utils/slugify';
 import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
 import type { ScheduledWorkflowTrigger } from '../workflows/scheduler/types';
@@ -49,6 +49,16 @@ function normalizeScheduleId(rawId: string, prefix: string): string {
   return canonical;
 }
 
+function scheduleCompleted(id: string, op: string): MastraError {
+  return new MastraError({
+    id: 'SCHEDULES_COMPLETED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    details: { status: 409 },
+    text: `schedules.${op}: schedule "${id}" is completed and can no longer be ${op === 'pause' ? 'paused' : 'resumed'}.`,
+  });
+}
+
 /**
  * Flat agent-schedule view returned by the {@link Schedules} service.
  * Projects the underlying `Schedule` row + `target.type === 'agent'` payload
@@ -67,7 +77,7 @@ export interface AgentSchedule {
   prompt: string;
   cron: string;
   timezone?: string;
-  status: 'active' | 'paused';
+  status: ScheduleStatus;
   nextFireAt: number;
   lastFireAt?: number;
   lastRunId?: string;
@@ -93,7 +103,7 @@ export interface WorkflowSchedule {
   agentId?: undefined;
   cron: string;
   timezone?: string;
-  status: 'active' | 'paused';
+  status: ScheduleStatus;
   nextFireAt: number;
   lastFireAt?: number;
   lastRunId?: string;
@@ -215,7 +225,7 @@ export interface ListSchedulesFilter {
   resourceId?: string;
   /** Agent-schedule only: match the free-form target name. */
   name?: string;
-  status?: 'active' | 'paused';
+  status?: ScheduleStatus;
 }
 
 /**
@@ -428,6 +438,8 @@ export class Schedules {
       ...(filter?.status ? { status: filter.status } : {}),
     });
     const views = schedules
+      // Completed schedules are hidden unless explicitly requested by status.
+      .filter(s => filter?.status !== undefined || s.status !== 'completed')
       .map(toScheduleView)
       .filter((s): s is AnySchedule => s !== null)
       // `workflowId` filters at the store level, but an `agentId` filter must
@@ -472,13 +484,21 @@ export class Schedules {
         : this.#patchWorkflowTarget(existing.target, patch);
 
     // Recompute the next fire when the cadence changes OR when this patch
-    // resumes a paused schedule. Resuming must follow the same semantics as
-    // resume(): a paused row carries a stale nextFireAt (often in the past),
-    // so flipping status back to 'active' without recomputing would trigger
-    // an immediate spurious fire instead of waiting for the next cron tick.
-    const resuming = patch.status === 'active' && existing.status === 'paused';
+    // resumes a paused schedule. Editing a completed schedule's cadence
+    // reactivates it; lifecycle-only patches cannot resume a completed row.
+    const timingChanged = patch.cron !== undefined || patch.timezone !== undefined;
+    if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
+      throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');
+    }
+    const nextStatus: ScheduleStatus =
+      existing.status === 'completed'
+        ? timingChanged
+          ? (patch.status ?? 'active')
+          : 'completed'
+        : (patch.status ?? existing.status);
+    const resuming = nextStatus === 'active' && existing.status !== 'active';
     const nextFireAt =
-      patch.cron !== undefined || patch.timezone !== undefined || resuming
+      timingChanged || resuming
         ? computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() })
         : undefined;
 
@@ -488,7 +508,7 @@ export class Schedules {
       target: nextTarget,
       ...(nextFireAt !== undefined ? { nextFireAt } : {}),
       ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
-      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(nextStatus !== existing.status ? { status: nextStatus } : {}),
     });
     return toScheduleView(updated)!;
   }
@@ -580,6 +600,7 @@ export class Schedules {
       });
     }
     if (existing.status === 'paused') return toScheduleView(existing)!;
+    if (existing.status === 'completed') throw scheduleCompleted(existing.id, 'pause');
     const updated = await store.updateSchedule(existing.id, { status: 'paused' });
     return toScheduleView(updated)!;
   }
@@ -597,6 +618,7 @@ export class Schedules {
       });
     }
     if (existing.status === 'active') return toScheduleView(existing)!;
+    if (existing.status === 'completed') throw scheduleCompleted(existing.id, 'resume');
     const nextFireAt = computeNextFireAt(existing.cron, {
       timezone: existing.timezone,
       after: Date.now(),
