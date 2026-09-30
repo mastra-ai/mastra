@@ -139,9 +139,19 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   if (!context.pullRequest) return;
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own Review card, which is the arrival — the
-  // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation has nothing to file.
-  if (context.item && context.pullRequestIntake !== true) return;
+  // evaluation carrying `pullRequestIntake`. The authoring Work item's own
+  // evaluation files nothing; a Work item still Building moves to Review, since
+  // its build has produced the pull request.
+  if (context.item && context.pullRequestIntake !== true) {
+    if (context.board !== 'work') return;
+    if (!(context.item.stages.length === 1 && context.item.stages[0] === 'execute')) return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:work-pull-request-opened`,
+      board: 'work',
+      stage: 'review',
+    } as const;
+  }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =

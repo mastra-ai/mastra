@@ -1057,10 +1057,10 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('files the pull request card only on the arrival, not on the item that authored it', async () => {
+  it('files the pull request card only on the arrival and moves the Building authoring item to Review', async () => {
     // Opening a pull request is evaluated once per card it concerns. Only the
     // arrival — flagged `pullRequestIntake` — files the card; the authoring
-    // item's own evaluation must leave the card alone.
+    // Work item's own evaluation advances it from Building to Review.
     const authored = {
       ...githubContext('pullRequestOpened'),
       item: {
@@ -1078,7 +1078,18 @@ describe('built-in board and integration handlers', () => {
       itemRevision: 1,
     };
 
-    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestOpened?.(authored)).toEqual({
+      type: 'transition',
+      idempotencyKey: expect.stringMatching(/:work-pull-request-opened$/),
+      board: 'work',
+      stage: 'review',
+    });
+    for (const stages of [['review'], ['planning']]) {
+      expect(
+        await defaultGithubRules.pullRequestOpened?.({ ...authored, item: { ...authored.item, stages } }),
+      ).toBeUndefined();
+    }
+    expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, board: 'review' })).toBeUndefined();
     expect(await defaultGithubRules.pullRequestOpened?.({ ...authored, pullRequestIntake: true })).toMatchObject({
       type: 'upsertLinkedWorkItem',
       source: 'github-pr',
