@@ -445,7 +445,7 @@ export class LocalSandbox extends MastraSandbox<string> {
     );
     candidates: for (const name of candidates) {
       const checkpointDir = this._checkpointPath(name);
-      if (!(await this._checkpointReadable(checkpointDir))) {
+      if (!(await this._checkpointIdentity(checkpointDir))) {
         // Missing checkpoint → try the next candidate (same contract as provider 404).
         continue;
       }
@@ -467,38 +467,32 @@ export class LocalSandbox extends MastraSandbox<string> {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
-        await fs.rm(this.workingDirectory, { recursive: true, force: true }).catch(() => {});
+        // A failed wipe must throw: copying over leftovers would pass the identity check with mixed contents.
+        await fs.rm(this.workingDirectory, { recursive: true, force: true });
         await fs.mkdir(this.workingDirectory, { recursive: true });
       }
       throw new Error(`Checkpoint "${name}" kept changing while seeding the working directory`);
     }
   }
 
-  /** Identity of the directory currently at `checkpointDir`, waiting out a mid-swap gap. */
-  private async _checkpointIdentity(checkpointDir: string): Promise<string | undefined> {
-    if (!(await this._checkpointReadable(checkpointDir))) return undefined;
-    const stat = await fs.stat(checkpointDir).catch(() => undefined);
-    return stat ? `${stat.dev}:${stat.ino}:${stat.ctimeMs}` : undefined;
-  }
-
   /**
-   * Check that a checkpoint directory exists, retrying briefly to cover the
-   * instant in `_captureCheckpoint` where the old checkpoint has been renamed
-   * away but the replacement has not yet been renamed into place. The window
-   * is two atomic renames, so a couple of short retries close it.
+   * Identity of the directory currently at `checkpointDir`, or undefined if no
+   * directory is there. Retries briefly to cover the instant in
+   * `_captureCheckpoint` where the old checkpoint has been renamed away but the
+   * replacement has not yet been renamed into place. The window is two atomic
+   * renames, so a couple of short retries close it.
    */
-  private async _checkpointReadable(checkpointDir: string): Promise<boolean> {
+  private async _checkpointIdentity(checkpointDir: string): Promise<string | undefined> {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 25));
       try {
-        const stat = await fs.stat(checkpointDir);
-        if (stat.isDirectory()) return true;
-        return false;
+        const stat = await fs.stat(checkpointDir, { bigint: true });
+        return stat.isDirectory() ? `${stat.dev}:${stat.ino}:${stat.ctimeNs}` : undefined;
       } catch {
         // Missing right now — may be mid-swap; retry.
       }
     }
-    return false;
+    return undefined;
   }
 
   /**
