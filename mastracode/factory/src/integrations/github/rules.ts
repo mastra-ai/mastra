@@ -287,6 +287,20 @@ function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
   return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
+/**
+ * Whether a login is Factory itself. Prefers the resolved identity, which is
+ * observed from Factory's own writes, and falls back to the configured slug.
+ */
+export function isFactoryGithubLogin(
+  github: Pick<GithubRulesIntegration, 'identity' | 'slug'>,
+  login: string | null | undefined,
+): boolean {
+  if (github.identity?.known) return github.identity.matches(login);
+  const slug = github.slug?.trim();
+  if (!slug || !login) return false;
+  return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+}
+
 export class GithubRules {
   constructor(private readonly options: GithubRulesOptions) {}
 
@@ -297,11 +311,7 @@ export class GithubRules {
    * disabled every self-loop guard.
    */
   #isFactoryLogin(login: string | undefined): boolean {
-    const identity = this.options.github.identity;
-    if (identity?.known) return identity.matches(login);
-    const slug = this.options.github.slug?.trim();
-    if (!slug || !login) return false;
-    return login.toLowerCase() === `${slug.toLowerCase()}[bot]`;
+    return isFactoryGithubLogin(this.options.github, login);
   }
 
   #factoryMentionTarget(): string | undefined {

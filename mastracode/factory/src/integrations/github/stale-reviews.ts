@@ -13,18 +13,25 @@ export function isFactoryRequestChangesVerdict(body: string | null | undefined):
 /**
  * Factory change requests an approval has superseded. GitHub keeps a reviewer's
  * change request blocking until that same reviewer approves or it is dismissed,
- * so one left by another Factory identity (a rotated reviewer token, say) pins
- * `reviewDecision` at CHANGES_REQUESTED. Only each author's latest review is
- * considered, and only when it carries Factory's verdict marker — human reviews
- * are never selected.
+ * so one left by Factory's app identity pins `reviewDecision` at
+ * CHANGES_REQUESTED after a separate reviewer identity approves.
+ *
+ * A review is selected only when it is its author's latest verdict (comments
+ * do not replace a verdict on GitHub), was submitted before the approval, is a
+ * change request carrying Factory's verdict marker, and its author is verified
+ * as Factory. Nothing is selected unless the approval is still in effect.
  */
 export function selectStaleFactoryReviews(
   reviews: readonly Review[],
   approving: { reviewId: string; author: string },
+  isFactoryAuthor: (login: string) => boolean,
 ): Review[] {
+  const approval = reviews.find(review => review.id === approving.reviewId);
+  if (!approval || approval.state !== 'approved' || !approval.submittedAt) return [];
+  const cutoff = approval.submittedAt;
   const latestByAuthor = new Map<string, Review>();
   for (const review of reviews) {
-    if (!review.author || review.state === 'pending') continue;
+    if (!review.author || review.state === 'pending' || review.state === 'commented') continue;
     const key = review.author.toLowerCase();
     const previous = latestByAuthor.get(key);
     if (!previous || (review.submittedAt ?? '') >= (previous.submittedAt ?? '')) latestByAuthor.set(key, review);
@@ -35,7 +42,10 @@ export function selectStaleFactoryReviews(
       review.id !== approving.reviewId &&
       review.author!.toLowerCase() !== approvingAuthor &&
       review.state === 'changes-requested' &&
-      isFactoryRequestChangesVerdict(review.body),
+      !!review.submittedAt &&
+      review.submittedAt < cutoff &&
+      isFactoryRequestChangesVerdict(review.body) &&
+      isFactoryAuthor(review.author!),
   );
 }
 
@@ -43,6 +53,7 @@ export function selectStaleFactoryReviews(
 export async function dismissStaleFactoryReviews(
   versionControl: Pick<VersionControl, 'listReviews' | 'dismissReview'>,
   decision: Omit<FactoryDismissStaleReviewsDecision, 'type' | 'idempotencyKey'>,
+  isFactoryAuthor: (login: string) => boolean,
 ): Promise<string[]> {
   const ref = {
     connection: { type: 'app-installation' as const, installationId: decision.installationId },
@@ -59,7 +70,7 @@ export async function dismissStaleFactoryReviews(
   const stale = selectStaleFactoryReviews(reviews, {
     reviewId: decision.approvingReviewId,
     author: decision.approvingAuthor,
-  });
+  }, isFactoryAuthor);
   for (const review of stale) {
     await versionControl.dismissReview({
       ...ref,
