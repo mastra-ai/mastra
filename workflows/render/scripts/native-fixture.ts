@@ -13,7 +13,8 @@ export const database = new Pool({ connectionString, max: 2 });
 export const persistence = createPostgresPersistence({ connectionString, max: 3 });
 export const storage = new PostgresStore({ id: 'render-native-fixture', connectionString });
 let ready: Promise<unknown> | undefined;
-const initialize = () =>
+/** Create only the isolated fixture audit/fault tables, once per process. */
+export const initialize = () =>
   (ready ??= database.query(`
   CREATE TABLE IF NOT EXISTS mastra_render_native_audit (
     id bigserial PRIMARY KEY, audit text NOT NULL, event text NOT NULL, details jsonb NOT NULL
@@ -21,6 +22,7 @@ const initialize = () =>
   CREATE TABLE IF NOT EXISTS mastra_render_native_faults (
     audit text NOT NULL, fault text NOT NULL, PRIMARY KEY (audit, fault)
   )`));
+/** Record fixture effects with native ancestry, independently of adapter result persistence. */
 export async function audit(key: string, event: string, details: Record<string, unknown> = {}) {
   await initialize();
   await database.query('INSERT INTO mastra_render_native_audit (audit,event,details) VALUES ($1,$2,$3)', [
@@ -29,6 +31,7 @@ export async function audit(key: string, event: string, details: Record<string, 
     JSON.stringify({ ...details, pid: process.pid, native: getRenderTaskContext().metadata }),
   ]);
 }
+/** Atomically inject each requested fixture fault only once across native retries. */
 async function firstFault(key: string, fault: string) {
   await initialize();
   return (

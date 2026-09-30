@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Render } from '@renderinc/sdk';
+import { waitForCanceledTree } from './native-cancellation.js';
 import { adapter, database, persistence, storage, workflow, retryWorkflow } from './native-fixture.js';
 
 const client = new Render();
@@ -12,6 +13,7 @@ const modes = (
 const observations: unknown[] = [];
 mkdirSync('.scratch', { recursive: true });
 const output = process.env.NATIVE_RESULTS_FILE ?? '.scratch/native-observations.json';
+/** Read only this fixture invocation's effects for lineage and duplicate-execution assertions. */
 async function events(audit: string) {
   return (
     await database.query<{
@@ -51,9 +53,11 @@ try {
     assert.equal(record.status, expected, JSON.stringify(record.error));
     const log = await events(audit);
     const root = await client.workflows.getTaskRun(record.providerId!);
-    const chain = (await client.workflows.listTaskRuns({ rootTaskRunId: [record.providerId!], limit: 100 }))
-      .map(item => item.taskRun)
-      .filter(item => item.rootTaskRunId === record.providerId);
+    const readChain = async () =>
+      (await client.workflows.listTaskRuns({ rootTaskRunId: [record.providerId!], limit: 100 }))
+        .map(item => item.taskRun)
+        .filter(item => item.rootTaskRunId === record.providerId);
+    const chain = mode === 'cancel' ? await waitForCanceledTree(record.providerId!, readChain) : await readChain();
     const repeat = mode.startsWith('root-') ? 2 : 1;
     assert.equal(
       log.filter(event => event.event === 'prepare').length,

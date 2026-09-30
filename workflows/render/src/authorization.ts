@@ -52,6 +52,7 @@ export function verifyNestedDispatch(envelope: RootEnvelope, parent: RunRecord |
     throw new RenderProtocolError('Nested workflow dispatch authorization does not match its payload');
 }
 
+/** Reject new work once its coordinator closes, expires, or receives cancellation. */
 export function assertDispatchOpen(record: RunRecord): void {
   if (
     record.status !== 'running' ||

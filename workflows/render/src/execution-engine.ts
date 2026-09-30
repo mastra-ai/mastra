@@ -25,11 +25,13 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
     super(options);
   }
 
+  /** Fence callbacks against stale attempts while exposing the stable logical run ID. */
   override async invokeStartCallback(info: Parameters<DefaultExecutionEngine['invokeStartCallback']>[0]) {
     await coordinatorRuntime().assertActive();
     return super.invokeStartCallback({ ...info, runId: logicalRunId(info.runId) });
   }
 
+  /** Reject lifecycle callbacks after cancellation or attempt replacement. */
   override async invokeLifecycleCallbacks(info: Parameters<DefaultExecutionEngine['invokeLifecycleCallbacks']>[0]) {
     await coordinatorRuntime().assertActive();
     return super.invokeLifecycleCallbacks({ ...info, runId: logicalRunId(info.runId) });
@@ -94,6 +96,7 @@ export class RenderExecutionEngine extends DefaultExecutionEngine {
     });
   }
 
+  /** Recognize only nested graphs registered in this provider's validated manifest. */
   override isNestedWorkflowStep(step: Parameters<DefaultExecutionEngine['isNestedWorkflowStep']>[0]): boolean {
     return this.binding.manifest().nested.has(step.id);
   }
