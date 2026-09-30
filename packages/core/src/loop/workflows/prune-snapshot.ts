@@ -191,6 +191,24 @@ function stripTerminalPayloadState<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Drops `agentSpanData.attributes.instructions`: the agent's full system
+ * prompt, recorded on the exported AGENT_RUN span. The durable loop carries
+ * `agentSpanData` forward on every iteration, so each step result holds another
+ * copy of the prompt on its payload/output side, rewritten at every snapshot
+ * boundary. Every `rebuildSpan` site reads
+ * `reg?.resumeAgentSpanData ?? initData.agentSpanData` (i.e.
+ * `snapshot.context.input`, which is never touched here), and the live span was
+ * already exported during streaming. Span ids and other attributes stay.
+ */
+function stripAgentSpanInstructions<T>(value: T): T {
+  if (!isPlainObject(value)) return value;
+  const span = value.agentSpanData;
+  if (!isPlainObject(span) || !isPlainObject(span.attributes) || !('instructions' in span.attributes)) return value;
+  const { instructions: _instructions, ...attributes } = span.attributes;
+  return { ...value, agentSpanData: { ...span, attributes } } as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(
   result: Record<string, any>,
@@ -203,6 +221,9 @@ function pruneStepResult(
   if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
+  pruned.payload = stripAgentSpanInstructions(pruned.payload);
+  if ('output' in pruned) pruned.output = stripAgentSpanInstructions(pruned.output);
+  if ('prevOutput' in pruned) pruned.prevOutput = stripAgentSpanInstructions(pruned.prevOutput);
 
   if (TERMINAL_STEP_STATUSES.has(result.status)) {
     // Completed steps are never resumed again — their old suspension state is
