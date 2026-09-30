@@ -3811,18 +3811,19 @@ export class Run<
   }
 
   /**
-   * Whether the run has already finished, based on its persisted snapshot.
-   * The in-memory status alone is not reliable because it never reaches success/failed.
+   * Whether the run has already finished, according to either its in-memory status or its persisted snapshot.
+   * The snapshot covers runs finished by another Run instance; the in-memory status covers runs without storage
+   * or whose terminal snapshot was not persisted.
    */
   protected async hasReachedTerminalStatus(): Promise<boolean> {
+    if (TERMINAL_WORKFLOW_RUN_STATUSES.has(this.workflowRunStatus)) return true;
     try {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       const snapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
       });
-      const status = snapshot?.status ?? this.workflowRunStatus;
-      return TERMINAL_WORKFLOW_RUN_STATUSES.has(status);
+      return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
     } catch {
       return false;
     }
@@ -4087,6 +4088,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5136,6 +5138,7 @@ export class Run<
         if (!params.isVNext && result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
         }
+        this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.cleanup?.();
         }
@@ -5282,6 +5285,7 @@ export class Run<
       workflowSpan,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
@@ -5423,6 +5427,7 @@ export class Run<
       perStep,
     });
 
+    this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }

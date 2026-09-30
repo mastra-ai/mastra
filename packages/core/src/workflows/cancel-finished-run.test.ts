@@ -59,4 +59,50 @@ describe('cancel() on a finished run', () => {
       }
     });
   });
+
+  describe('default engine without a persisted terminal snapshot', () => {
+    const buildWorkflow = (id: string, shouldPersistSnapshot?: () => boolean) =>
+      createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false, ...(shouldPersistSnapshot ? { shouldPersistSnapshot } : {}) },
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }),
+        )
+        .commit();
+
+    it('preserves status when there is no storage', async () => {
+      const workflow = buildWorkflow('cancel-finished-no-storage');
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      await run.cancel();
+
+      expect(run.workflowRunStatus).toBe('success');
+      expect(run.abortController.signal.aborted).toBe(false);
+    });
+
+    it('preserves status when snapshot persistence is disabled', async () => {
+      const workflowId = 'cancel-finished-no-persist';
+      const workflow = buildWorkflow(workflowId, () => false);
+      const storage = new MockStore();
+      const mastra = new Mastra({ workflows: { [workflowId]: workflow }, storage, logger: false });
+      const run = await mastra.getWorkflow(workflowId).createRun();
+      await run.start({ inputData: {} });
+
+      await run.cancel();
+
+      expect(run.workflowRunStatus).toBe('success');
+      const store = await storage.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
+      expect(snapshot?.status).not.toBe('canceled');
+    });
+  });
 });
