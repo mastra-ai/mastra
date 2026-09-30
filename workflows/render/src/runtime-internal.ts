@@ -26,6 +26,7 @@ export function isActiveWorkerRun(workflowId: string, runId: string): boolean {
   return active?.run?.workflowId === workflowId && (active.run.runId === runId || active.localRunId === runId);
 }
 
+/** Require a coordinator scope with the authority needed to reserve and dispatch nested runs. */
 export function coordinatorRuntime() {
   const active = runtime.getStore();
   if (!active?.run || !active.attempt || !active.assertActive)
@@ -37,10 +38,12 @@ export function coordinatorRuntime() {
   };
 }
 
+/** Carry parallel-branch mutation restrictions into nested workflow execution. */
 export function inheritedReadOnly(): boolean {
   return runtime.getStore()?.readOnly ?? false;
 }
 
+/** Keep user-visible run identity stable while retry attempts use separate snapshot IDs. */
 export function logicalRunId(fallback: string): string {
   return runtime.getStore()?.run?.runId ?? fallback;
 }
@@ -51,7 +54,7 @@ export function getRenderTaskContext(): TaskContext {
 }
 
 /** Authorize a complete child payload and run its registered native definition under the root concurrency bound. */
-export function dispatchChild(name: string, envelope: RootEnvelope): Promise<unknown> {
+export function dispatchChild(name: string, envelope: RootEnvelope, onDispatch?: () => void): Promise<unknown> {
   const active = runtime.getStore();
   const definition = active?.tasks.get(name);
   if (!active?.authorize || !definition) return unsupported(`unauthorized Render child dispatch ${name}`);
@@ -59,6 +62,8 @@ export function dispatchChild(name: string, envelope: RootEnvelope): Promise<unk
     await active.assertActive?.();
     const authorized = active.authorize!(envelope);
     json([authorized], 'authorized task arguments');
+    // From this point, a thrown error cannot prove that Render rejected the task.
+    onDispatch?.();
     const result = await active.context.run(definition, authorized);
     await active.assertActive?.();
     return result;

@@ -6,6 +6,7 @@ import { RenderProtocolError, RenderRunConflictError, RenderSubmissionUnknownErr
 import { compileManifest, type Manifest } from './manifest.js';
 import { workflowBindings, type WorkflowBinding } from './bindings.js';
 import { identity } from './native.js';
+import { reconcileUnboundNested } from './nested.js';
 export { workflowBindings, type WorkflowBinding } from './bindings.js';
 import { DEFAULT_RETRY, NO_RETRY, taskPolicy, type TaskPolicy } from './policy.js';
 import { frameworkJson, json, type RootEnvelope } from './protocol.js';
@@ -162,7 +163,8 @@ export class RenderProvider {
   /** Reconcile one persisted run with native terminal state without regressing an active coordinator. */
   async getRun(workflowId: string, runId: string): Promise<RunRecord | null> {
     const record = await this.store.get(workflowId, runId);
-    if (!record || terminal(record.status) || !record.providerId) return record;
+    if (!record || terminal(record.status)) return record;
+    if (!record.providerId) return reconcileUnboundNested(this.store, record);
     const remote = await this.transport.get(record.providerId);
     if (remote.status === 'pending' || remote.status === 'running' || remote.status === 'paused') {
       // Render pauses a coordinating root while its children run. This is still
