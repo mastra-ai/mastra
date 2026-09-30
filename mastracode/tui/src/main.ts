@@ -214,8 +214,9 @@ const asyncCleanup = (): Promise<void> => {
     threadScheduler?.stop();
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
-    const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+    // Call close() on the pubsub itself; a detached method loses `this` and rejects silently.
+    const pubsubToClose = signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), pubsubToClose?.close?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
