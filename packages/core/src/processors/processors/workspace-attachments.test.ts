@@ -326,7 +326,7 @@ describe('WorkspaceAttachmentsProcessor', () => {
       ]);
       expect(parts.map(p => p.type)).toEqual(['text', 'text', 'text']);
       expect(parts[0].text).toContain('uploads/');
-      expect(parts[2].text).toContain('b.xls');
+      expect(parts[2].text).toContain('"b.xls" (application/vnd.ms-excel)');
     });
 
     it.each([

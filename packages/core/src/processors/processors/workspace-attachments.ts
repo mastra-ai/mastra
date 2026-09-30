@@ -20,11 +20,11 @@ export const WORKSPACE_REQUIRED_FOR_ATTACHMENT = 'WORKSPACE_REQUIRED_FOR_ATTACHM
 export const ATTACHMENT_NOT_INLINE = 'ATTACHMENT_NOT_INLINE';
 export const ATTACHMENT_INVALID_DATA = 'ATTACHMENT_INVALID_DATA';
 
-const ROUTED_MEDIA_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-]);
-const ROUTED_EXTENSIONS = ['.xlsx', '.xls'];
+const ROUTED_TYPES_BY_EXTENSION: Record<string, string> = {
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+};
+const ROUTED_MEDIA_TYPES = new Set(Object.values(ROUTED_TYPES_BY_EXTENSION));
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 export interface WorkspaceAttachmentsProcessorOptions {
@@ -43,10 +43,9 @@ type Pending = Candidate & { replace: (text: string) => void };
 function routedMediaType(mediaType: unknown, filename: unknown): string | undefined {
   const type = typeof mediaType === 'string' ? mediaType.toLowerCase() : undefined;
   if (type && ROUTED_MEDIA_TYPES.has(type)) return type;
-  if (typeof filename === 'string' && ROUTED_EXTENSIONS.some(ext => filename.toLowerCase().endsWith(ext))) {
-    return type ?? 'application/octet-stream';
-  }
-  return undefined;
+  if (typeof filename !== 'string') return undefined;
+  const extension = filename.toLowerCase().match(/\.[^.]+$/)?.[0];
+  return extension ? ROUTED_TYPES_BY_EXTENSION[extension] : undefined;
 }
 
 function isCompositeFilesystem(fs: unknown): fs is CompositeFilesystem {
@@ -118,6 +117,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
         typeof message.content !== 'object'
       )
         continue;
+
       const content = message.content;
       const parts = Array.isArray(content.parts) ? content.parts : [];
       const routedFileData = new Set<unknown>();
