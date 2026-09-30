@@ -26,6 +26,7 @@ import { listTableRowsTool } from './tools/list-table-rows.js';
 import { listTablesTool } from './tools/list-tables.js';
 import { listUsersTool } from './tools/list-users.js';
 import { listWorkbooksTool } from './tools/list-workbooks.js';
+import { listWorksheetsTool } from './tools/list-worksheets.js';
 import { updateRangeTool } from './tools/update-range.js';
 import { updateWorksheetTool } from './tools/update-worksheet.js';
 
@@ -56,6 +57,7 @@ export function createMicrosoftExcelTools(options?: ProviderToolsOptions) {
     microsoft_excel_list_tables: listTablesTool(platformProxy),
     microsoft_excel_list_users: listUsersTool(platformProxy),
     microsoft_excel_list_workbooks: listWorkbooksTool(platformProxy),
+    microsoft_excel_list_worksheets: listWorksheetsTool(platformProxy),
     microsoft_excel_update_range: updateRangeTool(platformProxy),
     microsoft_excel_update_worksheet: updateWorksheetTool(platformProxy),
   };

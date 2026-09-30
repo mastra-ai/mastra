@@ -49,8 +49,17 @@ import { templatePinFor, type TemplatePin } from './templates-config.js';
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
 const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
+/**
+ * Method-agnostic proxy helpers on the SDK context. `proxy` dispatches by
+ * `method` option and `paginate` iterates a paginated endpoint; both are
+ * modelled by the platform proxy runtime and treated as first-class provider
+ * proxy usage (so an exec that only calls `nango.proxy(...)` still passes
+ * the "must call the provider proxy" check).
+ */
+const PROVIDER_PROXY_HELPERS = new Set(['proxy', 'paginate']);
 const PROXY_CONTEXT_METHODS = new Set([
   ...PROXY_REQUEST_METHODS,
+  ...PROVIDER_PROXY_HELPERS,
   'getConnection',
   'getMetadata',
   'updateMetadata',
@@ -58,6 +67,13 @@ const PROXY_CONTEXT_METHODS = new Set([
   'ActionError',
   'log',
 ]);
+/**
+ * Node built-in modules that are always available in the platform proxy
+ * runtime. Import statements naming them are preserved in the generated
+ * module (rewritten to the `node:` prefix), so templates can rely on
+ * standard library helpers like `crypto.randomUUID`.
+ */
+const ALLOWED_NODE_BUILTIN_MODULES = new Set(['crypto', 'node:crypto']);
 /**
  * Proxy config keys that shipped templates use but the platform proxy cannot
  * honor. If a template sets any of these, the action is skipped rather than
@@ -84,6 +100,8 @@ interface ExtractedAction {
   moduleStatements: string[];
   execBody: string;
   usesProxyRequestType: boolean;
+  /** Import lines from allowlisted Node built-ins the template relies on. */
+  preservedImports: string[];
 }
 
 interface SkippedAction {
@@ -137,10 +155,10 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
 function unsupportedImportReason(source: SourceFile): string | undefined {
   for (const declaration of source.getImportDeclarations()) {
     const moduleName = declaration.getModuleSpecifierValue();
-    if (moduleName !== 'zod' && moduleName !== TEMPLATE_SDK_MODULE) {
+    if (moduleName === 'zod' || ALLOWED_NODE_BUILTIN_MODULES.has(moduleName)) continue;
+    if (moduleName !== TEMPLATE_SDK_MODULE) {
       return `imports unsupported module: ${moduleName}`;
     }
-    if (moduleName !== TEMPLATE_SDK_MODULE) continue;
 
     const unsupported = declaration
       .getNamedImports()
@@ -151,6 +169,28 @@ function unsupportedImportReason(source: SourceFile): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Collects the preserved-import lines that must appear in the generated
+ * module so the emitted exec body still resolves its callees. Rewrites
+ * bare `crypto` module specifiers to the `node:` form to match modern
+ * Node style and match our lint rules.
+ */
+function collectPreservedImports(source: SourceFile): string[] {
+  const lines: string[] = [];
+  for (const declaration of source.getImportDeclarations()) {
+    const moduleName = declaration.getModuleSpecifierValue();
+    if (!ALLOWED_NODE_BUILTIN_MODULES.has(moduleName)) continue;
+    const namedImports = declaration.getNamedImports().map(namedImport => namedImport.getStructure());
+    if (namedImports.length === 0) continue;
+    const specifier = moduleName.startsWith('node:') ? moduleName : `node:${moduleName}`;
+    const clause = namedImports
+      .map(named => (named.alias && named.alias !== named.name ? `${named.name} as ${named.alias}` : named.name))
+      .join(', ');
+    lines.push(`import { ${clause} } from '${specifier}';`);
+  }
+  return lines;
 }
 
 function isGeneratedActionStatement(statement: Statement, createActionCall: CallExpression): boolean {
@@ -511,8 +551,11 @@ function extractAction(
   // binding-aware: `.credentials` reads on unrelated values (for example a
   // `credentials` input field) don't trigger the rewrite.
   const readsCredentials = execReadsConnectionCredentials(execInitializer);
-  const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
-    new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
+  // Match `nango.get(`, `nango.get<T>(`, and `nango.proxy(`/`nango.paginate(`
+  // as first-class provider-proxy calls. The optional `<...>` accommodates
+  // templates that pass a response-type parameter to the SDK method.
+  const usesProviderProxy = [...PROXY_REQUEST_METHODS, ...PROVIDER_PROXY_HELPERS].some(method =>
+    new RegExp(`\\bnango\\.${method}(?:\\s*<[^>]*>)?\\s*\\(`).test(source.getFullText()),
   );
   if (!usesProviderProxy) {
     return { kind: 'skip', reason: 'exec does not call the provider proxy' };
@@ -616,6 +659,7 @@ function extractAction(
       moduleStatements,
       execBody,
       usesProxyRequestType,
+      preservedImports: collectPreservedImports(source),
     },
   };
 }
@@ -688,8 +732,14 @@ ${execBodyStatements(action.execBody)}
 ${execBodyStatements(action.execBody)}
     },`;
 
+  // Node built-in imports come first to satisfy `import/order` (builtin >
+  // external > internal). Templates that use e.g. `randomUUID` are the only
+  // preserved-import producers today; adding more allowlisted specifiers
+  // will keep landing here.
+  const preservedImports = action.preservedImports.length > 0 ? `${action.preservedImports.join('\n')}\n\n` : '';
+
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
-import { createTool } from '@mastra/core/tools';
+${preservedImports}import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 ${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}${redactImport}

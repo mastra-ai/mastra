@@ -191,6 +191,128 @@ describe('createPlatformProxy request context binding', () => {
   });
 });
 
+function callUrl(fetchMock: ReturnType<typeof vi.fn>, index: number): URL {
+  const raw = fetchMock.mock.calls[index]![0] as string;
+  return new URL(raw, 'https://example.test');
+}
+
+function callMethod(fetchMock: ReturnType<typeof vi.fn>, index: number): string {
+  return (fetchMock.mock.calls[index]![1] as RequestInit).method ?? 'GET';
+}
+
+describe('proxy dispatch helper', () => {
+  it('defaults to GET when the template omits method', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ items: [] }));
+    const proxy = makeProxy(fetchMock);
+    await proxy.proxy({ endpoint: 'items' });
+    expect(callMethod(fetchMock, 0)).toBe('GET');
+  });
+
+  it('forwards an explicit method to the platform proxy', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ ok: true }));
+    const proxy = makeProxy(fetchMock);
+    await proxy.proxy({ method: 'POST', endpoint: 'items', data: { a: 1 } });
+    expect(callMethod(fetchMock, 0)).toBe('POST');
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).body).toBe(JSON.stringify({ a: 1 }));
+  });
+
+  it('threads responseType through to return an ArrayBuffer', async () => {
+    const binary = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(binary, { status: 200 }));
+    const proxy = makeProxy(fetchMock);
+    const response = await proxy.proxy<ArrayBuffer>({
+      endpoint: 'documents/export',
+      responseType: 'arraybuffer',
+    });
+    expect(response.data).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(response.data)).toEqual(binary);
+  });
+});
+
+describe('paginate helper', () => {
+  it('follows an absolute link cursor across pages and stops when the link is absent', async () => {
+    const first = {
+      value: [{ id: 1 }, { id: 2 }],
+      '@odata.nextLink': 'https://graph.example.test/v1.0/items?$skiptoken=abc',
+    };
+    const second = { value: [{ id: 3 }] };
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(first)).mockResolvedValueOnce(Response.json(second));
+    const proxy = makeProxy(fetchMock);
+    const collected: number[] = [];
+    for await (const items of proxy.paginate<{ id: number }>({
+      endpoint: 'items',
+      paginate: {
+        type: 'link',
+        response_path: 'value',
+        link_path_in_response_body: '@odata.nextLink',
+        limit_name_in_request: '$top',
+        limit: 50,
+      },
+    })) {
+      for (const item of items) collected.push(item.id);
+    }
+    expect(collected).toEqual([1, 2, 3]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstUrl = callUrl(fetchMock, 0);
+    expect(firstUrl.pathname).toBe('/v2/connections/conn-1/proxy/items');
+    expect(firstUrl.searchParams.get('$top')).toBe('50');
+
+    const secondUrl = callUrl(fetchMock, 1);
+    expect(secondUrl.pathname).toBe('/v2/connections/conn-1/proxy/v1.0/items');
+    expect(secondUrl.searchParams.get('$skiptoken')).toBe('abc');
+    const secondHeaders = new Headers((fetchMock.mock.calls[1]![1] as RequestInit).headers);
+    expect(secondHeaders.get('base-url-override')).toBe('https://graph.example.test');
+  });
+
+  it('increments an offset cursor and stops when the page is short', async () => {
+    const first = { value: [{ id: 1 }, { id: 2 }] };
+    const second = { value: [{ id: 3 }] };
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(first)).mockResolvedValueOnce(Response.json(second));
+    const proxy = makeProxy(fetchMock);
+    const collected: number[] = [];
+    for await (const items of proxy.paginate<{ id: number }>({
+      endpoint: 'items',
+      paginate: {
+        type: 'offset',
+        response_path: 'value',
+        offset_name_in_request: 'offset',
+        offset_start_value: 0,
+        limit_name_in_request: 'limit',
+        limit: 2,
+      },
+    })) {
+      for (const item of items) collected.push(item.id);
+    }
+    expect(collected).toEqual([1, 2, 3]);
+    expect(callUrl(fetchMock, 0).searchParams.get('offset')).toBe('0');
+    expect(callUrl(fetchMock, 1).searchParams.get('offset')).toBe('2');
+  });
+
+  it('follows a cursor value read from the response body', async () => {
+    const first = { items: [{ id: 1 }], next: 'cur-2' };
+    const second = { items: [{ id: 2 }] };
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(first)).mockResolvedValueOnce(Response.json(second));
+    const proxy = makeProxy(fetchMock);
+    const collected: number[] = [];
+    for await (const items of proxy.paginate<{ id: number }>({
+      endpoint: 'items',
+      paginate: {
+        type: 'cursor',
+        response_path: 'items',
+        cursor_name_in_request: 'page_token',
+        cursor_path_in_response_body: 'next',
+        limit_name_in_request: 'limit',
+        limit: 100,
+      },
+    })) {
+      for (const item of items) collected.push(item.id);
+    }
+    expect(collected).toEqual([1, 2]);
+    expect(callUrl(fetchMock, 1).searchParams.get('page_token')).toBe('cur-2');
+  });
+});
+
 describe('callProxy retry policy', () => {
   it('retries an idempotent GET on transient network failures', async () => {
     const fetchMock = vi

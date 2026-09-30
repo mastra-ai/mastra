@@ -3,21 +3,13 @@
   "localId": "microsoft-word",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-30T14:24:50.213Z",
-  "toolCount": 16,
-  "skippedActions": [
-    {
-      "action": "copy-word-document",
-      "reason": "imports unsupported module: crypto"
-    },
-    {
-      "action": "get-word-document-content",
-      "reason": "exec uses unsupported template SDK helpers: proxy"
-    }
-  ],
+  "generatedAt": "2026-09-30T14:44:09.598Z",
+  "toolCount": 18,
+  "skippedActions": [],
   "files": {
     "index.ts": "79b4a50fdaeae6b89d98d722b92eae086aa599172e608ac0f8ea04940456b42b",
-    "tools.ts": "01f4ee4339ba7285390a5336839c0c6f685e42664d471788111366c6080fcff7",
+    "tools.ts": "4b973c14480c0d338f5656b3128515a6e832206fe0fd3d3c4513c69c7fdc6073",
+    "tools/copy-word-document.ts": "89567e87c98592e5233577068e599d3ba779f9da550d1a8c6b6f6dc5e26a7ea6",
     "tools/create-folder.ts": "01f4de67993cc98bccbe92eac291fe277fa97b1135936b4ddf8fd32e02c01008",
     "tools/create-sharing-link.ts": "6ebcd895399aeb3c8650cff11e6f43583bbd6aa55d588b9de2eb05a77e74e8ec",
     "tools/create-word-document.ts": "011ad44cbbd15e20f69fb48b28a4bde4b860f6b614b221e83f44f0bde50a336a",
@@ -25,6 +17,7 @@
     "tools/get-site-drive.ts": "2ae0d6cf928621c9d21d78ae785a96dbcb3ffbd6dda34452e5e1dfc47d8e1f96",
     "tools/get-user-drive.ts": "1de34add696e9d19c13a47ee78480cc7c34de5b3980025b6237d067f6c2153e9",
     "tools/get-word-document-as-pdf.ts": "6c0c0579ce820e749e030e4adfb550f34e32ee257030990ddf5989c69b7f7877",
+    "tools/get-word-document-content.ts": "f275b01947a8859948129f21bc1a3f89a367e50f11560c4d8c95784c7aa0e730",
     "tools/get-word-document.ts": "62a9d40e819e4b63c1a9887679247930a111744b73e53e7486aaaab29995f055",
     "tools/list-sites.ts": "eecf7ebcfc05953812334060c7ead6f2fe5d0b285f4459b750917fcf4ecb63ac",
     "tools/list-users.ts": "4fe2d645cb0362b854cc9b727a6cddae325b0013dc7ba98c7ed9aa08720a61ae",

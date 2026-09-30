@@ -3,17 +3,12 @@
   "localId": "microsoft-excel",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-30T14:24:52.976Z",
-  "toolCount": 26,
-  "skippedActions": [
-    {
-      "action": "list-worksheets",
-      "reason": "exec uses unsupported template SDK helpers: paginate"
-    }
-  ],
+  "generatedAt": "2026-09-30T14:41:40.837Z",
+  "toolCount": 27,
+  "skippedActions": [],
   "files": {
     "index.ts": "f2cee2fa6267036ddf959b7fffc938d69bf596646f732e258696f112010c410b",
-    "tools.ts": "f156dc8effc7da70a09ebb98de96b1aea657d3177809de8aefde10874af8bb66",
+    "tools.ts": "1245c389b36f01ed323d1773b6baea3a51962ad848d8684aa87d2287f74d9302",
     "tools/add-chart.ts": "6b1328c4b07032c764eaba8e1e68bb12d5f4a11eb692a15d00926a130cbe6e85",
     "tools/add-defined-name.ts": "6078798825783319046bd4956369f010c5f0ea5aa7639c6e15d383c4076627a2",
     "tools/add-table-rows.ts": "819a972b6e788dfceeb54174a212ffde3e6aa8eea074a9dc9d693e1f7e5afab9",
@@ -38,6 +33,7 @@
     "tools/list-tables.ts": "18f671239f24d525448c2de18b611ae0989c1abfe580fd499effed321ef4cd4f",
     "tools/list-users.ts": "63cda3922501119f98f6886ec6d244f025ce68c0819f52b75d6f1c185f34c224",
     "tools/list-workbooks.ts": "11e2adb285fc8dd37f4353363d2eaa90aae9e4298891b0cc3c84c54da68a5455",
+    "tools/list-worksheets.ts": "bd4ee21b9af60a93899630fec294d02721975904750ba4c3a8ef00e0b27840df",
     "tools/update-range.ts": "a7611e3dbc02141b1b0cf41961cd3662f3b5184624d7e098066850f3611eed02",
     "tools/update-worksheet.ts": "47d8baf8e1b8211d03b02d206bf80f08a6a31540d4b401abfb583035579e2d3f"
   }

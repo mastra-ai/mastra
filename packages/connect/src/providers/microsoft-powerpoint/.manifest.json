@@ -3,17 +3,12 @@
   "localId": "microsoft-powerpoint",
   "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
   "templateRepo": "NangoHQ/integration-templates",
-  "generatedAt": "2026-09-30T14:24:55.174Z",
-  "toolCount": 17,
-  "skippedActions": [
-    {
-      "action": "list-presentation-permissions",
-      "reason": "exec does not call the provider proxy"
-    }
-  ],
+  "generatedAt": "2026-09-30T14:41:45.580Z",
+  "toolCount": 18,
+  "skippedActions": [],
   "files": {
     "index.ts": "1c62443777214e15f30c008401b7e3c7490dcd04b8cc2e6da125b7454c6bef28",
-    "tools.ts": "fa99c8b7c46dcb0be7ddfa57d2dececdd79cad647b06228c968935678fd114e7",
+    "tools.ts": "fc305fe2549ba144bbd4bc4ae032272ad9cde249ce72f95a634afb34da2b5057",
     "tools/copy-presentation.ts": "8e6408fe803eee50117eb4309269b93f532097424a7868db175ee13cb9f1ea05",
     "tools/create-presentation.ts": "f1a0e98dd92aa65702043ee7a4bdd0aeb66cebeaab93000ed699b956b2f365e4",
     "tools/create-sharing-link.ts": "a2f8671c72d7a8e373bc7a77149f4f8d9845276eebbe7de549127e9e7dfa2a7d",
@@ -23,6 +18,7 @@
     "tools/get-presentation.ts": "eb9d6641c4fa33f568a790300503a5d5c58f10e3f68105b27ad7e884172c77ba",
     "tools/get-site-drive.ts": "05311fa205fd14cf5ccdd13bd0807b5d1ccc46c9f2090f3fe45b434a08af1825",
     "tools/get-user-drive.ts": "91e192498da96e7b6a70802309b2d9bb8858e035d9e1687ba3d1720614f5e830",
+    "tools/list-presentation-permissions.ts": "0504608b40c22b36c7c553b415d34ea1f3436939a6af9d3edbb8507ad0274094",
     "tools/list-presentation-thumbnails.ts": "eacaa70061ba54cc145f88aecde44756e5ef32668895c248cc4b1d94ff807ed4",
     "tools/list-presentation-versions.ts": "71e33d321f114f2a105f5af5644f4f20fb9880249e087c04137e7cab68acb5a5",
     "tools/list-presentations.ts": "4354a51cd87a25ad195f31a2abd94259c055976e39b9592ba8a72f4e012da0f7",

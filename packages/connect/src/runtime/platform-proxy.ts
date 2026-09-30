@@ -28,6 +28,17 @@ import { MastraConnectError } from '../errors.js';
  * subset of the upstream proxy configuration containing only the fields the
  * templates actually use.
  */
+/**
+ * Pagination configuration accepted by `platformProxy.paginate`. Mirrors the
+ * subset of Nango's paginate options that shipped templates use:
+ *
+ * - `link`: follow a next-link URL returned in the response body.
+ * - `offset`: increment a numeric offset query parameter each page.
+ * - `cursor`: forward an opaque cursor value from the response into the
+ *   next request as a query parameter.
+ */
+export type PaginateConfig = LinkPaginateConfig | OffsetPaginateConfig | CursorPaginateConfig;
+
 export interface PlatformProxyRequest {
   endpoint: string;
   params?: NonNullable<ProxyRequestOptions['query']>;
@@ -51,6 +62,50 @@ export interface PlatformProxyRequest {
    * wrap with `Buffer.from(...)`.
    */
   responseType?: 'arraybuffer';
+  /**
+   * Optional pagination config. Only consumed by `platformProxy.paginate`;
+   * ignored by the single-page HTTP method helpers. Kept on the base shape
+   * because templates author one `ProxyConfiguration` object and pass it to
+   * whichever helper they need.
+   */
+  paginate?: PaginateConfig;
+}
+
+/** Extended request shape for `platformProxy.proxy` / `platformProxy.paginate`. */
+export interface PlatformProxyDispatchRequest extends PlatformProxyRequest {
+  /** HTTP method. Defaults to GET when omitted (matches Nango's `proxy` helper). */
+  method?: ProxyRequestOptions['method'];
+}
+
+interface CommonPaginateConfig {
+  /** Dot-separated path inside the response body where the items array lives. */
+  response_path?: string;
+  /** Page-size query parameter name to send with each request. */
+  limit_name_in_request?: string;
+  /** Page-size value to send with each request. */
+  limit?: number;
+}
+
+export interface LinkPaginateConfig extends CommonPaginateConfig {
+  type: 'link';
+  /** Dot-separated path inside the response body that contains the next-page URL. */
+  link_path_in_response_body: string;
+}
+
+export interface OffsetPaginateConfig extends CommonPaginateConfig {
+  type: 'offset';
+  /** Query parameter name that receives the running offset. */
+  offset_name_in_request: string;
+  /** Initial offset value. Defaults to 0. */
+  offset_start_value?: number;
+}
+
+export interface CursorPaginateConfig extends CommonPaginateConfig {
+  type: 'cursor';
+  /** Dot-separated path inside the response body that contains the next cursor value. */
+  cursor_path_in_response_body: string;
+  /** Query parameter name that receives the next cursor value. */
+  cursor_name_in_request: string;
 }
 
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
@@ -127,6 +182,20 @@ export interface PlatformProxy {
   put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  /**
+   * Method-agnostic proxy call. Mirrors Nango's `nango.proxy({ method, ... })`
+   * helper — dispatches to the underlying HTTP method (default GET) so
+   * templates that build a single request config and pick the method
+   * separately work unchanged.
+   */
+  proxy<T = ProviderResponseData>(config: PlatformProxyDispatchRequest): Promise<PlatformProxyResponse<T>>;
+  /**
+   * Iterates a paginated provider endpoint using Nango's paginate config
+   * shape. Each yielded value is the page's item array as parsed from the
+   * response body. Follows `type: 'link'` (next-link URL), `'offset'`
+   * (offset query parameter), or `'cursor'` (opaque cursor value).
+   */
+  paginate<T = ProviderResponseData>(config: PlatformProxyDispatchRequest): AsyncGenerator<T[], void, unknown>;
   getConnection(): Promise<TemplateConnectionContext>;
   /**
    * `getConnection()` plus the raw connection credential fetched from the
@@ -251,6 +320,100 @@ function isTransient(error: unknown): boolean {
 }
 
 /**
+ * Reads `path.a.b` off a nested provider response body. Falls back to a
+ * direct property lookup first so keys that literally contain dots (Microsoft
+ * Graph's `@odata.nextLink`, for example) resolve without requiring the
+ * caller to escape them.
+ */
+function readPath(source: unknown, path: string | undefined): unknown {
+  if (!path) return source;
+  if (source !== null && typeof source === 'object' && path in (source as Record<string, unknown>)) {
+    return (source as Record<string, unknown>)[path];
+  }
+  let current: unknown = source;
+  for (const segment of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+/** Coerces the items collection at `response_path` to a typed array. */
+function extractItems<T>(body: unknown, responsePath: string | undefined): T[] {
+  const raw = readPath(body, responsePath);
+  return Array.isArray(raw) ? (raw as T[]) : [];
+}
+
+/**
+ * Splits a next-link URL from a provider response into an endpoint path and
+ * a base URL override the platform proxy can execute. Provider next-links
+ * come back as absolute URLs (`https://graph.microsoft.com/v1.0/…?…`), which
+ * `callProxy` cannot use directly — it needs `path` and `baseUrlOverride`
+ * separately.
+ */
+function splitAbsoluteNextLink(nextLink: string): { path: string; baseUrlOverride: string } | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(nextLink);
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== 'https:') return undefined;
+  return {
+    path: `${parsed.pathname.replace(/^\/+/, '')}${parsed.search}`,
+    baseUrlOverride: `${parsed.protocol}//${parsed.host}`,
+  };
+}
+
+function buildFirstPageRequest(base: PlatformProxyRequest, config: PaginateConfig): PlatformProxyRequest {
+  const params = { ...(base.params ?? {}) };
+  if (config.limit_name_in_request && config.limit !== undefined) {
+    params[config.limit_name_in_request] = config.limit;
+  }
+  if (config.type === 'offset') {
+    params[config.offset_name_in_request] = config.offset_start_value ?? 0;
+  }
+  return { ...base, params };
+}
+
+function buildNextPageRequest(
+  base: PlatformProxyRequest,
+  config: PaginateConfig,
+  responseBody: unknown,
+  lastPageSize: number,
+  previous: PlatformProxyRequest,
+): PlatformProxyRequest | undefined {
+  if (config.type === 'link') {
+    const nextLink = readPath(responseBody, config.link_path_in_response_body);
+    if (typeof nextLink !== 'string' || nextLink.length === 0) return undefined;
+    const split = splitAbsoluteNextLink(nextLink);
+    if (!split) return undefined;
+    // Follow the provider's next-link verbatim: it already carries every
+    // query parameter needed for the next page, and any client-side
+    // `params` would collide with it.
+    return { ...base, params: undefined, endpoint: split.path, baseUrlOverride: split.baseUrlOverride };
+  }
+  if (config.type === 'cursor') {
+    const nextCursor = readPath(responseBody, config.cursor_path_in_response_body);
+    if (typeof nextCursor !== 'string' && typeof nextCursor !== 'number') return undefined;
+    if (nextCursor === '' || nextCursor === null || nextCursor === undefined) return undefined;
+    return {
+      ...previous,
+      params: { ...(previous.params ?? {}), [config.cursor_name_in_request]: nextCursor as string | number },
+    };
+  }
+  // Offset: keep advancing until the provider returns fewer items than the
+  // page size. Without a limit hint, exit after any page — offset paging is
+  // meaningless without a stable window size.
+  if (config.limit === undefined || lastPageSize < config.limit) return undefined;
+  const previousOffset = Number(previous.params?.[config.offset_name_in_request] ?? config.offset_start_value ?? 0);
+  return {
+    ...previous,
+    params: { ...(previous.params ?? {}), [config.offset_name_in_request]: previousOffset + lastPageSize },
+  };
+}
+
+/**
  * Builds the platform proxy context shared by every tool of a provider
  * toolset. Connection id and client config resolve lazily inside each call.
  */
@@ -259,6 +422,32 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     (method: ProxyRequestOptions['method']) =>
     <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
       callProxy<T>(method, context, config);
+  const proxy = <T>({ method, ...config }: PlatformProxyDispatchRequest): Promise<PlatformProxyResponse<T>> =>
+    callProxy<T>(method ?? 'GET', context, config);
+  async function* paginate<T>({
+    paginate: pageConfig,
+    method,
+    ...requestBase
+  }: PlatformProxyDispatchRequest): AsyncGenerator<T[], void, unknown> {
+    if (!pageConfig) {
+      throw new MastraConnectError(
+        'invalid_options',
+        'platformProxy.paginate requires a `paginate` config on the request.',
+      );
+    }
+    const httpMethod = method ?? 'GET';
+    let nextRequest: PlatformProxyRequest | undefined = buildFirstPageRequest(requestBase, pageConfig);
+    while (nextRequest) {
+      const response = await callProxy<unknown>(httpMethod, context, nextRequest);
+      const items = extractItems<T>(response.data, pageConfig.response_path);
+      yield items;
+      // The provider indicates the end of pagination by either omitting the
+      // next-page cue (link/cursor) or returning fewer items than the page
+      // size. Stop before making a redundant call.
+      if (items.length === 0) break;
+      nextRequest = buildNextPageRequest(requestBase, pageConfig, response.data, items.length, nextRequest);
+    }
+  }
   let connectionContext: Promise<ConnectionContext> | undefined;
   const loadConnection = () => (connectionContext ??= loadConnectionContext(context));
   const getConnection = async (): Promise<TemplateConnectionContext> => {
@@ -279,6 +468,8 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     put: bind('PUT'),
     patch: bind('PATCH'),
     delete: bind('DELETE'),
+    proxy,
+    paginate,
     getConnection,
     getConnectionWithCredentials,
     getMetadata: async <T = Record<string, ProviderResponseData>>() => {

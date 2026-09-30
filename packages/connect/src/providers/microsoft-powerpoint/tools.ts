@@ -11,6 +11,7 @@ import { getPresentationContentTool } from './tools/get-presentation-content.js'
 import { getPresentationTool } from './tools/get-presentation.js';
 import { getSiteDriveTool } from './tools/get-site-drive.js';
 import { getUserDriveTool } from './tools/get-user-drive.js';
+import { listPresentationPermissionsTool } from './tools/list-presentation-permissions.js';
 import { listPresentationThumbnailsTool } from './tools/list-presentation-thumbnails.js';
 import { listPresentationVersionsTool } from './tools/list-presentation-versions.js';
 import { listPresentationsTool } from './tools/list-presentations.js';
@@ -32,6 +33,7 @@ export function createMicrosoftPowerpointTools(options?: ProviderToolsOptions) {
     microsoft_powerpoint_get_presentation: getPresentationTool(platformProxy),
     microsoft_powerpoint_get_site_drive: getSiteDriveTool(platformProxy),
     microsoft_powerpoint_get_user_drive: getUserDriveTool(platformProxy),
+    microsoft_powerpoint_list_presentation_permissions: listPresentationPermissionsTool(platformProxy),
     microsoft_powerpoint_list_presentation_thumbnails: listPresentationThumbnailsTool(platformProxy),
     microsoft_powerpoint_list_presentation_versions: listPresentationVersionsTool(platformProxy),
     microsoft_powerpoint_list_presentations: listPresentationsTool(platformProxy),
