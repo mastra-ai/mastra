@@ -9,7 +9,8 @@ import { isRunLocalTopic } from '../../events/topics';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_VERSIONS_KEY, RequestContext } from '../../request-context';
+import type { VersionOverrides } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { WorkflowsStorage } from '../../storage';
@@ -27,6 +28,20 @@ import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import {
+  applySelectedLabelToResolvedAgent,
+  assertAgentVersionPinsOwnerIntegrity,
+  assertContinuationVersionOverrides,
+  exactVersionOverridesForPins,
+  getAgentVersionPins,
+  getResolvedAgentVersionSelection,
+  mergeLegacyContinuationRootPins,
+  reconcileLegacyPersistedVersionPinDefaultStatus,
+  reconcileRootVersionOverrides,
+  resolveLegacyContinuationRootPin,
+  setAgentVersionPins,
+} from '../version-pins';
+import type { AgentVersionPins } from '../version-pins';
 
 import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -50,6 +65,58 @@ const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptio
 const RECOVERY_LEASE_TTL_MS = 30_000;
 const RECOVERY_LEASE_RENEW_INTERVAL_MS = 10_000;
 const localRecoveryClaims = new Map<string, string>();
+
+function getDurableSnapshotVersions(input: DurableAgenticWorkflowInput): VersionOverrides | undefined {
+  return input.requestContextEntries?.[MASTRA_VERSIONS_KEY] as VersionOverrides | undefined;
+}
+
+function getLegacyDurableRootPin(
+  input: DurableAgenticWorkflowInput,
+  agentId: string,
+): AgentVersionPins['root'] | undefined {
+  if (input.agentVersionPins !== undefined) return undefined;
+  const span = input.agentSpanData as
+    | { entityVersionId?: unknown; metadata?: { entityVersionId?: unknown } }
+    | undefined;
+  const spanVersionId = span?.metadata?.entityVersionId ?? span?.entityVersionId;
+  // Older durable snapshots persisted only a root ID. Preserve that identity
+  // even when observability was disabled, and reject contradictory old pins.
+  return mergeLegacyContinuationRootPins(
+    agentId,
+    typeof input.agentVersionId === 'string' && input.agentVersionId.length > 0
+      ? { agentId, versionId: input.agentVersionId }
+      : undefined,
+    typeof spanVersionId === 'string' && spanVersionId.length > 0 ? { agentId, versionId: spanVersionId } : undefined,
+  );
+}
+
+function getDurableWorkflowVersionPins(
+  input: DurableAgenticWorkflowInput,
+  agentId: string,
+): AgentVersionPins | undefined {
+  const legacyRoot = getLegacyDurableRootPin(input, agentId);
+  return assertAgentVersionPinsOwnerIntegrity(
+    reconcileLegacyPersistedVersionPinDefaultStatus(
+      input.agentVersionPins ?? (legacyRoot ? { root: legacyRoot } : undefined),
+      getDurableSnapshotVersions(input),
+    ),
+    agentId,
+  );
+}
+
+function replaceHistoricalRootWithExactPin(
+  versions: VersionOverrides | undefined,
+  rootPin: NonNullable<AgentVersionPins['root']>,
+): VersionOverrides | undefined {
+  if (!versions) return undefined;
+  return {
+    ...versions,
+    ...(versions.self ? { self: { versionId: rootPin.versionId } } : {}),
+    ...(versions.agents?.[rootPin.agentId]
+      ? { agents: { ...versions.agents, [rootPin.agentId]: { versionId: rootPin.versionId } } }
+      : {}),
+  };
+}
 
 interface RecoveryLease {
   assertOwned(): void;
@@ -563,6 +630,8 @@ export interface DurableAgentRecoverActiveRunsResult {
  * mirror `stream()` / `resume()`.
  */
 export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
+  /** Optional assertion that must match the immutable version selected by the run. */
+  versions?: AgentExecutionOptions<OUTPUT>['versions'];
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
@@ -1112,7 +1181,45 @@ export class DurableAgent<
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) messageList deserialize skipped: ${error}`);
     }
 
-    const wrapped = this.#wrappedAgent as Agent<string, any, TOutput>;
+    const versionPins = getDurableWorkflowVersionPins(workflowInput, this.id);
+    const currentSelection = getResolvedAgentVersionSelection(this);
+    if (versionPins && !versionPins.root && currentSelection) {
+      throw new MastraError({
+        id: 'PINNED_VERSION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Durable recovery was persisted without a root version and cannot run on resolved version "${currentSelection.versionId}".`,
+        details: { agentId: this.id, resolvedVersionId: currentSelection.versionId },
+      });
+    }
+    setAgentVersionPins(requestContext, versionPins);
+    const frozenVersions = exactVersionOverridesForPins(versionPins);
+    if (frozenVersions) requestContext.set(MASTRA_VERSIONS_KEY, frozenVersions);
+    let recoveryAgent: Agent<string, any, TOutput> = this as unknown as Agent<string, any, TOutput>;
+    if (versionPins?.root) {
+      if (versionPins.root.agentId !== this.id) {
+        throw new MastraError({
+          id: 'PINNED_VERSION_CONFLICT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Durable run is pinned to agent "${versionPins.root.agentId}", not "${this.id}".`,
+          details: { agentId: this.id, pinnedAgentId: versionPins.root.agentId },
+        });
+      }
+      if (!this.#mastra) {
+        throw new Error(`Cannot recover pinned durable agent "${this.id}" without a Mastra instance.`);
+      }
+      recoveryAgent = (await this.#mastra.resolveVersionedAgent(recoveryAgent as unknown as Agent, {
+        versionId: versionPins.root.versionId,
+      })) as unknown as Agent<string, any, TOutput>;
+      applySelectedLabelToResolvedAgent(recoveryAgent, versionPins.root);
+    }
+    const wrapped =
+      (
+        recoveryAgent as Agent<string, any, TOutput> & {
+          __getDurableExecutionAgent?: () => Agent<string, any, TOutput>;
+        }
+      ).__getDurableExecutionAgent?.() ?? recoveryAgent;
     let model;
     try {
       model = await wrapped.getModel({ requestContext });
@@ -1419,6 +1526,14 @@ export class DurableAgent<
     return this.#wrappedAgent.getConfiguredToolHooks();
   }
 
+  override getToolsForExecution(options: any) {
+    return this.#wrappedAgent.getToolsForExecution(options);
+  }
+
+  override __resolveExplicitAgentVersionPins(options: any) {
+    return this.#wrappedAgent.__resolveExplicitAgentVersionPins(options);
+  }
+
   // --- Default options ---
   override getDefaultOptions(options?: any) {
     return this.#wrappedAgent.getDefaultOptions(options);
@@ -1658,6 +1773,11 @@ export class DurableAgent<
     this.#wrappedAgent.__setTools(tools);
   }
 
+  /** @internal Configuration-bearing agent used by durable preparation. */
+  __getDurableExecutionAgent(): Agent<TAgentId, TTools, TOutput> {
+    return this.#wrappedAgent;
+  }
+
   /**
    * Raw stored config lives on the wrapped agent for the same reason as the
    * mutators above: durable preparation and tracing read
@@ -1672,6 +1792,7 @@ export class DurableAgent<
   }
 
   override __setRawConfig(rawConfig: Record<string, unknown>): void {
+    super.__setRawConfig(rawConfig);
     this.#wrappedAgent.__setRawConfig(rawConfig);
   }
 
@@ -2160,6 +2281,7 @@ export class DurableAgent<
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+      versionResolutionAgent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
@@ -2369,6 +2491,43 @@ export class DurableAgent<
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
+    const warmRequestContext = entry?.requestContext as RequestContext | undefined;
+    let warmPins = reconcileLegacyPersistedVersionPinDefaultStatus(
+      getAgentVersionPins(warmRequestContext),
+      warmRequestContext?.get(MASTRA_VERSIONS_KEY),
+    );
+    const contextVersions = options?.requestContext?.get(MASTRA_VERSIONS_KEY) as
+      | AgentExecutionOptions<TOutput>['versions']
+      | undefined;
+    reconcileRootVersionOverrides(options?.versions as VersionOverrides | undefined, this.id);
+    reconcileRootVersionOverrides(contextVersions as VersionOverrides | undefined, this.id);
+    if (entry && !warmPins) {
+      const legacyRootPin = mergeLegacyContinuationRootPins(
+        this.id,
+        resolveLegacyContinuationRootPin(options?.versions as VersionOverrides | undefined, this.id),
+        resolveLegacyContinuationRootPin(contextVersions as VersionOverrides | undefined, this.id),
+        resolveLegacyContinuationRootPin(
+          warmRequestContext?.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined,
+          this.id,
+        ),
+      );
+      if (legacyRootPin) warmPins = { root: legacyRootPin };
+    }
+    if (warmPins && warmRequestContext) setAgentVersionPins(warmRequestContext, warmPins);
+    if (warmPins) {
+      const currentSelection = getResolvedAgentVersionSelection(this);
+      if (!warmPins.root && currentSelection) {
+        throw new MastraError({
+          id: 'PINNED_VERSION_CONFLICT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Durable continuation was persisted without a root version and cannot run on resolved version "${currentSelection.versionId}".`,
+          details: { agentId: this.id, resolvedVersionId: currentSelection.versionId },
+        });
+      }
+      assertContinuationVersionOverrides(options?.versions, warmPins, this.id);
+      assertContinuationVersionOverrides(contextVersions, warmPins, this.id);
+    }
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -2410,45 +2569,6 @@ export class DurableAgent<
         });
       }
 
-      // A run that suspended while executing a stored version must resume on
-      // *that* version. Cold rehydration rebuilds tools/model/instructions
-      // from whatever `this` currently resolves to — which, for status
-      // selectors, hot-switches to the latest publish mid-flight. Re-resolve
-      // to the pinned id and delegate. An explicit exact version at the call
-      // site is an operator escape hatch and wins over the pin, and forks
-      // already produced by `resolveVersionedAgent` are left alone (they are
-      // either this very delegation or an explicit server-side resolution).
-      const pinnedVersionId = workflowInput.agentVersionId;
-      if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
-        const callSiteSelector = options?.versions?.agents?.[this.id];
-        const hasExplicitVersion = !!callSiteSelector && 'versionId' in callSiteSelector;
-        const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
-        if (!hasExplicitVersion && pinnedVersionId !== currentVersionId) {
-          try {
-            const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
-              versionId: pinnedVersionId,
-            });
-            if (resolved !== (this as unknown as Agent)) {
-              return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).resume(
-                runId,
-                resumeData,
-                options,
-              );
-            }
-          } catch (versionError) {
-            // The pinned version may have been deleted while the run sat
-            // suspended — resume on the current definition rather than
-            // failing at the approver (mirrors Agent#execute's fallback).
-            this.logger.warn('Failed to resolve pinned agent version for durable resume, using current definition', {
-              agentId: this.id,
-              runId,
-              pinnedVersionId,
-              error: versionError,
-            });
-          }
-        }
-      }
-
       const messageListMemoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
@@ -2457,6 +2577,31 @@ export class DurableAgent<
       const snapshotRequestContext = workflowInput.requestContextEntries
         ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
         : undefined;
+      const snapshotVersions = snapshotRequestContext?.get(MASTRA_VERSIONS_KEY) as
+        | AgentExecutionOptions<TOutput>['versions']
+        | undefined;
+      reconcileRootVersionOverrides(snapshotVersions as VersionOverrides | undefined, this.id);
+      const legacyRootPin = getLegacyDurableRootPin(workflowInput, this.id);
+      let continuationVersionPins = getDurableWorkflowVersionPins(workflowInput, this.id);
+      if (legacyRootPin && continuationVersionPins) {
+        const historicalAssertions = replaceHistoricalRootWithExactPin(
+          snapshotVersions as VersionOverrides | undefined,
+          legacyRootPin,
+        );
+        assertContinuationVersionOverrides(historicalAssertions, continuationVersionPins, this.id);
+        const frozenSnapshotVersions = exactVersionOverridesForPins(continuationVersionPins);
+        if (frozenSnapshotVersions) snapshotRequestContext?.set(MASTRA_VERSIONS_KEY, frozenSnapshotVersions);
+      }
+      if (continuationVersionPins === undefined) {
+        const callerContextVersions = options?.requestContext?.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+        const legacyRootPin = mergeLegacyContinuationRootPins(
+          this.id,
+          resolveLegacyContinuationRootPin(options?.versions as VersionOverrides | undefined, this.id),
+          resolveLegacyContinuationRootPin(callerContextVersions, this.id),
+          resolveLegacyContinuationRootPin(snapshotVersions as VersionOverrides | undefined, this.id),
+        );
+        if (legacyRootPin) continuationVersionPins = { root: legacyRootPin };
+      }
       const memory = threadId
         ? {
             ...options?.memory,
@@ -2465,7 +2610,7 @@ export class DurableAgent<
           }
         : options?.memory;
 
-      await this.prepare([], {
+      const prepareOptions = {
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -2477,7 +2622,12 @@ export class DurableAgent<
         // entry re-arms the run-level timeout budget (#21724); caller
         // override wins.
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
-      });
+      };
+      if (continuationVersionPins === undefined) {
+        await this.prepare([], prepareOptions);
+      } else {
+        await this.prepare([], prepareOptions, { versionPins: continuationVersionPins });
+      }
       entry = this.#runRegistry.get(runId);
     }
     if (!entry) {
@@ -2493,7 +2643,8 @@ export class DurableAgent<
         } as DurableAgentStreamOptions<TOutput>['memory'])
       : options?.memory;
 
-    let resumeRequestContext = entry.requestContext;
+    const continuationPins = getAgentVersionPins(entry.requestContext as RequestContext | undefined);
+    let resumeRequestContext = entry.requestContext ?? new RequestContext();
     if (options?.requestContext) {
       // Keep the caller's instance so schema-transformed contexts retain their
       // input source. Caller values win except for framework-managed memory.
@@ -2508,6 +2659,17 @@ export class DurableAgent<
       }
     }
 
+    let continuationVersions: VersionOverrides | undefined = options?.versions as VersionOverrides | undefined;
+    if (continuationPins) {
+      continuationVersions = exactVersionOverridesForPins(continuationPins);
+      if (continuationVersions) {
+        resumeRequestContext.set(MASTRA_VERSIONS_KEY, continuationVersions);
+      } else {
+        resumeRequestContext.delete(MASTRA_VERSIONS_KEY);
+      }
+      setAgentVersionPins(resumeRequestContext as RequestContext, continuationPins);
+    }
+
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = globalRunRegistry.get(runId);
     if (globalEntryForContext) {
@@ -2517,8 +2679,9 @@ export class DurableAgent<
     const resolvedOptions = (await this.#resolveExecutionOptions({
       ...(options as DurableAgentStreamOptions<TOutput>),
       requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
+      versions: continuationVersions,
       memory: registeredMemory ?? options?.memory,
-    })) as DurableAgentResumeOptions<TOutput>;
+    } as DurableAgentStreamOptions<TOutput>)) as DurableAgentResumeOptions<TOutput>;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -2892,41 +3055,20 @@ export class DurableAgent<
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
     let { workflowInput } = await this.#loadRecoverableSnapshot(workflowsStore, runId);
-
-    // A crashed run that was executing a stored version must recover on
-    // *that* version — rehydration rebuilds tools/model/instructions from
-    // whatever `this` currently resolves to, which for status selectors
-    // hot-switches to the latest publish (mirrors the resume() pin above).
-    // Resolution happens BEFORE lease acquisition so we never delegate to a
-    // fork while holding the lease; reading the pin from the pre-claim
-    // snapshot is safe because `agentVersionId` is stamped once at
-    // preparation and never mutated. Unlike resume(), recover options carry
-    // no call-site version selector, so the pin always wins here — recovery
-    // is unattended and has no operator escape hatch.
-    const pinnedVersionId = workflowInput.agentVersionId;
-    if (pinnedVersionId && this.#mastra && !this.__isStoredVersionApplied()) {
-      const currentVersionId = this.toRawConfig()?.resolvedVersionId as string | undefined;
-      if (pinnedVersionId !== currentVersionId) {
-        try {
-          const resolved = await this.#mastra.resolveVersionedAgent(this as unknown as Agent, {
-            versionId: pinnedVersionId,
-          });
-          if (resolved !== (this as unknown as Agent)) {
-            return (resolved as unknown as DurableAgent<TAgentId, TTools, TOutput>).recover(runId, options);
-          }
-        } catch (versionError) {
-          // The pinned version may have been deleted while the run sat
-          // crashed — recover on the current definition rather than failing
-          // an unattended path (mirrors resume()'s deleted-pin fallback).
-          this.logger.warn('Failed to resolve pinned agent version for durable recovery, using current definition', {
-            agentId: this.id,
-            runId,
-            pinnedVersionId,
-            error: versionError,
-          });
-        }
+    const assertRecoveryVersions = (input: DurableAgenticWorkflowInput) => {
+      reconcileRootVersionOverrides(options?.versions as VersionOverrides | undefined, this.id);
+      const pins = getDurableWorkflowVersionPins(input, this.id);
+      if (pins) {
+        assertContinuationVersionOverrides(options?.versions, pins, this.id);
+        return pins;
       }
-    }
+      const legacyRootPin = resolveLegacyContinuationRootPin(
+        options?.versions as VersionOverrides | undefined,
+        this.id,
+      );
+      return legacyRootPin ? { root: legacyRootPin } : undefined;
+    };
+    let recoveryVersionPins = assertRecoveryVersions(workflowInput);
 
     // 2. Claim recovery ownership before resolving any live dependencies so a
     //    concurrent caller cannot finish first and leave this attempt using a
@@ -2965,6 +3107,14 @@ export class DurableAgent<
       finishPublishedBeforeCrash =
         this.resolveWorkflowEngine() === 'default' &&
         loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+      recoveryVersionPins = assertRecoveryVersions(workflowInput);
+      if (
+        recoveryVersionPins &&
+        workflowInput.agentVersionPins === undefined &&
+        !getLegacyDurableRootPin(workflowInput, this.id)
+      ) {
+        workflowInput = { ...workflowInput, agentVersionPins: recoveryVersionPins };
+      }
       recoveryLease.assertOwned();
       recoveryState = await this.#rehydrateRecoveryState({
         runId,
@@ -3246,6 +3396,7 @@ export class DurableAgent<
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+      versionResolutionAgent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
@@ -4059,9 +4210,14 @@ export class DurableAgent<
   /**
    * Prepare for durable execution without starting it.
    */
-  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
+  async prepare(
+    messages: MessageListInput,
+    options?: AgentExecutionOptions<TOutput>,
+    internal?: { versionPins?: AgentVersionPins },
+  ) {
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+      versionResolutionAgent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options,
       // Forward the caller-provided runId (mirrors stream()). Without this,
@@ -4072,6 +4228,7 @@ export class DurableAgent<
       runId: options?.runId,
       requestContext: options?.requestContext,
       mastra: this.#mastra,
+      versionPins: internal?.versionPins,
     });
 
     this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
