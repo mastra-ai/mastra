@@ -1734,7 +1734,7 @@ export function createWorkflow<
     for (const entry of schedules) {
       // Declarative schedules are re-validated on every boot, so a `runAt`
       // or `endAt` that has already passed must not break construction.
-      validateScheduleTiming(entry, { requireFutureEndAt: false });
+      validateScheduleTiming(entry, { requireFuture: false });
     }
   }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
