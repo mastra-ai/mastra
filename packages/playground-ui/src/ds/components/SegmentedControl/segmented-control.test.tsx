@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Sun } from 'lucide-react';
+import { createRef } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
@@ -86,6 +87,19 @@ describe('SegmentedControl', () => {
     );
 
     expect(screen.getByRole('radio', { name: 'Light' }).textContent).toBe('');
+  });
+
+  it("forwards the caller's ref to the item", () => {
+    const ref = createRef<HTMLElement>();
+    render(
+      <SegmentedControl aria-label="Permission" value="ask" onValueChange={() => {}}>
+        <SegmentedControlItem ref={ref} value="ask">
+          Ask
+        </SegmentedControlItem>
+      </SegmentedControl>,
+    );
+
+    expect(ref.current).toBe(screen.getByRole('radio', { name: 'Ask' }));
   });
 
   it('throws when an item is rendered outside a SegmentedControl', () => {

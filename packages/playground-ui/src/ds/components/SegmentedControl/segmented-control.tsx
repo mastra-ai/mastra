@@ -6,6 +6,7 @@ import type { ControlSize } from '@/ds/primitives/control-size';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 type SegmentedControlContextValue = {
@@ -134,15 +135,31 @@ export type SegmentedControlItemProps = Omit<RadioPrimitive.Root.Props, 'classNa
   className?: string;
 };
 
-export function SegmentedControlItem({ value, disabled, className, children, ...props }: SegmentedControlItemProps) {
+export function SegmentedControlItem({
+  value,
+  disabled,
+  className,
+  children,
+  ref,
+  ...props
+}: SegmentedControlItemProps) {
   const context = React.useContext(SegmentedControlContext);
+  const registerItem = context?.registerItem;
+  const itemRef = React.useMemo(
+    () =>
+      mergeRefs<HTMLElement>(ref, element => {
+        registerItem?.(value, element);
+        return () => registerItem?.(value, null);
+      }),
+    [ref, registerItem, value],
+  );
   if (!context) throw new Error('SegmentedControlItem must be used inside a SegmentedControl');
-  const { iconOnly, registerItem } = context;
+  const { iconOnly } = context;
 
   return (
     <RadioPrimitive.Root
       {...props}
-      ref={element => registerItem(value, element)}
+      ref={itemRef}
       value={value}
       disabled={disabled}
       data-slot="segmented-control-item"
