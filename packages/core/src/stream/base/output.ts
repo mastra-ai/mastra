@@ -307,6 +307,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
@@ -377,6 +378,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options,
     messageId,
     initialState,
+    finishUsageIsTotal,
   }: {
     model: {
       modelId: string | undefined;
@@ -388,12 +390,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
     initialState?: any;
+    finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
       this.__setLogger(options.logger);
     }
     this.#options = options;
+    this.#finishUsageIsTotal = finishUsageIsTotal ?? false;
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
@@ -1062,7 +1066,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 };
               }
 
-              this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
+              if (self.#finishUsageIsTotal) {
+                self.#usageCount = {
+                  inputTokens: undefined,
+                  outputTokens: undefined,
+                  totalTokens: undefined,
+                };
+                self.#usageCountMissing.clear();
+              }
+              this.populateUsageCount(chunk.payload.output.usage as Partial<LanguageModelUsage>);
 
               chunk.payload.output.usage = {
                 inputTokens: self.#usageCount.inputTokens,
