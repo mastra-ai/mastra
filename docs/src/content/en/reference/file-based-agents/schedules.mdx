@@ -130,8 +130,7 @@ Frontmatter accepts every option below except `handler`, which needs a function 
   {
     name: 'cron',
     type: 'string',
-    description:
-      'Standard five-field cron expression. Required. The scheduler evaluates schedules on a tick loop, so the effective granularity is one minute. Sub-minute fields are not supported.',
+    description: 'A 5-, 6-, or 7-part cron expression. Required.',
   },
   {
     name: 'prompt',
