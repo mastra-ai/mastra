@@ -605,6 +605,69 @@ describe('WorkspaceAttachmentsProcessor', () => {
       });
     });
 
+    describe('error messages', () => {
+      it.each([
+        ['there is no workspace', async () => undefined, /"report\.xlsx".*this agent has no workspace/],
+        [
+          'the filesystem is read-only',
+          async () => (await localWorkspace({ readOnly: true })).workspace,
+          /"report\.xlsx".*filesystem of workspace ".*" is read-only/,
+        ],
+        [
+          'every mount is read-only',
+          async () =>
+            new Workspace({ mounts: { '/docs': new LocalFilesystem({ basePath: await tempDir(), readOnly: true }) } }),
+          /every mount of workspace ".*" is read-only \(\/docs\)/,
+        ],
+        [
+          'the sandbox can write nothing',
+          async () => ({ id: 'w', name: 'box', sandbox: {} }) as unknown as AnyWorkspace,
+          /workspace "box" has no filesystem and its sandbox supports neither writeFiles nor executeCommand/,
+        ],
+        [
+          'the workspace has neither filesystem nor sandbox',
+          async () => ({ id: 'w', name: 'empty' }) as unknown as AnyWorkspace,
+          /workspace "empty" has neither a filesystem nor a sandbox/,
+        ],
+      ])('explains the cause when %s', async (_label, makeWorkspace, message) => {
+        await expect(run(await makeWorkspace(), [file(BASE64)])).rejects.toThrow(message);
+      });
+
+      it('names the attachment sent by URL', async () => {
+        const { workspace } = await localWorkspace();
+        await expect(run(workspace, [file('https://example.com/q.xlsx', 'q.xlsx')])).rejects.toThrow(
+          /"q\.xlsx" was sent by URL\. Send its content inline/,
+        );
+      });
+
+      it('names the attachment whose data is not base64', async () => {
+        const { workspace } = await localWorkspace();
+        await expect(run(workspace, [file('!!!!', 'q.xlsx')])).rejects.toThrow(/"q\.xlsx" has invalid data/);
+      });
+
+      it('names the attachment and destination when a write fails', async () => {
+        const { workspace } = await localWorkspace();
+        workspace.filesystem!.writeFile = async () => {
+          throw new Error('disk full');
+        };
+        await expect(run(workspace, [file(BASE64, 'q.xlsx')])).rejects.toThrow(
+          /Failed to upload attachment "q\.xlsx" to uploads\/[0-9a-f-]{36}\/q\.xlsx: disk full/,
+        );
+      });
+
+      it('names the failing sandbox step and its output', async () => {
+        const executeCommand = vi.fn(async (_c: string, args: string[]) =>
+          args[1]!.includes('base64 -d')
+            ? { success: false, exitCode: 127, stdout: '', stderr: 'openssl: not found\n', executionTimeMs: 0 }
+            : { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 },
+        );
+        const workspace = { id: 'w', name: 'w', sandbox: { executeCommand } } as unknown as AnyWorkspace;
+        await expect(run(workspace, [file(BASE64, 'q.xlsx')])).rejects.toThrow(
+          /"q\.xlsx".*Sandbox command failed to decode the file \(the sandbox needs `base64` or `openssl`\) \(exit code 127\): openssl: not found/,
+        );
+      });
+    });
+
     it('deletes files written earlier in the call when a later write fails', async () => {
       const { basePath, workspace } = await localWorkspace();
       const fs = workspace.filesystem!;

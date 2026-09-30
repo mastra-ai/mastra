@@ -180,8 +180,9 @@ function findUnsupportedAttachments(messages: MastraDBMessage[]): UnsupportedAtt
 async function resolveUploadTarget(
   workspace: AnyWorkspace | undefined,
   requestContext: RequestContext,
-): Promise<UploadTarget | undefined> {
-  if (!workspace) return undefined;
+): Promise<UploadTarget | { unavailable: string }> {
+  if (!workspace)
+    return { unavailable: 'this agent has no workspace. Configure a workspace with a writable filesystem' };
 
   const filesystem = workspace.resolveFilesystem
     ? await workspace.resolveFilesystem({ requestContext })
@@ -193,10 +194,20 @@ async function resolveUploadTarget(
 
     if (isCompositeFilesystem(filesystem)) {
       const writableMount = [...filesystem.mounts].find(([, fs]) => !fs.readOnly);
-      if (!writableMount) return undefined;
+      if (!writableMount) {
+        const mounts = [...filesystem.mounts.keys()].join(', ');
+        return {
+          unavailable: `every mount of workspace "${workspace.name}" is read-only (${mounts}). Add a writable mount`,
+        };
+      }
       return { directory: `${writableMount[0].replace(/\/$/, '')}/uploads`, write, remove };
     }
-    return filesystem.readOnly ? undefined : { directory: 'uploads', write, remove };
+    if (filesystem.readOnly) {
+      return {
+        unavailable: `the filesystem of workspace "${workspace.name}" is read-only. Make it writable or add a writable mount`,
+      };
+    }
+    return { directory: 'uploads', write, remove };
   }
 
   const sandbox = workspace.resolveSandbox ? await workspace.resolveSandbox({ requestContext }) : workspace.sandbox;
@@ -210,10 +221,14 @@ async function resolveUploadTarget(
     return {
       directory: 'uploads',
       write: (path, content) => writeThroughCommands(sandbox, path, content),
-      remove: path => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`),
+      remove: path => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'remove the upload directory'),
     };
   }
-  return undefined;
+  return {
+    unavailable: sandbox
+      ? `workspace "${workspace.name}" has no filesystem and its sandbox supports neither writeFiles nor executeCommand. Add a writable filesystem`
+      : `workspace "${workspace.name}" has neither a filesystem nor a sandbox. Add a writable filesystem`,
+  };
 }
 
 /** Base64 characters sent per command, kept well under common argv limits. */
@@ -230,25 +245,32 @@ async function writeThroughCommands(sandbox: WorkspaceSandbox, path: string, con
   const encoded = shellQuote(`${path}.b64`);
   const base64 = Buffer.from(content).toString('base64');
   try {
-    await runShell(sandbox, `mkdir -p ${shellQuote(parentDirectory(path))} && : > ${encoded}`);
-    for (let offset = 0; offset < base64.length; offset += COMMAND_CHUNK_SIZE) {
-      const chunk = base64.slice(offset, offset + COMMAND_CHUNK_SIZE);
-      await runShell(sandbox, `printf '%s' '${chunk}' >> ${encoded}`);
+    await runShell(
+      sandbox,
+      `mkdir -p ${shellQuote(parentDirectory(path))} && : > ${encoded}`,
+      'create the upload directory',
+    );
+    const chunks = Math.ceil(base64.length / COMMAND_CHUNK_SIZE);
+    for (let index = 0; index < chunks; index++) {
+      const chunk = base64.slice(index * COMMAND_CHUNK_SIZE, (index + 1) * COMMAND_CHUNK_SIZE);
+      await runShell(sandbox, `printf '%s' '${chunk}' >> ${encoded}`, `upload chunk ${index + 1} of ${chunks}`);
     }
     await runShell(
       sandbox,
       `{ base64 -d ${encoded} > ${target} 2>/dev/null || base64 -D -i ${encoded} > ${target} 2>/dev/null || openssl base64 -d -A -in ${encoded} -out ${target}; } && rm -f ${encoded}`,
+      'decode the file (the sandbox needs `base64` or `openssl`)',
     );
   } catch (error) {
-    await runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`).catch(() => {});
+    await runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'clean up').catch(() => {});
     throw error;
   }
 }
 
-async function runShell(sandbox: WorkspaceSandbox, script: string) {
+async function runShell(sandbox: WorkspaceSandbox, script: string, step: string) {
   const result = await sandbox.executeCommand!('sh', ['-c', script]);
   if (!result.success) {
-    throw new Error(`Failed to write attachment through the sandbox (exit ${result.exitCode}): ${result.stderr}`);
+    const details = result.stderr.trim() || result.stdout.trim() || 'no output';
+    throw new Error(`Sandbox command failed to ${step} (exit code ${result.exitCode}): ${details}`);
   }
 }
 
@@ -267,7 +289,14 @@ async function uploadAll(target: UploadTarget, files: { filename?: string; bytes
   try {
     for (const file of files) {
       const path = `${target.directory}/${crypto.randomUUID()}/${sanitizeFilename(file.filename)}`;
-      await target.write(path, file.bytes);
+      try {
+        await target.write(path, file.bytes);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to upload attachment "${file.filename ?? 'attachment'}" to ${path}: ${reason}`, {
+          cause: error,
+        });
+      }
       paths.push(path);
     }
     return paths;
@@ -305,14 +334,20 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     const files = attachments.map(attachment => {
       const bytes = decodeData(attachment.data);
       if (bytes === ATTACHMENT_NOT_INLINE) {
-        return abort('Spreadsheet attachments must be sent inline (base64 or data URL)', {
-          metadata: { code: ATTACHMENT_NOT_INLINE, mediaType: attachment.mediaType },
-        });
+        return abort(
+          `Spreadsheet attachment "${attachment.filename ?? 'attachment'}" was sent by URL. Send its content inline as base64 or a data URL`,
+          {
+            metadata: { code: ATTACHMENT_NOT_INLINE, mediaType: attachment.mediaType },
+          },
+        );
       }
       if (bytes === ATTACHMENT_INVALID_DATA) {
-        return abort('Spreadsheet attachment data is not valid base64', {
-          metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType },
-        });
+        return abort(
+          `Spreadsheet attachment "${attachment.filename ?? 'attachment'}" has invalid data: expected base64 or a base64 data URL`,
+          {
+            metadata: { code: ATTACHMENT_INVALID_DATA, mediaType: attachment.mediaType },
+          },
+        );
       }
       return { filename: attachment.filename, bytes };
     });
@@ -321,14 +356,12 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
     const workspace = this._workspace;
     const target = await resolveUploadTarget(workspace, requestContext ?? new RequestContext());
     tracingContext?.currentSpan?.update({
-      attributes: { workspaceId: workspace?.id, workspaceName: workspace?.name, success: Boolean(target) },
+      attributes: { workspaceId: workspace?.id, workspaceName: workspace?.name, success: !('unavailable' in target) },
     });
-    if (!target) {
-      const mediaType = attachments[0]!.mediaType;
+    if ('unavailable' in target) {
+      const { mediaType, filename } = attachments[0]!;
       return abort(
-        workspace
-          ? `Attachments of type "${mediaType}" require a writable workspace, but this agent's workspace has no writable filesystem or sandbox that can write files (writeFiles or executeCommand)`
-          : `Attachments of type "${mediaType}" are not supported by the model and require a workspace, but none is configured for this agent`,
+        `Spreadsheet attachment "${filename ?? 'attachment'}" (${mediaType}) can't be sent to the model and must be stored in a writable workspace, but ${target.unavailable}.`,
         { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType } },
       );
     }
