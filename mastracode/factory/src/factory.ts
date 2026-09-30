@@ -820,7 +820,15 @@ export class MastraFactory {
           }
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
-      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      ...(workItemsReady
+        ? {
+            workItems: workItemsStorage,
+            controller: {
+              getSessionByResource: async (resourceId: string) =>
+                this.#prepared?.base.controller.getSessionByResource(resourceId),
+            },
+          }
+        : {}),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({

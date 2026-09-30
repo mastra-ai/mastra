@@ -77,7 +77,12 @@ export interface ToolSearchProcessorOptions {
     topK?: number;
 
     /**
-     * Minimum relevance score (0-1) for including a tool in search results
+     * Minimum relevance score for including a tool in search results.
+     * Scores are raw BM25 relevance plus name-match boosts (+5 exact ID term,
+     * +2 ID substring), are not normalized, and can exceed 1. Scores depend on
+     * the tool catalog, so thresholds may not carry over between tool sets.
+     * Tools scoring less than or equal to this value are excluded. Small values
+     * such as 0 to 0.5 require some term overlap.
      * @default 0
      */
     minScore?: number;

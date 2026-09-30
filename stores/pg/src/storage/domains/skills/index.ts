@@ -376,13 +376,7 @@ export class SkillsPG extends SkillsStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       const updatedSkill = await this.#getById(this.#db.client, id);
       if (!updatedSkill) {

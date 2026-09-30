@@ -948,6 +948,14 @@ export function createDurableToolCallStep() {
       // fresh) or a delegated approval raised mid-execution by the sub-agent. A
       // framework-resolved inner run id disambiguates the delegated approval.
       const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
+      // Mirror the non-durable step: a bare `{ approved }` belongs to the gate and is
+      // dropped, but an approval carrying extra keys is caller data for the tool.
+      const hasCustomApprovalResumeData =
+        approvalGated &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        Object.keys(resumeData).length > 1;
       if ((isResumingFromSuspension || isDelegatedApprovalResume) && suspendedToolRunId) {
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
       }
@@ -1024,7 +1032,8 @@ export function createDurableToolCallStep() {
         actor,
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
-        resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        resumeData:
+          isResumingFromSuspension || isDelegatedApprovalResume || hasCustomApprovalResumeData ? resumeData : undefined,
         suspendedToolRunId,
         // The payload this tool call suspended with (see `toolCallSuspended` below), so a
         // resumed tool can continue from its own state — mirrors the non-durable step.

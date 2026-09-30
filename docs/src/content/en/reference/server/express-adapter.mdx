@@ -39,11 +39,7 @@ app.listen(4111, () => {
 })
 ```
 
-:::note
-
-Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
-
-:::
+Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`. `init()` doesn't start Mastra's background workers. To run [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, or event listeners, call `await mastra.startWorkers()` after the server starts listening. See [Start background workers](/docs/server/server-adapters#start-background-workers).
 
 ## Constructor parameters
 

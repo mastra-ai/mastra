@@ -134,7 +134,7 @@ Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the ba
 <SankeyChart getNodeColor={() => 'var(--span-agent)'} getLinkColor={() => 'var(--chart-blue)'} />
 ```
 
-Foundations/Color has separate stories for ramps, semantic colors, product colors, charts, span types, and brand colors. Badge and avatar examples live in Elements/Products; the semantic Sankey example lives in Metrics/SankeyChart.
+Foundations/Color has one story each for monochrome and chromatic ramps, semantic roles, products, charts, span types, and brand colors. Badge and avatar examples live in Elements/Products; the semantic Sankey example lives in Metrics/SankeyChart.
 
 ### Typography
 

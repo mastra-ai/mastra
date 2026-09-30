@@ -395,7 +395,8 @@ export class CustomEditor extends Editor {
     const fullText = this.getText();
     let greyRemaining =
       this.voiceTranscriptText.length > 0 && fullText.endsWith(this.voiceTranscriptText)
-        ? this.voiceTranscriptText.length
+        ? // Count code points to match greyifyTrailing, which consumes per code point.
+          [...this.voiceTranscriptText].length
         : 0;
     const greyOpen = `\x1b[38;2;${parseHex(theme.getTheme().muted).join(';')}m`;
 

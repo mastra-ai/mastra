@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -239,7 +237,7 @@ export async function deleteScores(
   if (args.scoreIds.length === 0) return;
 
   const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'scores',

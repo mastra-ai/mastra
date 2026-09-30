@@ -1,6 +1,5 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -193,32 +192,5 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         </SelectContent>
       </Select>
     </div>
-  );
-}
-
-interface SegmentedProps<T extends string> {
-  value: T;
-  options: { value: T; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}
-
-/** For choices that are alternatives rather than a ramp: policies, modes, delivery. */
-export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
-  return (
-    <ButtonsGroup size="sm" role="group" aria-label={ariaLabel}>
-      {options.map(o => (
-        <Button
-          key={o.value}
-          variant={value === o.value ? 'primary' : 'default'}
-          aria-pressed={value === o.value}
-          disabled={disabled}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </ButtonsGroup>
   );
 }
