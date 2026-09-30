@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
+import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
-import { WorkspaceAttachmentsProcessor } from '@mastra/core/processors';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

@@ -25,3 +25,25 @@ export const Link: LinkComponent = forwardRef<HTMLAnchorElement, LinkComponentPr
     );
   },
 );
+
+export const Sup = () => {
+  return (
+    <Workspace.Root>
+      <Workspace.Aside>
+        {/* expandable using collapse panel (i think tha's the name) */}
+        <Workspace.AsideHeader>
+          <Workspace.Search /> {/* <-- starts search of both files and skills */}
+        </Workspace.AsideHeader>
+        <Workspace.Tree /> {/* clickingon that thing shows the selected file in the file viewer */}
+      </Workspace.Aside>
+
+      <Workspace.ActiveFile>
+        <Workspace.ActiveFileHeader>
+          {' '}
+          {/* <-- shows the selected file */}
+          <Workspace.FilePath /> {/* <-- shows the path of the selected file */}
+        </Workspace.ActiveFileHeader>
+      </Workspace.ActiveFile>
+    </Workspace.Root>
+  );
+};
