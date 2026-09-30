@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import { isChunkOutputProcessed } from './output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
@@ -456,13 +457,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             // may still be retried or served by a fallback model, so processors
             // must not react to them here. The caller runs processors on the
             // error once it has ruled out recovery.
+            //
+            // Chunks marked output-processed already ran through the
+            // processors upstream, so they pass through too.
             const isDeferredErrorChunk =
               options.deferErrorChunks &&
               (chunk.type === 'error' || (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'error'));
 
             if (
               (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') ||
-              isDeferredErrorChunk
+              isDeferredErrorChunk ||
+              isChunkOutputProcessed(chunk)
             ) {
               controller.enqueue(chunk);
               return;

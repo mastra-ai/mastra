@@ -243,7 +243,10 @@ async function processChunkThroughOutputProcessors(
       : undefined,
     emitChunk: async c => {
       if (pubsub) {
-        await emitChunkEvent(pubsub, runId, c);
+        // Mark chunks the processors ran on so the stream consumer doesn't run
+        // them again. Without a runner (no processors, or none in this process)
+        // the chunk goes out unmarked and the consumer processes it.
+        await emitChunkEvent(pubsub, runId, c, !!runner);
       }
     },
     onProcessorError: error => {
