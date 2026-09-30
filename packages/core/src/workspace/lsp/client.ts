@@ -493,6 +493,96 @@ export class LSPClient {
   }
 
   /**
+   * Query a workspace-wide rename of the symbol at a position. Returns the
+   * server's WorkspaceEdit (or null when the symbol can't be renamed).
+   */
+  async queryRename(
+    uri: string,
+    position: { line: number; character: number },
+    newName: string,
+    timeoutMs: number = 5000,
+  ): Promise<any> {
+    if (!this.connection) return null;
+    return withTimeout(
+      this.connection.sendRequest('textDocument/rename', { textDocument: { uri }, position, newName }),
+      timeoutMs,
+      'Rename request timed out',
+    );
+  }
+
+  /**
+   * Query code actions (quick fixes, refactorings) for a range. `context.diagnostics`
+   * should carry the raw LSP diagnostics overlapping the range — servers use them
+   * to compute quick fixes.
+   */
+  async queryCodeActions(
+    uri: string,
+    range: { start: { line: number; character: number }; end: { line: number; character: number } },
+    context: { diagnostics: any[]; only?: string[] },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/codeAction', { textDocument: { uri }, range, context }),
+      timeoutMs,
+      'Code action request timed out',
+    );
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Query whole-document formatting edits.
+   */
+  async queryFormatting(
+    uri: string,
+    options: { tabSize: number; insertSpaces: boolean },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/formatting', { textDocument: { uri }, options }),
+      timeoutMs,
+      'Formatting request timed out',
+    );
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Query all references to the symbol at a position across the workspace.
+   */
+  async queryReferences(
+    uri: string,
+    position: { line: number; character: number },
+    timeoutMs: number = 5000,
+  ): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/references', {
+        textDocument: { uri },
+        position,
+        context: { includeDeclaration: true },
+      }),
+      timeoutMs,
+      'References request timed out',
+    );
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
+   * Query the document's symbol tree (functions, classes, methods…). Servers
+   * return either hierarchical DocumentSymbol[] or flat SymbolInformation[].
+   */
+  async queryDocumentSymbols(uri: string, timeoutMs: number = 5000): Promise<any[]> {
+    if (!this.connection) return [];
+    const result = await withTimeout(
+      this.connection.sendRequest('textDocument/documentSymbol', { textDocument: { uri } }),
+      timeoutMs,
+      'Document symbols request timed out',
+    );
+    return Array.isArray(result) ? result : [];
+  }
+
+  /**
    * Shutdown the connection and kill the process.
    */
   async shutdown(): Promise<void> {

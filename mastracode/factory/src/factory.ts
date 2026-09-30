@@ -62,6 +62,11 @@ import { PlatformJiraIntegration } from './integrations/platform/jira/integratio
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
+import {
+  createPreviewDispatchMiddleware,
+  createPreviewNotImplementedHandler,
+  parentHostFromPublicUrl,
+} from './routes/preview.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -231,6 +236,19 @@ export interface MastraFactoryConfig {
   boards?: readonly InstalledBoard[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
   includeDefaultBoards?: boolean;
+  /**
+   * Preview subdomain routing — exposes sandbox-local ports back to the
+   * user's browser through `p-{port}-{sessionSlug}.preview.{publicUrlHost}`.
+   * When enabled, incoming requests whose Host header matches the preview
+   * pattern short-circuit normal routing and hit the preview handler
+   * (proxy to `127.0.0.1:{port}` inside the sandbox — currently a 501 stub
+   * until the proxy layer lands). Default: disabled, since the preview
+   * subdomain scheme depends on a wildcard TLS cert (`*.preview.{host}`) or
+   * on browsers resolving `*.localhost` for local development.
+   */
+  preview?: {
+    enabled?: boolean;
+  };
 
   /**
    * Platform-specific overrides.
@@ -293,10 +311,35 @@ function hasPlatformCredentials(): boolean {
  *      without the caller wiring the env var by hand.
  *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
  */
-function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
+function buildDefaultStudioAuth(
+  publicUrl: string,
+  options: { previewEnabled: boolean } = { previewEnabled: false },
+): IMastraAuthProvider {
   return new MastraAuthStudio({
-    cookieDomain: parentDomainFromPublicUrl(publicUrl),
+    cookieDomain: previewCookieOverride(publicUrl, options) ?? parentDomainFromPublicUrl(publicUrl),
   });
+}
+
+/**
+ * When preview subdomains are enabled we need the auth cookie to travel to
+ * `*.preview.{host}` as well as the Factory's own origin — otherwise the
+ * preview iframe would be unauthenticated. For `.mastra.cloud` /
+ * `.mastra.ai` deploys the existing `parentDomainFromPublicUrl` already
+ * mints the right parent-domain cookie, so this only kicks in for local
+ * development on `localhost`, where the default falls through to
+ * host-only. Modern browsers (Chrome 87+, Firefox 68+, Safari 14+) accept
+ * `Domain=.localhost` — the last stragglers have aged out.
+ */
+function previewCookieOverride(publicUrl: string, { previewEnabled }: { previewEnabled: boolean }): string | undefined {
+  if (!previewEnabled) return undefined;
+  let hostname: string;
+  try {
+    hostname = new URL(publicUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+  if (hostname === 'localhost') return '.localhost';
+  return undefined;
 }
 
 /**
@@ -395,6 +438,16 @@ export class MastraFactory {
 
     const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
+    const previewEnabled = this.#config.preview?.enabled === true;
+    // Preview subdomains need a real hostname to route against — bail with
+    // a warning rather than silently misconfigure when the caller opts in
+    // but the deploy is on an IP or something otherwise unparseable.
+    const previewParentHost = previewEnabled ? parentHostFromPublicUrl(publicOrigin) : null;
+    if (previewEnabled && !previewParentHost) {
+      console.warn(
+        `[Factory] preview.enabled=true but publicUrl (${publicOrigin}) has no wildcard-capable hostname; disabling preview routing.`,
+      );
+    }
     const storage = this.#config.storage;
     const vector = this.#config.vector;
     const pubsub = this.#config.pubsub;
@@ -408,7 +461,9 @@ export class MastraFactory {
     // cookies without the caller wiring `MASTRA_COOKIE_DOMAIN` explicitly.
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
-      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+      configuredAuth === null
+        ? undefined
+        : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin, { previewEnabled: Boolean(previewParentHost) }));
     if (auth && !this.#config.secretEncryption) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
@@ -1201,6 +1256,7 @@ export class MastraFactory {
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
+            previewEnabled: Boolean(previewParentHost),
             domains,
             feed: commentsDomain,
             integrations: integrationRegistrations,
@@ -1304,9 +1360,23 @@ export class MastraFactory {
           // `auth` also lands on `server.auth` so the core auth middleware (and
           // Studio's dual-auth routing — see `studio.auth` on the returned args)
           // authenticates core `/api/*` routes with the same provider.
+          // Preview subdomain dispatch runs BEFORE the auth gate so a request
+          // hitting `p-{port}-{slug}.preview.{host}` short-circuits the SPA
+          // routing entirely. The stub handler currently 501s; the real
+          // proxy will resolve session/port authorization inside its own
+          // handler so the middleware stays thin and hostname-only.
+          const previewMiddleware = previewParentHost
+            ? [
+                createPreviewDispatchMiddleware({
+                  parentHost: previewParentHost,
+                  handle: createPreviewNotImplementedHandler(),
+                }),
+              ]
+            : [];
           return {
             auth,
             middleware: [
+              ...previewMiddleware,
               createFactoryAuthGate(auth),
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({

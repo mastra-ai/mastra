@@ -1,0 +1,251 @@
+/**
+ * Command runner for the embedded editor: discover package scripts, start a
+ * command in the session sandbox, and poll its output while it runs.
+ *
+ * Commands run detached inside the sandbox with output redirected to a log
+ * file under /tmp, so polling streams incremental output instead of waiting
+ * for completion. An exit marker appended by the wrapper carries the exit
+ * code back through the log.
+ *
+ *   - GET  /web/workspace/runner/scripts?workspacePath=  → package.json scripts
+ *   - POST /web/workspace/runner/start?workspacePath=    → { command } → { runId }
+ *   - GET  /web/workspace/runner/poll?workspacePath=&runId= → { running, exitCode, output }
+ *   - POST /web/workspace/runner/stop?workspacePath=     → { runId } → { ok }
+ */
+
+import { randomBytes } from 'node:crypto';
+
+import { registerApiRoute } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
+
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
+import { resolveAuthorizedSession, sessionSandbox } from './editor.js';
+import type { EditorSessionDeps, SessionSandboxHandle } from './editor.js';
+
+export interface RunnerScript {
+  name: string;
+  command: string;
+}
+
+export interface RunnerScripts {
+  workspacePath: string;
+  available: boolean;
+  scripts: RunnerScript[];
+}
+
+export interface RunnerStartResult {
+  workspacePath: string;
+  runId: string;
+  command: string;
+}
+
+export interface RunnerPollResult {
+  workspacePath: string;
+  runId: string;
+  command: string;
+  running: boolean;
+  /** Present once the command finished and its exit marker was seen. */
+  exitCode?: number;
+  /** The last chunk of combined stdout+stderr (tail-capped). */
+  output: string;
+}
+
+const MAX_COMMAND_LENGTH = 2000;
+const MAX_OUTPUT_TAIL_BYTES = 64_000;
+const MAX_RUNS_PER_SESSION = 5;
+const RUN_IDLE_MS = 30 * 60_000;
+const EXIT_MARKER = '::mastra-runner-exit:';
+const ALIVE_MARKER = '::mastra-runner-alive:';
+
+interface RunnerRun {
+  runId: string;
+  command: string;
+  pid: string;
+  log: string;
+  startedAt: number;
+  lastPoll: number;
+}
+
+/** sessionId → runId → run. In-process only, like collab rooms. */
+const runsBySession = new Map<string, Map<string, RunnerRun>>();
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function sessionRuns(sessionId: string): Map<string, RunnerRun> {
+  let runs = runsBySession.get(sessionId);
+  if (!runs) {
+    runs = new Map();
+    runsBySession.set(sessionId, runs);
+  }
+  const now = Date.now();
+  for (const [runId, run] of runs) {
+    if (now - run.lastPoll > RUN_IDLE_MS) runs.delete(runId);
+  }
+  return runs;
+}
+
+async function requireHandle(session: SourceControlSession): Promise<SessionSandboxHandle> {
+  const handle = await sessionSandbox(session);
+  if (!handle) throw new Error('The session sandbox is not available');
+  return handle;
+}
+
+export async function listRunnerScripts(session: SourceControlSession): Promise<RunnerScripts> {
+  const empty: RunnerScripts = { workspacePath: session.sessionId, available: false, scripts: [] };
+  const handle = await sessionSandbox(session);
+  if (!handle) return empty;
+  let scripts: RunnerScript[] = [];
+  try {
+    const raw = await handle.filesystem.readFile('package.json');
+    const text = typeof raw === 'string' ? raw : raw.toString('utf8');
+    const parsed = JSON.parse(text) as { scripts?: Record<string, unknown> };
+    scripts = Object.entries(parsed.scripts ?? {})
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      .map(([name, command]) => ({ name, command }));
+  } catch {
+    // No package.json (or unparsable) — arbitrary commands still work.
+  }
+  return { workspacePath: session.sessionId, available: true, scripts };
+}
+
+export async function startRunnerCommand(session: SourceControlSession, command: string): Promise<RunnerStartResult> {
+  const trimmed = command?.trim();
+  if (!trimmed) throw new Error('command is required');
+  if (trimmed.length > MAX_COMMAND_LENGTH) throw new Error('command too large');
+  const handle = await requireHandle(session);
+
+  const runs = sessionRuns(session.sessionId);
+  if (runs.size >= MAX_RUNS_PER_SESSION) {
+    // Evict the oldest finished-or-stale run slot.
+    const oldest = [...runs.values()].sort((a, b) => a.startedAt - b.startedAt)[0];
+    if (oldest) runs.delete(oldest.runId);
+  }
+
+  const runId = randomBytes(8).toString('hex');
+  const log = `/tmp/mastra-runner-${runId}.log`;
+  // Detach the command with its output redirected to the log; the wrapper
+  // appends an exit marker so the poller can report the exit code. `echo $!`
+  // hands the wrapper subshell's pid back for aliveness checks and stop.
+  const script = `cd ${shellQuote(handle.workdir)} && : > ${shellQuote(log)} && ( sh -c ${shellQuote(trimmed)} >> ${shellQuote(log)} 2>&1; echo "${EXIT_MARKER}$?" >> ${shellQuote(log)} ) </dev/null >/dev/null 2>&1 & echo $!`;
+  const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
+  const pid = result.stdout.trim().split('\n').pop()?.trim() ?? '';
+  if (result.exitCode !== 0 || !/^\d+$/.test(pid)) {
+    throw new Error(`Could not start command: ${result.stderr || result.stdout || 'unknown error'}`);
+  }
+
+  const now = Date.now();
+  runs.set(runId, { runId, command: trimmed, pid, log, startedAt: now, lastPoll: now });
+  return { workspacePath: session.sessionId, runId, command: trimmed };
+}
+
+export async function pollRunnerCommand(session: SourceControlSession, runId: string): Promise<RunnerPollResult> {
+  const runs = sessionRuns(session.sessionId);
+  const run = runs.get(runId);
+  if (!run) throw new Error('run not found');
+  run.lastPoll = Date.now();
+  const handle = await requireHandle(session);
+
+  const script = `( kill -0 ${run.pid} 2>/dev/null && echo '${ALIVE_MARKER}1' || echo '${ALIVE_MARKER}0' ); tail -c ${MAX_OUTPUT_TAIL_BYTES} ${shellQuote(run.log)} 2>/dev/null`;
+  const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
+
+  let alive = false;
+  let output = result.stdout;
+  const aliveIndex = output.indexOf(ALIVE_MARKER);
+  if (aliveIndex !== -1) {
+    const lineEnd = output.indexOf('\n', aliveIndex);
+    alive = output.slice(aliveIndex + ALIVE_MARKER.length, lineEnd === -1 ? undefined : lineEnd).trim() === '1';
+    output = lineEnd === -1 ? '' : output.slice(lineEnd + 1);
+  }
+
+  let exitCode: number | undefined;
+  const markerIndex = output.lastIndexOf(EXIT_MARKER);
+  if (markerIndex !== -1) {
+    const parsed = Number.parseInt(output.slice(markerIndex + EXIT_MARKER.length), 10);
+    if (Number.isFinite(parsed)) exitCode = parsed;
+    output = output.slice(0, markerIndex).replace(/\n$/, '');
+  }
+
+  return {
+    workspacePath: session.sessionId,
+    runId,
+    command: run.command,
+    running: alive && exitCode === undefined,
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    output,
+  };
+}
+
+export async function stopRunnerCommand(
+  session: SourceControlSession,
+  runId: string,
+): Promise<{ workspacePath: string; runId: string; ok: boolean }> {
+  const runs = sessionRuns(session.sessionId);
+  const run = runs.get(runId);
+  if (!run) throw new Error('run not found');
+  const handle = await requireHandle(session);
+  // Kill the wrapper's children first (test runners, dev servers…), then the
+  // wrapper itself; escalate to -9 for anything that ignored TERM.
+  const script = `pkill -P ${run.pid} 2>/dev/null; kill ${run.pid} 2>/dev/null; sleep 0.3; pkill -9 -P ${run.pid} 2>/dev/null; kill -9 ${run.pid} 2>/dev/null; true`;
+  const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 10_000 });
+  return { workspacePath: session.sessionId, runId, ok: result.exitCode === 0 };
+}
+
+function errorStatus(message: string): 400 | 403 | 404 | 500 {
+  if (message.includes('not available') || message.includes('current user')) return 403;
+  if (message.includes('not found')) return 404;
+  if (message.includes('required') || message.includes('too large') || message.includes('Could not start')) return 400;
+  return 500;
+}
+
+/** Register the `/web/workspace/runner/*` routes. */
+export function buildRunnerRoutes(deps: EditorSessionDeps): ApiRoute[] {
+  const respond = async (c: Context, run: (session: SourceControlSession) => Promise<unknown>) => {
+    const workspacePath = c.req.query('workspacePath');
+    if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+    try {
+      const session = await resolveAuthorizedSession(c, deps, workspacePath);
+      return c.json(await run(session));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json({ error: message }, errorStatus(message));
+    }
+  };
+
+  return [
+    registerApiRoute('/web/workspace/runner/scripts', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => respond(c, session => listRunnerScripts(session)),
+    }),
+    registerApiRoute('/web/workspace/runner/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const body = (await c.req.json().catch(() => null)) as { command?: string } | null;
+        if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
+        return respond(c, session => startRunnerCommand(session, body.command ?? ''));
+      },
+    }),
+    registerApiRoute('/web/workspace/runner/poll', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => {
+        const runId = c.req.query('runId');
+        if (!runId) return c.json({ error: 'Missing required query param: runId' }, 400);
+        return respond(c, session => pollRunnerCommand(session, runId));
+      },
+    }),
+    registerApiRoute('/web/workspace/runner/stop', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const body = (await c.req.json().catch(() => null)) as { runId?: string } | null;
+        if (!body?.runId) return c.json({ error: 'Missing required body field: runId' }, 400);
+        return respond(c, session => stopRunnerCommand(session, body.runId!));
+      },
+    }),
+  ];
+}

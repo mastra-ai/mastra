@@ -15,6 +15,7 @@ import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
+import { parseSelectionMessage, SelectionMessage } from './SelectionMessage';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
@@ -129,7 +130,10 @@ export function MessageBubble({
       if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        if (activation) return <SkillMessage activation={activation} />;
+        const selection = parseSelectionMessage(part.text);
+        if (selection) return <SelectionMessage message={selection} />;
+        return <MarkdownRenderer>{part.text}</MarkdownRenderer>;
       }
 
       return (

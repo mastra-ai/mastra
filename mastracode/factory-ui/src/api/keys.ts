@@ -141,6 +141,23 @@ export const queryKeys = {
     filePath: string | undefined,
     previousFilePath: string | undefined,
   ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
+  editorTree: (workspacePath: string | undefined, path: string | undefined) =>
+    ['editor-tree', workspacePath ?? null, path ?? null] as const,
+  editorFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['editor-file', workspacePath ?? null, filePath ?? null] as const,
+  editorFileOriginal: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['editor-file-original', workspacePath ?? null, filePath ?? null] as const,
+  editorSearch: (workspacePath: string | undefined, query: string | undefined) =>
+    ['editor-search', workspacePath ?? null, query ?? null] as const,
+  scmStatus: (workspacePath: string | undefined) => ['scm-status', workspacePath ?? null] as const,
+  runnerScripts: (workspacePath: string | undefined) => ['runner-scripts', workspacePath ?? null] as const,
+  runnerPoll: (workspacePath: string | undefined, runId: string | undefined) =>
+    ['runner-poll', workspacePath ?? null, runId ?? null] as const,
+  scmDiff: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['scm-diff', workspacePath ?? null, filePath ?? null] as const,
+  blame: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['blame', workspacePath ?? null, filePath ?? null] as const,
+  previewBase: (workspacePath: string | undefined) => ['preview-base', workspacePath ?? null] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key

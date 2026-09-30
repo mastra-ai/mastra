@@ -578,3 +578,4 @@ allowBuilds:
   oracledb: false
   isolated-vm: true
   '@types/koa-compose': false
+  leveldown: false

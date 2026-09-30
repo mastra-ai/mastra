@@ -1,0 +1,57 @@
+/*
+ * Agent-activity ring: a spinning green conic highlight tracing the outline
+ * of a file-tree row or tab while the agent has a running tool call touching
+ * that file. Same technique as the composer ring (an @property-animated
+ * conic gradient), masked so only a 1px border shows. Uses `::before` so it
+ * can coexist with elements that already use `::after` (the active tab bar).
+ */
+
+@property --editor-activity-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.editor-activity-ring {
+  position: relative;
+}
+
+.editor-activity-ring::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    conic-gradient(
+        from calc(var(--editor-activity-spin) - 60deg),
+        transparent 0deg,
+        var(--notice-success) 60deg,
+        transparent 120deg
+      )
+      border-box,
+    color-mix(in oklab, var(--notice-success) 30%, transparent) border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: editor-activity-spin 2.4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes editor-activity-spin {
+  to {
+    --editor-activity-spin: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-activity-ring::before {
+    animation: none;
+    background: color-mix(in oklab, var(--notice-success) 55%, transparent) border-box;
+  }
+}

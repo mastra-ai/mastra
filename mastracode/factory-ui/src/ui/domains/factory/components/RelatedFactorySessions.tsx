@@ -8,6 +8,7 @@ import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWo
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
+import { EditorToggle } from '../../editor/EditorToggle';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -112,6 +113,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
               projectRepositoryId={projectRepositoryId}
             />
           ) : null}
+          <EditorToggle />
           <WorkspaceFilesToggle />
         </>
       }
