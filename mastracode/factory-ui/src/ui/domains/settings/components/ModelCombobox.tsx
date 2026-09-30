@@ -1,5 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
@@ -11,6 +12,9 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
  *
  * A persisted value that is no longer in the catalog (key removed, model
  * retired) is kept selectable so the control always displays the stored state.
+ *
+ * `fixedWidth` gives settings rows one fixed width and truncates longer model
+ * names; by default the trigger fills its field (for stacked forms).
  */
 export function ModelCombobox({
   models,
@@ -18,6 +22,7 @@ export function ModelCombobox({
   onValueChange,
   placeholder,
   disabled,
+  fixedWidth = false,
   className,
 }: {
   models: AvailableModelOption[];
@@ -25,6 +30,7 @@ export function ModelCombobox({
   onValueChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  fixedWidth?: boolean;
   className?: string;
 }) {
   const options = useMemo(() => {
@@ -44,7 +50,7 @@ export function ModelCombobox({
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}
-      className={className}
+      className={cn(fixedWidth && 'w-64 shrink-0', className)}
     />
   );
 }
