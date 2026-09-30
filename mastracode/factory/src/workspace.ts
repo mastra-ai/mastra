@@ -544,8 +544,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           .catch(() => {});
       };
       const finishStart = async () => {
-        if (setupError) throw setupError;
         await publishStartSideEffects();
+        if (setupError) throw setupError;
       };
       if (!githubProvider) {
         await finishStart();

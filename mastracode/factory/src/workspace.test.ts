@@ -1177,6 +1177,25 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_replaced');
   });
 
+  it('persists the physical sandbox before surfacing a setup command failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    const session = addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /setup-failed|Setup command failed/,
+    );
+    expect(session.sandboxId).toBe('vm-session-a');
+
+    __clearSessionSandboxesForTests();
+    mocks.createSandbox.mockClear();
+    const restarted = await createLocalFactory();
+    await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
   it('does not register GitHub refresh after an infrastructure setup failure', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm i' });
