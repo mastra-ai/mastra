@@ -57,12 +57,16 @@ export function useSetPermissionForCategoryMutation({
     },
     // Roll back only this category, and only if no later write to it has started since.
     onError: (_error, { category }, context) => {
-      if (!context || revisions.current.get(category) !== context.revision) return;
-      const previousPolicy = context.previousPermissions?.categories?.[category];
-      if (previousPolicy === undefined) return;
-      queryClient.setQueryData<PermissionRules>(permissionsQueryKey, current =>
-        current ? { ...current, categories: { ...current.categories, [category]: previousPolicy } } : current,
-      );
+      if (!context?.previousPermissions || revisions.current.get(category) !== context.revision) return;
+      const previousPolicy = context.previousPermissions.categories?.[category];
+      queryClient.setQueryData<PermissionRules>(permissionsQueryKey, current => {
+        if (!current) return current;
+        const categories = { ...current.categories };
+        // A category with no policy before the write goes back to having none.
+        if (previousPolicy === undefined) delete categories[category];
+        else categories[category] = previousPolicy;
+        return { ...current, categories };
+      });
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: permissionsQueryKey }),
   });
