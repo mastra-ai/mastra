@@ -27,7 +27,7 @@ import type {
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, StepTripwireData } from '../../stream/types';
 import type { ToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import type {
   CoreTool,
@@ -352,6 +352,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     messageId?: string;
     request?: LanguageModelRequestMetadata;
+    /** Set when a processOutputStep processor rejected this step */
+    tripwire?: StepTripwireData;
   };
   /** Response metadata from the model */
   metadata: {

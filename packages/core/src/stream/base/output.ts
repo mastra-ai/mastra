@@ -1180,6 +1180,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // aggregate stream text because pre-approval text is part of the resumed run.
                   // Durable agents set resolveFinalPromises to force resolution even when
                   // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
+                  // Durable runs output processors in its workflow, so a blocked final step gets
+                  // its text back here, as the output processor pass above does for the main loop.
+                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+                  if (
+                    self.#options.resolveFinalPromises &&
+                    lastStep?.finishReason === 'tripwire' &&
+                    lastStep.toolCalls.length === 0
+                  ) {
+                    lastStep.text = lastStep.content
+                      .filter(part => part.type === 'text')
+                      .map(part => part.text)
+                      .join('');
+                  }
                   this.resolvePromises({
                     text: self.#producedText(),
                     finishReason: self.#finishReason,
@@ -2096,6 +2109,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #producedText(): string {
     const lastStep = this.#bufferedSteps[this.#bufferedSteps.length - 1];
     const hasToolStep = this.#bufferedSteps.some(step => step.toolCalls.length > 0 || step.toolResults.length > 0);
+    // Durable reads its final text from the steps, where a retried attempt's text is empty,
+    // plus the text of a step that never finished (an aborted run).
+    if (!hasToolStep && !this.#wasSuspended && this.#options.resolveFinalPromises) {
+      return this.#bufferedSteps.map(step => step.text).join('') + this.#bufferedByStep.text;
+    }
     return hasToolStep && !this.#wasSuspended && lastStep ? lastStep.text : this.#bufferedText.join('');
   }
 
