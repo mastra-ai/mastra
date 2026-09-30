@@ -644,6 +644,9 @@ describe('LangfuseExporter', () => {
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: makeSpan({ id: 'outer-run', isRootSpan: true, type: SpanType.AGENT_RUN }),
       });
+      for (let i = 0; i < 10_000; i++) {
+        await exportSpan(exporter, makeSpan({ id: `other-${i}` }));
+      }
       await exportSpan(
         exporter,
         makeSpan({
@@ -656,7 +659,7 @@ describe('LangfuseExporter', () => {
         } as any),
       );
 
-      const attrs = processedSpans[0].attributes;
+      const attrs = processedSpans.at(-1)!.attributes;
       expect(attrs['langfuse.trace.input']).toBeUndefined();
       expect(attrs['langfuse.trace.name']).toBeUndefined();
     });

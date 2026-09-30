@@ -37,8 +37,8 @@ const DEDICATED_METADATA_KEYS = new Set([
 ]);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
-/** Span ids remembered to detect runs nested under a span this exporter already sends. Oldest are dropped first. */
-const MAX_SEEN_SPAN_IDS = 10_000;
+/** Cap for each set of span ids kept to detect runs nested under a span this exporter sends. Oldest are dropped first. */
+const MAX_TRACKED_SPAN_IDS = 10_000;
 
 export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse public key */
@@ -72,7 +72,8 @@ export class LangfuseExporter extends BaseExporter {
   #environment: string | undefined;
   #release: string | undefined;
   #resourceAttributes: OtelExporterConfig['resourceAttributes'];
-  #seenSpanIds = new Set<string>();
+  #activeSpanIds = new Set<string>();
+  #endedSpanIds = new Set<string>();
 
   constructor(config: LangfuseExporterConfig = {}) {
     super(config);
@@ -137,25 +138,28 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    this.#rememberSpanId(event.exportedSpan.id);
+    const span = event.exportedSpan;
+    if (event.type === TracingEventType.SPAN_STARTED) {
+      trackSpanId(this.#activeSpanIds, span.id);
+      return;
+    }
     if (event.type !== TracingEventType.SPAN_ENDED) return;
+
+    // Running spans are kept apart from ended ones, so a long-running parent
+    // is not dropped while other spans fill the ended history.
+    this.#activeSpanIds.delete(span.id);
+    trackSpanId(this.#endedSpanIds, span.id);
     if (!this.#processor) return;
 
-    await this.exportSpan(event.exportedSpan);
-  }
-
-  #rememberSpanId(spanId: string): void {
-    if (this.#seenSpanIds.has(spanId)) return;
-    if (this.#seenSpanIds.size >= MAX_SEEN_SPAN_IDS) {
-      this.#seenSpanIds.delete(this.#seenSpanIds.values().next().value!);
-    }
-    this.#seenSpanIds.add(spanId);
+    await this.exportSpan(span);
   }
 
   private async exportSpan(span: AnyExportedSpan): Promise<void> {
     // A run started with tracingOptions.parentSpanId under a span this exporter
     // sends is a child in Langfuse, even though Mastra marks it as a root span.
-    const isNestedRun = span.externalParentSpanId !== undefined && this.#seenSpanIds.has(span.externalParentSpanId);
+    const parentSpanId = span.externalParentSpanId;
+    const isNestedRun =
+      parentSpanId !== undefined && (this.#activeSpanIds.has(parentSpanId) || this.#endedSpanIds.has(parentSpanId));
 
     if (!this.#spanConverter) {
       // Fallback if init() was not called (e.g., standalone usage without Mastra)
@@ -280,6 +284,13 @@ export class LangfuseExporter extends BaseExporter {
   async shutdown(): Promise<void> {
     await Promise.all([this.#processor?.shutdown(), this.#client?.shutdown()]);
   }
+}
+
+function trackSpanId(spanIds: Set<string>, spanId: string): void {
+  if (spanIds.size >= MAX_TRACKED_SPAN_IDS && !spanIds.has(spanId)) {
+    spanIds.delete(spanIds.values().next().value!);
+  }
+  spanIds.add(spanId);
 }
 
 /**
