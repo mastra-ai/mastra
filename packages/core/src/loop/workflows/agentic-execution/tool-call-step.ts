@@ -349,7 +349,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           payload: {
             // Auto-resume re-calls the tool under a new id; ack the id the client saw suspended.
             toolCallId: entry.toolCallId ?? inputData.toolCallId,
-            toolName: inputData.toolName,
+            toolName: entry.toolName ?? inputData.toolName,
             kind,
             args: entry.args,
             ...(kind === 'suspension' ? { suspendPayload: entry.suspendPayload } : {}),

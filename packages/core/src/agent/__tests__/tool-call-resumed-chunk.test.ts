@@ -162,6 +162,51 @@ describe('tool-call-resumed chunk (#24280)', () => {
     expect(resumed.status).not.toBe('suspended');
   });
 
+  it('acks a delegated approval with the inner tool name', async () => {
+    const subAgent = buildAgentCallingTool(
+      'sub-approver',
+      'inner-appr',
+      'doThing',
+      { value: 'x' },
+      {
+        tools: {
+          doThing: createTool({
+            id: 'do-thing',
+            description: 'Does a thing.',
+            inputSchema: z.object({ value: z.string() }),
+            requireApproval: true,
+            execute: async (input: { value: string }) => ({ done: input.value }),
+          }),
+        },
+      },
+    );
+    const supervisor = buildAgentCallingTool(
+      'supervisor-appr',
+      'sup-appr',
+      'agent-subAgent',
+      { prompt: 'do it' },
+      { agents: { subAgent }, memory: new MockMemory() },
+    );
+    const mastra = new Mastra({ agents: { supervisor }, logger: false, storage: new InMemoryStore() });
+    const sup = mastra.getAgent('supervisor');
+
+    const stream = await sup.stream('go', { maxSteps: 6, memory: { resource: 'r2', thread: 't2' } });
+    const initial = await collect(stream);
+    const approval = initial.find(c => c.type === 'tool-call-approval');
+    expect(approval?.payload.toolName).toBe('doThing');
+
+    const chunks = await collect(
+      await sup.approveToolCall({
+        runId: stream.runId,
+        toolCallId: approval!.payload.toolCallId,
+        memory: { resource: 'r2', thread: 't2' },
+      } as any),
+    );
+    const acks = chunks.filter(c => c.type === 'tool-call-resumed');
+    expect(acks).toHaveLength(1);
+    expect(acks[0].payload).toMatchObject({ toolCallId: approval!.payload.toolCallId, toolName: 'doThing' });
+  });
+
   it('does not emit tool-call-resumed for a fresh call whose model args carry resumeData', async () => {
     const agent = buildAgentCallingTool(
       'asker-fresh',
