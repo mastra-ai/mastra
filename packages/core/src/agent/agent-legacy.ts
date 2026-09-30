@@ -3,7 +3,6 @@ import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { AnyWorkspace } from '../workspace';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -37,6 +36,7 @@ import type { ChunkType } from '../stream/types';
 import type { CoreTool, ToolHooks } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows';
+import type { AnyWorkspace } from '../workspace';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
