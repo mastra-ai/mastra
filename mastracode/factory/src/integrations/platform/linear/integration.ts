@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -670,7 +669,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
     }
 
-    const cursors = decodeCursor(cursor, sourceIds, attributionSourceIds);
+    const cursors = await decodeCursor(cursor, sourceIds, attributionSourceIds);
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
@@ -706,7 +705,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     );
     return {
       issues: dedupeIssuesBySource(pages.flat(), sourceIds),
-      nextCursor: hasNextPage ? encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
+      nextCursor: hasNextPage ? await encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
     };
   }
 
@@ -956,30 +955,31 @@ function canonicalSourceIds(sourceIds: string[]): string[] {
   return [...new Set(sourceIds)].sort();
 }
 
-function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): string {
+async function linearSourceSetFingerprint(sourceIds: string[], attributionSourceIds: string[]): Promise<string> {
   const scope = {
     sourceIds: canonicalSourceIds(sourceIds),
     attributionSourceIds: canonicalSourceIds(attributionSourceIds),
   };
-  return createHash('sha256').update(JSON.stringify(scope)).digest('base64url');
+  const bytes = new TextEncoder().encode(JSON.stringify(scope));
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64url');
 }
 
 function invalidLinearCursor(): Error {
   return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
 }
 
-function decodeCursor(
+async function decodeCursor(
   cursor: string | undefined,
   sourceIds: string[],
   attributionSourceIds: string[],
-): Record<string, string | null | undefined> {
+): Promise<Record<string, string | null | undefined>> {
   if (!cursor) return {};
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<PlatformListCursor>;
     const canonical = canonicalSourceIds(sourceIds);
     if (
       parsed.v !== 1 ||
-      parsed.sourceSet !== linearSourceSetFingerprint(sourceIds, attributionSourceIds) ||
+      parsed.sourceSet !== (await linearSourceSetFingerprint(sourceIds, attributionSourceIds)) ||
       !Array.isArray(parsed.cursors) ||
       parsed.cursors.length !== canonical.length ||
       !parsed.cursors.every(value => value === null || typeof value === 'string')
@@ -992,15 +992,15 @@ function decodeCursor(
   }
 }
 
-function encodeCursor(
+async function encodeCursor(
   state: Record<string, string | null>,
   sourceIds: string[],
   attributionSourceIds: string[],
-): string {
+): Promise<string> {
   const canonical = canonicalSourceIds(sourceIds);
   const cursor: PlatformListCursor = {
     v: 1,
-    sourceSet: linearSourceSetFingerprint(sourceIds, attributionSourceIds),
+    sourceSet: await linearSourceSetFingerprint(sourceIds, attributionSourceIds),
     cursors: canonical.map(sourceId => state[sourceId] ?? null),
   };
   return Buffer.from(JSON.stringify(cursor)).toString('base64url');

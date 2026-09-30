@@ -33,7 +33,7 @@
   --belt-sway: 0;
   --wick-fill: 0;
   --wick-drift: 1;
-  --belt-hue: var(--green-400);
+  --belt-hue: var(--success-bright);
 }
 
 .session-initializing {
@@ -41,7 +41,7 @@
   --belt-sway: 0;
   --wick-fill: 0;
   --wick-drift: 1;
-  --belt-hue: var(--orange-400);
+  --belt-hue: var(--session-initializing);
 }
 
 .session-ready {
@@ -49,19 +49,7 @@
   --belt-sway: 1;
   --wick-fill: 1;
   --wick-drift: 0;
-  --belt-hue: var(--blue-500);
-}
-
-html.light .session-working {
-  --belt-hue: var(--green-500);
-}
-
-html.light .session-initializing {
-  --belt-hue: var(--orange-500);
-}
-
-html.light .session-ready {
-  --belt-hue: var(--blue-600);
+  --belt-hue: var(--info-bright);
 }
 
 .session-belt {

@@ -39,7 +39,7 @@ interface ProblemJson {
   status?: number;
   detail?: string;
   code?: string;
-  error?: string;
+  error?: string | { message?: unknown };
 }
 
 /**
@@ -64,6 +64,13 @@ export async function extractProblemDetail(
         const value = data[field];
         if (typeof value === 'string' && value) {
           return { detail: truncate(value), code, isProblemJson };
+        }
+        // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
+        if (field === 'error' && value && typeof value === 'object') {
+          const message = value.message;
+          if (typeof message === 'string' && message) {
+            return { detail: truncate(message), code, isProblemJson };
+          }
         }
       }
       return { code, isProblemJson };

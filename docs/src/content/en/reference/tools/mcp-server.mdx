@@ -266,36 +266,47 @@ The same request also populates `context.requestContext`, the trusted applicatio
 const authInfo = context.mcp?.extra.authInfo ?? context.requestContext?.get('authInfo')
 ```
 
-#### Example: Tool that reads the caller's token
+#### Example: Tool that uses caller identity with a separate credential
 
 ```typescript
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
+import { apiCredentials } from '../lib/api-credentials'
+
 const fetchUserData = createTool({
   id: 'fetchUserData',
-  description: 'Fetches user data using authentication from MCP context',
+  description: 'Fetches data for the authenticated MCP caller',
   inputSchema: z.object({
-    userId: z.string().describe('The ID of the user to fetch'),
+    resourceId: z.string().describe('The ID of the record to fetch'),
   }),
   execute: async (inputData, context) => {
     const authInfo = context.mcp?.extra.authInfo ?? context.requestContext?.get('authInfo')
+    const user = authInfo?.extra?.user as { id?: string } | undefined
 
-    if (!authInfo?.token) {
+    if (!user?.id) {
       throw new Error('Authentication required')
     }
 
-    const response = await fetch(`https://api.example.com/users/${inputData.userId}`, {
-      headers: {
-        Authorization: `Bearer ${authInfo.token}`,
+    // Resolve the owner from trusted context, not from model input
+    const credential = await apiCredentials.getForUser(user.id)
+
+    const response = await fetch(
+      `https://api.example.com/users/${encodeURIComponent(user.id)}/records/${encodeURIComponent(inputData.resourceId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${credential.token}`,
+        },
+        signal: context.mcp?.extra.signal,
       },
-      signal: context.mcp?.extra.signal,
-    })
+    )
 
     return response.json()
   },
 })
 ```
+
+Use `authInfo` for caller identity, then select a credential intended for the service the tool calls. The model supplies business input such as `resourceId`, while trusted code selects the credential. An MCP access token is for your MCP server, so it must not be forwarded to another API. See [Access upstream services safely](/docs/guides/mcp-authentication-authorization#access-upstream-services-safely).
 
 #### Where `authInfo` comes from
 
@@ -1292,8 +1303,12 @@ execute: async (inputData, context) => {
   console.log('User ID:', authInfo.extra.sub)
   console.log('Email:', authInfo.extra.email)
 
+  // Use a credential intended for the API being called, not the MCP token.
+  // See https://mastra.ai/docs/guides/mcp-authentication-authorization#access-upstream-services-safely
+  const credential = await apiCredentials.getForUser(authInfo.extra.sub as string)
+
   const response = await fetch('/api/data', {
-    headers: { Authorization: `Bearer ${authInfo.token}` },
+    headers: { Authorization: `Bearer ${credential.token}` },
     signal: context.mcp?.extra.signal,
   })
 

@@ -82,6 +82,12 @@
   --product-persistent-server-subtle: var(--badge-purple-subtle);
 
   --brand-green-indicator: var(--color-brand-green);
+
+  --destructive-bright: var(--red-300);
+  --warning-bright: var(--yellow-300);
+  --success-bright: var(--green-300);
+  --info-bright: var(--blue-300);
+  --session-initializing: var(--orange-400);
 }
 
 html.light {
@@ -153,6 +159,12 @@ html.light {
   --product-persistent-server-foreground: var(--purple-950);
 
   --brand-green-indicator: var(--green-700);
+
+  --destructive-bright: var(--red-500);
+  --warning-bright: var(--yellow-400);
+  --success-bright: var(--green-500);
+  --info-bright: var(--blue-500);
+  --session-initializing: var(--orange-500);
 }
 
 @theme inline {
@@ -161,18 +173,22 @@ html.light {
   --color-destructive-edge: var(--destructive-edge);
   --color-destructive-indicator: var(--destructive-indicator);
   --color-destructive-subtle-foreground: var(--destructive-subtle-foreground);
+  --color-destructive-bright: var(--destructive-bright);
   --color-warning-subtle: var(--warning-subtle);
   --color-warning-edge: var(--warning-edge);
   --color-warning-indicator: var(--warning-indicator);
   --color-warning-subtle-foreground: var(--warning-subtle-foreground);
+  --color-warning-bright: var(--warning-bright);
   --color-success-subtle: var(--success-subtle);
   --color-success-edge: var(--success-edge);
   --color-success-indicator: var(--success-indicator);
   --color-success-subtle-foreground: var(--success-subtle-foreground);
+  --color-success-bright: var(--success-bright);
   --color-info-subtle: var(--info-subtle);
   --color-info-edge: var(--info-edge);
   --color-info-indicator: var(--info-indicator);
   --color-info-subtle-foreground: var(--info-subtle-foreground);
+  --color-info-bright: var(--info-bright);
   --color-badge-neutral-foreground: var(--badge-neutral-foreground);
   --color-badge-green-strong: var(--badge-green-strong);
   --color-badge-green-subtle: var(--badge-green-subtle);

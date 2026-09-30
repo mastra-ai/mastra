@@ -308,7 +308,11 @@ export const mapWorkflowStreamChunkToWatchResult = (
   prev: WorkflowStreamResult<any, any, any, any> | undefined,
   chunk: StreamChunk,
 ): WorkflowStreamResult<any, any, any, any> => {
-  const previous = prev ?? { status: 'running', input: undefined, steps: {} };
+  // On replay, `prev` may be a finished tool result (e.g. `{ result, runId }`) with no `steps`.
+  const previous =
+    prev && typeof prev === 'object' && prev.steps && typeof prev.steps === 'object'
+      ? prev
+      : { status: 'running' as const, input: undefined, steps: {} };
   if (chunk.type === 'workflow-start') {
     return { input: previous.input, status: 'running', steps: previous.steps };
   }
