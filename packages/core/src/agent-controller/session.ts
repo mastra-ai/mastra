@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import { assertRequestContextResourceMatches } from '../agent/memory-thread-ownership';
 import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal, resolveDeliveryAttributes } from '../agent/signals';
 import type {
@@ -4032,14 +4033,15 @@ export class Session<TState = unknown> {
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
+      const requestContext = await this.#authorizeCaller(requestContextInput);
       if (!this.thread.getId()) {
-        const thread = await this.thread.create({ requestContext: requestContextInput });
+        const thread = await this.thread.create({ requestContext });
         this.thread.set({ threadId: thread.id });
       }
       const threadId = this.thread.getId()!;
 
       const agent = this.machinery.getAgent();
-      await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+      await this.thread.ensureSubscription(threadId, agent, requestContext);
       assertNotCancelled();
 
       // A deferred abort (parked approval gate) leaves the AbortController
@@ -4059,6 +4061,7 @@ export class Session<TState = unknown> {
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
+          requestContext,
           ifActive,
           ifIdle,
         });
@@ -4124,7 +4127,7 @@ export class Session<TState = unknown> {
           // never reach the session, leaving `run.isRunning()` stuck true.
           this.thread.cleanupSubscription();
         }
-        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+        await this.thread.ensureSubscription(threadId, agent, requestContext);
         assertNotCancelled();
       } else if (abortedStreamTeardown) {
         // Stop on a run parked on a tool suspension leaves no run id behind,
@@ -4140,13 +4143,13 @@ export class Session<TState = unknown> {
           this.thread.cleanupSubscription();
           this.run.reset();
         }
-        await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+        await this.thread.ensureSubscription(threadId, agent, requestContext);
         assertNotCancelled();
       }
       abortedStreamTeardown?.cancel();
 
       const streamOptions = await this.machinery.buildStreamOptions({
-        requestContext: requestContextInput,
+        requestContext,
         tracingContext,
         tracingOptions,
         untilIdle,
@@ -4156,6 +4159,7 @@ export class Session<TState = unknown> {
       const result = agent.sendSignal(signal, {
         resourceId: this.identity.getResourceId(),
         threadId,
+        requestContext: streamOptions.requestContext as RequestContext | undefined,
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
@@ -4195,26 +4199,28 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    const requestContext = await this.#authorizeCaller(requestContextInput);
     if (!this.thread.getId()) {
-      const thread = await this.thread.create({ requestContext: requestContextInput });
+      const thread = await this.thread.create({ requestContext });
       this.thread.set({ threadId: thread.id });
     }
     const threadId = this.thread.getId()!;
 
     const agent = this.machinery.getAgent();
-    await this.thread.ensureSubscription(threadId, agent, requestContextInput);
+    await this.thread.ensureSubscription(threadId, agent, requestContext);
 
     if (this.run.getRunId() && this.stream.activeRunId()) {
       return agent.sendNotificationSignal(input, {
         resourceId: this.identity.getResourceId(),
         threadId,
+        requestContext,
         ifActive,
         ifIdle,
       });
     }
 
     const streamOptions = await this.machinery.buildStreamOptions({
-      requestContext: requestContextInput,
+      requestContext,
       tracingContext,
       tracingOptions,
     });
@@ -4222,9 +4228,28 @@ export class Session<TState = unknown> {
     return agent.sendNotificationSignal(input, {
       resourceId: this.identity.getResourceId(),
       threadId,
+      requestContext: streamOptions.requestContext as RequestContext | undefined,
       ifActive,
       ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
     });
+  }
+
+  /**
+   * Run the host's session-resource policy once for a caller, then reject a
+   * caller whose resource still differs from this session's before anything
+   * is created, subscribed, queued or delivered. The returned context carries
+   * the session resource when approved, so downstream context builders skip
+   * the policy.
+   */
+  async #authorizeCaller(requestContext?: RequestContext): Promise<RequestContext | undefined> {
+    if (!requestContext) return undefined;
+    const authorized = await this.machinery.buildRequestContext(requestContext);
+    assertRequestContextResourceMatches({
+      requestContext: authorized,
+      resourceId: this.identity.getResourceId(),
+      threadId: this.thread.getId() ?? undefined,
+    });
+    return authorized;
   }
 
   private async prepareMessageTarget({
@@ -4240,19 +4265,20 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     includeStreamOptions?: boolean;
   }) {
+    const authorized = await this.#authorizeCaller(requestContext);
     if (!this.thread.getId()) {
-      const thread = await this.thread.create({ requestContext });
+      const thread = await this.thread.create({ requestContext: authorized });
       this.thread.set({ threadId: thread.id });
     }
     const threadId = this.thread.getId()!;
-    await this.thread.ensureSubscription(threadId, undefined, requestContext);
+    await this.thread.ensureSubscription(threadId, undefined, authorized);
 
     if (!includeStreamOptions) {
-      return { resourceId: this.identity.getResourceId(), threadId };
+      return { resourceId: this.identity.getResourceId(), threadId, requestContext: authorized };
     }
 
     const streamOptions = await this.machinery.buildStreamOptions({
-      requestContext,
+      requestContext: authorized,
       tracingContext,
       tracingOptions,
       untilIdle,
@@ -4261,6 +4287,7 @@ export class Session<TState = unknown> {
     return {
       resourceId: this.identity.getResourceId(),
       threadId,
+      requestContext: streamOptions.requestContext as RequestContext | undefined,
       ifIdle: { streamOptions: streamOptions as any },
     };
   }
@@ -4341,8 +4368,10 @@ export class Session<TState = unknown> {
 
   /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    // Abort synchronously when there is no caller context to authorize.
+    const authorized = requestContext ? await this.#authorizeCaller(requestContext) : undefined;
     this.abort();
-    await this.sendMessage({ content, requestContext });
+    await this.sendMessage({ content, requestContext: authorized });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
@@ -4384,6 +4413,7 @@ export class Session<TState = unknown> {
     if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
     const threadId = this.thread.getId();
     if (!threadId) return;
+    const authorized = await this.#authorizeCaller(requestContext);
     const resourceId = this.identity.getResourceId();
     const agent = this.machinery.getAgent();
     const binding = this.ensureFollowUpBinding(agent, resourceId, threadId);
@@ -4392,7 +4422,7 @@ export class Session<TState = unknown> {
     this.#preparingFollowUps.add(operation);
     try {
       const streamOptions = await this.machinery.buildStreamOptions({
-        requestContext,
+        requestContext: authorized,
         abortSignal: operation.controller.signal,
       });
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
@@ -4406,6 +4436,7 @@ export class Session<TState = unknown> {
         {
           resourceId,
           threadId,
+          requestContext: streamOptions.requestContext as RequestContext | undefined,
           ifIdle: { streamOptions: streamOptions as any },
         },
       ).accepted;
@@ -4573,7 +4604,8 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
+    const requestContext =
+      (await this.#authorizeCaller(requestContextInput)) ?? (await this.machinery.buildRequestContext());
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
@@ -4628,7 +4660,8 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
+    const requestContext =
+      (await this.#authorizeCaller(requestContextInput)) ?? (await this.machinery.buildRequestContext());
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
@@ -4709,10 +4742,11 @@ export class Session<TState = unknown> {
     // re-register the same toolCallId without being clobbered by this cleanup.
     // Drop the matching display-state entry too so the UI stops rendering the
     // resolved prompt while any other parked suspensions stay visible.
+    const requestContext =
+      (await this.#authorizeCaller(requestContextInput)) ?? (await this.machinery.buildRequestContext());
     this.suspensions.delete({ toolCallId });
     this.displayState.deletePendingSuspension(toolCallId);
 
-    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const threadId = this.thread.getId();
     if (!threadId) {
       throw new Error('Cannot resume a suspended tool without a current thread');
