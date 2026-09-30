@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { TaskContext, TaskDefinition } from '@renderinc/sdk/workflows';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Mastra } from '@mastra/core/mastra';
@@ -162,6 +163,35 @@ export async function executeCoordinator(
       },
     );
   } catch (error) {
+    // Render cancels descendants before the root. Reporting an error while that
+    // cancellation is propagating can incorrectly finalize the root as failed.
+    // Stop application work and let Render terminate the handler. The existing
+    // coordinator deadline bounds this wait if the cancellation request fails.
+    let current = await store.get(envelope.workflowId, envelope.runId).catch(() => {
+      console.error('[mastra-render] Failed to read cancellation state.');
+      return null;
+    });
+    if (current?.workerClaim === workerClaim) {
+      const deadline = Math.min(claimed.dispatchExpiresAt!, current.dispatchExpiresAt ?? Infinity);
+      const visited = new Set<string>();
+      while (current) {
+        if (current.status === 'cancel-requested' || current.status === 'canceled') {
+          const remaining = Math.max(0, deadline - Date.now());
+          if (remaining) await delay(remaining, undefined, { ref: false });
+          break;
+        }
+        const parent: RunRecord['parent'] = current.parent;
+        if (!parent) break;
+        const key = JSON.stringify([parent.workflowId, parent.runId]);
+        if (visited.has(key)) break;
+        visited.add(key);
+        current = await store.get(parent.workflowId, parent.runId).catch(() => {
+          console.error('[mastra-render] Failed to read ancestor cancellation state.');
+          return null;
+        });
+        if (current?.attempt !== parent.attempt) break;
+      }
+    }
     // Keep the logical run nonterminal until Render exhausts native retries.
     await write(current => ({
       error: errorRecord(error),

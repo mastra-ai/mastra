@@ -22,7 +22,7 @@ export interface RenderOptions {
   stepDefaults?: TaskPolicy;
   requestContextKeys?: readonly string[];
   pollIntervalMs?: number;
-  /** Per-root concurrency bound, in addition to foreach concurrency. */
+  /** Per-coordinator dispatch bound; each nested coordinator has its own limiter. */
   maxConcurrentSteps?: number;
   /** Optional SDK client configuration, including local development URL. */
   client?: Parameters<typeof createRenderTransport>[0];

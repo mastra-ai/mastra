@@ -66,7 +66,7 @@ export function dispatchChild(name: string, envelope: RootEnvelope): Promise<unk
   return active.dispatch ? active.dispatch(execute) : execute();
 }
 
-/** Per-root bound, not a replacement for Render's workspace rate limit or queue. */
+/** Per-coordinator bound, not a replacement for Render's workspace rate limit or queue. */
 export function createDispatchLimiter(maxConcurrent: number) {
   let running = 0;
   const queue: (() => void)[] = [];

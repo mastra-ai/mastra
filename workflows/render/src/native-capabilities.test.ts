@@ -460,8 +460,16 @@ describe('attempt and identity boundaries', () => {
     const root = tasks.get(h.provider.workflows.get(workflow.id)!.manifest().rootName)!;
     const attempt = Promise.resolve(root.func(h.context('native-root'), h.envelope())).catch(error => error);
     await entered.promise;
+    // Simulate cancellation near the coordinator deadline without a long unit-test wait.
+    await updateRun(h.provider.store, workflow.id, run.runId, () => ({ dispatchExpiresAt: Date.now() + 80 }));
     await h.provider.cancel(workflow.id, run.runId);
     release.resolve();
+    let settled = false;
+    void attempt.then(() => {
+      settled = true;
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(settled).toBe(false);
     expect(await attempt).toBeInstanceOf(Error);
     await expect(root.func(h.context('native-root'), h.envelope())).rejects.toThrow('terminal');
     expect((await h.provider.store.get(workflow.id, run.runId))?.status).toBe('cancel-requested');

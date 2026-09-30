@@ -21,7 +21,7 @@ async function call(...args: string[]) {
 }
 /** Poll a fixture condition until its bounded deadline, failing when it never becomes true. */
 async function until<T>(operation: () => Promise<T>, check: (value: T) => boolean): Promise<T> {
-  const deadline = performance.now() + 45000;
+  const deadline = performance.now() + 180000;
   while (performance.now() < deadline) {
     const value = await operation();
     if (check(value)) return value;
