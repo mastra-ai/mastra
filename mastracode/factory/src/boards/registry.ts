@@ -24,13 +24,7 @@ export function createBoardRegistry(
   const registry = new Map<string, InstalledBoard>();
 
   for (const board of [...installed, ...(options.boards ?? [])]) {
-    const existing = registry.get(board.id);
-    if (existing) {
-      if (defaultBoards.includes(existing)) {
-        throw new Error(
-          `MastraFactory: board id '${board.id}' is already used by a built-in board. Set includeDefaultBoards: false to replace it.`,
-        );
-      }
+    if (registry.has(board.id)) {
       throw new Error(`MastraFactory: duplicate board id '${board.id}' in 'boards'.`);
     }
     registry.set(board.id, board);

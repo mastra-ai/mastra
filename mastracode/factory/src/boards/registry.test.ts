@@ -29,7 +29,7 @@ describe('createBoardRegistry', () => {
     );
   });
 
-  it('rejects a custom board that collides with an installed built-in', () => {
+  it('rejects an id already used by an installed built-in', () => {
     const replacement = defineBoard({
       id: 'work',
       title: 'Replacement',
@@ -37,9 +37,7 @@ describe('createBoardRegistry', () => {
       phases: { start: { title: 'Start', kind: 'resting' } },
     });
 
-    expect(() => createBoardRegistry({ boards: [replacement] })).toThrow(
-      "board id 'work' is already used by a built-in board",
-    );
+    expect(() => createBoardRegistry({ boards: [replacement] })).toThrow("duplicate board id 'work'");
   });
 
   it('allows replacing a built-in id when default boards are disabled', () => {
