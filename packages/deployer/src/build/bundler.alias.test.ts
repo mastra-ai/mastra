@@ -46,4 +46,46 @@ describe('getInputOptions module aliases', () => {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it('converts CommonJS alias targets when using the externals preset', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'mastra-bundler-alias-cjs-'));
+    const entryFile = join(projectRoot, 'entry.ts');
+    const shimFile = join(projectRoot, 'shim.cjs');
+
+    try {
+      await Promise.all([
+        writeFile(entryFile, `import { marker } from 'aliased-package';\nexport { marker };\n`),
+        writeFile(shimFile, `exports.marker = 'MASTRA_CJS_ALIAS_SHIM';\n`),
+      ]);
+
+      const inputOptions = await getInputOptions(
+        entryFile,
+        {
+          dependencies: new Map(),
+          externalDependencies: new Map(),
+          workspaceMap: new Map(),
+        },
+        'node',
+        undefined,
+        {
+          projectRoot,
+          externalsPreset: true,
+          alias: { 'aliased-package': shimFile },
+        },
+      );
+      const bundler = await rollup({ ...inputOptions, input: entryFile });
+
+      try {
+        const { output } = await bundler.generate({ format: 'esm' });
+        const code = output.map(chunk => ('code' in chunk ? chunk.code : '')).join('\n');
+
+        expect(code).toContain('MASTRA_CJS_ALIAS_SHIM');
+        expect(code).not.toContain("from 'aliased-package'");
+      } finally {
+        await bundler.close();
+      }
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
 });

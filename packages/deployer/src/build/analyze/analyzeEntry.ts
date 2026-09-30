@@ -16,6 +16,7 @@ import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
+import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 function analysisExternals({
@@ -62,6 +63,7 @@ function getInputPlugins(
     externals,
     externalsPreset,
     alias,
+    platform,
   }: {
     sourcemapEnabled: boolean;
     env: Record<string, string>;
@@ -69,6 +71,7 @@ function getInputPlugins(
     externals: string[];
     externalsPreset: boolean;
     alias: Record<string, string>;
+    platform: BundlerPlatform;
   },
 ): Plugin[] {
   let virtualPlugin = null;
@@ -84,7 +87,7 @@ function getInputPlugins(
     plugins.push(virtualPlugin);
   }
 
-  const aliasPlugin = moduleAlias(alias, mastraEntry);
+  const aliasPlugin = moduleAlias(alias, mastraEntry, platform);
   plugins.push(
     ...[
       protocolExternalResolver(),
@@ -130,6 +133,7 @@ async function captureDependenciesToOptimize(
     externals,
     externalsPreset,
     alias,
+    platform,
   }: {
     logger: IMastraLogger;
     mastraEntry: string;
@@ -142,6 +146,7 @@ async function captureDependenciesToOptimize(
     externals: string[];
     externalsPreset: boolean;
     alias: Record<string, string>;
+    platform: BundlerPlatform;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -236,6 +241,7 @@ async function captureDependenciesToOptimize(
         externals,
         externalsPreset,
         alias,
+        platform,
       });
 
       if (!analysis?.dependencies) {
@@ -346,6 +352,7 @@ export async function analyzeEntry(
     externals = [],
     externalsPreset = false,
     alias = {},
+    platform = 'node',
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -363,6 +370,7 @@ export async function analyzeEntry(
     externalsPreset?: boolean;
     /** Exact module specifier aliases applied before externalization */
     alias?: Record<string, string>;
+    platform?: BundlerPlatform;
   },
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
@@ -395,6 +403,7 @@ export async function analyzeEntry(
         externals,
         externalsPreset,
         alias,
+        platform,
       }),
       external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
     });
@@ -420,6 +429,7 @@ export async function analyzeEntry(
       externals,
       externalsPreset,
       alias,
+      platform,
     });
 
     const result: AnalyzeEntryResult = {

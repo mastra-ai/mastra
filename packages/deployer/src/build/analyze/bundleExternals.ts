@@ -177,7 +177,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
-    moduleAlias(alias, path.join(rootDir, 'package.json')),
+    moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
     tsConfigPaths({ cwd: projectRoot }),
     protocolExternalResolver(),
     subpathExternalsResolver(externals, workspaceMap),

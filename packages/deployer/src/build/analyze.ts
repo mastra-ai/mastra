@@ -451,6 +451,7 @@ export async function analyzeBundle(
       externals: mergedExternals,
       externalsPreset,
       alias: bundlerOptions?.alias,
+      platform,
     });
 
     // Detect pino transports in the bundled output

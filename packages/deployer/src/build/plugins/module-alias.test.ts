@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { rollup } from 'rollup';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { BundlerPlatform } from '../utils';
 import { moduleAlias } from './module-alias';
 
 const tempDirs: string[] = [];
@@ -18,11 +19,17 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 
-async function generate(entry: string, alias: Record<string, string>, resolveFrom = entry, external?: string[]) {
+async function generate(
+  entry: string,
+  alias: Record<string, string>,
+  resolveFrom = entry,
+  external?: string[],
+  platform: BundlerPlatform = 'node',
+) {
   const bundle = await rollup({
     input: entry,
     external,
-    plugins: [moduleAlias(alias, resolveFrom), nodeResolve()].filter(Boolean),
+    plugins: [moduleAlias(alias, resolveFrom, platform), nodeResolve()].filter(Boolean),
   });
 
   try {
@@ -109,6 +116,39 @@ describe('moduleAlias', () => {
 
     expect(code).toContain('nested-replacement');
     expect(code).not.toContain('root-replacement');
+  });
+
+  it('resolves bare targets with export conditions for the target platform', async () => {
+    const root = await createTempDir();
+    const packageDir = join(root, 'node_modules', 'replacement');
+    const entry = join(root, 'entry.mjs');
+    await mkdir(packageDir, { recursive: true });
+    await Promise.all([
+      writeFile(entry, `import value from 'original'; export { value };`),
+      writeFile(
+        join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: 'replacement',
+          version: '1.0.0',
+          type: 'module',
+          exports: {
+            '.': {
+              browser: './browser.js',
+              node: './node.js',
+              default: './default.js',
+            },
+          },
+        }),
+      ),
+      writeFile(join(packageDir, 'browser.js'), `export default 'browser-replacement';`),
+      writeFile(join(packageDir, 'node.js'), `export default 'node-replacement';`),
+      writeFile(join(packageDir, 'default.js'), `export default 'default-replacement';`),
+    ]);
+
+    const code = await generate(entry, { original: 'replacement' }, entry, ['replacement'], 'browser');
+
+    expect(code).toContain('browser-replacement');
+    expect(code).not.toContain('node-replacement');
   });
 
   it('throws a MastraError when the target cannot be resolved', async () => {

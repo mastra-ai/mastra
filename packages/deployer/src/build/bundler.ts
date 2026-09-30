@@ -109,7 +109,7 @@ export async function getInputOptions(
     external: externalsPreset ? [] : rollupExternals,
     plugins: [
       protocolExternalResolver(),
-      moduleAlias(alias, entryFile),
+      moduleAlias(alias, entryFile, platform),
       subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
       {
         name: 'alias-optimized-deps',
@@ -146,15 +146,13 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      externalsPreset
-        ? null
-        : commonjs({
-            extensions: ['.js', '.ts'],
-            transformMixedEsModules: true,
-            esmExternals(id) {
-              return externals.includes(id);
-            },
-          }),
+      commonjs({
+        extensions: ['.js', '.ts', '.cjs'],
+        transformMixedEsModules: true,
+        esmExternals(id) {
+          return externals.includes(id);
+        },
+      }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
