@@ -88,6 +88,16 @@ export interface WorkItemStageEntry {
  * upstream repo, so counting those as machine work reports the repo's activity
  * as the Factory's and pins any such ratio near 100%.
  */
+/** When the card entered the stage it currently sits in, from its open history entry. */
+export function currentStageEnteredAt(item: {
+  stages: WorkItemStage[];
+  stageHistory: WorkItemStageEntry[];
+}): Date | null {
+  const open = [...item.stageHistory].reverse().find(entry => !entry.exitedAt && item.stages.includes(entry.stage));
+  const at = open ? Date.parse(open.enteredAt) : Number.NaN;
+  return Number.isFinite(at) ? new Date(at) : null;
+}
+
 export function isAgentActor(by: string | undefined): boolean {
   if (by === undefined) return false;
   return by.startsWith('agent:') || by === 'factory-tool-result-rule';
@@ -2502,6 +2512,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     workItemId: string;
     role?: string;
+    /** Only supersede decisions queued strictly before this instant. */
+    createdBefore?: Date;
     supersededAt: Date;
   }): Promise<FactoryDeferredDecisionRecord[]> {
     const rows = await this.#db.findMany<GovernanceDbRow>('factory_deferred_decisions', {
@@ -2514,6 +2526,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (const row of rows) {
       const decision = toDeferredDecision(row);
       if (input.role !== undefined && decision.decision.role !== input.role) continue;
+      if (
+        input.createdBefore &&
+        decision.status === 'proposed' &&
+        decision.createdAt.getTime() >= input.createdBefore.getTime()
+      )
+        continue;
       const record =
         decision.status === 'proposed'
           ? await this.#settleProposedDecision(
@@ -2603,7 +2621,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     workItemId: string;
     supersededAt: Date;
   }): Promise<void> {
-    await this.supersedeDecisionsForWorkItem(input);
+    const item = await this.get({ orgId: input.orgId, id: input.workItemId });
+    await this.supersedeDecisionsForWorkItem({ ...input, ...this.#terminalCloseOutCutoff(item) });
+  }
+
+  /**
+   * A terminal stage's own onEnter effects (e.g. the close-out skill) are
+   * committed in the same transaction that enters the stage, so they are
+   * created at or after its entry. Only work queued before that is stale.
+   */
+  #terminalCloseOutCutoff(item: WorkItemRow | null): { createdBefore?: Date } {
+    const enteredAt = item && this.#isTerminal(item) ? currentStageEnteredAt(item) : null;
+    return enteredAt ? { createdBefore: enteredAt } : {};
   }
 
   async repairLegacyAttentionState(): Promise<void> {
@@ -2657,6 +2686,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           factoryProjectId: decision.factoryProjectId,
           workItemId: decision.workItemId,
           supersededAt: new Date(),
+          ...this.#terminalCloseOutCutoff(item),
         });
       }
       const last = page.at(-1);

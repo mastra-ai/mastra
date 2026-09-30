@@ -1518,7 +1518,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       createBody({ title: 'Terminal repair target' }),
     );
     const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
+    const now = new Date('2020-01-01T00:00:00.000Z');
     await seed.workItems.commitRuleEvaluation({
       orgId: 'org1',
       factoryProjectId: PROJECT_ID,
