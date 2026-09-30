@@ -39,7 +39,7 @@ export function createVariableAutocomplete(schema: JsonSchema | undefined): Exte
 /**
  * Creates a completion source function for CodeMirror's autocompletion.
  */
-function createVariableCompletionSource(
+export function createVariableCompletionSource(
   variables: VariableCompletion[],
 ): (context: CompletionContext) => CompletionResult | null {
   return (context: CompletionContext): CompletionResult | null => {
@@ -70,14 +70,15 @@ function createVariableCompletionSource(
       detail: variable.type,
       info: variable.description,
       apply: (view, completion, from, to) => {
-        // Check if }} already follows the cursor
-        const afterCursor = view.state.sliceDoc(to, to + 2);
-        const hasClosingBraces = afterCursor === '}}';
+        // Replace the rest of the identifier after the cursor, then reuse any closing }}
+        const rest = view.state.sliceDoc(to, to + 100);
+        const end = to + (rest.match(/^[a-zA-Z0-9_.\[\]]*/)?.[0].length ?? 0);
+        const hasClosingBraces = view.state.sliceDoc(end, end + 2) === '}}';
 
         const insertText = hasClosingBraces ? completion.label : `${completion.label}}}`;
 
         view.dispatch({
-          changes: { from, to, insert: insertText },
+          changes: { from, to: end, insert: insertText },
           selection: { anchor: from + insertText.length },
         });
       },
