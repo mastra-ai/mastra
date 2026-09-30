@@ -1,9 +1,10 @@
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { SpanPayloadCollapsible } from './span-payload-collapsible';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { cn } from '@/lib/utils';
@@ -64,6 +65,7 @@ export function SpanPayloadSection({
   className,
 }: SpanPayloadSectionProps) {
   const [view, setView] = useState<SpanPayloadView>(defaultView);
+  const box = useCollapsibleBox();
   if (raw == null) return null;
 
   const hasRich = hasPreview && children != null;
@@ -80,11 +82,21 @@ export function SpanPayloadSection({
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
+          {(box.isClipped || box.isExpanded) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={box.isExpanded ? <Minimize2 /> : <Maximize2 />}
+              onClick={box.toggleExpanded}
+            >
+              {box.isExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
           <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" variant="ghost" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>
-      <SpanPayloadCollapsible>{showJson ? <SpanPayloadJson value={raw} /> : children}</SpanPayloadCollapsible>
+      <CollapsibleBox state={box}>{showJson ? <SpanPayloadJson value={raw} /> : children}</CollapsibleBox>
     </div>
   );
 }

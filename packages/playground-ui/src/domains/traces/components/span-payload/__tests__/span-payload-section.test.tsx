@@ -28,7 +28,7 @@ describe('SpanPayloadSection', () => {
           <p>Long content</p>
         </SpanPayloadSection>,
       );
-      const clip = () => container.querySelector<HTMLElement>('[data-slot="span-payload-section"] [style]');
+      const clip = () => container.querySelector<HTMLElement>('[data-slot="collapsible-box"]');
       expect(clip()?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
       expect(clip()?.style.maxHeight).toBe('');
