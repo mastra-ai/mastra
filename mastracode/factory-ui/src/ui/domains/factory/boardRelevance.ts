@@ -343,19 +343,33 @@ export function boardParticipants({
 
   // Collapse: any external participant whose id belongs to a claimed identity
   // of a known Factory user is dropped in favour of that Factory participant.
-  // This keeps the picker at one row per person; the expansion built from the
-  // same roster restores the full match set at filter time.
+  // If the Factory user isn't already in the picker (they never touched the
+  // board directly — think "Alice only ever authored GitHub PRs as octocat"),
+  // synthesize their `factory:<uid>` row from one of the external profiles so
+  // she still shows up as one person. The roster-driven expansion built from
+  // the same map restores the full match set at filter time.
   if (roster && roster.size > 0) {
-    const claimedExternalIds = new Set<string>();
     for (const [userId, claims] of roster) {
-      if (!participants.has(`factory:${userId}`)) continue;
+      const factoryId = `factory:${userId}`;
+      const claimedIds: string[] = [];
       for (const [integrationId, externalIds] of claims) {
         for (const externalId of externalIds) {
-          claimedExternalIds.add(`${integrationId}:${externalId.toLowerCase()}`);
+          claimedIds.push(`${integrationId}:${externalId.toLowerCase()}`);
         }
       }
+      const presentIds = claimedIds.filter(id => participants.has(id));
+      if (presentIds.length === 0) continue;
+      if (!participants.has(factoryId)) {
+        const donor = participants.get(presentIds[0])!;
+        participants.set(factoryId, {
+          id: factoryId,
+          name: donor.name,
+          avatarUrl: donor.avatarUrl,
+          source: 'factory',
+        });
+      }
+      for (const id of presentIds) participants.delete(id);
     }
-    for (const id of claimedExternalIds) participants.delete(id);
   }
 
   return [...participants.values()].sort((left, right) => left.name.localeCompare(right.name));

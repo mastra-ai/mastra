@@ -455,5 +455,41 @@ describe('board relevance', () => {
       expect(ids).toContain('github:hubot');
       expect(ids).toContain('github:monalisa');
     });
+
+    it('surfaces a teammate as one factory:<uid> row even when they only appear via a claimed external identity', () => {
+      // Alice never touched the board directly (no Factory audit event), she
+      // only authored a GitHub PR as `octocat`. The roster should still let
+      // us pick her by name — synthesized from her GitHub profile — and
+      // picking her must expand across every identity she's claimed.
+      const collapsed = boardParticipants({
+        items: [item],
+        candidates: [],
+        activityPage: undefined,
+        roster,
+      });
+      const ids = collapsed.map(p => p.id);
+      expect(ids).toContain('factory:user-alice');
+      expect(ids).not.toContain('github:octocat');
+
+      const expansion = participantExpansionFromRoster(roster);
+      // The synthesized picker entry still expands to include her Linear identity.
+      const linearAssignee = linearCandidate({
+        id: 'ISSUE-1',
+        identifier: 'ENG-42',
+        title: 'Ship retention job',
+        url: 'https://linear.app/acme/issue/ENG-42',
+        state: 'Todo',
+        stateType: 'unstarted',
+        priorityLabel: 'No priority',
+        assignee: 'alice-linear-uuid',
+        creator: 'someone-else',
+        team: 'engineering',
+        sourceId: 'linear-team:eng',
+        labels: [],
+        createdAt: '2026-08-01T09:00:00.000Z',
+        updatedAt: '2026-08-01T09:00:00.000Z',
+      });
+      expect(candidateMatchesRelevance(linearAssignee, 'factory:user-alice', allTypes, expansion)).toBe(true);
+    });
   });
 });
