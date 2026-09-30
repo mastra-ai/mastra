@@ -71,8 +71,16 @@ export interface MCPClientOptions<
 > {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
-  /** Map of server names to their connection configurations (stdio or HTTP-based) */
-  servers: { [Server in keyof NoInfer<TServers>]: MastraMCPServerDefinition };
+  /**
+   * Map of server names to their connection configurations (stdio or HTTP-based).
+   *
+   * Broad when no snapshot generic is supplied, so ordinary object literals stay contextually
+   * typed (a mapped type over an unresolved type parameter suppresses that); exact keys once the
+   * caller supplies a generated server map.
+   */
+  servers: string extends keyof TServers
+    ? Record<string, MastraMCPServerDefinition>
+    : Record<keyof NoInfer<TServers> & string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
   /** Optional output path for the package's generate command, relative to its working directory. */
