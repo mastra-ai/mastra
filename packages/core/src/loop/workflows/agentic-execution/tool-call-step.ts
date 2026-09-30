@@ -347,7 +347,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           runId,
           from: ChunkFrom.AGENT,
           payload: {
-            toolCallId: inputData.toolCallId,
+            // Auto-resume re-calls the tool under a new id; ack the id the client saw suspended.
+            toolCallId: entry.toolCallId ?? inputData.toolCallId,
             toolName: inputData.toolName,
             kind,
             args: entry.args,

@@ -765,8 +765,9 @@ export function createDurableToolCallStep() {
               runId,
               from: ChunkFrom.AGENT,
               payload: {
-                toolCallId,
-                toolName,
+                toolCallId: matchedEntry.toolCallId ?? toolCallId,
+                // Delegated approvals store the inner tool's name; policies select redaction by it.
+                toolName: matchedEntry.toolName ?? toolName,
                 args: matchedEntry.args,
                 ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
                 resumeSchema: matchedEntry.resumeSchema,
@@ -784,7 +785,7 @@ export function createDurableToolCallStep() {
             runId,
             from: ChunkFrom.AGENT,
             payload: {
-              toolCallId,
+              toolCallId: matchedEntry.toolCallId ?? toolCallId,
               toolName,
               kind: type,
               args: displayed.payload.args,
