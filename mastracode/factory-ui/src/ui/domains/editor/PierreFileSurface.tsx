@@ -261,14 +261,22 @@ function renderSurfaceAnnotation(annotation: LineAnnotation<SurfaceAnnotation>):
   if (metadata.kind === 'blame') {
     const line = metadata.blame;
     const el = document.createElement('div');
-    el.className = 'flex items-center gap-2 text-caption text-muted-foreground';
+    // Hard-capped compact chip so the annotation gutter can't blow out into a
+    // 300px+ column. Full metadata sits in the tooltip.
+    el.className =
+      'flex items-center gap-1.5 text-caption text-muted-foreground max-w-[10rem] truncate';
     el.title = `${line.sha} • ${line.author}${line.email ? ` <${line.email}>` : ''} • ${line.time}\n${line.summary}`;
     const author = document.createElement('span');
-    author.className = line.uncommitted ? 'italic text-notice-warning/80' : 'font-medium';
-    author.textContent = line.uncommitted ? 'Not committed' : line.author;
+    author.className = line.uncommitted
+      ? 'italic text-notice-warning/80 truncate'
+      : 'font-medium truncate max-w-[6rem]';
+    // Just the first name — the column stays legible even for `Firstname M. Lastname` authors.
+    const displayName = line.uncommitted ? 'uncommitted' : (line.author.split(/\s+/)[0] ?? line.author);
+    author.textContent = displayName;
     const sha = document.createElement('span');
-    sha.className = 'font-mono opacity-70';
-    sha.textContent = line.sha;
+    sha.className = 'font-mono opacity-60 text-[10px]';
+    // 6 chars is enough to uniquely identify a commit in most repos.
+    sha.textContent = line.sha.slice(0, 6);
     el.append(author, sha);
     if (line.agent) el.classList.add('border-l-2', 'border-accent3/60', 'pl-1');
     return el;
@@ -647,7 +655,7 @@ export function PierreFileSurface({
           edit={!readOnly}
           editorOptions={editorOptions}
           editStateKey={`file:${path}`}
-          lineAnnotations={lineAnnotations}
+          lineAnnotations={hasAnnotations ? lineAnnotations : undefined}
           onEditChange={handleEditChange}
           onEditComplete={handleEditComplete}
         />
