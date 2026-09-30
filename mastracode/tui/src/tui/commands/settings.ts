@@ -20,6 +20,10 @@ function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
   return typeof color === 'string' ? color : undefined;
 }
 
+function resolveExperimentalAgentSetting(value: unknown): ExperimentalAgent | null {
+  return value === 'durable' || value === 'evented' ? value : null;
+}
+
 function commandExists(command: string): Promise<boolean> {
   return new Promise(resolve => {
     execFile('/bin/sh', ['-lc', `command -v ${command}`], error => resolve(!error));
@@ -197,7 +201,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
     experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
-    experimentalAgent: globalSettings.experimentalAgent,
+    experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
     // matching the runtime resolver's fallback. The saved preference is kept so

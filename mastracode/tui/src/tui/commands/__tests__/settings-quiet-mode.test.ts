@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   loadSettings: vi.fn(),
   saveSettings: vi.fn(),
+  config: null as any,
   callbacks: null as any,
 }));
 
@@ -15,7 +16,8 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
 vi.mock('../../components/settings.js', () => ({
   SettingsComponent: class {
     focused = false;
-    constructor(_config: unknown, callbacks: unknown) {
+    constructor(config: unknown, callbacks: unknown) {
+      mocks.config = config;
       mocks.callbacks = callbacks;
     }
   },
@@ -87,6 +89,7 @@ function createCtx() {
 
 describe('/settings quiet mode callbacks', () => {
   beforeEach(() => {
+    mocks.config = null;
     mocks.callbacks = null;
     mocks.loadSettings.mockReset();
     mocks.saveSettings.mockReset();
@@ -119,6 +122,14 @@ describe('/settings quiet mode callbacks', () => {
     expect(restored).toContain('high · ci-status · delivered');
     expect(restored).toContain('line four');
     expect(stripAnsi(summary.render(80).join('\n'))).toContain('notification_inbox');
+  });
+
+  it('narrows an invalid persisted experimental agent value for the settings UI', () => {
+    mocks.loadSettings.mockReturnValue({ ...createSettings(), experimentalAgent: { invalid: true } });
+
+    void handleSettingsCommand(createCtx().ctx);
+
+    expect(mocks.config).toEqual(expect.objectContaining({ experimentalAgent: null }));
   });
 
   it('persists the experimental agent selection', () => {

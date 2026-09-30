@@ -366,8 +366,8 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
-  // Experimental coding agent implementation. Null keeps the plain Agent.
-  experimentalAgent: ExperimentalAgent | null;
+  // Raw persisted experimental agent value. Resolve through resolveExperimentalAgent() before use.
+  experimentalAgent: unknown;
   // Internal load diagnostic retained on clones until the user repairs the setting.
   _experimentalAgentSettingsPath?: string;
   // Native background execution for eligible Mastra Code tools
@@ -665,12 +665,12 @@ export function parseExperimentalAgentSetting(value: unknown, settingsPath?: str
 function loadExperimentalAgentSetting(
   value: unknown,
   settingsPath: string,
-): { selection: ExperimentalAgent | null; settingsPath?: string } {
+): { selection: unknown; settingsPath?: string } {
   try {
     return { selection: parseExperimentalAgentSetting(value, settingsPath) };
   } catch (error) {
     if (error instanceof ExperimentalAgentSettingsError) {
-      return { selection: error.value as ExperimentalAgent | null, settingsPath };
+      return { selection: error.value, settingsPath };
     }
     throw error;
   }
