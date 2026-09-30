@@ -189,6 +189,13 @@ export type FullOutput<OUTPUT = undefined> = {
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  *
+ * Converting to model messages splits an assistant message at every tool
+ * result, so when the current loop iteration called a tool the last converted
+ * message holds only the text after the call, or nothing if the step ended on
+ * it. In that case the text is read from the DB message's parts after the
+ * iteration's boundary instead. The last `step-start` is not that boundary:
+ * one is also inserted inside a single response whenever text follows a tool call.
+ *
  * Returns `undefined` only when there is no response message to read text from,
  * so callers can distinguish "no processed output exists" from an output
  * processor deliberately clearing the text to `''`. Never collapse the two with
@@ -197,15 +204,21 @@ export type FullOutput<OUTPUT = undefined> = {
 function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
   const responseDbMessages = messageList.get.response.db();
   const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  if (hasCompletionCheckMessages) {
-    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
-    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
-    const lastConverted = converted[converted.length - 1];
-    return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+  const lastRealMessage = hasCompletionCheckMessages
+    ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
+    : responseDbMessages[responseDbMessages.length - 1];
+  if (!lastRealMessage) return undefined;
+  if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
+    const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
+    if (stepParts.some(p => p.type === 'tool-invocation')) {
+      return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
+    }
   }
-  const responseMessages = messageList.get.response.aiV4.core();
-  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : undefined;
+  const converted = hasCompletionCheckMessages
+    ? convertMessages([lastRealMessage]).to('AIV4.Core')
+    : messageList.get.response.aiV4.core();
+  const lastConverted = converted[converted.length - 1];
+  return lastConverted ? coreContentToString(lastConverted.content) : undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
