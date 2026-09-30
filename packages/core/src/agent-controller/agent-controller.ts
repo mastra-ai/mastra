@@ -409,12 +409,12 @@ export class AgentController<TState = {}> {
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
       // History lets the runtime skip retained run parts that storage already
       // covers, so a fresh session never re-acts on finished runs.
-      subscribeToThread: async ({ agent, resourceId, threadId }) =>
+      subscribeToThread: async ({ agent, resourceId, threadId, requestContext }) =>
         (agent ?? this.getCurrentAgent(session)).subscribeToThread({
           resourceId,
           threadId,
           withInitialHistory: true,
-          requestContext: await this.buildRequestContext(session),
+          requestContext: await this.buildRequestContext(session, requestContext),
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
@@ -551,9 +551,9 @@ export class AgentController<TState = {}> {
             if (existingThread.resourceId !== effectiveResourceId) {
               throw new Error(`Thread not found: ${threadId}`);
             }
-            await session.thread.switch({ threadId });
+            await session.thread.switch({ threadId, requestContext });
           } else {
-            await session.thread.create({ id: threadId });
+            await session.thread.create({ id: threadId, requestContext });
           }
         }
         // A deletion may have started during the thread-rebinding awaits.
@@ -705,9 +705,9 @@ export class AgentController<TState = {}> {
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
         await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
+        await session.thread.ensureCurrentSubscription(requestContext);
       } else {
-        await session.thread.create({ id: overrides.threadId });
+        await session.thread.create({ id: overrides.threadId, requestContext });
       }
     } else {
       // Same scope `thread.create()` stamps, matched strictly: a thread outside
@@ -722,13 +722,13 @@ export class AgentController<TState = {}> {
       });
 
       if (candidates.length === 0) {
-        await session.thread.create();
+        await session.thread.create({ requestContext });
       } else {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
         await session.thread.loadMetadata();
-        await session.thread.ensureCurrentSubscription();
+        await session.thread.ensureCurrentSubscription(requestContext);
       }
     }
 
@@ -1026,9 +1026,9 @@ export class AgentController<TState = {}> {
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
-      deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
-      cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata }),
+      deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1051,11 +1051,34 @@ export class AgentController<TState = {}> {
     });
   }
 
-  /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
-  private async deleteThreadRow(threadId: string): Promise<void> {
+  /**
+   * Delete a thread from controller storage and, when memory is resolved per
+   * caller, from the caller's memory as well so a clone's messages are not
+   * left behind there (gateway primitive for the Session thread domain).
+   */
+  private async deleteThreadRow({
+    session,
+    threadId,
+    requestContext,
+  }: {
+    session: Session<TState>;
+    threadId: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     if (!this.#resolveStorage()) return;
+    // Delete through memory first: Memory.deleteThread reads the row to find
+    // the resourceId it needs for observational-memory cleanup, and if the
+    // controller row goes first a failure here leaves nothing to retry against.
+    // Some adapters throw when the thread is missing, so each store is only
+    // asked to delete a row it has: a thread made with create() exists only in
+    // controller storage, and when both resolve to the same store the first
+    // delete already removed it.
+    if (this.config.memory) {
+      const memory = await this.resolveMemory(session, requestContext);
+      if (await memory.getThreadById({ threadId })) await memory.deleteThread(threadId);
+    }
     const memoryStorage = await this.getMemoryStorage();
-    await memoryStorage.deleteThread({ threadId });
+    if (await memoryStorage.getThreadById({ threadId })) await memoryStorage.deleteThread({ threadId });
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
@@ -1065,19 +1088,18 @@ export class AgentController<TState = {}> {
     resourceId,
     title,
     metadata,
+    requestContext,
   }: {
     session: Session<TState>;
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
-    const memory = this.config.memory
-      ? await this.resolveMemory(session)
-      : storage
-        ? await storage.getStore('memory')
-        : undefined;
+    const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
+    const memory = callerMemory ? callerMemory : storage ? await storage.getStore('memory') : undefined;
     if (!memory) {
       throw new Error(
         storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
@@ -1085,7 +1107,7 @@ export class AgentController<TState = {}> {
     }
 
     const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
-    return {
+    const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
       title: result.thread.title ?? 'Cloned Thread',
@@ -1093,6 +1115,18 @@ export class AgentController<TState = {}> {
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
     };
+    // A per-user memory may live in a different store than the controller's
+    // thread rows; mirror the row so getById, listing, and ownership checks see it.
+    if (callerMemory) {
+      try {
+        await this.persistThreadRow(cloned);
+      } catch (error) {
+        // Without the controller row the clone is unreachable; remove it rather than orphan it.
+        await callerMemory.deleteThread(cloned.id).catch(() => {});
+        throw error;
+      }
+    }
+    return cloned;
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
@@ -2244,8 +2278,8 @@ export class AgentController<TState = {}> {
         // that thread pickers / startup flows can hide transient fork threads —
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
-          ? async ({ sourceThreadId, resourceId, title }) => {
-              const memory = await this.resolveMemory(session);
+          ? async ({ sourceThreadId, resourceId, title, requestContext }) => {
+              const memory = await this.resolveMemory(session, requestContext);
               // The fork only needs the new thread id, so copy without loading
               // the message payloads into the Node heap.
               const result = await memory.copyThread({
@@ -2361,8 +2395,9 @@ export class AgentController<TState = {}> {
 
   /**
    * Resolve memory from config — handles both static instances and dynamic factory functions.
+   * Pass the caller's context so a dynamic factory sees the caller's user.
    */
-  private async resolveMemory(session: Session<TState>): Promise<MastraMemory> {
+  private async resolveMemory(session: Session<TState>, callerContext?: RequestContext): Promise<MastraMemory> {
     const mem = this.config.memory;
     if (!mem) {
       throw new Error('Memory is not configured on this AgentController');
@@ -2370,7 +2405,7 @@ export class AgentController<TState = {}> {
     if (typeof mem !== 'function') {
       return mem;
     }
-    const requestContext = await this.buildRequestContext(session);
+    const requestContext = await this.buildRequestContext(session, callerContext);
     const resolved = await Promise.resolve(mem({ requestContext }));
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
