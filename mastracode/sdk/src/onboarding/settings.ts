@@ -1156,7 +1156,7 @@ export function loadSettings(filePath?: string): GlobalSettings {
     const raw = JSON.parse(readFileSync(resolvedPath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
-    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, filePath);
+    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, resolvedPath);
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
