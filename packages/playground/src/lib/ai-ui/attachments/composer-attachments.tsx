@@ -21,7 +21,8 @@ export interface ComposerAttachment {
 interface ComposerAttachmentsContextValue {
   attachments: ComposerAttachment[];
   addFiles: (files: File[] | FileList) => Promise<string[]>;
-  addUrl: (url: string) => Promise<void>;
+  /** Returns the URL when it can't be attached (spreadsheets must be uploaded as files). */
+  addUrl: (url: string) => Promise<string | undefined>;
   remove: (id: string) => void;
   clear: () => void;
   isAddingAttachments: boolean;
@@ -164,8 +165,10 @@ export const ComposerAttachmentsProvider = ({
       try {
         const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
         // URL attachments are represented by an empty File named with the URL.
-        const file = new File([], url, { type: contentType });
-        if (generation.current === currentGeneration) setAttachments(prev => [...prev, toAttachment(file)]);
+        const attachment = toAttachment(new File([], url, { type: contentType }));
+        // The agent needs spreadsheet bytes inline to store them in its workspace; it never fetches URLs.
+        if (attachment.kind === 'spreadsheet') return url;
+        if (generation.current === currentGeneration) setAttachments(prev => [...prev, attachment]);
       } finally {
         if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
       }

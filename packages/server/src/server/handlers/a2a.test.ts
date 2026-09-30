@@ -861,8 +861,13 @@ describe('A2A Handler', () => {
       expect(coreMessages[0].role).toBe('user');
       expect(coreMessages[0].content).toEqual([
         { type: 'text', text: 'Please summarize the attached invoice.' },
-        { type: 'file', data: new URL('https://example.com/invoice.pdf'), mimeType: 'application/pdf' },
-        { type: 'file', data: 'AAAA', mimeType: 'image/png' },
+        {
+          type: 'file',
+          data: new URL('https://example.com/invoice.pdf'),
+          mimeType: 'application/pdf',
+          filename: 'invoice.pdf',
+        },
+        { type: 'file', data: 'AAAA', mimeType: 'image/png', filename: 'screenshot.png' },
       ]);
     });
 

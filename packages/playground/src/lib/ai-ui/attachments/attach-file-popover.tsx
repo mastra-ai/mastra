@@ -7,7 +7,7 @@ import { CloudUpload, Link, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
-import { unreadableFilesMessage } from './unreadable-files-message';
+import { spreadsheetUrlMessage, unreadableFilesMessage } from './unreadable-files-message';
 
 /**
  * "+" composer action opening a popover to attach a file via public URL or
@@ -63,7 +63,11 @@ export const AttachFilePopover = () => {
     if (!url) return;
 
     try {
-      await addUrl(url);
+      const rejected = await addUrl(url);
+      if (rejected) {
+        setError(spreadsheetUrlMessage(rejected));
+        return;
+      }
       setOpen(false);
     } catch {
       // Keep the popover open so the user can correct the URL and retry.

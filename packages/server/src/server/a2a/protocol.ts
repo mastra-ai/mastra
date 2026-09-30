@@ -75,6 +75,7 @@ function convertToCoreMessagePart(part: Part) {
         type: 'file',
         data: 'uri' in part.file ? new URL(part.file.uri) : part.file.bytes,
         mimeType: part.file.mimeType!,
+        ...(part.file.name ? { filename: part.file.name } : {}),
       } as const;
     case 'data':
       throw new Error('Data parts are not supported in core messages');

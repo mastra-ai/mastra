@@ -1153,6 +1153,8 @@ async function executeMessageSend({
           requestContext,
           memory,
         });
+    // A processor aborted the run (e.g. an attachment it can't accept): fail the task with its reason.
+    if (result.tripwire) throw new Error(result.tripwire.reason);
 
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
     if (latestTask?.status.state === 'canceled') {
@@ -1862,6 +1864,8 @@ export async function* handleMessageStream({
     }
 
     if (!streamCanceled && !suspended) {
+      const tripwire = await result.tripwire;
+      if (tripwire) throw new Error(tripwire.reason);
       structuredData ??= (await result.object) as Record<string, unknown> | undefined;
 
       if (!pendingTextChunk && !sawTextArtifact) {
