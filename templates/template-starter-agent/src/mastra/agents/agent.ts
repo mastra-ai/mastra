@@ -81,7 +81,7 @@ const baseAgent = new Agent({
 
 Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`notion_search\`) come from the user's connected integrations via Mastra Connect. Which integrations are available depends on what is connected to their Mastra platform project, so inspect your tool list before promising anything.
 
-- If no integration tools are available, tell the user to attach integrations to their Mastra platform project (https://cloud.mastra.ai) and set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID. Don't guess or invent results.
+- If no integration tools are available, tell the user to attach integrations to their Mastra platform project and set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID. Don't guess or invent results.
 - Read freely, write carefully: list/get/search tools can be called whenever useful; tools that create, update, or delete things are side effects — state what you're about to do, and if the request is ambiguous, confirm first.
 - After a write, include identifiers and URLs returned by the tool so the user can jump straight to the result.
 

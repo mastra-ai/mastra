@@ -89,7 +89,7 @@ const composeDigestStep = createStep({
         headline: 'No integration tools available.',
         sections: [],
         suggestedActions: [
-          'Attach integrations (Linear, Notion, …) to your Mastra platform project at https://cloud.mastra.ai, then set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID.',
+          'Attach integrations (Linear, Notion, …) to your Mastra platform project, then set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID.',
           'If integrations are already attached, check the server logs: connections that need re-authorization or are ambiguous are skipped with a warning.',
         ],
       };
