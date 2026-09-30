@@ -1230,6 +1230,8 @@ https://mastra.ai/en/docs/memory/overview`,
         blockAfter: obs.blockAfter,
         previousObserverTokens: obs.previousObserverTokens,
         observeAttachments: obs.observeAttachments,
+        maxRetries: obs.maxRetries,
+        failurePolicy: obs.failurePolicy,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {
@@ -1246,6 +1248,8 @@ https://mastra.ai/en/docs/memory/overview`,
         providerOptions: ref.providerOptions,
         blockAfter: ref.blockAfter,
         bufferActivation: ref.bufferActivation,
+        maxRetries: ref.maxRetries,
+        failurePolicy: ref.failurePolicy,
       };
       const refModelId = extractModelIdString(ref.model);
       if (refModelId) {

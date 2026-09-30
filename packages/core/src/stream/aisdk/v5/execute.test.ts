@@ -250,6 +250,50 @@ describe('execute structured output prompt handling', () => {
     expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
     expect(promptJson).toContain('suggestions');
   });
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])('processor mode with jsonPromptInjection: %s injects schema hint: %s', async (jsonPromptInjection, injects) => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Main agent summary.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const stream = execute({
+      runId: 'test-run-24440',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: { schema, model: model as any, jsonPromptInjection },
+    });
+
+    await readStream(stream);
+
+    const promptJson = JSON.stringify(capturedPrompt);
+    if (injects) {
+      expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
+    } else {
+      expect(capturedPrompt).toEqual(inputMessages);
+      expect(promptJson).not.toContain('suggestions');
+    }
+  });
 });
 
 describe('execute compact structuredOutput.instructions (issue #23798)', () => {

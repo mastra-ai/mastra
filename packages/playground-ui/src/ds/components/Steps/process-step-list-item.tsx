@@ -1,5 +1,6 @@
 import { getStatusIcon } from './shared';
 import type { ProcessStep } from './shared';
+import { Txt } from '@/ds/components/Txt';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -29,8 +30,8 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
     return (
       <span
         className={cn('flex size-4 items-center justify-center self-center [&>svg]:size-4', transitions.colors, {
-          '[&>svg]:text-positive1': status === 'success',
-          '[&>svg]:text-negative1': status === 'failed',
+          '[&>svg]:text-success-indicator': status === 'success',
+          '[&>svg]:text-destructive-foreground': status === 'failed',
         })}
       >
         {status === 'pending' ? <PendingRing /> : getStatusIcon(status)}
@@ -45,12 +46,12 @@ function StepStatusMarker({ status, variant }: { status: string; variant: Proces
         transitions.colors,
         transitions.transform,
         {
-          '[&>svg]:text-notice-success-fg': status === 'success',
-          '[&>svg]:text-notice-destructive-fg': status === 'failed',
+          '[&>svg]:text-success-indicator': status === 'success',
+          '[&>svg]:text-destructive-foreground': status === 'failed',
           'border border-dashed border-placeholder': status === 'pending',
           '[&>svg]:size-4': status !== 'running',
-          'bg-accent1Dark': status === 'success',
-          'bg-accent2Dark': status === 'failed',
+          'bg-success-subtle': status === 'success',
+          'bg-destructive-subtle': status === 'failed',
           'scale-110': status === 'success' || status === 'failed',
         },
       )}
@@ -70,6 +71,8 @@ export type ProcessStepListItemProps = {
 };
 
 export function ProcessStepListItem({ step, isActive, position, variant = 'default' }: ProcessStepListItemProps) {
+  const stepTone = isActive || step.status === 'success' ? 'ink' : 'muted';
+
   return (
     <div
       className={cn(
@@ -82,27 +85,17 @@ export function ProcessStepListItem({ step, isActive, position, variant = 'defau
       )}
     >
       <div className="grid min-w-0 grid-cols-[auto_1fr] gap-2">
-        <span
-          className={cn('flex min-w-6 justify-end text-body', transitions.colors, {
-            'text-foreground': isActive || step.status === 'success',
-            'text-muted-foreground': !isActive && step.status !== 'success',
-          })}
-        >
+        <Txt as="span" tone={stepTone} className={cn('flex min-w-6 justify-end', transitions.colors)}>
           {position}.
-        </span>
+        </Txt>
         <div className="min-w-0">
-          <h4
-            className={cn('text-body', transitions.colors, {
-              'text-foreground': isActive || step.status === 'success',
-              'text-muted-foreground': !isActive && step.status !== 'success',
-            })}
-          >
+          <Txt as="h4" tone={stepTone} className={transitions.colors}>
             {step.title}
-          </h4>
+          </Txt>
           {step.description && (
-            <p className={cn('-mt-0.5 text-body text-placeholder', { truncate: variant === 'plain' })}>
+            <Txt tone="faint" className={cn('-mt-0.5', { truncate: variant === 'plain' })}>
               {step.description}
-            </p>
+            </Txt>
           )}
         </div>
       </div>

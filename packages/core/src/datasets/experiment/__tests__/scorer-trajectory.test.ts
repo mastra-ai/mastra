@@ -212,6 +212,26 @@ describe('steps scorer config — per-step dispatch', () => {
     return createWorkflow({ id: 'two-step-wf', inputSchema, outputSchema }).then(upperStep).then(echoStep).commit();
   }
 
+  it('trajectory scorer receives workflow step trajectory when no trace is stored', async () => {
+    const workflow = buildTwoStepWorkflow();
+    (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+    (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+    const scorer = createCapturingScorer('traj-scorer');
+
+    const result = await runExperiment(mastra, {
+      datasetId,
+      targetType: 'workflow',
+      targetId: 'two-step-wf',
+      scorers: [scorer],
+    });
+
+    expect(result.status).toBe('completed');
+    const trajectory = scorer.capturedOutput as Trajectory;
+    expect(trajectory.steps.map(s => s.name)).toEqual(['upper', 'echo']);
+    expect(trajectory.steps.every(s => s.stepType === 'workflow_step')).toBe(true);
+  });
+
   it('runs per-step scorers against each step output', async () => {
     const workflow = buildTwoStepWorkflow();
     (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);

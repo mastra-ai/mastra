@@ -1697,6 +1697,101 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream).not.toHaveBeenCalled();
   });
 
+  describe('fallback logging severity', () => {
+    const failingStream = (name: string) =>
+      vi.fn(async () => {
+        throw new APICallError({
+          message: `${name} failed`,
+          url: `https://${name}.example.com/v1/messages`,
+          requestBodyValues: {},
+          statusCode: 503,
+          isRetryable: true,
+        });
+      });
+    const succeedingStream = () =>
+      vi.fn(async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'response-metadata', id: 'resp-1', modelId: 'ok-model', timestamp: new Date(0) },
+          { type: 'text-delta', textDelta: 'ok' },
+          { type: 'finish', finishReason: 'stop', usage: testUsage },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      }));
+    const makeModel = (modelId: string, doStream: any) => ({
+      id: modelId,
+      maxRetries: 0,
+      model: {
+        specificationVersion: 'v2' as const,
+        provider: 'mock-provider',
+        modelId,
+        supportedUrls: {},
+        doGenerate: vi.fn(),
+        doStream,
+      } as any,
+    });
+    const run = async (models: any[]) => {
+      const logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() };
+      const step = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models,
+        tools: {},
+        streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+        _internal: { generateId: () => 'generated-id', threadId: 'thread-123', resourceId: 'resource-456' },
+        logger: logger as any,
+      } as unknown as OuterLLMRun<{}>);
+      const result = await step.execute(createExecuteParams(createIterationInput())).catch(e => e);
+      return { logger, result };
+    };
+
+    it('logs a single warning and no errors when a fallback model recovers', async () => {
+      const { logger } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.objectContaining({ modelId: 'primary-model', nextModelId: 'secondary-model' }),
+      );
+    });
+
+    it('logs one warning per failover when recovering on the third model', async () => {
+      const { logger } = await run([
+        makeModel('a-model', failingStream('a')),
+        makeModel('b-model', failingStream('b')),
+        makeModel('c-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('surfaces the final failure as an error without a failover warning for the last model', async () => {
+      const { logger, result } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', failingStream('secondary')),
+      ]);
+
+      expect(result.stepResult.reason).toBe('error');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.anything(),
+      );
+    });
+  });
+
   it('preserves fallback model index when processAPIError requests a retry', async () => {
     const firstModelStream = vi.fn(async () => {
       throw new APICallError({

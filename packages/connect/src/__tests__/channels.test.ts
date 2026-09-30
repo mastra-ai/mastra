@@ -155,6 +155,11 @@ function slackConfig(): Record<string, unknown> & { tokenResolver?: () => Promis
   if (!call) throw new Error('SlackProvider was never constructed');
   return call[1] as Record<string, unknown> & { tokenResolver?: () => Promise<string> };
 }
+function telegramConfig(): Record<string, unknown> & { tokenResolver?: () => Promise<string> } {
+  const call = FakeChannelProvider.configSpy.mock.calls.findLast(c => c[0] === 'telegram');
+  if (!call) throw new Error('TelegramProvider was never constructed');
+  return call[1] as Record<string, unknown> & { tokenResolver?: () => Promise<string> };
+}
 function fakeTelegram() {
   return class TelegramProvider extends FakeChannelProvider {
     constructor(config: Record<string, unknown>) {
@@ -284,7 +289,7 @@ describe('channels()', () => {
     await expect(tokenResolver!()).rejects.toThrow(/no active slack connection/i);
   });
 
-  it('syncs a TelegramProvider with { botToken } from an api_key credential', async () => {
+  it('builds a TelegramProvider with a platform-backed tokenResolver from an api_key credential', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
       credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -293,22 +298,29 @@ describe('channels()', () => {
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
     expect(providers.telegram).toBeInstanceOf(FakeChannelProvider);
-    // Credentials arrive via configure(), not the constructor.
-    expect(FakeChannelProvider.configSpy).toHaveBeenCalledWith(
+    const config = telegramConfig();
+    // The platform owns the bot token — the provider never receives a static
+    // one to persist, only a resolver it invokes per Bot API call.
+    expect(config.botToken).toBeUndefined();
+    expect(typeof config.tokenResolver).toBe('function');
+    await expect(config.tokenResolver!()).resolves.toBe(TELEGRAM_BOT_TOKEN);
+    // No credential push happens at resolution time.
+    expect(FakeChannelProvider.configureSpy).not.toHaveBeenCalledWith(
       'telegram',
-      expect.not.objectContaining({ botToken: expect.anything() }),
+      expect.objectContaining({ botToken: expect.anything() }),
     );
-    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('telegram', { botToken: TELEGRAM_BOT_TOKEN });
   });
 
-  it('syncs a DiscordProvider with { botToken, applicationId, publicKey } from credential + metadata', async () => {
+  it('syncs a DiscordProvider with { botToken, applicationId, publicKey } from connection metadata', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      // The oauth2 credential is a user Bearer token — Discord rejects it for
+      // bot auth, so it must NOT be used when metadata carries the bot token.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
       contexts: {
         c_dc: {
           connection_config: null,
-          metadata: { applicationId: 'app_123', publicKey: 'pubkey_abc' },
+          metadata: { botToken: DISCORD_BOT_TOKEN, applicationId: 'app_123', publicKey: 'pubkey_abc' },
         },
       },
     });
@@ -323,14 +335,14 @@ describe('channels()', () => {
     });
   });
 
-  it('accepts snake_case metadata keys for Discord (application_id / public_key)', async () => {
+  it('accepts snake_case metadata keys for Discord (bot_token / application_id / public_key)', async () => {
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
       contexts: {
         c_dc: {
           connection_config: null,
-          metadata: { application_id: 'app_snake', public_key: 'pubkey_snake' },
+          metadata: { bot_token: DISCORD_BOT_TOKEN, application_id: 'app_snake', public_key: 'pubkey_snake' },
         },
       },
     });
@@ -340,16 +352,37 @@ describe('channels()', () => {
     expect(providers.discord).toBeDefined();
     expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith(
       'discord',
-      expect.objectContaining({ applicationId: 'app_snake', publicKey: 'pubkey_snake' }),
+      expect.objectContaining({ botToken: DISCORD_BOT_TOKEN, applicationId: 'app_snake', publicKey: 'pubkey_snake' }),
     );
   });
 
-  it('syncs Discord from the bot token alone without warning — the provider backfills the rest', async () => {
+  it('skips Discord with a warning when the connection metadata has no botToken', async () => {
+    // The oauth2 credential is a user Bearer token that Discord always
+    // rejects for bot auth — there is no fallback. Without botToken metadata
+    // the channel is skipped with an actionable warning instead of failing
+    // later with a misleading 401.
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
-      // No metadata → DiscordProvider self-resolves applicationId/publicKey
-      // from `GET /applications/@me`, so no warning fires.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers.discord).toBeUndefined();
+    expect(FakeChannelProvider.configureSpy).not.toHaveBeenCalledWith(
+      'discord',
+      expect.objectContaining({ botToken: expect.anything() }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no botToken in its metadata'));
+  });
+
+  it('syncs Discord from the metadata botToken alone — the provider backfills applicationId/publicKey', async () => {
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+      contexts: {
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
+      },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
@@ -373,8 +406,11 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      credentials: { c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null } },
-      // No metadata — the token is the only credential material available.
+      credentials: { c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null } },
+      contexts: {
+        // The token is the only credential material available (via metadata).
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
+      },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
@@ -395,9 +431,12 @@ describe('channels()', () => {
     vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
     const state: PlatformState = {
       connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
-      credentials: { c_a: { type: 'oauth2', accessToken: 'discord-bot-A', expiresAt: null } },
+      credentials: { c_a: { type: 'oauth2', accessToken: 'oauth-bearer-A', expiresAt: null } },
       contexts: {
-        c_a: { connection_config: null, metadata: { applicationId: 'A_app_id', publicKey: 'A_public_key' } },
+        c_a: {
+          connection_config: null,
+          metadata: { botToken: 'discord-bot-A', applicationId: 'A_app_id', publicKey: 'A_public_key' },
+        },
       },
     };
     const fetchMock = platformFetch(state);
@@ -410,8 +449,8 @@ describe('channels()', () => {
 
     // The platform swaps connection A for connection B — token only.
     state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
-    state.credentials = { c_b: { type: 'oauth2', accessToken: 'discord-bot-B', expiresAt: null } };
-    state.contexts = {};
+    state.credentials = { c_b: { type: 'oauth2', accessToken: 'oauth-bearer-B', expiresAt: null } };
+    state.contexts = { c_b: { connection_config: null, metadata: { botToken: 'discord-bot-B' } } };
     resolver.invalidate();
     await resolver();
 
@@ -446,7 +485,10 @@ describe('channels()', () => {
       credentials: {
         c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null },
         c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN },
-        c_dc: { type: 'oauth2', accessToken: DISCORD_BOT_TOKEN, expiresAt: null },
+        c_dc: { type: 'oauth2', accessToken: 'oauth-bearer-not-a-bot-token', expiresAt: null },
+      },
+      contexts: {
+        c_dc: { connection_config: null, metadata: { botToken: DISCORD_BOT_TOKEN } },
       },
     });
     const channelsFn = await importChannels();
@@ -545,21 +587,24 @@ describe('channels()', () => {
     expect(providers.slack).toBeUndefined();
   });
 
-  it('warns and skips a channel whose credential sync fails, keeping the others', async () => {
+  it('keeps a telegram provider whose credential is missing — the failure surfaces lazily from the tokenResolver', async () => {
     const fetchMock = platformFetch({
       connections: [
         makeConnection({ id: 'c_tg', integrationId: 'telegram' }),
         makeConnection({ id: 'c_slack', integrationId: 'slack' }),
       ],
-      // No credential for c_tg → sync() fails with a 404.
+      // No credential for c_tg → the credential fetch 404s. Telegram no longer
+      // syncs credentials at resolution time (delegated mode), so the provider
+      // stays in the map and the failure surfaces on the next Bot API call.
       credentials: { c_slack: { type: 'oauth2', accessToken: SLACK_ACCESS_TOKEN, expiresAt: null } },
     });
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers.telegram).toBeUndefined();
+    expect(providers.telegram).toBeDefined();
     expect(providers.slack).toBeDefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/Skipping telegram channel/));
+    const { tokenResolver } = telegramConfig();
+    await expect(tokenResolver!()).rejects.toThrow();
   });
 
   it('merges non-reserved providerOptions into the ChannelProvider constructor call', async () => {
@@ -599,6 +644,7 @@ describe('channels()', () => {
               baseUrl: 'https://attacker.example.com',
               apiBaseUrl: 'https://attacker.example.com/api',
               botToken: 'attacker-token',
+              tokenResolver: async () => 'attacker-token',
               encryptionKey: 'attacker-key',
               // Non-reserved field must still make it through.
               mode: 'polling',
@@ -617,8 +663,10 @@ describe('channels()', () => {
     expect((config as Record<string, unknown>).botToken).toBeUndefined();
     expect((config as Record<string, unknown>).encryptionKey).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/ignoring reserved providerOptions/));
-    // The platform credential still arrives via configure().
-    expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('telegram', { botToken: TELEGRAM_BOT_TOKEN });
+    // The provider still gets the platform-backed resolver — the attacker's
+    // injected tokenResolver was stripped, not spread over ours.
+    const { tokenResolver } = telegramConfig();
+    await expect(tokenResolver!()).resolves.toBe(TELEGRAM_BOT_TOKEN);
   });
 
   it('caches providers within ttlMs and invalidate() forces refresh', async () => {
@@ -721,7 +769,7 @@ describe('channels()', () => {
       await expect(tokenResolver!()).rejects.toThrow(/no active slack connection/i);
     });
 
-    it('re-syncs a rotated credential into the live provider on the next resolution', async () => {
+    it('picks up a rotated telegram credential on the next tokenResolver call — no re-resolution needed', async () => {
       const state: PlatformState = {
         connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
         credentials: { c_tg: { type: 'api_key', apiKey: TELEGRAM_BOT_TOKEN } },
@@ -730,12 +778,13 @@ describe('channels()', () => {
       const channelsFn = await importChannels();
       const resolver = await channelsFn(options(fetchMock));
       await resolver();
-      expect(FakeChannelProvider.configureSpy).toHaveBeenLastCalledWith('telegram', { botToken: TELEGRAM_BOT_TOKEN });
+      const { tokenResolver } = telegramConfig();
+      await expect(tokenResolver!()).resolves.toBe(TELEGRAM_BOT_TOKEN);
 
+      // The token is re-pasted on the platform — the very next Bot API call
+      // resolves the new value, without waiting for a snapshot refresh.
       state.credentials = { c_tg: { type: 'api_key', apiKey: '999999:rotated' } };
-      resolver.invalidate();
-      await resolver();
-      expect(FakeChannelProvider.configureSpy).toHaveBeenLastCalledWith('telegram', { botToken: '999999:rotated' });
+      await expect(tokenResolver!()).resolves.toBe('999999:rotated');
     });
 
     it('switches the slack tokenResolver to a different connection when the pin target changes on the platform', async () => {

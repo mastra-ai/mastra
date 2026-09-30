@@ -6,7 +6,7 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, Container, getKeybindings, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { ModelSelectorComponent } from './model-selector.js';
@@ -82,7 +82,7 @@ function parseTokenInput(input: string): number | null {
 // Threshold Input Submenu
 // =============================================================================
 
-class ThresholdSubmenu extends Container {
+export class ThresholdSubmenu extends Container {
   private input: Input;
   private selectList: SelectList;
   private onDone: (value: number) => void;
@@ -137,8 +137,10 @@ class ThresholdSubmenu extends Container {
 
   handleInput(data: string): void {
     if (this.inInputMode) {
+      const kb = getKeybindings();
+
       // Enter — submit the typed value
-      if (data === '\r' || data === '\n') {
+      if (data === '\r' || data === '\n' || kb.matches(data, 'tui.input.submit')) {
         const parsed = parseTokenInput(this.input.getValue());
         if (parsed) {
           this.onDone(parsed);
@@ -147,13 +149,13 @@ class ThresholdSubmenu extends Container {
       }
 
       // Escape
-      if (data === '\x1b' || data === '\x1b\x1b') {
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.onBack();
         return;
       }
 
       // Down arrow — switch to preset list
-      if (data === '\x1b[B') {
+      if (kb.matches(data, 'tui.select.down')) {
         this.inInputMode = false;
         return;
       }

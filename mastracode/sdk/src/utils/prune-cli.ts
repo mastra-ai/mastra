@@ -1,0 +1,172 @@
+/**
+ * `mastracode prune` — storage maintenance from a non-interactive shell.
+ *
+ * The in-TUI `/prune` command has to stop the UI, quiesce background writers
+ * (MCP, workers, intervals) and then exit the process, because retention
+ * deletes and VACUUM need the database to themselves. A standalone process
+ * already satisfies that contract — and, unlike `/prune`, it does not require a
+ * rendered prompt first, so maintenance stays reachable when the TUI cannot
+ * start. Without it a large mastra.db has no in-app remedy (issue #22056).
+ *
+ * Usage:
+ *   mastracode prune                 delete rows older than the retention policies
+ *   mastracode prune --vacuum        prune, then checkpoint WAL + VACUUM to return disk to the OS
+ *                                    (local libsql only; remote libsql and Postgres only prune rows)
+ *   mastracode prune --keep-memory   prune, but keep chat history (messages/threads)
+ */
+
+import path from 'node:path';
+
+import type { MastraVector } from '@mastra/core/vector';
+import { LibSQLVector } from '@mastra/libsql';
+
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { loadSettings } from '../onboarding/settings.js';
+
+import { acquireMaintenanceLock } from './maintenance-lock.js';
+import { detectProject, getStorageConfig } from './project.js';
+import type { StorageConfig } from './project.js';
+import { createStorage, createVectorStore } from './storage-factory.js';
+import {
+  DEFAULT_RETENTION,
+  createStorageMaintenance,
+  resolveLocalDbFiles,
+  runStorageMaintenance,
+} from './storage-maintenance.js';
+
+const USAGE = `Usage: mastracode prune [--vacuum] [--keep-memory]
+
+  --vacuum        After pruning, compact the local database files so freed
+                  pages are returned to the OS. Needs free disk for the copy.
+                  Local libsql only; remote libsql and Postgres only prune rows.
+  --keep-memory   Prune everything except chat history (messages/threads).
+`;
+
+/**
+ * Run storage maintenance for the project in the current directory.
+ * Returns the process exit code (0 on success).
+ */
+export async function runPruneCommand(args: string[]): Promise<number> {
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return 0;
+  }
+
+  const flags = new Set(args.map(a => a.toLowerCase()));
+  const unknown = [...flags].filter(f => f !== '--vacuum' && f !== '--keep-memory');
+  if (unknown.length > 0) {
+    console.error(`Unknown prune option: ${unknown.join(', ')}\n${USAGE}`);
+    return 1;
+  }
+  const vacuum = flags.has('--vacuum');
+  const keepMemory = flags.has('--keep-memory');
+
+  // Startup loads the project .env before registering its session and resolving
+  // storage (MASTRA_APP_DATA_DIR, MASTRA_DB_PATH, ...). Do the same before taking
+  // the lock, or prune locks/scans a different app data dir or opens another DB.
+  try {
+    process.loadEnvFile(path.join(process.cwd(), '.env'));
+  } catch {
+    // No .env file — keys may be in the shell environment
+  }
+
+  // Maintenance needs the database to itself: hold the lock for the whole run
+  // and refuse while any mastracode session is registered.
+  let releaseLock: () => void;
+  try {
+    releaseLock = acquireMaintenanceLock();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+
+  try {
+    return await prune({ vacuum, keepMemory });
+  } finally {
+    releaseLock();
+  }
+}
+
+async function prune({ vacuum, keepMemory }: { vacuum: boolean; keepMemory: boolean }): Promise<number> {
+  // Resolve storage exactly the way startup does, so prune targets the same
+  // database the TUI uses — honoring MASTRA_DB_PATH / MASTRA_STORAGE_BACKEND,
+  // global settings, and a project's own .mastracode/database.json.
+  const settings = loadSettings();
+  const project = detectProject(process.cwd());
+  const storageConfig = getStorageConfig(project.rootPath, settings.storage, DEFAULT_CONFIG_DIR);
+
+  // A project .env can point storage elsewhere (startup honors it too), so say
+  // exactly what is about to be pruned before anything is deleted.
+  console.log(`Storage target: ${describeStorageTarget(storageConfig)}`);
+
+  const { storage, backend, warning } = await createStorage(storageConfig);
+  if (warning) console.log(warning);
+
+  let vector: MastraVector | undefined;
+  try {
+    // The libsql factory does not init (the PG path already has); init is
+    // coalesced, so tables are guaranteed to exist before we delete from them.
+    await storage.init();
+
+    const localDbFiles = resolveLocalDbFiles(storageConfig, backend);
+    if (localDbFiles.length > 0) {
+      console.log(`Database: ${localDbFiles.join(', ')}`);
+    }
+
+    // Only the local-libsql compaction needs the vector connection (its file
+    // swap refuses while any connection is open). Opening it otherwise would
+    // create mastra-vectors.db as a side effect.
+    if (vacuum && localDbFiles.length > 0) {
+      vector = await createVectorStore(storageConfig, backend);
+    }
+    const libsqlVector = vector instanceof LibSQLVector ? vector : undefined;
+
+    const maintenance = createStorageMaintenance({
+      storage,
+      backend,
+      retention: DEFAULT_RETENTION,
+      localDbFiles,
+      ...(libsqlVector ? { closeVector: () => libsqlVector.close() } : {}),
+    });
+
+    await runStorageMaintenance({ maintenance, vacuum, keepMemory, log: line => console.log(line) });
+    console.log('Storage maintenance complete.');
+    return 0;
+  } catch (err) {
+    console.error(`Storage maintenance failed: ${err instanceof Error ? err.message : String(err)}`);
+    // runStorageMaintenance closes storage on its success path. If it threw
+    // first, release the connections here so a retry isn't blocked by our own
+    // open handles. Best effort — the original failure is what matters.
+    try {
+      await storage.close?.();
+      if (vector instanceof LibSQLVector) await vector.close();
+    } catch {
+      // ignore cleanup errors
+    }
+    return 1;
+  }
+}
+
+/** Credential-free URL: drops userinfo and the query string (e.g. ?authToken=). */
+function redactUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return '<unparseable URL>';
+  }
+}
+
+export function describeStorageTarget(config: StorageConfig): string {
+  if (config.backend === 'libsql') {
+    return config.url.startsWith('file:')
+      ? `libsql file ${config.url.slice('file:'.length)}`
+      : `libsql ${redactUrl(config.url)}`;
+  }
+  if (config.connectionString) return `pg ${redactUrl(config.connectionString)}`;
+  const host = `${config.host ?? 'localhost'}${config.port ? `:${config.port}` : ''}`;
+  return `pg postgres://${host}/${config.database ?? ''}`;
+}

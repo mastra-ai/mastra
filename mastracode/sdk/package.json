@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.8.4-alpha.2",
+  "version": "1.10.0-alpha.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -18,6 +18,12 @@
         "default": "./dist/index.js"
       }
     },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
+      }
+    },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",
@@ -30,8 +36,12 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:acp": "vitest run --config vitest.acp.config.ts",
     "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "build:acp:dev": "node scripts/build-acp-dev.mjs",
+    "test:acp:conformance": "node scripts/run-acp-conformance.mjs",
+    "check:acp": "tsc --noEmit -p tsconfig.acp.json"
   },
   "keywords": [],
   "author": "",

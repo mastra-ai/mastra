@@ -6,13 +6,13 @@ import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
-import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { datasetCrumb, navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/datasets'), datasetCrumb, { id: 'dataset-versions', label: 'Versions' }];

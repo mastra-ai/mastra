@@ -15,6 +15,7 @@ import { Tabs } from '@/ds/components/Tabs/tabs-root';
 import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type TabbedContainerSearchProps = Pick<
@@ -85,9 +86,9 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
                     <ListFilterIcon aria-hidden="true" />
                     {filterCount > 0 ? (
-                      <span aria-hidden="true" data-slot="tabbed-container-filter-count" className="text-meta">
+                      <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
                         {filterCount}
-                      </span>
+                      </Txt>
                     ) : null}
                     {filter.multiple ? (
                       <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />

@@ -10,11 +10,10 @@ import {
 import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
 import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -147,7 +146,7 @@ export function SortableSignalHeaders({
                               <TooltipTrigger
                                 className="cursor-default font-mono text-column tracking-wider"
                                 data-testid="signal-column-header"
-                                style={{ color: nodeColor(getSignalHue(signalName)) }}
+                                style={{ color: getSignalColor(signalName) }}
                               >
                                 {label.toUpperCase()}
                               </TooltipTrigger>

@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -56,16 +57,18 @@ export function ReferenceViewerDialog({
               <FileText className="h-4 w-4 text-muted-foreground" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-subheading text-foreground">
+              <Txt as="h2" variant="subheading" tone="ink" id="reference-viewer-title">
                 {referencePath}
-              </h2>
-              <p className="text-caption text-muted-foreground">from {skillName}</p>
+              </Txt>
+              <Txt variant="caption" tone="muted">
+                from {skillName}
+              </Txt>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button size="md" variant="default" onClick={handleCopy} disabled={!content || isLoading}>
               <Icon>
-                {isCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                {isCopied ? <Check className="h-3.5 w-3.5 text-success-indicator" /> : <Copy className="h-3.5 w-3.5" />}
               </Icon>
               {isCopied ? 'Copied!' : 'Copy'}
             </Button>
@@ -83,12 +86,12 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent1 border-t-transparent" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="mb-2 text-red-400">Failed to load reference</p>
-              <p className="text-body text-muted-foreground">{error}</p>
+              <p className="mb-2 text-destructive-foreground">Failed to load reference</p>
+              <Txt tone="muted">{error}</Txt>
             </div>
           ) : content ? (
             <pre className="overflow-auto rounded-lg bg-card p-4 text-body whitespace-pre-wrap text-foreground">

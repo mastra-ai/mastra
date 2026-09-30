@@ -23,6 +23,10 @@ const knowledgeScopeTreeMock = vi.fn(async () => ({
   ],
 }));
 const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
+const durableAgentMock = { kind: 'durable' };
+const eventedAgentMock = { kind: 'evented' };
+const createDurableAgentMock = vi.fn(() => durableAgentMock);
+const createEventedAgentMock = vi.fn(() => eventedAgentMock);
 
 vi.mock('../knowledge-inspector.js', () => ({
   createKnowledgeInspector: createKnowledgeInspectorMock,
@@ -50,6 +54,13 @@ vi.mock('@mastra/core/coding-agent', () => ({
     agentConstructorMock(config);
     return {};
   },
+}));
+
+vi.mock('@mastra/core/agent/durable', () => ({
+  createDurableAgent: createDurableAgentMock,
+  createEventedAgent: createEventedAgentMock,
+  isDurableAgent: (agent: unknown) => agent === durableAgentMock || agent === eventedAgentMock,
+  isEventedAgent: (agent: unknown) => agent === eventedAgentMock,
 }));
 
 const agentConstructorMock = vi.fn();
@@ -152,11 +163,13 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    experimentalAgent: null,
     backgroundTools: { enabled: false },
     signals: {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
+      experimentalScheduleTools: false,
       githubPollIntervalMs: 300_000,
     },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -265,6 +278,9 @@ vi.mock('@mastra/core/processors', () => ({
     }
   },
   createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
+  CyberRefusalHandler: class {
+    readonly id = 'cyber-refusal-handler';
+  },
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -361,6 +377,7 @@ vi.mock('../onboarding/om-settings.js', () => ({
 
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: loadSettingsMock,
   MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
@@ -526,6 +543,8 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
+    createDurableAgentMock.mockClear();
+    createEventedAgentMock.mockClear();
     controllerConstructorMock.mockReset();
     controllerOnSessionCreatedMock.mockReset();
     controllerOnSessionDeletedMock.mockReset();
@@ -544,6 +563,40 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
+    delete process.env.MASTRACODE_EXPERIMENTAL_AGENT;
+  });
+
+  it('keeps the plain coding agent when the experiment is disabled', async () => {
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const result = await createMastraCodeAgentController();
+
+    expect(createDurableAgentMock).not.toHaveBeenCalled();
+    expect(createEventedAgentMock).not.toHaveBeenCalled();
+    expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
+    expect(result).not.toHaveProperty('validateExperimentalAgent');
+  }, 15_000);
+
+  it.each([
+    ['durable', createDurableAgentMock, durableAgentMock],
+    ['evented', createEventedAgentMock, eventedAgentMock],
+  ] as const)('wraps the coding agent with the %s implementation', async (selection, factory, wrapper) => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), experimentalAgent: selection });
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const result = await createMastraCodeAgentController();
+
+    expect(factory).toHaveBeenCalledWith({ agent: expect.any(Object) });
+    expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(wrapper);
+    expect(result.codeAgent).toBe(wrapper);
+  });
+
+  it('lets the environment override the persisted selection', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_AGENT = 'evented';
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), experimentalAgent: 'durable' });
+    const { createMastraCodeAgentController } = await import('../index.js');
+    await createMastraCodeAgentController();
+
+    expect(createEventedAgentMock).toHaveBeenCalledOnce();
+    expect(createDurableAgentMock).not.toHaveBeenCalled();
   });
 
   it('omits background task infrastructure unless background tools are enabled', async () => {
@@ -1292,7 +1345,7 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
+  it('names only its tuned stream retry policy and lets the shared defaults supply the rest', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -1302,10 +1355,13 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { errorProcessors?: Array<{ id?: string }>; maxProcessorRetries?: number } | undefined)
       .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.maxProcessorRetries).toBe(64);
+    // The Agent inserts the missing shared defaults at their canonical positions, so both
+    // `provider-history-compat` and `prefill-error-handler` still resolve ahead of this
+    // processor without being named here.
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
+      'cyber-refusal-handler',
       'stream-error-retry-processor',
-      'prefill-error-handler',
       'mastracode-account-rotation',
     ]);
   });
@@ -1456,10 +1512,9 @@ describe('createMastraCode', () => {
       'embedding-reconciler',
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {
@@ -1483,7 +1538,6 @@ describe('createMastraCode', () => {
       'needs-mastra',
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
     ]);
   });
 
@@ -1514,11 +1568,10 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
       'acme-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([pluginOutput]);
+    expect(resolveOutputProcessors()).toEqual([expect.objectContaining({ id: 'cyber-refusal-handler' }), pluginOutput]);
 
     // A plugin disabled or updated mid-session changes what the manager reports;
     // the next request picks it up through the same agent.
@@ -1527,10 +1580,9 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('runs plugin signal providers through the lane, never the agent signals array', async () => {
@@ -1571,11 +1623,13 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
       'acme-provider-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([outputProcessor]);
+    expect(resolveOutputProcessors()).toEqual([
+      expect.objectContaining({ id: 'cyber-refusal-handler' }),
+      outputProcessor,
+    ]);
     expect(built.controller).toBeDefined();
   });
 
@@ -1637,26 +1691,37 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
       'agents-md-injector',
-      'provider-history-compat',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors()).toEqual([]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
     // Warned once, not once per request: this is the hot path.
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 
-  it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
+  it('orders its own ProviderHistoryCompat ahead of the stream-retry and cyber-refusal handlers', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls
-      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
-      .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
-    expect(resolveInputProcessors().map(processor => processor.id)).toContain('provider-history-compat');
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    const configs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { errorProcessors?: Array<{ id?: string }>; inputProcessors?: unknown[] } | undefined,
+    );
+    // It is named rather than inherited from the shared default because the Agent
+    // appends missing defaults after a caller's list, which would place it after
+    // the blind retry. The named instance replaces the default in its slot, so
+    // exactly one instance of each repair resolves.
+    const config = configs.find(config =>
+      config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'),
+    );
+    const ids = config?.errorProcessors?.map(processor => processor.id);
+    expect(ids).toEqual([
+      'provider-history-compat',
+      'cyber-refusal-handler',
+      'stream-error-retry-processor',
+      'mastracode-account-rotation',
+    ]);
   });
 
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {

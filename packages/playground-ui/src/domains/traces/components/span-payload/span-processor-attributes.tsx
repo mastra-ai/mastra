@@ -42,7 +42,11 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
           <li key={index} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2 text-body text-foreground">
               <span>{MUTATION_LABELS[mutation.type] ?? mutation.type}</span>
-              {detail && <span className="text-meta text-placeholder">{detail}</span>}
+              {detail && (
+                <Txt as="span" variant="meta" tone="faint">
+                  {detail}
+                </Txt>
+              )}
             </div>
             {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
             {mutation.ids && mutation.ids.length > 0 && (
