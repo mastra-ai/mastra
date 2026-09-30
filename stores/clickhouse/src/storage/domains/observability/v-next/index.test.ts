@@ -4947,6 +4947,16 @@ LIMIT 1`,
       expect(result.value).toBe(0);
     });
 
+    it('getFeedbackAggregate count_distinct counts distinct values instead of summing', async () => {
+      // Production thumbs values are 1 and 0: sum is 1, distinct count is 2
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        filters: { environment: 'production' },
+        aggregation: 'count_distinct',
+      });
+      expect(result.value).toBe(2);
+    });
+
     it('getFeedbackPercentiles rejects out-of-range values', async () => {
       await expect(
         storage.getFeedbackPercentiles({
