@@ -680,9 +680,14 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 
-  it('passes configured co-author identity into the agent instruction callback', async () => {
+  it('passes configured attribution and provider guidance into the agent instruction callback', async () => {
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ coAuthor: { name: 'mastracode' } });
+    const pullRequestGuidance = 'Use brokered source-control tools.';
+    await createMastraCode({
+      coAuthor: { name: 'mastracode' },
+      includeCommitCoAuthorGuidance: false,
+      pullRequestGuidance,
+    });
 
     const agentConfig = agentConstructorMock.mock.calls
       .map(
@@ -703,9 +708,14 @@ describe('createMastraCode', () => {
     await agentConfig.instructions({ requestContext });
 
     expect(getDynamicInstructionsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ requestContext, coAuthor: { name: 'mastracode' } }),
+      expect.objectContaining({
+        requestContext,
+        coAuthor: { name: 'mastracode' },
+        includeCommitCoAuthorGuidance: false,
+        pullRequestGuidance,
+      }),
     );
-  });
+  }, 30_000);
 
   it.each([{}, { subagents: undefined }])(
     'registers native defaults when subagents is omitted or undefined (%j)',

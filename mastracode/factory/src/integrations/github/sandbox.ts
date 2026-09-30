@@ -752,6 +752,9 @@ export interface GitIdentity {
   login?: string | null;
 }
 
+/** Repository-local identity used for every commit produced by a Factory session. */
+export const FACTORY_COMMIT_IDENTITY: GitIdentity = { name: 'Mastra Factory', email: 'noreply@mastra.ai' };
+
 /**
  * Resolve a concrete `{ name, email }` for git authorship from a possibly-sparse
  * identity. Falls back to a GitHub-style noreply identity so commits are never
@@ -858,10 +861,9 @@ export async function addCommitCoAuthorBeforePush(
   workdir: string,
   coAuthor: { name: string; email: string } | undefined,
 ): Promise<void> {
-  if (!coAuthor) return;
-  const name = coAuthor.name.replace(/[\r\n<>]+/g, ' ').trim();
-  const email = coAuthor.email.trim();
-  if (!name || !/^[^\s<>@]+@[^\s<>@]+$/.test(email)) return;
+  const name = coAuthor?.name.replace(/[\r\n<>]+/g, ' ').trim();
+  const email = coAuthor?.email.trim();
+  const validCoAuthor = Boolean(name && email && /^[^\s<>@]+@[^\s<>@]+$/.test(email));
 
   const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
   if (head.exitCode !== 0 || !head.stdout.trim()) return;
@@ -881,22 +883,58 @@ export async function addCommitCoAuthorBeforePush(
     }
   }
 
+  // The sandbox exposes git directly to the coding agent. Reassert the stable
+  // service identity at the final pre-push boundary so a repository or setup
+  // command cannot silently replace it with a host/human identity.
+  await configureGitIdentity(sandbox, workdir, FACTORY_COMMIT_IDENTITY);
+
   const message = await execute(sandbox, 'git', ['-C', workdir, 'log', '-1', '--format=%B']);
   if (message.exitCode !== 0) return;
-  const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`^Co-authored-by:.*<${escapedEmail}>\\s*$`, 'im').test(message.stdout)) return;
+  const escapedEmail = validCoAuthor ? email!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : undefined;
+  const needsTrailer = escapedEmail
+    ? !new RegExp(`^Co-authored-by:.*<${escapedEmail}>\\s*$`, 'im').test(message.stdout)
+    : false;
 
-  const amend = await execute(sandbox, 'git', [
+  const amendArgs = [
     '-C',
     workdir,
     'commit',
     '--amend',
     '--no-edit',
-    '--trailer',
-    `Co-authored-by: ${name} <${email}>`,
-  ]);
+    '--reset-author',
+    ...(needsTrailer ? ['--trailer', `Co-authored-by: ${name} <${email}>`] : []),
+  ];
+  const amend = await execute(sandbox, 'git', amendArgs);
   if (amend.exitCode !== 0) {
     throw new MaterializeError(`Failed to add commit co-author: ${amend.stderr.trim()}`, 'commit-failed');
+  }
+
+  const unpushed = await execute(sandbox, 'git', ['-C', workdir, 'rev-list', 'HEAD', '--not', '--remotes']);
+  if (unpushed.exitCode !== 0) {
+    throw new MaterializeError(`Failed to verify commit identity: ${unpushed.stderr.trim()}`, 'push-failed');
+  }
+  for (const commit of unpushed.stdout.split(/\s+/).filter(Boolean)) {
+    const identity = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'show',
+      '-s',
+      '--format=%an%x00%ae%x00%cn%x00%ce',
+      commit,
+    ]);
+    const [authorName, authorEmail, committerName, committerEmail] = identity.stdout.trimEnd().split('\0');
+    if (
+      identity.exitCode !== 0 ||
+      authorName !== FACTORY_COMMIT_IDENTITY.name ||
+      authorEmail !== FACTORY_COMMIT_IDENTITY.email ||
+      committerName !== FACTORY_COMMIT_IDENTITY.name ||
+      committerEmail !== FACTORY_COMMIT_IDENTITY.email
+    ) {
+      throw new MaterializeError(
+        `Refusing to push commit ${commit.slice(0, 12)} because it does not use the stable Factory author and committer identity.`,
+        'push-failed',
+      );
+    }
   }
 }
 

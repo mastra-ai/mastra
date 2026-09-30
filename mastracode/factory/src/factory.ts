@@ -907,7 +907,6 @@ export class MastraFactory {
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
-        coAuthor: { name: 'mastra-platform[bot]' },
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -928,6 +927,9 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        includeCommitCoAuthorGuidance: false,
+        pullRequestGuidance:
+          'Create or update pull requests and merge requests only with source_control_create_change_request and source_control_update_change_request. Push the session branch first with source_control_push_branch. Do not use a provider CLI to create or update a change request.',
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
         // session's owner in its org; Factory sessions are keyed by resourceId.

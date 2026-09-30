@@ -317,6 +317,10 @@ export interface MastraCodeConfig {
     | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
+  /** Disable the default commit co-author instruction without changing the underlying prompt defaults. */
+  includeCommitCoAuthorGuidance?: boolean;
+  /** Replace the default provider-specific pull-request instructions. */
+  pullRequestGuidance?: string;
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
@@ -1123,6 +1127,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         requestContext,
         hostInstructions,
         coAuthor: config?.coAuthor,
+        includeCommitCoAuthorGuidance: config?.includeCommitCoAuthorGuidance,
+        pullRequestGuidance: config?.pullRequestGuidance,
         hasSubconscious,
         hasSubagents: subagents.length > 0,
       });

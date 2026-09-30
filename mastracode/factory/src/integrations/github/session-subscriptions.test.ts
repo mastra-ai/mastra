@@ -10,6 +10,48 @@ const mocks = vi.hoisted(() => ({
     cloneUrl: 'https://github.com/mastra-ai/mastra.git',
     authorization: { scheme: 'bearer' as const, token: 'fresh-gh-token' },
   })),
+  getRepositoryTarget: vi.fn(async () => ({
+    connection: { type: 'app-installation' as const, installationId: 7 },
+    sourceId: 'mastra-ai/mastra',
+  })),
+  getVersionControlPullRequest: vi.fn(async () => ({
+    id: '123',
+    title: 'Fix',
+    url: 'https://github.com/mastra-ai/mastra/pull/123',
+    author: 'mastra-factory[bot]',
+    body: 'Summary',
+    state: 'open' as const,
+    draft: true,
+    merged: false,
+    mergeable: true,
+    baseBranch: 'main',
+    headBranch: 'factory/issue-7',
+    headSha: 'abc123',
+    createdAt: '2026-09-30T00:00:00Z',
+    updatedAt: '2026-09-30T00:00:00Z',
+  })),
+  updatePullRequest: vi.fn(async (input: { body?: string | null }) => ({
+    id: '123',
+    title: 'Fix',
+    url: 'https://github.com/mastra-ai/mastra/pull/123',
+    author: 'mastra-factory[bot]',
+    body: input.body ?? null,
+    state: 'open' as const,
+    draft: true,
+    merged: false,
+    mergeable: true,
+    baseBranch: 'main',
+    headBranch: 'factory/issue-7',
+    headSha: 'abc123',
+    createdAt: '2026-09-30T00:00:00Z',
+    updatedAt: '2026-09-30T00:00:01Z',
+  })),
+  createIntakeComment: vi.fn(async () => ({
+    id: '84',
+    url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-84',
+  })),
+  addIssueLabels: vi.fn(async () => undefined),
+  removeIssueLabel: vi.fn(async () => undefined),
   upsertTriageComment: vi.fn(async (): Promise<{ action: 'created' | 'updated'; commentId: string; url: string }> => ({
     action: 'created',
     commentId: '42',
@@ -55,17 +97,27 @@ const githubStub = {
   },
   versionControl: {
     getRepositoryAccess: mocks.getRepositoryAccess,
+    getRepositoryTarget: mocks.getRepositoryTarget,
+    getPullRequest: mocks.getVersionControlPullRequest,
+    updatePullRequest: mocks.updatePullRequest,
   },
+  intake: { createComment: mocks.createIntakeComment },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
+  addIssueLabels: mocks.addIssueLabels,
+  removeIssueLabel: mocks.removeIssueLabel,
   upsertFactoryTriageComment: mocks.upsertTriageComment,
 } as unknown as GithubIntegration;
 
 import {
+  attributeCurrentSessionPullRequest,
+  commentCurrentSessionIssue,
   createGithubSubscriptionTools,
+  observeCurrentSessionPullRequest,
   parseCreatedPullRequest,
   refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
+  updateCurrentSessionIssueLabels,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './token-refresh.js';
@@ -156,6 +208,47 @@ describe('parseCreatedPullRequest', () => {
 });
 
 describe('GitHub subscription entry points', () => {
+  it('repairs a CLI-created pull request with server-resolved Factory attribution', async () => {
+    await attributeCurrentSessionPullRequest(
+      authenticatedRequestContext(),
+      'https://github.com/mastra-ai/mastra/pull/123',
+      githubStub,
+    );
+
+    expect(mocks.updatePullRequest).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'mastra-ai/mastra',
+      pullRequestId: '123',
+      actingUserId: 'user-1',
+      body: 'Summary',
+      attribution: {
+        kind: 'human',
+        userId: 'user-1',
+        displayName: 'Ada Lovelace',
+        session: {
+          role: 'build',
+          workItemRef: 'resource-1',
+          runId: 'thread-1',
+        },
+      },
+    });
+  });
+
+  it('still subscribes when compatibility attribution repair fails', async () => {
+    mocks.getVersionControlPullRequest.mockRejectedValueOnce(new Error('temporary read failure'));
+
+    await expect(
+      observeCurrentSessionPullRequest(
+        authenticatedRequestContext(),
+        'https://github.com/mastra-ai/mastra/pull/123',
+        'execute_command',
+        githubStub,
+      ),
+    ).rejects.toThrow('temporary read failure');
+
+    expect(mocks.subscribe).toHaveBeenCalledOnce();
+  });
+
   it('does not expose tools without authenticated repository context', () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
@@ -303,6 +396,55 @@ describe('GitHub subscription entry points', () => {
         },
       },
     });
+  });
+
+  it('comments on the active issue through the installation with session attribution', async () => {
+    await expect(
+      commentCurrentSessionIssue(
+        authenticatedRequestContext(),
+        { issueNumber: 7, body: 'This issue has now been marked as done.' },
+        githubStub,
+      ),
+    ).resolves.toMatchObject({ id: '84' });
+
+    expect(mocks.createIntakeComment).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'mastra-ai/mastra',
+      issueId: '7',
+      body: 'This issue has now been marked as done.',
+      actingUserId: 'user-1',
+      attribution: {
+        kind: 'human',
+        userId: 'user-1',
+        displayName: 'Ada Lovelace',
+        session: {
+          role: 'build',
+          workItemRef: 'resource-1',
+          runId: 'thread-1',
+        },
+      },
+    });
+  });
+
+  it('updates issue and pull-request labels through the active installation', async () => {
+    await expect(
+      updateCurrentSessionIssueLabels(
+        authenticatedRequestContext(),
+        {
+          issueNumber: 123,
+          add: ['status:auto-approved', 'status:auto-approved'],
+          remove: ['status:changes-requested', 'status:auto-approved'],
+        },
+        githubStub,
+      ),
+    ).resolves.toEqual({
+      issueNumber: 123,
+      added: ['status:auto-approved'],
+      removed: ['status:changes-requested'],
+    });
+
+    expect(mocks.addIssueLabels).toHaveBeenCalledWith(7, 'mastra-ai/mastra', 123, ['status:auto-approved']);
+    expect(mocks.removeIssueLabel).toHaveBeenCalledWith(7, 'mastra-ai/mastra', 123, 'status:changes-requested');
   });
 
   it('exposes the triage upsert only in authenticated repository sessions and rejects unmarked bodies', () => {

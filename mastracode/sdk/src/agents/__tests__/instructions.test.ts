@@ -76,6 +76,29 @@ describe('getDynamicInstructions', () => {
     expect(prompt).toContain('Co-Authored-By: mastracode <mastracode@example.test>');
   });
 
+  it('forwards commit and pull-request guidance overrides to the assembled prompt', async () => {
+    const pullRequestGuidance = 'Use only brokered source-control tools to open change requests.';
+    const prompt = await getDynamicInstructions({
+      requestContext: {
+        get: vi.fn(key =>
+          key === 'controller'
+            ? {
+                getState: () => ({ projectPath: '/tmp/project', projectName: 'test-project' }),
+                session: { modeId: 'build' },
+              }
+            : undefined,
+        ),
+      },
+      includeCommitCoAuthorGuidance: false,
+      pullRequestGuidance,
+    });
+
+    expect(prompt).not.toContain('Co-Authored-By:');
+    expect(prompt).toContain(pullRequestGuidance);
+    expect(prompt).not.toContain('Use `gh pr create`.');
+    expect(prompt).not.toContain('github_subscribe_pr');
+  });
+
   it('never leaks the host cwd, branch, or instruction files into a session without a project', async () => {
     const { getCurrentGitBranchAsync } = await import('../../utils/project.js');
     const { loadAgentInstructions } = await import('../prompts/agent-instructions.js');

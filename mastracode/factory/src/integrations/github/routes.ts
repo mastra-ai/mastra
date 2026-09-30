@@ -49,16 +49,15 @@ import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   addCommitCoAuthorBeforePush,
   commitAll,
+  FACTORY_COMMIT_IDENTITY,
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
   pushBranch,
   SetupCommandError,
 } from './sandbox.js';
-import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
-const FACTORY_COMMIT_IDENTITY: GitIdentity = { name: 'Mastra Factory', email: 'noreply@mastra.ai' };
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /**

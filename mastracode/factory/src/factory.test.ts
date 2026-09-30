@@ -276,10 +276,34 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
-  it('uses the platform bot co-author identity', async () => {
+  it('does not ask the coding agent to add a synthetic bot co-author', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
-    expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+    expect(config.coAuthor).toBeUndefined();
+    expect(config.includeCommitCoAuthorGuidance).toBe(false);
+    expect(config.pullRequestGuidance).toContain('source_control_create_change_request');
+  });
+
+  it('assembles Factory prompt guidance without SDK bot attribution or provider CLI instructions', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      getState: () => ({ projectPath: '', projectName: '' }),
+      session: { modeId: 'build' },
+    });
+
+    const prompt = await getDynamicInstructions({
+      requestContext,
+      includeCommitCoAuthorGuidance: config.includeCommitCoAuthorGuidance,
+      pullRequestGuidance: config.pullRequestGuidance,
+    });
+
+    expect(prompt).not.toContain('Co-Authored-By:');
+    expect(prompt).toContain('source_control_push_branch');
+    expect(prompt).toContain('source_control_create_change_request');
+    expect(prompt).toContain('source_control_update_change_request');
+    expect(prompt).not.toContain('Use `gh pr create`.');
+    expect(prompt).not.toContain('github_subscribe_pr');
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {

@@ -67,8 +67,8 @@ import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import {
   createGithubSubscriptionTools,
+  observeCurrentSessionPullRequest,
   parseCreatedPullRequest,
-  subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
@@ -1031,10 +1031,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
     const pullRequestUrl = parseCreatedPullRequest(toolContext);
     if (!pullRequestUrl || !requestContext) return;
-    await subscribeCurrentSessionToPullRequest(
+    await observeCurrentSessionPullRequest(
       requestContext,
       pullRequestUrl,
-      'auto-gh-pr-create',
+      toolContext.toolName,
       this as unknown as GithubIntegration,
     );
   }

@@ -126,6 +126,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     modelId: ctx.modelId,
     coAuthorName: ctx.coAuthorName,
     coAuthorEmail: ctx.coAuthorEmail,
+    includeCommitCoAuthorGuidance: ctx.includeCommitCoAuthorGuidance,
+    pullRequestGuidance: ctx.pullRequestGuidance,
     activePlan: ctx.state?.activePlan,
     hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
     toolGuidance,

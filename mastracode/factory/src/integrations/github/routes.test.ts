@@ -495,6 +495,7 @@ vi.mock('./sandbox', () => {
   }
   return {
     DEFAULT_COMMAND_TIMEOUT_MS: 15 * 60_000,
+    FACTORY_COMMIT_IDENTITY: { name: 'Mastra Factory', email: 'noreply@mastra.ai' },
     materializeRepo: (opts: any) => materializeRepo(opts),
     runSetupCommand: (sb: any, worktreePath: string, command: string) => runSetupCommand(sb, worktreePath, command),
     runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>

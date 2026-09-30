@@ -25,6 +25,10 @@ export interface PromptContext {
   coAuthorName?: string;
   /** Email used in the commit `Co-Authored-By` line. Default: the mastra-platform bot noreply address. */
   coAuthorEmail?: string;
+  /** Whether commit guidance should ask for a co-author trailer. Defaults to true. */
+  includeCommitCoAuthorGuidance?: boolean;
+  /** Replaces the default pull-request guidance when provided. */
+  pullRequestGuidance?: string;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
@@ -32,6 +36,9 @@ export function buildBasePrompt(ctx: PromptContext): string {
   const productName = ctx.productName ?? 'Mastra Code';
   const coAuthorName = ctx.coAuthorName ?? 'mastra-platform[bot]';
   const coAuthorEmail = ctx.coAuthorEmail ?? '284800079+mastra-platform[bot]@users.noreply.github.com';
+  const pullRequestGuidance =
+    ctx.pullRequestGuidance ??
+    "Use `gh pr create`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.\nWhen `github_subscribe_pr` and `github_unsubscribe_pr` are available, a successful `gh pr create` subscribes the current thread automatically, so do not call `github_subscribe_pr` after creating a PR. Use it only for an existing PR or to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use `github_unsubscribe_pr` only to stop notifications earlier.";
 
   return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -86,11 +93,14 @@ ${ctx.toolGuidance}
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName} <${coAuthorEmail}>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style.${
+    ctx.includeCommitCoAuthorGuidance === false
+      ? ''
+      : ` Include \`Co-Authored-By: ${coAuthorName} <${coAuthorEmail}>\` in the message body.`
+  }
 
 ## Pull Requests
-Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.
-When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a successful \`gh pr create\` subscribes the current thread automatically, so do not call \`github_subscribe_pr\` after creating a PR. Use it only for an existing PR or to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use \`github_unsubscribe_pr\` only to stop notifications earlier.
+${pullRequestGuidance}
 
 ${
   ctx.hasSubagents !== false

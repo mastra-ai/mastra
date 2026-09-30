@@ -63,8 +63,8 @@ import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import {
   createGithubSubscriptionTools,
+  observeCurrentSessionPullRequest,
   parseCreatedPullRequest,
-  subscribeCurrentSessionToPullRequest,
 } from './session-subscriptions.js';
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
@@ -1400,7 +1400,7 @@ export class GithubIntegration implements FactoryIntegration {
   }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
     const pullRequestUrl = parseCreatedPullRequest(toolContext);
     if (!pullRequestUrl || !requestContext) return;
-    await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create', this);
+    await observeCurrentSessionPullRequest(requestContext, pullRequestUrl, toolContext.toolName, this);
   }
 
   /** Non-secret config snapshot for system diagnostics/startup logs. */

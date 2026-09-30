@@ -23,7 +23,9 @@ import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
+  configureGitIdentity,
   DEFAULT_COMMAND_TIMEOUT_MS,
+  FACTORY_COMMIT_IDENTITY,
   materializeRepo,
   runSetupCommand,
   runTeardownCommand,
@@ -887,6 +889,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
         mergeRequestNumber: sourceControl.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
       });
+      // Agents can invoke git directly through the sandbox. Pin the repository
+      // identity after every checkout/start so those commits cannot inherit a
+      // human identity from the host or base repository configuration.
+      await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
@@ -904,6 +910,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         try {
           await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          // Setup is arbitrary repository-owned shell and may change local git
+          // configuration. Restore Factory's identity before the agent can
+          // create any commits in the prepared workspace.
+          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -920,6 +930,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               });
             }
           }
+          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
           if (setupError instanceof SetupCommandError) {
             // The command ran and exited non-zero — a config problem, not an
             // infra one. Remember it so the next start recovers, and tell the

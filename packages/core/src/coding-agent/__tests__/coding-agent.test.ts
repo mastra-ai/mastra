@@ -400,6 +400,8 @@ describe('buildBasePrompt', () => {
     expect(prompt).toContain(
       'Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>',
     );
+    expect(prompt).toContain('Use `gh pr create`.');
+    expect(prompt).toContain('github_subscribe_pr');
   });
 
   it('parameterizes productName and coAuthorName', () => {
@@ -420,6 +422,16 @@ describe('buildBasePrompt', () => {
   it('parameterizes the Co-Authored-By email', () => {
     const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
     expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
+  });
+
+  it('allows callers to replace commit and pull-request guidance', () => {
+    const pullRequestGuidance = 'Use the brokered source-control tools to open change requests.';
+    const prompt = buildBasePrompt(promptContext({ includeCommitCoAuthorGuidance: false, pullRequestGuidance }));
+
+    expect(prompt).not.toContain('Co-Authored-By:');
+    expect(prompt).toContain(pullRequestGuidance);
+    expect(prompt).not.toContain('Use `gh pr create`.');
+    expect(prompt).not.toContain('github_subscribe_pr');
   });
 
   it('names the delivery wrapper the runtime emits, and no other', () => {

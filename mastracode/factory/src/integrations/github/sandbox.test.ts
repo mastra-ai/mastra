@@ -930,15 +930,82 @@ describe('addCommitCoAuthorBeforePush', () => {
       email: 'ada@example.test',
     });
 
-    expect(sandbox.executions.at(-1)?.args).toEqual([
+    expect(sandbox.executions.find(entry => entry.args[2] === 'commit')?.args).toEqual([
       '-C',
       '/workspace/hello',
       'commit',
       '--amend',
       '--no-edit',
+      '--reset-author',
       '--trailer',
       'Co-authored-by: Ada Lovelace <ada@example.test>',
     ]);
+  });
+
+  it('reasserts the stable Factory author even when no human co-author is available', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('log -1')) return { ...OK, stdout: 'Factory change\n' };
+      return OK;
+    });
+
+    await addCommitCoAuthorBeforePush(sandbox, '/workspace/hello', undefined);
+
+    expect(sandbox.executions.filter(entry => entry.args[2] === 'config').map(entry => entry.args)).toEqual([
+      ['-C', '/workspace/hello', 'config', 'user.name', 'Mastra Factory'],
+      ['-C', '/workspace/hello', 'config', 'user.email', 'noreply@mastra.ai'],
+    ]);
+    expect(sandbox.executions.find(entry => entry.args[2] === 'commit')?.args).toEqual([
+      '-C',
+      '/workspace/hello',
+      'commit',
+      '--amend',
+      '--no-edit',
+      '--reset-author',
+    ]);
+  });
+
+  it('allows multiple unpublished commits when every author and committer uses the Factory identity', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 0, stdout: 'remote-sha\n', stderr: '' };
+      if (script.includes('log -1')) return { ...OK, stdout: 'Factory change\n' };
+      if (script.includes('rev-list HEAD')) return { ...OK, stdout: 'new-tip\nolder-local\n' };
+      if (script.includes('show -s')) {
+        return {
+          ...OK,
+          stdout: 'Mastra Factory\0noreply@mastra.ai\0Mastra Factory\0noreply@mastra.ai\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(addCommitCoAuthorBeforePush(sandbox, '/workspace/hello', undefined)).resolves.toBeUndefined();
+    expect(sandbox.calls.filter(call => call.includes('show -s'))).toHaveLength(2);
+  });
+
+  it('refuses to push when an earlier unpublished commit carries another identity', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 0, stdout: 'remote-sha\n', stderr: '' };
+      if (script.includes('log -1')) return { ...OK, stdout: 'Factory change\n' };
+      if (script.includes('rev-list HEAD')) return { ...OK, stdout: 'new-tip\nolder-local\n' };
+      if (script.endsWith('show -s --format=%an%x00%ae%x00%cn%x00%ce older-local')) {
+        return { ...OK, stdout: 'Host User\0host@example.test\0Host User\0host@example.test\n' };
+      }
+      if (script.includes('show -s')) {
+        return {
+          ...OK,
+          stdout: 'Mastra Factory\0noreply@mastra.ai\0Mastra Factory\0noreply@mastra.ai\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(addCommitCoAuthorBeforePush(sandbox, '/workspace/hello', undefined)).rejects.toThrow(
+      'does not use the stable Factory author and committer identity',
+    );
   });
 
   it('does not rewrite a tip that already matches its upstream', async () => {

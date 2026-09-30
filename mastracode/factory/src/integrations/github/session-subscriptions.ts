@@ -51,6 +51,15 @@ const triageCommentInputSchema = z.object({
   issueNumber: z.number().int().positive(),
   body: z.string().startsWith(TRIAGE_COMMENT_MARKER),
 });
+const issueCommentInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  body: z.string().trim().min(1),
+});
+const issueLabelsInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  add: z.array(z.string().trim().min(1)).default([]),
+  remove: z.array(z.string().trim().min(1)).default([]),
+});
 
 const triageCommentLocks = new Map<string, Promise<void>>();
 
@@ -130,6 +139,22 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
   return { context, projectRepository, connection, installation, repository, orgId, userId };
 }
 
+function currentSessionAttribution(requestContext: RequestContext, target: SessionTarget) {
+  const trustedSession = requestContext.get('factoryArtifactSession') as FactoryArtifactSession | undefined;
+  return resolveFactoryArtifactAttribution({
+    user: getFactoryAuthUserFromContext(requestContext),
+    userId: target.userId,
+    trigger: requestContext.get('factoryArtifactTrigger') as FactoryArtifactTrigger | undefined,
+    session:
+      trustedSession ??
+      ({
+        role: target.context.getState().factoryRole ?? target.context.session.modeId ?? 'session',
+        workItemRef: target.context.getState().factoryWorkItemId ?? target.context.resourceId,
+        runId: target.context.threadId ?? target.context.resourceId,
+      } satisfies FactoryArtifactSession),
+  });
+}
+
 async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
   const [owner, repo] = target.repository.slug.split('/');
   if (!owner || !repo) throw new Error('GitHub repository is invalid.');
@@ -186,6 +211,55 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return number;
 }
 
+/**
+ * Repair the body provenance of a pull request created through the sandbox
+ * `gh` CLI. The PR author is immutable, so Factory sessions are instructed to
+ * use the brokered creation tool; this remains only a compatibility repair for
+ * callers that used the legacy CLI path.
+ */
+export async function attributeCurrentSessionPullRequest(
+  requestContext: RequestContext,
+  pullRequest: number | string,
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const number = parsePullRequest(pullRequest, target.repository.slug);
+  const reference = {
+    ...(await github.versionControl.getRepositoryTarget({
+      orgId: target.orgId,
+      repositoryId: target.repository.id,
+    })),
+    pullRequestId: String(number),
+    actingUserId: target.userId,
+  };
+  const existing = await github.versionControl.getPullRequest(reference);
+  if (!existing) throw new Error(`Pull request ${number} was not found in the active project repository.`);
+  return github.versionControl.updatePullRequest({
+    ...reference,
+    body: existing.body ?? '',
+    attribution: currentSessionAttribution(requestContext, target),
+  });
+}
+
+/**
+ * Apply the compatibility repair and subscription side effects for a newly
+ * created pull request. Start them together so a failed best-effort repair
+ * cannot prevent Factory from observing later pull request activity.
+ */
+export async function observeCurrentSessionPullRequest(
+  requestContext: RequestContext,
+  pullRequest: number | string,
+  toolName: string,
+  github: GithubIntegration,
+) {
+  await Promise.all([
+    toolName === 'execute_command'
+      ? attributeCurrentSessionPullRequest(requestContext, pullRequest, github)
+      : Promise.resolve(),
+    subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'auto-gh-pr-create', github),
+  ]);
+}
+
 export async function upsertFactoryTriageComment(
   requestContext: RequestContext,
   input: { issueNumber: number; body: string },
@@ -194,19 +268,7 @@ export async function upsertFactoryTriageComment(
   const target = await resolveSessionTarget(requestContext, github);
   const installationId = Number(target.installation.externalId);
   if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
-  const trustedSession = requestContext.get('factoryArtifactSession') as FactoryArtifactSession | undefined;
-  const attribution = resolveFactoryArtifactAttribution({
-    user: getFactoryAuthUserFromContext(requestContext),
-    userId: target.userId,
-    trigger: requestContext.get('factoryArtifactTrigger') as FactoryArtifactTrigger | undefined,
-    session:
-      trustedSession ??
-      ({
-        role: target.context.getState().factoryRole ?? target.context.session.modeId ?? 'session',
-        workItemRef: target.context.getState().factoryWorkItemId ?? target.context.resourceId,
-        runId: target.context.threadId ?? target.context.resourceId,
-      } satisfies FactoryArtifactSession),
-  });
+  const attribution = currentSessionAttribution(requestContext, target);
   return serializeTriageComment(`${installationId}:${target.repository.externalId}:${input.issueNumber}`, () =>
     github.upsertFactoryTriageComment({
       installationId,
@@ -216,6 +278,48 @@ export async function upsertFactoryTriageComment(
       attribution,
     }),
   );
+}
+
+export async function commentCurrentSessionIssue(
+  requestContext: RequestContext,
+  input: { issueNumber: number; body: string },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const repositoryTarget = await github.versionControl.getRepositoryTarget({
+    orgId: target.orgId,
+    repositoryId: target.repository.id,
+  });
+  const created = await github.intake.createComment({
+    ...repositoryTarget,
+    issueId: String(input.issueNumber),
+    body: input.body,
+    actingUserId: target.userId,
+    attribution: currentSessionAttribution(requestContext, target),
+  });
+  if (!created) throw new Error(`GitHub issue ${input.issueNumber} was not found in the active project repository.`);
+  return created;
+}
+
+export async function updateCurrentSessionIssueLabels(
+  requestContext: RequestContext,
+  input: { issueNumber: number; add: string[]; remove: string[] },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const installationId = Number(target.installation.externalId);
+  if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  const add = [...new Set(input.add.map(label => label.trim()).filter(Boolean))];
+  const remove = [...new Set(input.remove.map(label => label.trim()).filter(Boolean))].filter(
+    label => !add.includes(label),
+  );
+  await Promise.all([
+    add.length > 0
+      ? github.addIssueLabels(installationId, target.repository.slug, input.issueNumber, add)
+      : Promise.resolve(),
+    ...remove.map(label => github.removeIssueLabel(installationId, target.repository.slug, input.issueNumber, label)),
+  ]);
+  return { issueNumber: input.issueNumber, added: add, removed: remove };
 }
 
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
@@ -262,6 +366,20 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         'Create or update this Factory App’s canonical triage handoff comment on an issue in the active repository. Use this for every marked pending or final Factory triage handoff; never use gh to create or edit that handoff.',
       inputSchema: triageCommentInputSchema,
       execute: async input => upsertFactoryTriageComment(requestContext, input, github),
+    }),
+    github_comment_issue: createTool({
+      id: 'github_comment_issue',
+      description:
+        'Add an attributed comment to a GitHub issue in the active repository through Factory’s stable installation identity. Never use gh issue comment for Factory-authored issue comments.',
+      inputSchema: issueCommentInputSchema,
+      execute: async input => commentCurrentSessionIssue(requestContext, input, github),
+    }),
+    github_update_issue_labels: createTool({
+      id: 'github_update_issue_labels',
+      description:
+        'Add or remove existing labels on an issue or pull request in the active GitHub repository through Factory’s stable installation identity. Read the current labels first and request only necessary changes.',
+      inputSchema: issueLabelsInputSchema,
+      execute: async input => updateCurrentSessionIssueLabels(requestContext, input, github),
     }),
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',

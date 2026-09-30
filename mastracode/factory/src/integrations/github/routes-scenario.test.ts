@@ -233,6 +233,7 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
+    FACTORY_COMMIT_IDENTITY: { name: 'Mastra Factory', email: 'noreply@mastra.ai' },
     materializeRepo: (opts: any) => materializeRepo(opts),
     addCommitCoAuthorBeforePush: (...args: any[]) => addCommitCoAuthorBeforePush(...(args as [])),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
