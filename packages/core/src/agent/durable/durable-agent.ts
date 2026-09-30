@@ -11,7 +11,7 @@ import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } fro
 import { RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
-import type { WorkflowsStorage } from '../../storage';
+import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -34,7 +34,7 @@ import {
   ExecutionFence,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
-  setExecutionId,
+  setExecutionClaim,
 } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
@@ -1956,16 +1956,51 @@ export class DurableAgent<
 
   /**
    * Claim the run's execution fence (#23734): `acquire` for a new execution
-   * segment, `takeover` when recovering an orphaned run.
+   * segment, `takeover` when recovering an orphaned run. With a
+   * `requestContext`, the claim also covers the run's memory store (see
+   * {@link DurableAgent.#coverMemory}).
    */
-  #claimExecution(runId: string, mode: 'acquire' | 'takeover'): Promise<ExecutionFence> {
-    return ExecutionFence.claim({
+  async #claimExecution(
+    runId: string,
+    mode: 'acquire' | 'takeover',
+    requestContext?: RequestContext,
+  ): Promise<ExecutionFence> {
+    const fence = await ExecutionFence.claim({
       leaseProvider: resolveLeaseProvider(this.pubsub),
+      workflowsStore: await this.#mastra?.getStorage()?.getStore('workflows'),
       agentId: this.id,
       runId,
       mode,
       logger: this.logger,
     });
+    if (requestContext) await this.#coverMemory(fence, requestContext);
+    return fence;
+  }
+
+  /**
+   * Raise the memory store the run writes to to the fence's claim before the
+   * run touches memory. Settles the fence if a newer claim already covers
+   * memory. Memory that cannot be resolved stays unfenced: the run's own
+   * memory writes fail the same way.
+   */
+  async #coverMemory(fence: ExecutionFence, requestContext: RequestContext): Promise<void> {
+    if (fence.generation === undefined) return;
+    let store: MemoryStorage | undefined;
+    try {
+      const memory = await this.getMemory({ requestContext });
+      store = memory ? await memory.storage.getStore('memory') : undefined;
+    } catch (error) {
+      this.logger.warn(`[DurableAgent] run ${fence.runId}: memory is not fenced, failed to resolve its store`, {
+        runId: fence.runId,
+        error,
+      });
+    }
+    try {
+      await fence.coverMemory(store);
+    } catch (error) {
+      await fence.settle(async () => {});
+      throw error;
+    }
   }
 
   /**
@@ -1996,18 +2031,20 @@ export class DurableAgent<
         this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
       }
     };
+    // Reaching any non-suspended terminal status means the run is done and its
+    // persisted snapshot rows will never be resumed. Suspended runs keep their
+    // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
+    // find them.
+    const finished = status !== undefined && status !== 'suspended';
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
       if (error) await reportError(error);
-      // Reaching any non-suspended terminal status means the run is done and
-      // its persisted snapshot rows will never be resumed. Suspended runs keep
-      // their snapshots so `resume()` / `recoverActiveRuns()` can find them.
-      if (status && status !== 'suspended') await this.deleteRunSnapshots(runId);
+      if (finished) await this.deleteRunSnapshots(runId);
     };
 
     if (!fence) return writeTerminalState();
-    const settlement = await fence.settle(writeTerminalState);
+    const settlement = await fence.settle(writeTerminalState, { finished });
     // `wrote` is false when the fence could not verify ownership, or when it
     // was already settled by this segment's normal completion and a later step
     // (for example goal bookkeeping) failed.
@@ -2224,7 +2261,7 @@ export class DurableAgent<
     // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
-    const executionFence = await this.#claimExecution(runId, 'acquire');
+    const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
@@ -2241,13 +2278,14 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      await executionFence.settle(async () => {});
+      // The run never started: drop its owner record rather than leave it behind.
+      await executionFence.settle(async () => {}, { finished: true });
       throw error;
     }
 
     const { messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
     // Set after preparation so request-context schema validation never sees it.
-    setExecutionId(requestContext, runId, executionFence.executionId);
+    setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
 
     // 1b. Install the abort controller for this run. The controller is owned
@@ -2584,6 +2622,9 @@ export class DurableAgent<
       }
     }
 
+    // The resumed segment always carries its own claim: without a context the
+    // engine would restore the previous segment's claim from the snapshot.
+    resumeRequestContext ??= new RequestContext();
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = globalRunRegistry.get(runId);
     if (globalEntryForContext) {
@@ -2640,10 +2681,8 @@ export class DurableAgent<
     });
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
-    const executionFence = await this.#claimExecution(runId, 'acquire');
-    if (resolvedOptions.requestContext) {
-      setExecutionId(resolvedOptions.requestContext, runId, executionFence.executionId);
-    }
+    const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
+    setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, globalRunRegistry.get(runId)]) {
       if (reg) reg.executionFence = executionFence;
     }
@@ -3071,13 +3110,15 @@ export class DurableAgent<
         abortController,
         recoveryLease,
       });
+      // Memory is resolved from the rehydrated context; rehydration does not write to it.
+      await this.#coverMemory(executionFence, recoveryState.requestContext);
     } catch (error) {
       await executionFence?.settle(async () => {});
       await recoveryLease.release();
       throw error;
     }
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, registryEntry } = recoveryState;
-    setExecutionId(requestContext, runId, executionFence.executionId);
+    setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
 
     // 3. Cleanup plumbing (mirrors stream()/resume()).
@@ -3179,12 +3220,16 @@ export class DurableAgent<
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
         // contract — but only while this recovery still owns the run.
-        await executionFence.settle(async () => {
-          if (result?.status && result.status !== 'suspended') {
-            await this.deleteRunSnapshots(runId);
-            recoveryLease.assertOwned();
-          }
-        });
+        const finished = !!result?.status && result.status !== 'suspended';
+        await executionFence.settle(
+          async () => {
+            if (finished) {
+              await this.deleteRunSnapshots(runId);
+              recoveryLease.assertOwned();
+            }
+          },
+          { finished },
+        );
         if (result?.status === 'failed') {
           throw new Error((result as any).error?.message || 'Workflow recover failed');
         }
@@ -3357,7 +3402,7 @@ export class DurableAgent<
     // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
     const requestContext = options?.requestContext ?? new RequestContext();
-    const executionFence = await this.#claimExecution(runId, 'acquire');
+    const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
     // 1a. Prepare for durable execution (non-durable phase)
     let preparation: PreparationResult<TOutput>;
@@ -3375,13 +3420,14 @@ export class DurableAgent<
         durableAgentName: this.name,
       });
     } catch (error) {
-      await executionFence.settle(async () => {});
+      // The run never started: drop its owner record rather than leave it behind.
+      await executionFence.settle(async () => {}, { finished: true });
       throw error;
     }
 
     const { messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
     // Set after preparation so request-context schema validation never sees it.
-    setExecutionId(requestContext, runId, executionFence.executionId);
+    setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
 
     // 1b. Install the abort controller for this run. The controller is owned
