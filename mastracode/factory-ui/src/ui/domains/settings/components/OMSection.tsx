@@ -137,7 +137,7 @@ export function OMSection({
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <ModelCombobox
-          fixedWidth
+          className="w-64 max-w-full shrink-0"
           models={models}
           value={config?.observerModelId ?? ''}
           placeholder="Select observer model…"
@@ -148,7 +148,7 @@ export function OMSection({
 
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
         <ModelCombobox
-          fixedWidth
+          className="w-64 max-w-full shrink-0"
           models={models}
           value={config?.reflectorModelId ?? ''}
           placeholder="Select reflector model…"
