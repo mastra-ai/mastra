@@ -58,6 +58,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -1641,7 +1642,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       let runId = executionOptions.runId ?? agent.getActiveThreadRunId({ threadId, resourceId });
       if (!runId) {
         // listSuspendedRuns also queries this agent's durableLoopWorkflowName.
-        const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+        let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'] = [];
+        try {
+          ({ runs } = await agent.listSuspendedRuns({ threadId, resourceId }));
+        } catch (error) {
+          if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+            throw error;
+          }
+        }
         const matchingRuns = options.toolCallId
           ? runs.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId))
           : runs;
@@ -1653,7 +1661,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             text:
               `Agent "${agent.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
               `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
-            details: { threadId, resourceId, agentName: agent.name },
+            details: {
+              threadId,
+              resourceId,
+              agentName: agent.name,
+              runIds: matchingRuns.map(run => run.runId).join(', '),
+            },
           });
         }
         runId = matchingRuns[0]?.runId;
@@ -1677,7 +1690,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           : approved
             ? { approved }
             : { approved, ...(declineContext ?? {}) };
-      const resumeOptions = { ...(streamOptions ?? {}), ...executionOptions } as Record<string, any>;
+      const resumeOptions = deepMerge(
+        (streamOptions ?? {}) as Record<string, any>,
+        executionOptions as Record<string, any>,
+      );
 
       await proxyRef!.resumeStream(resumeData, {
         ...resumeOptions,

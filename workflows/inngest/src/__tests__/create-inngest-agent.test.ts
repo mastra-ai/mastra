@@ -15,7 +15,7 @@ import {
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
-import { MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1982,7 +1982,46 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     await expect(
       durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
     ).rejects.toThrow(/could not find an active or suspended run/);
+
+    listSpy.mockResolvedValue({
+      runs: [
+        { runId: 'a', toolCalls: [{ toolCallId: 't1' }] },
+        { runId: 'b', toolCalls: [{ toolCallId: 't1' }] },
+      ],
+    } as any);
+    await expect(
+      durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
+    ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS', details: { runIds: 'a, b' } });
+
+    listSpy.mockRejectedValue(
+      new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'no storage',
+      }),
+    );
+    await expect(
+      durableAgent.sendToolApproval({ threadId: 'th', resourceId: 'res', toolCallId: 't1', approved: true }),
+    ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN' });
     listSpy.mockRestore();
+  });
+
+  it('sendToolApproval deep-merges streamOptions with execution options', async () => {
+    const durableAgent = makeDurable('send-tool-approval-merge');
+    const { resumeSpy } = spyResume(durableAgent);
+
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved: true,
+      streamOptions: { memory: { thread: 'th', resource: 'res', options: { lastMessages: 5 } } },
+      memory: { thread: 'th', resource: 'res' },
+    } as any);
+
+    expect(resumeSpy.mock.calls[0]![2]).toMatchObject({ memory: { options: { lastMessages: 5 } } });
   });
 
   it('approveToolCallGenerate / declineToolCallGenerate route through resumeGenerate()', async () => {
