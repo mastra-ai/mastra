@@ -54,7 +54,7 @@ node node_modules/tsx/dist/cli.mjs scripts/example-smoke.ts
 
 The HTTP check starts and restarts an example backend on port 4318. It verifies unauthorized requests, invalid input, owner isolation for lookup/cancellation, an asynchronous accepted response, backend restart and successful reconnection, explicit failure, and real cancellation. It closes the backend processes it owns. Results are recorded in `.scratch/example-observations.json`. The example makes no model calls in deterministic mode.
 
-See [hosted validation](hosted-validation.md) for real Render deployment results, the deterministic HTTP check and a separate real-agent check using OpenAI GPT-4.1 mini. Production deploy transitions during active runs, workspace rate pressure, other model providers, agent tool loops, Studio streaming and unpublished Mastra core compatibility remain unverified.
+See [hosted validation](hosted-validation.md) for real Render deployment results, the deterministic HTTP check root process-exit and timeout recovery, and real-agent checks using OpenAI GPT-4.1 mini and Anthropic Claude Haiku. Production deploy transitions during active runs, workspace rate pressure, additional model providers, agent tool loops, Studio streaming and unpublished Mastra core compatibility remain unverified.
 
 ## Security regression checks
 
