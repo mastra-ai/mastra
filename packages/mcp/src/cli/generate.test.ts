@@ -52,8 +52,14 @@ async function client(file = 'client.ts', output = 'generated.ts', servers = '{}
     ${extra}`,
   );
 }
-function stdio() {
-  return `{weather:{command:${JSON.stringify(process.execPath)},args:${JSON.stringify([server, 'stdio', join(directory, 'events'), '', join(directory, 'mode')])},timeout:200}}`;
+// A successful discovery must not be timing-sensitive: node startup plus the MCP
+// handshake can exceed a few hundred milliseconds on a loaded host. Only `stall`
+// needs a short budget, so that it fails discovery instead of hanging until the
+// harness timeout.
+const STARTUP_TIMEOUT_MS = 5_000;
+const STALL_TIMEOUT_MS = 1_000;
+function stdio(timeoutMs = STARTUP_TIMEOUT_MS) {
+  return `{weather:{command:${JSON.stringify(process.execPath)},args:${JSON.stringify([server, 'stdio', join(directory, 'events'), '', join(directory, 'mode')])},timeout:${timeoutMs}}}`;
 }
 async function events() {
   return (await readFile(join(directory, 'events'), 'utf8').catch(() => ''))
@@ -131,7 +137,7 @@ describe('client-file generation', () => {
 
   it.each(['fail', 'invalid', 'stall'])('preserves all outputs and cleans up on %s', async mode => {
     await client('first.ts', 'first.generated.ts');
-    await client('second.ts', 'second.generated.ts', stdio());
+    await client('second.ts', 'second.generated.ts', stdio(mode === 'stall' ? STALL_TIMEOUT_MS : STARTUP_TIMEOUT_MS));
     await writeFile(join(directory, 'mode'), mode);
     for (const file of ['first.generated.ts', 'second.generated.ts']) await writeFile(join(directory, file), 'before');
     const result = await launch(['generate', 'first.ts', 'second.ts'], { VERBOSE: '1' }).done;
