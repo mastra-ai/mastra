@@ -1,5 +1,6 @@
 import { compile } from 'json-schema-to-typescript';
 import type { SerializableMCPToolCatalog } from '../client/types';
+import { MAX_JSON_SCHEMA_DEPTH } from '../shared/json-schema-dialect';
 
 type Schema = boolean | Record<string, unknown>;
 
@@ -92,7 +93,7 @@ function fail(position: string): never {
 
 // JSON roundtripping is not enough: schema object insertion order affects declaration order.
 function canonical(value: unknown, position: string, ancestors = new Set<object>(), depth = 0): unknown {
-  if (depth > 128) fail(position);
+  if (depth > MAX_JSON_SCHEMA_DEPTH) fail(position);
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value !== 'object' || value === null || ancestors.has(value)) fail(position);
@@ -201,7 +202,7 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
   const active = new Set<string>();
   const complete = new Set<string>();
   function checkCycle(path: string, depth = 0): void {
-    if (active.has(path) || depth > 128) fail(position);
+    if (active.has(path) || depth > MAX_JSON_SCHEMA_DEPTH) fail(position);
     if (complete.has(path)) return;
     active.add(path);
     const schema = locations.get(path);
