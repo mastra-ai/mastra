@@ -614,10 +614,10 @@ describe('bundled Factory skill assets', () => {
     };
 
     // Terminal ordering is a sequence, not a mention: compose without sending,
-    // publish the verdict on the PR, request the transition, and only then send
+    // publish the verdict on the PR, record it, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
+      "Don't send either to the conversation yet",
       'event: "approve"',
       'event: "request-changes"',
       'Then make your terminal `factory_record_review_verdict` call',
