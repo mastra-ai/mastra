@@ -72,6 +72,19 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
                 </Button>
               ) : undefined;
 
+            const isToolCall = message.content.parts.every(part => part.type === 'tool-invocation');
+            if (isToolCall && action) {
+              // Tool calls sit on one line, so the action goes beside the tool card instead of below it.
+              return (
+                <div key={message.id} className="group/tool mb-3 flex items-start gap-1 last:mb-0">
+                  <MessageRow message={message} readOnly className="flex-1" />
+                  <div className="shrink-0 group-focus-within/tool:opacity-100 group-hover/tool:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
+                    {action}
+                  </div>
+                </div>
+              );
+            }
+
             return <MessageRow key={message.id} message={message} readOnly footer={action} />;
           })}
         </ToolCallProvider>
