@@ -86,7 +86,7 @@ describe('AgentController signal messages', () => {
         resourceId: 'resource-1',
         threadId,
         ifActive: { attributes: { path: 'active' } },
-        ifIdle: { attributes: { path: 'idle' }, streamOptions: expect.any(Function) },
+        ifIdle: { attributes: { path: 'idle' } },
       }),
     );
   });
@@ -701,7 +701,6 @@ describe('AgentController signal messages', () => {
         threadId,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
-            requestContext: expect.any(RequestContext),
             tracingContext,
             tracingOptions,
           }),

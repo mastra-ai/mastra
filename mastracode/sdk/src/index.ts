@@ -20,7 +20,6 @@ import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
@@ -824,12 +823,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
   // Builds the stream options of every wake (a run with no inbound request).
-  // Shared by GithubSignals (immediate sends) and the code agent's
-  // notification delivery policy (notifications and cross-agent signals,
-  // including deferred sends re-dispatched by the core notification dispatch
-  // workflow) — all need the target session's request context, or a woken idle
-  // thread has no model to run with ("No model selected"). New wake paths must
-  // build their options here so `prepareWakeRequestContext` runs for them.
+  // Installed as the code agent's `wakeOptions`, so every signal that wakes an
+  // idle thread gets the target session's request context.
   const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
     // Run the woken notification as the session that owns the target
     // resource so it uses that session's model/mode/state. Fall back to
@@ -1018,7 +1013,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             process.env.GITCRAWL_BIN ??
             process.env.MASTRACODE_GITCRAWL_COMMAND ??
             process.env.GITCRAWL_COMMAND,
-          getNotificationStreamOptions: getWakeStreamOptions,
         })
       : undefined;
   // Mastra Code's own processors are constructed once, here, rather than inside
@@ -1130,28 +1124,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
-    // Deferred notifications are re-dispatched by the core notification
-    // dispatch workflow long after the originating send; the delivery policy
-    // rebuilds the request context (model selection included) at delivery time
-    // so waking an idle thread does not fail with "No model selected". The
-    // default decision logic is kept as-is — the policy only attaches
-    // streamOptions on top of it.
-    notifications: {
-      deliveryPolicy: {
-        decide: async input => {
-          const decision = defaultNotificationDeliveryDecision(input);
-          // Without a resourceId there is no session to resolve options from —
-          // don't fall through to the active session and wake it under an
-          // empty resource binding.
-          if (!input.record.resourceId) return decision;
-          const streamOptions = await getWakeStreamOptions({
-            resourceId: input.record.resourceId,
-            threadId: input.record.threadId,
-          });
-          return streamOptions ? { ...decision, streamOptions } : decision;
-        },
-      },
-    },
+    // Every signal that wakes an idle thread (notifications, including deferred
+    // ones re-dispatched by the notification dispatch workflow, GitHub signals,
+    // schedules, peer messages) runs with these options, so the woken run has
+    // a model instead of failing with "No model selected".
+    wakeOptions: ({ resourceId, threadId }) => getWakeStreamOptions({ resourceId, threadId }),
     tools: createDynamicTools(
       mcpManager,
       config?.extraTools,

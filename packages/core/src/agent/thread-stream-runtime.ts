@@ -26,7 +26,6 @@ import type {
   AgentAbortThreadOptions,
   AgentClaimThreadPeerOptions,
   AgentSignal,
-  AgentSignalStreamOptions,
   AgentSubscribeToThreadOptions,
   AgentThreadIdentityOptions,
   AgentThreadPeerAdvertisement,
@@ -207,28 +206,6 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
-/** The runtime queues and spreads options without tracking the caller's OUTPUT type. */
-function idleStreamOptions(ifIdle: { streamOptions?: unknown } | undefined) {
-  return ifIdle?.streamOptions as AgentSignalStreamOptions<any> | undefined;
-}
-
-/** Build lazy idle-wake options now that the wake is actually happening. */
-async function resolveSignalStreamOptions<OUTPUT>(
-  streamOptions: AgentSignalStreamOptions<OUTPUT> | undefined,
-): Promise<AgentExecutionOptions<OUTPUT> | undefined> {
-  return typeof streamOptions === 'function' ? await streamOptions() : streamOptions;
-}
-
-/**
- * Options that are available without building lazy ones. Paths that don't wake
- * the thread must not build them: the builder may prepare a whole run.
- */
-function eagerSignalStreamOptions<OUTPUT>(
-  streamOptions: AgentSignalStreamOptions<OUTPUT> | undefined,
-): AgentExecutionOptions<OUTPUT> | undefined {
-  return typeof streamOptions === 'function' ? undefined : streamOptions;
-}
-
 type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
@@ -286,10 +263,43 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   runId: string;
   resourceId: string;
   threadId: string;
-  streamOptions?: AgentSignalStreamOptions<OUTPUT>;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  /** Set when the run's options come from the agent's `wakeOptions` hook, resolved at start. */
+  wake?: { requestContext?: RequestContext };
   queueOwnerId?: string;
   cancelled?: boolean;
 };
+
+/**
+ * Stream options for a run started by a signal waking an idle thread. Explicit
+ * options (from the sender or a notification delivery policy) are used as-is;
+ * otherwise the agent's `wakeOptions` hook is called, falling back to the
+ * sender's request context.
+ */
+/**
+ * Stays synchronous unless the agent's wake hook returns a promise, so wakes
+ * without a hook start their run on the same tick as before.
+ */
+function resolveWakeStreamOptions<OUTPUT>(
+  agent: Agent<any, any, any, any>,
+  input: {
+    resourceId: string;
+    threadId: string;
+    requestContext?: RequestContext;
+    streamOptions?: AgentExecutionOptions<OUTPUT>;
+  },
+): AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined> {
+  if (input.streamOptions) return input.streamOptions;
+  const { resourceId, threadId, requestContext } = input;
+  const merge = (hooked: AgentExecutionOptions<any> | undefined): AgentExecutionOptions<OUTPUT> | undefined => {
+    if (!hooked) return requestContext ? ({ requestContext } as AgentExecutionOptions<OUTPUT>) : undefined;
+    return (
+      hooked.requestContext || !requestContext ? hooked : { ...hooked, requestContext }
+    ) as AgentExecutionOptions<OUTPUT>;
+  };
+  const hooked = agent.resolveWakeOptions?.({ resourceId, threadId, requestContext });
+  return hooked instanceof Promise ? hooked.then(merge) : merge(hooked);
+}
 
 type PendingContinuation<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -3569,10 +3579,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: getErrorFromUnknown(err).message,
       });
-      this.#trimFailedRun(pubsub, key, {
-        ...pendingIdle,
-        streamOptions: eagerSignalStreamOptions(pendingIdle.streamOptions) ?? {},
-      });
+      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
       if (!(await this.#drainPendingIdleSignals(state, pubsub, key, fromRunId))) {
         this.#releaseThreadLease(pubsub, key, fromRunId ?? pendingIdle.runId);
       }
@@ -3627,16 +3634,25 @@ export class AgentThreadStreamRuntime {
       return true;
     }
 
-    let streamOptions = eagerSignalStreamOptions(pendingIdle.streamOptions);
+    let resolvingWakeOptions = false;
     try {
       state.drainingIdleSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
       state.startingQueuedRunIds.add(pendingIdle.runId);
-      streamOptions = await resolveSignalStreamOptions(pendingIdle.streamOptions);
+      if (pendingIdle.wake) {
+        resolvingWakeOptions = true;
+        const resolved = resolveWakeStreamOptions(pendingIdle.agent, {
+          resourceId: pendingIdle.resourceId,
+          threadId: pendingIdle.threadId,
+          requestContext: pendingIdle.wake.requestContext,
+        });
+        pendingIdle.streamOptions = resolved instanceof Promise ? await resolved : resolved;
+        resolvingWakeOptions = false;
+      }
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
-        ...(streamOptions as any),
+        ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
-        memory: withThreadMemory(streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
+        memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
 
       if ((idleQueue?.length ?? 0) > 0) {
@@ -3651,11 +3667,17 @@ export class AgentThreadStreamRuntime {
       // way the immediate-start path does: a sender retrying this logical message
       // must learn the turn failed rather than be told it was delivered. Only
       // settle the identity this run reserved.
+      // If the wake options failed to resolve, no stream started: release the
+      // identity so a retry is admitted again instead of reported as failed.
       if (drainedIdentity && state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId) {
-        state.acceptedIdleMessagesByIdentity.set(drainedIdentity, {
-          runId: pendingIdle.runId,
-          terminalReason: message,
-        });
+        if (resolvingWakeOptions) {
+          state.acceptedIdleMessagesByIdentity.delete(drainedIdentity);
+        } else {
+          state.acceptedIdleMessagesByIdentity.set(drainedIdentity, {
+            runId: pendingIdle.runId,
+            terminalReason: message,
+          });
+        }
       }
       state.threadKeysByRunId.delete(pendingIdle.runId);
       this.#cleanupPreparedRun(state, pendingIdle.runId);
@@ -3667,14 +3689,14 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: message,
       });
-      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: streamOptions ?? {} });
+      this.#trimFailedRun(pubsub, key, { ...pendingIdle, streamOptions: pendingIdle.streamOptions ?? {} });
       // No completion watcher exists for a failed startup. Preserve pending-before-idle recovery here too.
       await this.#drainPendingSignals(state, pubsub, key, {
         agent: pendingIdle.agent,
         runId: pendingIdle.runId,
         resourceId: pendingIdle.resourceId,
         threadId: pendingIdle.threadId,
-        streamOptions: streamOptions ?? {},
+        streamOptions: pendingIdle.streamOptions ?? {},
       });
     } finally {
       state.startingQueuedRunIds.delete(pendingIdle.runId);
@@ -4759,7 +4781,7 @@ export class AgentThreadStreamRuntime {
     });
     const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
-    const queuedStreamOptions: AgentSignalStreamOptions<any> = idleStreamOptions(target.ifIdle) ?? {
+    const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
       ...activeRecord?.streamOptions,
       abortSignal: undefined,
     };
@@ -4807,7 +4829,7 @@ export class AgentThreadStreamRuntime {
     const resourceId = target.resourceId;
     const threadId = target.threadId;
 
-    const requestContext = eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext;
+    const requestContext = target.requestContext ?? target.ifIdle?.streamOptions?.requestContext;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const memory = await agent.getMemory({ requestContext });
     if (!memory) {
@@ -4942,7 +4964,7 @@ export class AgentThreadStreamRuntime {
           signal,
           resourceId,
           threadId,
-          eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext,
+          target.requestContext ?? target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
         return {
@@ -5051,7 +5073,7 @@ export class AgentThreadStreamRuntime {
         signal,
         resourceId,
         threadId,
-        eagerSignalStreamOptions(idleStreamOptions(target.ifIdle))?.requestContext,
+        target.requestContext ?? target.ifIdle?.streamOptions?.requestContext,
       );
       void persisted.catch(() => {});
       return {
@@ -5088,7 +5110,15 @@ export class AgentThreadStreamRuntime {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: idleStreamOptions(target.ifIdle) });
+      idleQueue.push({
+        agent,
+        signal,
+        runId,
+        resourceId,
+        threadId,
+        streamOptions: target.ifIdle?.streamOptions,
+        ...(target.ifIdle?.streamOptions ? {} : { wake: { requestContext: target.requestContext } }),
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -5127,7 +5157,7 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
-          await resolveSignalStreamOptions(idleStreamOptions(target.ifIdle)),
+          target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
           throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
@@ -5211,14 +5241,20 @@ export class AgentThreadStreamRuntime {
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
-      let streamOptions = eagerSignalStreamOptions(idleStreamOptions(target.ifIdle));
+      let wakeStreamOptions: AgentExecutionOptions<OUTPUT> | undefined = target.ifIdle?.streamOptions;
       try {
-        streamOptions = await resolveSignalStreamOptions(idleStreamOptions(target.ifIdle));
+        const resolved = resolveWakeStreamOptions(agent, {
+          resourceId,
+          threadId,
+          requestContext: target.requestContext,
+          streamOptions: target.ifIdle?.streamOptions,
+        });
+        wakeStreamOptions = resolved instanceof Promise ? await resolved : resolved;
         const output = await agent.stream(signal, {
-          ...(streamOptions as any),
+          ...(wakeStreamOptions as any),
           untilIdle: true,
           runId: reservedRunId,
-          memory: withThreadMemory(streamOptions?.memory, resourceId, threadId),
+          memory: withThreadMemory(wakeStreamOptions?.memory, resourceId, threadId),
         });
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
@@ -5235,7 +5271,7 @@ export class AgentThreadStreamRuntime {
         });
         this.#trimFailedRun(pubsub, reservedKey, {
           agent,
-          streamOptions: streamOptions ?? {},
+          streamOptions: wakeStreamOptions ?? {},
           runId: reservedRunId,
         });
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);

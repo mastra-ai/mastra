@@ -155,15 +155,6 @@ export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
- * Stream options for an idle wake, either given up front or built lazily at wake time.
- *
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export type AgentSignalStreamOptions<OUTPUT = unknown> =
-  | AgentExecutionOptions<OUTPUT>
-  | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
-
-/**
  * Options applied when a signal targets an idle thread.
  *
  * Controls whether the thread should be woken, the signal persisted without
@@ -174,12 +165,7 @@ export type AgentSignalStreamOptions<OUTPUT = unknown> =
  */
 export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
-  /**
-   * Options for the run started when the signal wakes an idle thread. Pass a
-   * function to build them only when that wake happens — useful when the
-   * signal may instead be delivered to a run that is still active.
-   */
-  streamOptions?: AgentSignalStreamOptions<OUTPUT>;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
   attributes?: AgentSignalAttributes;
   /** Reject the wake unless an advertised thread owner acknowledges it. */
   requireClaimedOwner?: boolean;
@@ -228,6 +214,27 @@ export type DiscoverAgentThreadPeersOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * Input passed to an agent's `wakeOptions` hook.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentWakeOptionsInput = {
+  resourceId: string;
+  threadId: string;
+  /** The sender's request context, when one was provided. */
+  requestContext?: RequestContext;
+};
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentWakeOptions<OUTPUT = unknown> =
+  | AgentExecutionOptions<OUTPUT>
+  | ((
+      input: AgentWakeOptionsInput,
+    ) => AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined>);
+
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;
@@ -235,6 +242,8 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId?: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
+      /** The sender's request context. Used whether the thread is active or idle. */
+      requestContext?: RequestContext;
     }
   | {
       runId?: string;
@@ -242,6 +251,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
+      /**
+       * The sender's request context. Used whether the thread is active or idle,
+       * and passed to the agent's `wakeOptions` hook when the signal wakes an idle thread.
+       */
+      requestContext?: RequestContext;
     };
 
 /**
@@ -858,6 +872,16 @@ interface AgentConfigBase<
    * Default options used when calling `stream()` in vNext mode.
    */
   defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  /**
+   * Stream options for a run started by a signal that wakes an idle thread
+   * (notifications, schedules, peer messages, `sendSignal`). Called only when a
+   * signal actually starts a run. Explicit `ifIdle.streamOptions` fields take
+   * precedence over the returned fields; the returned `requestContext` takes
+   * precedence over the sender's `requestContext`.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  wakeOptions?: AgentWakeOptions<TOutput>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.

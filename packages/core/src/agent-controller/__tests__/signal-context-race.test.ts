@@ -178,12 +178,6 @@ describe('session signal context at run completion', () => {
           );
         }
         await vi.waitFor(() => expect(calls).toBe(2));
-        expect(
-          stream.mock.calls.some(call => {
-            const options = (call as unknown[])[1] as { tracingContext?: unknown } | undefined;
-            return options?.tracingContext === tracingContext;
-          }),
-        ).toBe(true);
         await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
         const threadId = session.thread.requireId();
         await session.sendMessage({ content: 'third', requestContext });
@@ -202,4 +196,62 @@ describe('session signal context at run completion', () => {
     },
     15_000,
   );
+});
+
+describe('agent wakeOptions hook', () => {
+  it('builds wake options when a direct notification wakes an idle thread', async () => {
+    let seen: RequestContext | undefined;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async options => {
+        seen = (options as { requestContext?: RequestContext }).requestContext ?? seen;
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text' });
+              controller.enqueue({ type: 'text-delta', id: 'text', delta: 'ok' });
+              controller.enqueue({ type: 'text-end', id: 'text' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const hookInputs: Array<{ resourceId: string; threadId: string; requestContext?: RequestContext }> = [];
+    const agent = new Agent({
+      id: 'wake-hook',
+      name: 'Wake hook',
+      instructions: 'Respond briefly.',
+      model: ({ requestContext }) => {
+        seen = requestContext;
+        return model;
+      },
+      wakeOptions: async input => {
+        hookInputs.push(input);
+        const requestContext = new RequestContext(input.requestContext?.entries() ?? []);
+        requestContext.set('controller', 'hook');
+        return { requestContext };
+      },
+    });
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+
+    const requestContext = new RequestContext();
+    requestContext.set('caller', 'schedule');
+    const result = await agent.sendNotificationSignal(
+      { source: 'schedule', kind: 'manual', priority: 'high', summary: 'wake up' },
+      { resourceId: 'resource-1', threadId: 'thread-1', requestContext },
+    );
+    await result.accepted;
+
+    await vi.waitFor(() => expect(seen?.get('controller')).toBe('hook'));
+    expect(seen?.get('caller')).toBe('schedule');
+    expect(hookInputs).toEqual([
+      expect.objectContaining({ resourceId: 'resource-1', threadId: 'thread-1', requestContext }),
+    ]);
+  });
 });
