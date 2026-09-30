@@ -2028,10 +2028,30 @@ describe('BackgroundTaskManager', () => {
     });
 
     it('drops nested output past the wrapper depth limit instead of publishing it unslimmed', () => {
-      const leaf = { type: 'step-start', payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } } };
+      const leaf = {
+        type: 'step-start',
+        from: 'AGENT',
+        payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } },
+      };
       let chunk: unknown = leaf;
       for (let i = 0; i < 30; i++) chunk = { type: 'tool-output', payload: { output: chunk } };
       expect(JSON.stringify(slimProgressChunk(chunk)).length).toBeLessThan(5_000);
+    });
+
+    it('publishes data a tool writes itself unchanged, even when it looks like an agent chunk', () => {
+      const userData = {
+        type: 'finish',
+        payload: { messages: { all: ['keep'] }, output: { steps: ['keep'] }, metadata: { request: { body: 'keep' } } },
+      };
+      const chunk = {
+        type: 'tool-output',
+        from: 'USER',
+        runId: 'r1',
+        payload: { output: userData, toolCallId: 'c1', toolName: 'tool' },
+      };
+      expect(slimProgressChunk(chunk)).toBe(chunk);
+      const wrapped = { type: 'workflow-step-output', from: 'WORKFLOW', payload: { output: chunk } };
+      expect(slimProgressChunk(wrapped)).toBe(wrapped);
     });
 
     it('publishes nested agent step/finish chunks without request snapshots or repeated args', async () => {
@@ -2079,7 +2099,7 @@ describe('BackgroundTaskManager', () => {
               output: { usage: { totalTokens: 3 }, steps: [bigFile] },
               metadata: { request: { body: bigFile } },
               messages: { all: [bigFile], user: [], nonUser: [] },
-              response: { messages: [bigFile] },
+              response: { id: 'resp-1', modelId: 'gpt-5' },
             },
           }),
         );
@@ -2109,6 +2129,7 @@ describe('BackgroundTaskManager', () => {
         stepResult: { reason: 'stop' },
         output: { usage: { totalTokens: 3 } },
         metadata: {},
+        response: { id: 'resp-1', modelId: 'gpt-5' },
       });
       expect(progress).toEqual({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } });
     });

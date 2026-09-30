@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { resolveSuspendedToolRunId } from '../agent/utils';
 import { InternalSpans } from '../observability';
+import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
@@ -33,46 +34,38 @@ const bodyOutputSchema = z.object({
 
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
+const PROGRESS_WRAPPER_TYPES = new Set(['tool-output', 'workflow-step-output']);
+
 /**
- * Drops the model request/response snapshots that `step-start`, `step-finish`
- * and `finish` chunks carry (full prompt, file parts, message history) before a
- * progress chunk is published to pubsub. Nested agent chunks are reached
- * through `payload.output` (tool-output / workflow-step-output wrappers).
- * Stream consumers only read lightweight fields from these chunks.
+ * Removes model request/history snapshots from agent chunks before a progress
+ * chunk is published to pubsub. Nested agent chunks arrive wrapped in
+ * `tool-output` / `workflow-step-output` payloads, so only those wrappers are
+ * unwrapped, and only agent-origin chunks are stripped — data a tool writes
+ * itself (`from: 'USER'`) is published as-is.
  */
 export function slimProgressChunk<T>(chunk: T, depth = 0): T {
   if (!chunk || typeof chunk !== 'object') return chunk;
-  const { type, payload } = chunk as { type?: unknown; payload?: unknown };
-  if (!payload || typeof payload !== 'object') return chunk;
-  const p = payload as Record<string, unknown>;
+  const { type, from, payload } = chunk as { type?: unknown; from?: unknown; payload?: unknown };
 
-  if (type === 'step-start') {
-    const { request: _request, inputMessages: _inputMessages, ...rest } = p;
-    return { ...chunk, payload: rest } as T;
-  }
-  if (type === 'step-finish' || type === 'finish') {
-    const { messages: _messages, ...rest } = p;
-    if (type === 'finish') delete rest.response;
-    if (rest.metadata && typeof rest.metadata === 'object') {
-      const { request: _request, ...metadata } = rest.metadata as Record<string, unknown>;
-      rest.metadata = metadata;
-    }
-    if (rest.output && typeof rest.output === 'object') {
-      const { steps: _steps, ...output } = rest.output as Record<string, unknown>;
-      rest.output = output;
-    }
-    return { ...chunk, payload: rest } as T;
-  }
-  if (p.output && typeof p.output === 'object') {
-    // Past the nesting limit, drop the nested output rather than publish it unslimmed.
+  if (typeof type === 'string' && PROGRESS_WRAPPER_TYPES.has(type) && payload && typeof payload === 'object') {
+    const p = payload as Record<string, unknown>;
+    const inner = p.output as { type?: unknown; from?: unknown } | undefined;
+    const isNestedChunk =
+      !!inner &&
+      typeof inner === 'object' &&
+      typeof inner.type === 'string' &&
+      (inner.from === 'AGENT' || PROGRESS_WRAPPER_TYPES.has(inner.type));
+    if (!isNestedChunk) return chunk;
+    // Past the nesting limit, drop the nested chunk rather than publish it unslimmed.
     if (depth >= 20) {
       const { output: _output, ...rest } = p;
-      return { ...chunk, payload: rest } as T;
+      return { ...chunk, payload: rest };
     }
-    const output = slimProgressChunk(p.output, depth + 1);
-    if (output !== p.output) return { ...chunk, payload: { ...p, output } } as T;
+    const output = slimProgressChunk(inner, depth + 1);
+    return output === inner ? chunk : { ...chunk, payload: { ...p, output } };
   }
-  return chunk;
+
+  return from === 'AGENT' ? stripModelSnapshots(chunk) : chunk;
 }
 
 /**
