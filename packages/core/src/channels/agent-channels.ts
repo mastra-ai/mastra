@@ -1110,7 +1110,11 @@ export class AgentChannels {
     if (cached) return cached;
 
     const pending = adapter.getUser(botUserId).then(
-      user => user?.userName || user?.fullName || undefined,
+      user => {
+        const name = user?.userName || user?.fullName || undefined;
+        if (!name) this.botDisplayNames.delete(platform);
+        return name;
+      },
       err => {
         this.botDisplayNames.delete(platform);
         this.log('debug', `[${platform}] Failed to resolve bot display name`, err);

@@ -1084,6 +1084,21 @@ describe('AgentChannels', () => {
         expect(second.botDisplayName).toBe('helper');
         expect(getUser).toHaveBeenCalledTimes(2);
       });
+
+      it('retries on the next event when getUser resolves to null', async () => {
+        const getUser = vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).not.toHaveProperty('botDisplayName');
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(2);
+      });
     });
 
     describe('suspended tool auto-resume', () => {
