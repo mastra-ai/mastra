@@ -14,6 +14,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '../../agent/messag
 import { SpanType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { CompositeFilesystem } from '../../workspace/filesystem/composite-filesystem';
+import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import type { AnyWorkspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
@@ -199,11 +200,65 @@ async function resolveUploadTarget(
   }
 
   const sandbox = workspace.resolveSandbox ? await workspace.resolveSandbox({ requestContext }) : workspace.sandbox;
-  if (!sandbox?.writeFiles) return undefined;
-  return {
-    directory: 'uploads',
-    write: (path, content) => sandbox.writeFiles!([{ path, content: Buffer.from(content) }]),
-  };
+  if (sandbox?.writeFiles) {
+    return {
+      directory: 'uploads',
+      write: (path, content) => sandbox.writeFiles!([{ path, content: Buffer.from(content) }]),
+    };
+  }
+  if (sandbox?.executeCommand) {
+    return {
+      directory: 'uploads',
+      write: (path, content) => writeThroughCommands(sandbox, path, content),
+      remove: path => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`),
+    };
+  }
+  return undefined;
+}
+
+/** Base64 characters sent per command, kept well under common argv limits. */
+const COMMAND_CHUNK_SIZE = 64_000;
+
+/**
+ * Writes a file into a sandbox that has no `writeFiles`, as the sandbox contract
+ * asks: base64 chunks are appended to a temp file, then decoded with the first
+ * available decoder (GNU/busybox `base64 -d`, macOS `base64 -D`, `openssl`).
+ * On failure the file's upload directory is removed.
+ */
+async function writeThroughCommands(sandbox: WorkspaceSandbox, path: string, content: Uint8Array) {
+  const target = shellQuote(path);
+  const encoded = shellQuote(`${path}.b64`);
+  const base64 = Buffer.from(content).toString('base64');
+  try {
+    await runShell(sandbox, `mkdir -p ${shellQuote(parentDirectory(path))} && : > ${encoded}`);
+    for (let offset = 0; offset < base64.length; offset += COMMAND_CHUNK_SIZE) {
+      const chunk = base64.slice(offset, offset + COMMAND_CHUNK_SIZE);
+      await runShell(sandbox, `printf '%s' '${chunk}' >> ${encoded}`);
+    }
+    await runShell(
+      sandbox,
+      `{ base64 -d ${encoded} > ${target} 2>/dev/null || base64 -D -i ${encoded} > ${target} 2>/dev/null || openssl base64 -d -A -in ${encoded} -out ${target}; } && rm -f ${encoded}`,
+    );
+  } catch (error) {
+    await runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`).catch(() => {});
+    throw error;
+  }
+}
+
+async function runShell(sandbox: WorkspaceSandbox, script: string) {
+  const result = await sandbox.executeCommand!('sh', ['-c', script]);
+  if (!result.success) {
+    throw new Error(`Failed to write attachment through the sandbox (exit ${result.exitCode}): ${result.stderr}`);
+  }
+}
+
+/** Single-quotes a value for POSIX shells. */
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function parentDirectory(path: string) {
+  return path.slice(0, path.lastIndexOf('/'));
 }
 
 /** Writes every file, or none: if one write fails, files already written are deleted. */
@@ -272,7 +327,7 @@ export class WorkspaceAttachmentsProcessor implements Processor<'workspace-attac
       const mediaType = attachments[0]!.mediaType;
       return abort(
         workspace
-          ? `Attachments of type "${mediaType}" require a writable workspace, but this agent's workspace has no writable filesystem or sandbox supporting writeFiles. Add a writable filesystem to the workspace`
+          ? `Attachments of type "${mediaType}" require a writable workspace, but this agent's workspace has no writable filesystem or sandbox that can write files (writeFiles or executeCommand)`
           : `Attachments of type "${mediaType}" are not supported by the model and require a workspace, but none is configured for this agent`,
         { metadata: { code: WORKSPACE_REQUIRED_FOR_ATTACHMENT, mediaType } },
       );

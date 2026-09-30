@@ -65,7 +65,7 @@ function noteText(prompt: any[]): string {
   return note.text;
 }
 function uploadedPath(text: string): string {
-  const match = text.match(/at (\S+)\. Use workspace tools/);
+  const match = text.match(/at (.+?)\. Use workspace tools/);
   if (!match) throw new Error(`No upload path in: ${text}`);
   return match[1]!;
 }
@@ -494,6 +494,115 @@ describe('WorkspaceAttachmentsProcessor', () => {
       const { parts } = await run(workspace, [file(BASE64)]);
       const path = uploadedPath(parts[0].text);
       expect(writeFiles).toHaveBeenCalledWith([{ path, content: Buffer.from(BYTES) }]);
+    });
+
+    describe('given a sandbox-only workspace whose sandbox has no writeFiles', () => {
+      /** A sandbox that really runs `sh -c` in a temp directory, optionally with extra PATH entries first. */
+      async function shellSandbox(options: { pathPrefix?: string; failWhen?: (script: string) => boolean } = {}) {
+        const cwd = await tempDir();
+        const scripts: string[] = [];
+        const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
+          const script = args[1] ?? '';
+          scripts.push(script);
+          if (options.failWhen?.(script)) {
+            return { success: false, exitCode: 1, stdout: '', stderr: 'boom', executionTimeMs: 0 };
+          }
+          const { spawnSync } = await import('node:child_process');
+          const env = { ...process.env, PATH: [options.pathPrefix, process.env.PATH].filter(Boolean).join(':') };
+          const result = spawnSync(command, args, { cwd, env, encoding: 'utf8' });
+          const exitCode = result.status ?? 1;
+          return {
+            success: exitCode === 0,
+            exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            executionTimeMs: 0,
+          };
+        });
+        const workspace = { id: 'w', name: 'w', sandbox: { executeCommand } } as unknown as AnyWorkspace;
+        return { cwd, workspace, executeCommand, scripts };
+      }
+
+      it('writes the exact bytes through executeCommand', async () => {
+        const { cwd, workspace, executeCommand } = await shellSandbox();
+        const { parts } = await run(workspace, [file(BASE64)]);
+        const path = uploadedPath(parts[0].text);
+        expect(path).toMatch(/^uploads\/[0-9a-f-]{36}\/report\.xlsx$/);
+        expect(new Uint8Array(await readFile(join(cwd, path)))).toEqual(BYTES);
+        expect(executeCommand).toHaveBeenCalledWith('sh', ['-c', expect.any(String)]);
+      });
+
+      it('splits large files into several commands and reassembles them byte for byte', async () => {
+        const { cwd, workspace, executeCommand } = await shellSandbox();
+        const large = new Uint8Array(300_000).map((_, i) => (i * 7919) % 256);
+        const { parts } = await run(workspace, [file(Buffer.from(large).toString('base64'))]);
+        expect(executeCommand.mock.calls.length).toBeGreaterThan(3);
+        expect(new Uint8Array(await readFile(join(cwd, uploadedPath(parts[0].text))))).toEqual(large);
+      });
+
+      it('leaves no temporary base64 file behind', async () => {
+        const { cwd, workspace } = await shellSandbox();
+        const { parts } = await run(workspace, [file(BASE64)]);
+        const dir = uploadedPath(parts[0].text).replace(/\/[^/]+$/, '');
+        expect(await readdir(join(cwd, dir))).toEqual(['report.xlsx']);
+      });
+
+      it('quotes filenames so shell metacharacters stay literal', async () => {
+        const { cwd, workspace } = await shellSandbox();
+        const { parts } = await run(workspace, [file(BASE64, "it's $(touch pwned) `x`.xlsx")]);
+        expect(new Uint8Array(await readFile(join(cwd, uploadedPath(parts[0].text))))).toEqual(BYTES);
+        expect(await readdir(cwd)).toEqual(['uploads']);
+      });
+
+      it('falls back to openssl when base64 cannot decode', async () => {
+        const bin = await tempDir();
+        const { writeFile, chmod } = await import('node:fs/promises');
+        await writeFile(join(bin, 'base64'), '#!/bin/sh\nexit 1\n');
+        await chmod(join(bin, 'base64'), 0o755);
+        const { cwd, workspace } = await shellSandbox({ pathPrefix: bin });
+        const { parts } = await run(workspace, [file(BASE64)]);
+        expect(new Uint8Array(await readFile(join(cwd, uploadedPath(parts[0].text))))).toEqual(BYTES);
+      });
+
+      it('removes the upload directory and rethrows when a command fails', async () => {
+        let calls = 0;
+        const { cwd, workspace, scripts } = await shellSandbox({
+          failWhen: script => !script.startsWith('rm ') && ++calls === 3,
+        });
+        const large = Buffer.alloc(200_000, 1).toString('base64');
+        await expect(run(workspace, [file(large)])).rejects.toThrow(/boom/);
+        expect(scripts.at(-1)).toMatch(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/);
+        expect(await readdir(join(cwd, 'uploads'))).toEqual([]);
+      });
+
+      it('removes files written for earlier attachments when a later one fails', async () => {
+        const { cwd, workspace } = await shellSandbox({ failWhen: script => script.includes('b.xlsx') });
+        await expect(run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')])).rejects.toThrow();
+        expect(await readdir(join(cwd, 'uploads'))).toEqual([]);
+      });
+
+      it('prefers writeFiles when the sandbox has both', async () => {
+        const writeFiles = vi.fn(async () => {});
+        const executeCommand = vi.fn();
+        const workspace = { id: 'w', name: 'w', sandbox: { writeFiles, executeCommand } } as unknown as AnyWorkspace;
+        await run(workspace, [file(BASE64)]);
+        expect(writeFiles).toHaveBeenCalledOnce();
+        expect(executeCommand).not.toHaveBeenCalled();
+      });
+
+      it('aborts without a workspace destination when the sandbox has neither writeFiles nor executeCommand', async () => {
+        const workspace = { id: 'w', name: 'w', sandbox: {} } as unknown as AnyWorkspace;
+        const { abort } = await run(workspace, [file(BASE64)]).catch(error => ({ abort: error }));
+        expect(abort.options.metadata.code).toBe(WORKSPACE_REQUIRED_FOR_ATTACHMENT);
+      });
+
+      it('writes through a real LocalSandbox', async () => {
+        const { LocalSandbox } = await import('../../workspace');
+        const cwd = await tempDir();
+        const workspace = new Workspace({ sandbox: new LocalSandbox({ workingDirectory: cwd }) });
+        const { parts } = await run(workspace, [file(BASE64)]);
+        expect(new Uint8Array(await readFile(join(cwd, uploadedPath(parts[0].text))))).toEqual(BYTES);
+      });
     });
 
     it('deletes files written earlier in the call when a later write fails', async () => {
