@@ -1850,7 +1850,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         // step running yet). Restarting it would re-suspend the step and drop
         // the resume data, so resume it with the data recorded on the parent.
         const nestedContext = (snapshot.context ?? {}) as Record<string, any>;
-        const suspendedNestedStepId = Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended');
+        const suspendedNestedStepId =
+          Object.keys(snapshot.suspendedPaths ?? {}).find(id => nestedContext[id]?.status === 'suspended') ??
+          Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended');
         const nestedHasRunningStep = Object.values(nestedContext).some(result => result?.status === 'running');
         if (
           isResumedRunningRecord(stepResults[leafId]) &&
