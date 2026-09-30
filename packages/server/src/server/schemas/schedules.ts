@@ -1,6 +1,28 @@
 import { z } from 'zod';
 
-export const scheduleStatusSchema = z.enum(['active', 'paused']);
+export const scheduleStatusSchema = z.enum(['active', 'paused', 'completed']);
+
+/** Statuses a caller may set directly; `completed` is only reached by the scheduler. */
+const settableScheduleStatusSchema = z.enum(['active', 'paused']);
+
+/** Epoch milliseconds. */
+const epochMsSchema = z.number().int().nonnegative();
+
+/**
+ * Timing for a schedule: exactly one of `cron` (recurring) or `runAt`
+ * (one-off). `endAt` bounds a cron schedule; whether it lies in the future is
+ * checked by the service against the current clock.
+ */
+function refineTiming(value: { cron?: string; runAt?: number; endAt?: number }, ctx: z.RefinementCtx) {
+  const hasCron = value.cron !== undefined && value.cron !== '';
+  const hasRunAt = value.runAt !== undefined;
+  if (hasCron === hasRunAt) {
+    ctx.addIssue({ code: 'custom', message: 'Provide exactly one of `cron` or `runAt`', path: ['cron'] });
+  }
+  if (value.endAt !== undefined && !hasCron) {
+    ctx.addIssue({ code: 'custom', message: '`endAt` is only supported with `cron`', path: ['endAt'] });
+  }
+}
 
 /** Mirrors the core `AgentSignalType` union. */
 const signalTypeSchema = z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']);
@@ -71,7 +93,9 @@ export const agentScheduleSchema = z.object({
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   prompt: z.string(),
-  cron: z.string(),
+  cron: z.string().optional(),
+  runAt: z.number().optional(),
+  endAt: z.number().optional(),
   timezone: z.string().optional(),
   status: scheduleStatusSchema,
   nextFireAt: z.number(),
@@ -97,7 +121,9 @@ export const workflowScheduleSchema = z.object({
   workflowId: z.string(),
   /** Mirror of the agent-schedule discriminator — always absent on workflow schedules. */
   agentId: z.undefined().optional(),
-  cron: z.string(),
+  cron: z.string().optional(),
+  runAt: z.number().optional(),
+  endAt: z.number().optional(),
   timezone: z.string().optional(),
   status: scheduleStatusSchema,
   nextFireAt: z.number(),
@@ -179,41 +205,49 @@ export const scheduleIdPathParams = z.object({
  * a body carrying both `agentId` and `workflowId` is rejected as ambiguous
  * instead of silently matching the agent branch of the union.
  */
-const createAgentScheduleBodySchema = z.strictObject({
-  /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
-  id: z.string().optional(),
-  agentId: z.string().min(1),
-  cron: z.string(),
-  timezone: z.string().optional(),
-  prompt: z.string(),
-  name: z.string().optional(),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-  signalType: signalTypeSchema.optional(),
-  tagName: z.string().optional(),
-  attributes: signalAttributesSchema.optional(),
-  ifActive: ifActiveSchema.optional(),
-  ifIdle: ifIdleSchema.optional(),
-  providerOptions: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const createAgentScheduleBodySchema = z
+  .strictObject({
+    /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
+    id: z.string().optional(),
+    agentId: z.string().min(1),
+    cron: z.string().optional(),
+    runAt: epochMsSchema.optional(),
+    endAt: epochMsSchema.optional(),
+    timezone: z.string().optional(),
+    prompt: z.string(),
+    name: z.string().optional(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    signalType: signalTypeSchema.optional(),
+    tagName: z.string().optional(),
+    attributes: signalAttributesSchema.optional(),
+    ifActive: ifActiveSchema.optional(),
+    ifIdle: ifIdleSchema.optional(),
+    providerOptions: z.record(z.string(), z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine(refineTiming);
 
 /**
  * Workflow variant of the create body — targets a workflow by `workflowId`.
  * Strict so ambiguous bodies (both ids) are rejected by the union.
  */
-const createWorkflowScheduleBodySchema = z.strictObject({
-  /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
-  id: z.string().optional(),
-  workflowId: z.string().min(1),
-  cron: z.string(),
-  timezone: z.string().optional(),
-  inputData: z.unknown().optional(),
-  initialState: z.unknown().optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  resourceId: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const createWorkflowScheduleBodySchema = z
+  .strictObject({
+    /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
+    id: z.string().optional(),
+    workflowId: z.string().min(1),
+    cron: z.string().optional(),
+    runAt: epochMsSchema.optional(),
+    endAt: epochMsSchema.optional(),
+    timezone: z.string().optional(),
+    inputData: z.unknown().optional(),
+    initialState: z.unknown().optional(),
+    requestContext: z.record(z.string(), z.unknown()).optional(),
+    resourceId: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine(refineTiming);
 
 /**
  * Body for POST /schedules. Discriminated by which target id is present:
@@ -232,9 +266,13 @@ export const createScheduleBodySchema = z.union([createAgentScheduleBodySchema, 
  * metadata (not identity) and may be updated.
  */
 export const updateScheduleBodySchema = z.object({
-  cron: z.string().optional(),
+  cron: z.string().min(1).optional(),
+  /** One-off schedules only: move the fire time. */
+  runAt: epochMsSchema.optional(),
+  /** Cron schedules only: set a new end time, or `null` to remove it. */
+  endAt: epochMsSchema.nullable().optional(),
   timezone: z.string().optional(),
-  status: scheduleStatusSchema.optional(),
+  status: settableScheduleStatusSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   // Agent-schedule fields
   prompt: z.string().optional(),

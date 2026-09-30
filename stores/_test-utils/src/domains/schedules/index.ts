@@ -65,6 +65,24 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
         expect(fetched!.lastFireAt).toBe(sched.lastFireAt);
         expect(fetched!.lastRunId).toBe('run_abc');
       });
+
+      it('round-trips runAt and endAt', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(
+          createSampleSchedule({ id: 'once', cron: '', runAt: 5_000, nextFireAt: 5_000 }),
+        );
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'bounded', endAt: 9_000_000_000_000 }));
+
+        const once = await scheduleStore.getSchedule('once');
+        expect(once!.runAt).toBe(5_000);
+        expect(once!.endAt).toBeUndefined();
+        const bounded = await scheduleStore.getSchedule('bounded');
+        expect(bounded!.endAt).toBe(9_000_000_000_000);
+        expect(bounded!.runAt).toBeUndefined();
+
+        const patched = await scheduleStore.updateSchedule('bounded', { endAt: undefined });
+        expect(patched.endAt).toBeUndefined();
+      });
     });
 
     describe('listSchedules', () => {
@@ -144,6 +162,27 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
     });
 
     describe('updateScheduleNextFire (CAS)', () => {
+      it('sets status atomically when newStatus is provided', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));
+
+        expect(await scheduleStore.updateScheduleNextFire('s1', 100, 100, 150, 'run_1', 'completed')).toBe(true);
+        const fetched = await scheduleStore.getSchedule('s1');
+        expect(fetched!.status).toBe('completed');
+        expect(fetched!.lastRunId).toBe('run_1');
+
+        // Completed rows are no longer claimable or due.
+        expect(await scheduleStore.updateScheduleNextFire('s1', 100, 200, 150, 'run_2')).toBe(false);
+        expect(await scheduleStore.listDueSchedules(10_000)).toHaveLength(0);
+      });
+
+      it('keeps status unchanged when newStatus is omitted', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));
+        await scheduleStore.updateScheduleNextFire('s1', 100, 200, 150, 'run_1');
+        expect((await scheduleStore.getSchedule('s1'))!.status).toBe('active');
+      });
+
       it('advances nextFireAt when expected matches', async () => {
         if (!scheduleStore) return;
         await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));

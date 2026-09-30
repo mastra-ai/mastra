@@ -149,7 +149,9 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
       }
       return await mastra.schedules.create({
         workflowId: body.workflowId,
-        cron: body.cron,
+        ...(body.cron ? { cron: body.cron } : {}),
+        ...(body.runAt !== undefined ? { runAt: body.runAt } : {}),
+        ...(body.endAt !== undefined ? { endAt: body.endAt } : {}),
         ...(body.id ? { id: body.id } : {}),
         ...(body.timezone ? { timezone: body.timezone } : {}),
         ...(body.inputData !== undefined ? { inputData: body.inputData } : {}),
@@ -167,7 +169,9 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     }
     return await mastra.schedules.create({
       agentId: agentBody.agentId,
-      cron: agentBody.cron,
+      ...(agentBody.cron ? { cron: agentBody.cron } : {}),
+      ...(agentBody.runAt !== undefined ? { runAt: agentBody.runAt } : {}),
+      ...(agentBody.endAt !== undefined ? { endAt: agentBody.endAt } : {}),
       prompt: agentBody.prompt,
       ...(agentBody.id ? { id: agentBody.id } : {}),
       ...(agentBody.name ? { name: agentBody.name } : {}),
@@ -194,13 +198,15 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
   responseSchema: scheduleSchema,
   summary: 'Update a schedule',
   description:
-    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`.",
+    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. One-off schedules accept `runAt`; cron schedules accept `endAt` (`null` removes the bound). A timing change reactivates a `completed` schedule.",
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, scheduleId, ...body }) => {
     await loadSchedule(mastra, scheduleId);
     return await mastra.schedules.update(scheduleId, {
       ...(body.cron !== undefined ? { cron: body.cron } : {}),
+      ...(body.runAt !== undefined ? { runAt: body.runAt } : {}),
+      ...(body.endAt !== undefined ? { endAt: body.endAt } : {}),
       ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),

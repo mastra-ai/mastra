@@ -1,8 +1,8 @@
 ---
-title: "Reference: mastra.schedules | Schedules"
-description: "mastra.schedules is the CRUD service for persisted cron schedules. Use it to create, list, update, pause, resume, manually run, and delete schedules for agents or workflows."
+title: 'Reference: mastra.schedules | Schedules'
+description: 'mastra.schedules is the CRUD service for persisted cron schedules. Use it to create, list, update, pause, resume, manually run, and delete schedules for agents or workflows.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # `mastra.schedules`
@@ -43,6 +43,15 @@ const schedule = await mastra.schedules.create({
 
 Schedules require a storage adapter that implements the schedules domain. Supported adapters include `@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/spanner`.
 
+To run once at a fixed time, pass `runAt` instead of `cron`:
+
+```typescript
+await mastra.schedules.create({
+  workflowId: 'send-report',
+  runAt: new Date('2026-12-01T09:00:00Z'),
+})
+```
+
 ## Methods
 
 ### Create schedules
@@ -78,7 +87,23 @@ const schedule = await mastra.schedules.create({
   {
     name: 'cron',
     type: 'string',
-    description: 'Cron expression for the schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames.',
+    isOptional: true,
+    description:
+      'Cron expression for a recurring schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames. Provide exactly one of `cron` or `runAt`.',
+  },
+  {
+    name: 'runAt',
+    type: 'number | Date',
+    isOptional: true,
+    description:
+      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. Must be in the future.',
+  },
+  {
+    name: 'endAt',
+    type: 'number | Date',
+    isOptional: true,
+    description:
+      'Only with `cron`. Stop firing after this time; the schedule moves to `completed` once its next occurrence would fall after `endAt`. Must be in the future.',
   },
   {
     name: 'prompt',
@@ -181,7 +206,23 @@ const schedule = await mastra.schedules.create({
   {
     name: 'cron',
     type: 'string',
-    description: 'Cron expression for the schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames.',
+    isOptional: true,
+    description:
+      'Cron expression for a recurring schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames. Provide exactly one of `cron` or `runAt`.',
+  },
+  {
+    name: 'runAt',
+    type: 'number | Date',
+    isOptional: true,
+    description:
+      'Fire the schedule once at this time (epoch milliseconds or `Date`). After it fires, the schedule moves to `completed`. Must be in the future.',
+  },
+  {
+    name: 'endAt',
+    type: 'number | Date',
+    isOptional: true,
+    description:
+      'Only with `cron`. Stop firing after this time; the schedule moves to `completed` once its next occurrence would fall after `endAt`. Must be in the future.',
   },
   {
     name: 'timezone',
@@ -287,7 +328,7 @@ const schedules = await mastra.schedules.list({
           },
           {
             name: 'status',
-            type: "'active' | 'paused'",
+            type: "'active' | 'paused' | 'completed'",
             description: 'Return only schedules with this status.',
             isOptional: true,
           },
@@ -319,7 +360,7 @@ Workflow schedule patches can update `cron`, `timezone`, `inputData`, `initialSt
 
 #### `pause(id)`
 
-Pauses a schedule. Pausing is durable and idempotent.
+Pauses a schedule. Pausing is durable and idempotent. Pausing a `completed` schedule throws a `409` error.
 
 ```typescript
 const paused = await mastra.schedules.pause('pinger')
@@ -327,7 +368,7 @@ const paused = await mastra.schedules.pause('pinger')
 
 #### `resume(id)`
 
-Resumes a paused schedule and recomputes the next fire time from the current time.
+Resumes a paused schedule and recomputes the next fire time from the current time. One-off schedules keep their `runAt`. Resuming a `completed` schedule throws a `409` error; update its `runAt` or `endAt` instead to reactivate it.
 
 ```typescript
 const active = await mastra.schedules.resume('pinger')
@@ -358,3 +399,6 @@ await mastra.schedules.delete('pinger')
 - `signalType`, `ifActive`, `ifIdle`, and `resourceId` require `threadId`.
 - Workflow schedules don't accept agent-only patch fields such as `prompt`, `signalType`, or `ifIdle`.
 - `run()` publishes a manual fire immediately and doesn't change the stored cron cadence.
+- Schedules have three statuses: `active`, `paused`, and `completed`. Only the scheduler sets `completed`, when a one-off fires or a bounded cron passes its `endAt`. `run()` doesn't complete a one-off schedule.
+- Updating `runAt` on a one-off, or `endAt` on a cron schedule (`null` removes the bound), reactivates a `completed` schedule.
+- `list()` hides `completed` schedules unless you pass `status: 'completed'`.
