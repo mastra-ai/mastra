@@ -161,6 +161,10 @@ export async function getObservationalMemoryHistory(
     const conditions = [`${OM_LOOKUP_KEY} = :lookupKey`];
     const binds: Record<string, unknown> = { lookupKey, limit };
 
+    if (options?.recordId !== undefined) {
+      conditions.push(`id = :recordId`);
+      binds.recordId = options.recordId;
+    }
     if (options?.from) {
       conditions.push(`${OM_CREATED_AT} >= :fromDate`);
       binds.fromDate = options.from;
@@ -169,6 +173,23 @@ export async function getObservationalMemoryHistory(
       conditions.push(`${OM_CREATED_AT} <= :toDate`);
       binds.toDate = options.to;
     }
+    if (options?.groupId !== undefined) {
+      conditions.push(`(DBMS_LOB.INSTR(${OM_ACTIVE_OBSERVATIONS}, :groupPrefix) > 0 OR EXISTS (
+        SELECT 1 FROM JSON_TABLE(${OM_BUFFERED_OBSERVATION_CHUNKS}, '$[*]'
+          COLUMNS (observations CLOB PATH '$.observations')) chunk
+        WHERE DBMS_LOB.INSTR(chunk.observations, :groupPrefix) > 0
+      ))`);
+      binds.groupPrefix = `<observation-group id="${options.groupId}"`;
+    }
+    if (options?.beforeGeneration !== undefined) {
+      conditions.push(`${OM_GENERATION_COUNT} < :beforeGeneration`);
+      binds.beforeGeneration = options.beforeGeneration;
+    }
+    if (options?.afterGeneration !== undefined) {
+      conditions.push(`${OM_GENERATION_COUNT} > :afterGeneration`);
+      binds.afterGeneration = options.afterGeneration;
+    }
+    const direction = options?.sortDirection === 'ASC' ? 'ASC' : 'DESC';
     if (options?.offset !== undefined) {
       binds.offset = options.offset;
     }
@@ -177,7 +198,7 @@ export async function getObservationalMemoryHistory(
       const result = await connection.execute<ObjectRow>(
         `${omSelect()} FROM ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
          WHERE ${conditions.join(' AND ')}
-         ORDER BY ${OM_GENERATION_COUNT} DESC
+         ORDER BY ${OM_GENERATION_COUNT} ${direction}, ${OM_CREATED_AT} ASC, "id" ASC
          OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY`,
         asBindParameters({ offset: options?.offset ?? 0, ...binds }),
         executeOptions(),

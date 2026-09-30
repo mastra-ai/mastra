@@ -173,6 +173,7 @@ function addMySQLMessageMetadataFilter(
 export class MemoryMySQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   private pool: Pool;
   private operations: StoreOperationsMySQL;
@@ -1889,6 +1890,10 @@ export class MemoryMySQL extends MemoryStorage {
       const conditions: string[] = [`${omCol('lookupKey')} = ?`];
       const params: any[] = [lookupKey];
 
+      if (options?.recordId !== undefined) {
+        conditions.push(`${omCol('id')} = ?`);
+        params.push(options.recordId);
+      }
       if (options?.from) {
         conditions.push(`${omCol('createdAt')} >= ?`);
         params.push(transformToSqlValue(options.from));
@@ -1898,8 +1903,26 @@ export class MemoryMySQL extends MemoryStorage {
         params.push(transformToSqlValue(options.to));
       }
 
+      if (options?.groupId !== undefined) {
+        conditions.push(`(LOCATE(CAST(? AS BINARY), CAST(${omCol('activeObservations')} AS BINARY)) > 0 OR EXISTS (
+          SELECT 1 FROM JSON_TABLE(${omCol('bufferedObservationChunks')}, '$[*]'
+            COLUMNS (observations LONGTEXT PATH '$.observations')) AS chunk
+          WHERE LOCATE(CAST(? AS BINARY), CAST(chunk.observations AS BINARY)) > 0
+        ))`);
+        const prefix = `<observation-group id="${options.groupId}"`;
+        params.push(prefix, prefix);
+      }
+      if (options?.beforeGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} < ?`);
+        params.push(options.beforeGeneration);
+      }
+      if (options?.afterGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} > ?`);
+        params.push(options.afterGeneration);
+      }
+      const direction = options?.sortDirection === 'ASC' ? 'ASC' : 'DESC';
       const whereClause = conditions.join(' AND ');
-      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} DESC LIMIT ${safeLimit}`;
+      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} ${direction}, ${omCol('createdAt')} ASC, id ASC LIMIT ${safeLimit}`;
 
       if (options?.offset != null && options.offset > 0) {
         sql += ` OFFSET ${options.offset}`;
