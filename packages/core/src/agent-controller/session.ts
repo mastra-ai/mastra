@@ -4085,6 +4085,8 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
           requestContext: requestContextInput,
+          tracingContext,
+          tracingOptions,
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
         const settled = shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
@@ -4235,6 +4237,8 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle,
         requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
       });
     }
 

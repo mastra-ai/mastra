@@ -44,7 +44,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -224,6 +231,10 @@ export type AgentWakeOptionsInput = {
   threadId: string;
   /** The sender's request context, when one was provided. */
   requestContext?: RequestContext;
+  /** The sender's tracing context, when one was provided. The woken run is traced as its child. */
+  tracingContext?: TracingContext;
+  /** The sender's tracing options, when provided. */
+  tracingOptions?: TracingOptions;
 };
 
 /**
@@ -244,6 +255,10 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       ifIdle?: never;
       /** The sender's request context. Used whether the thread is active or idle. */
       requestContext?: RequestContext;
+      /** The sender's tracing context. If the signal wakes an idle thread, the run is traced as its child. */
+      tracingContext?: TracingContext;
+      /** Tracing options for a run started when the signal wakes an idle thread. */
+      tracingOptions?: TracingOptions;
     }
   | {
       runId?: string;
@@ -256,6 +271,13 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
        * and passed to the agent's `wakeOptions` hook when the signal wakes an idle thread.
        */
       requestContext?: RequestContext;
+      /**
+       * The sender's tracing context. If the signal wakes an idle thread, the run is traced
+       * as its child, taking precedence over tracing returned by the `wakeOptions` hook.
+       */
+      tracingContext?: TracingContext;
+      /** Tracing options for a run started when the signal wakes an idle thread. */
+      tracingOptions?: TracingOptions;
     };
 
 /**

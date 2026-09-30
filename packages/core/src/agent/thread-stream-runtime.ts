@@ -41,6 +41,7 @@ import type {
   QueueAgentMessageResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
+  AgentWakeOptionsInput,
   SendAgentSignalOptions,
   SendAgentSignalAccepted,
   SendAgentSignalResult,
@@ -265,7 +266,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
   /** Set when the run's options come from the agent's `wakeOptions` hook, resolved at start. */
-  wake?: { requestContext?: RequestContext };
+  wake?: Omit<AgentWakeOptionsInput, 'resourceId' | 'threadId'>;
   queueOwnerId?: string;
   cancelled?: boolean;
 };
@@ -282,22 +283,21 @@ type PendingIdleSignal<OUTPUT = unknown> = {
  */
 function resolveWakeStreamOptions<OUTPUT>(
   agent: Agent<any, any, any, any>,
-  input: {
-    resourceId: string;
-    threadId: string;
-    requestContext?: RequestContext;
-    streamOptions?: AgentExecutionOptions<OUTPUT>;
-  },
+  input: AgentWakeOptionsInput & { streamOptions?: AgentExecutionOptions<OUTPUT> },
 ): AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined> {
   if (input.streamOptions) return input.streamOptions;
-  const { resourceId, threadId, requestContext } = input;
+  const { streamOptions: _explicit, ...hookInput } = input;
+  const { requestContext, tracingContext, tracingOptions } = hookInput;
+  // The sender's trace wins so the woken run nests under whatever caused it;
+  // the sender's request context is only a fallback for the hook's.
   const merge = (hooked: AgentExecutionOptions<any> | undefined): AgentExecutionOptions<OUTPUT> | undefined => {
-    if (!hooked) return requestContext ? ({ requestContext } as AgentExecutionOptions<OUTPUT>) : undefined;
-    return (
-      hooked.requestContext || !requestContext ? hooked : { ...hooked, requestContext }
-    ) as AgentExecutionOptions<OUTPUT>;
+    const merged: Record<string, unknown> = { ...hooked };
+    if (!merged.requestContext && requestContext) merged.requestContext = requestContext;
+    if (tracingContext) merged.tracingContext = tracingContext;
+    if (tracingOptions) merged.tracingOptions = tracingOptions;
+    return hooked || Object.keys(merged).length ? (merged as AgentExecutionOptions<OUTPUT>) : undefined;
   };
-  const hooked = agent.resolveWakeOptions?.({ resourceId, threadId, requestContext });
+  const hooked = agent.resolveWakeOptions?.(hookInput);
   return hooked instanceof Promise ? hooked.then(merge) : merge(hooked);
 }
 
@@ -3644,7 +3644,7 @@ export class AgentThreadStreamRuntime {
         const resolved = resolveWakeStreamOptions(pendingIdle.agent, {
           resourceId: pendingIdle.resourceId,
           threadId: pendingIdle.threadId,
-          requestContext: pendingIdle.wake.requestContext,
+          ...pendingIdle.wake,
         });
         pendingIdle.streamOptions = resolved instanceof Promise ? await resolved : resolved;
         resolvingWakeOptions = false;
@@ -5117,7 +5117,15 @@ export class AgentThreadStreamRuntime {
         resourceId,
         threadId,
         streamOptions: target.ifIdle?.streamOptions,
-        ...(target.ifIdle?.streamOptions ? {} : { wake: { requestContext: target.requestContext } }),
+        ...(target.ifIdle?.streamOptions
+          ? {}
+          : {
+              wake: {
+                requestContext: target.requestContext,
+                tracingContext: target.tracingContext,
+                tracingOptions: target.tracingOptions,
+              },
+            }),
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
@@ -5247,6 +5255,8 @@ export class AgentThreadStreamRuntime {
           resourceId,
           threadId,
           requestContext: target.requestContext,
+          tracingContext: target.tracingContext,
+          tracingOptions: target.tracingOptions,
           streamOptions: target.ifIdle?.streamOptions,
         });
         wakeStreamOptions = resolved instanceof Promise ? await resolved : resolved;

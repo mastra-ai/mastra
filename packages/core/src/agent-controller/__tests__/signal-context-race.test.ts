@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
+import type { AgentWakeOptionsInput } from '../../agent/types';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -178,6 +179,12 @@ describe('session signal context at run completion', () => {
           );
         }
         await vi.waitFor(() => expect(calls).toBe(2));
+        expect(
+          stream.mock.calls.some(call => {
+            const options = (call as unknown[])[1] as { tracingContext?: unknown } | undefined;
+            return options?.tracingContext === tracingContext;
+          }),
+        ).toBe(true);
         await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
         const threadId = session.thread.requireId();
         await session.sendMessage({ content: 'third', requestContext });
@@ -222,7 +229,7 @@ describe('agent wakeOptions hook', () => {
         };
       },
     });
-    const hookInputs: Array<{ resourceId: string; threadId: string; requestContext?: RequestContext }> = [];
+    const hookInputs: AgentWakeOptionsInput[] = [];
     const agent = new Agent({
       id: 'wake-hook',
       name: 'Wake hook',
@@ -235,23 +242,27 @@ describe('agent wakeOptions hook', () => {
         hookInputs.push(input);
         const requestContext = new RequestContext(input.requestContext?.entries() ?? []);
         requestContext.set('controller', 'hook');
-        return { requestContext };
+        return { requestContext, tracingContext: { currentSpan: undefined } };
       },
     });
     new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+    const stream = vi.spyOn(agent, 'stream');
+    const tracingContext = {};
 
     const requestContext = new RequestContext();
     requestContext.set('caller', 'schedule');
     const result = await agent.sendNotificationSignal(
       { source: 'schedule', kind: 'manual', priority: 'high', summary: 'wake up' },
-      { resourceId: 'resource-1', threadId: 'thread-1', requestContext },
+      { resourceId: 'resource-1', threadId: 'thread-1', requestContext, tracingContext },
     );
     await result.accepted;
 
     await vi.waitFor(() => expect(seen?.get('controller')).toBe('hook'));
     expect(seen?.get('caller')).toBe('schedule');
     expect(hookInputs).toEqual([
-      expect.objectContaining({ resourceId: 'resource-1', threadId: 'thread-1', requestContext }),
+      expect.objectContaining({ resourceId: 'resource-1', threadId: 'thread-1', requestContext, tracingContext }),
     ]);
+    // The sender's trace wins over the hook's, so the woken run nests under its cause.
+    expect((stream.mock.calls[0]?.[1] as { tracingContext?: unknown }).tracingContext).toBe(tracingContext);
   });
 });
