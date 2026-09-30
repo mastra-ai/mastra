@@ -26,7 +26,7 @@ Use a hosted database when your project needs durable storage that's managed by 
 
 Hosted databases are available through three providers today: Turso, Neon, and Postgres, with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
-Each provider injects a fixed set of variable names, for example, a single `DATABASE_URL` for both Neon and Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, so a single environment can use at most one database that injects a given variable. Because Neon and Postgres both inject `DATABASE_URL`, they're mutually exclusive within the same environment. Turso can be attached alongside either one.
+Each provider injects a fixed set of variable names, for example, a single `DATABASE_URL` for both Neon and Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, so a single environment can use at most one database per variable name. Because Neon and Postgres both inject `DATABASE_URL`, they're mutually exclusive within the same environment. Turso can be attached alongside either one.
 
 For most agent-focused projects, **Turso** is the simplest starting point. It provides a lightweight, SQLite-compatible engine well suited to agent memory, conversation history, and per-tenant isolation. Choose **Neon** when you want a public, serverless Postgres you can reach from your laptop, other services, or a migration tool. Choose **Postgres** when your workload needs to stay on your deployment's private network: it runs alongside your server and is only reachable from it. **MongoDB** (_coming soon_) will add document storage and built-in vector search for workloads that don't map cleanly to SQL.
 
@@ -102,7 +102,7 @@ mastra env db delete <database>
     Configure the database:
 
     - **Name**: A label for the database within your project.
-    - **Region**: Where the database is hosted. Select the region closest to your users. Turso defaults to `sjc` (San Jose) and is available in 20+ locations worldwide. Neon defaults to `aws-us-west-2` and is available across AWS and Azure regions in the US, EU, and APAC. Postgres runs on the same private network as your deployment, so its region follows the environment's Railway region (US, EU, or APAC).
+    - **Region**: Where the database is hosted. Select the region closest to your users. Turso defaults to `sjc` (San Jose) and is available in 20+ locations worldwide. Neon defaults to `aws-us-west-2` and is available across AWS and Azure regions in the US, EU, and APAC. Postgres runs on the same private network as your deployment. Its region follows the environment's Railway region (US, EU, or APAC).
   </StepItem>
 
   <StepItem>
