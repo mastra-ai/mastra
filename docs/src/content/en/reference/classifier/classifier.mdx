@@ -16,7 +16,7 @@ A classifier only returns evaluation results. Your application decides how to us
 
 ## Basic usage
 
-This example uses the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). To use another provider, see [Evaluation models](#evaluation-models).
+This example uses the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). Make sure to set the `TYPESAFE_AI_API_KEY` environment variable. To use another provider, see [Evaluation models](#evaluation-models).
 
 Install the provider package:
 
@@ -28,13 +28,11 @@ Define questions in the constructor when every evaluation uses the same question
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'request-classifier',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     route: {
       type: 'choice',
@@ -68,7 +66,17 @@ The evaluation model receives every question with the same `state`. When a quest
 
 The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
 
-Each provider requires an API key. Pass it with the `apiKey` option when you create the provider instance, or set the provider's default environment variable. To find the variable name, open the provider's page under [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) and look for the `apiKey` setting.
+Each provider exports a ready-made instance, which is what the examples on this page use. See [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) for the others.
+
+Pass a key explicitly by calling the factory instead:
+
+```typescript
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+
+const model = createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
+  '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
+)
+```
 
 ## Constructor
 
@@ -101,7 +109,7 @@ new Classifier(options)
 ]}
 />
 
-Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `evaluate()` rejects a `questions` option at compile time. If the constructor omits them, every `evaluate()` call must provide them.
+Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `evaluate()` rejects a `questions` option at compile time. If the constructor omits them, every `evaluate()` call must provide them. A processor, workflow step, or scorer classifies through a configured classifier, which requires constructor questions.
 
 ## Question types
 
@@ -193,6 +201,18 @@ const answer = {
 }
 ```
 
+## Designing questions
+
+These rules keep a question answerable from the state:
+
+- Ask for one judgment. A question that moves when either of two fields changes can't be routed on.
+- Keep criteria exclusive. `strong: 'A good fit'` and `partial: 'Maybe a fit'` leak probability between them.
+- Give a score enough levels to represent intermediate values.
+- Add an escape level when the list isn't closed. Three teams and no `other` forces every input into a team.
+- Put fields in `state`, not in `instructions`. One changed field then moves one answer.
+
+To check a question, change one field of the state and confirm one answer moves.
+
 ## `evaluate(options)`
 
 Evaluates all questions against the supplied state.
@@ -239,11 +259,11 @@ Omit `questions` from the constructor when the question set changes between eval
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'dynamic-classifier',
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
 })
 
 const result = await classifier.evaluate({
@@ -358,7 +378,7 @@ import {
   MastraEvaluationModel,
   type EvaluationModelResult,
 } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 class NormalizedEvaluationModel extends MastraEvaluationModel {
   protected override transformResult(result: EvaluationModelResult): EvaluationModelResult {
@@ -372,7 +392,7 @@ class NormalizedEvaluationModel extends MastraEvaluationModel {
 const classifier = new Classifier({
   id: 'normalized-classifier',
   model: new NormalizedEvaluationModel(
-    createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+    typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   ),
 })
 ```
@@ -386,13 +406,13 @@ Register classifiers on the `Mastra` instance to share them across your applicat
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 export const mastra = new Mastra({
   classifiers: {
     safety: new Classifier({
       id: 'safety',
-      model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+      model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
       questions: {
         unsafe: { type: 'boolean' },
       },
@@ -416,14 +436,19 @@ const workflow = createWorkflow({
   outputSchema: z.any(),
 })
   .map({ message: { initData: true, path: 'message' } })
-  .classifier('safety')
+  .classifier<typeof safety.questions>('safety')
   .commit()
 ```
+
+A string reference resolves through the `Mastra` instance at execution time. The ID doesn't carry the question types, so supply them with a type argument to keep the answers typed. In Studio, the workflow graph shows the step as a classifier node.
 
 The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
 
 ## Related
 
+- [ClassifierProcessor](/reference/processors/classifier-processor)
+- [ModelSelectionProcessor](/reference/processors/model-selection-processor)
+- [createClassifierScorer()](/reference/evals/create-classifier-scorer)
 - [Workflow.classifier()](/reference/workflows/workflow-methods/classifier)
 - [Step class](/reference/workflows/step)
 - [getClassifier()](/reference/core/getClassifier)
