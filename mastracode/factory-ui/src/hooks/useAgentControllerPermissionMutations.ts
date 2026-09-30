@@ -50,10 +50,15 @@ export function useSetPermissionForCategoryMutation({
 
       return { previousPermissions };
     },
-    onError: (_error, _variables, context) => {
-      if (context?.previousPermissions !== undefined) {
-        queryClient.setQueryData(permissionsQueryKey, context.previousPermissions);
-      }
+    // Roll back only this category, and only if no later write has replaced it since.
+    onError: (_error, { category, policy }, context) => {
+      const previousPolicy = context?.previousPermissions?.categories?.[category];
+      if (previousPolicy === undefined) return;
+      queryClient.setQueryData<PermissionRules>(permissionsQueryKey, current =>
+        current && current.categories?.[category] === policy
+          ? { ...current, categories: { ...current.categories, [category]: previousPolicy } }
+          : current,
+      );
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: permissionsQueryKey }),
   });

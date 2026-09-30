@@ -61,9 +61,9 @@ export function SegmentedControl<T extends string = string>({
     const measure = () => setThumb({ left: item.offsetLeft, width: item.offsetWidth });
     measure();
     if (typeof ResizeObserver === 'undefined') return;
-    // Labels reflow when fonts load or the text changes.
+    // Labels reflow when fonts load or the text changes; a sibling's resize moves this item too.
     const observer = new ResizeObserver(measure);
-    observer.observe(item);
+    itemRefs.current.forEach(element => observer.observe(element));
     return () => observer.disconnect();
   }, [value, options]);
 
