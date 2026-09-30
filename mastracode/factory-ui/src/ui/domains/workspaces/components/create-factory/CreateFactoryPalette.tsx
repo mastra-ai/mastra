@@ -125,7 +125,7 @@ export function CreateFactoryPalette({
 
 export function CreateFactoryPaletteAlert({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" role="alert" variant="caption" className="text-destructive-indicator m-0 px-3 py-2">
+    <Txt as="p" role="alert" variant="caption" className="text-destructive-foreground m-0 px-3 py-2">
       {children}
     </Txt>
   );

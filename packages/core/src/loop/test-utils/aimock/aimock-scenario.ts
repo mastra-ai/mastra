@@ -88,6 +88,7 @@ export async function createSharedAgent(
     | 'defaultOptions'
     | 'pubsub'
     | 'engine'
+    | 'inputProcessors'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
   return buildScenarioAgent({ llm, ...opts });
@@ -415,6 +416,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
+    // Pass the scenario's error processors at call time so they form the complete list. Without
+    // this, the agent's constructor list is the base and the shared stability defaults are added
+    // after it, which would add retries these scenarios do not expect.
+    ...(errorProcessors ? { errorProcessors } : {}),
     ...(prepareStep ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
     ...(delegation ? { delegation } : {}),

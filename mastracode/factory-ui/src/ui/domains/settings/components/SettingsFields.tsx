@@ -1,6 +1,5 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -51,7 +50,7 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
   const pending = dragged ?? held?.stop;
   const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
-  const tone = shown >= last - 1 ? 'text-warning-indicator' : shown === 0 ? 'text-placeholder' : 'text-foreground';
+  const tone = shown >= last - 1 ? 'text-warning-foreground' : shown === 0 ? 'text-placeholder' : 'text-foreground';
   const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 
@@ -193,32 +192,5 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         </SelectContent>
       </Select>
     </div>
-  );
-}
-
-interface SegmentedProps<T extends string> {
-  value: T;
-  options: { value: T; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}
-
-/** For choices that are alternatives rather than a ramp: policies, modes, delivery. */
-export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
-  return (
-    <ButtonsGroup size="sm" role="group" aria-label={ariaLabel}>
-      {options.map(o => (
-        <Button
-          key={o.value}
-          variant={value === o.value ? 'primary' : 'default'}
-          aria-pressed={value === o.value}
-          disabled={disabled}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </ButtonsGroup>
   );
 }

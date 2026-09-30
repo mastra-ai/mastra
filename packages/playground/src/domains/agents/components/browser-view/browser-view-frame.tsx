@@ -184,7 +184,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
           <div className="flex flex-col items-center gap-3 px-4 py-4 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive-subtle">
               <svg
-                className="h-7 w-7 text-destructive-indicator"
+                className="h-7 w-7 text-destructive-foreground"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

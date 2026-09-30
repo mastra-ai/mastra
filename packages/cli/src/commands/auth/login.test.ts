@@ -136,6 +136,7 @@ describe('login() server lifecycle', () => {
     );
     const port = extractPort();
     const state = extractState();
+    expect(state).toMatch(/^[a-f0-9]{32}$/);
 
     await sendCallback(port, { ...validParams, state });
 

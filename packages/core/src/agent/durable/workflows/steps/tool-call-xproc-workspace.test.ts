@@ -185,4 +185,70 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(result.result).toEqual({ ok: true });
   });
+
+  it('applies a rebuilt tool transcript transform to a synchronous result', async () => {
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: {
+        skill: {
+          id: 'skill',
+          execute: vi.fn().mockResolvedValue({ secret: 'raw-result' }),
+          transform: {
+            transcript: {
+              output: () => ({ secret: '[redacted]' }),
+            },
+          },
+        } as any,
+      },
+      workspace: undefined,
+    });
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: { toolCallId: 'call-result', toolName: 'skill', args: { name: 'greeting' } },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(result.result).toEqual({ secret: 'raw-result' });
+    expect(
+      result.transformMetadata?.mastra?.toolPayloadTransform?.transcript?.['output-available']?.transformed,
+    ).toEqual({ secret: '[redacted]' });
+  });
+
+  it('applies a rebuilt tool transcript transform to a synchronous error', async () => {
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: {
+        skill: {
+          id: 'skill',
+          execute: vi.fn().mockRejectedValue(new Error('raw-error')),
+          transform: {
+            transcript: {
+              error: () => ({ message: '[redacted]' }),
+            },
+          },
+        } as any,
+      },
+      workspace: undefined,
+    });
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: { toolCallId: 'call-error', toolName: 'skill', args: { name: 'greeting' } },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(result.error).toEqual(expect.objectContaining({ message: 'raw-error' }));
+    expect(result.transformMetadata?.mastra?.toolPayloadTransform?.transcript?.error?.transformed).toEqual({
+      message: '[redacted]',
+    });
+  });
 });

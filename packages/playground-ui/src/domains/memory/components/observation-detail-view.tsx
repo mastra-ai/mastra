@@ -241,7 +241,7 @@ function ObservationHistoryPanel({
               type="button"
               className={cn(
                 'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-border-strong bg-fill-hover',
+                isSelected && 'border-l-foreground bg-fill-hover text-foreground',
               )}
               onClick={() => onSelectRecord(record.id)}
             >

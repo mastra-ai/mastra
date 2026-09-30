@@ -1207,7 +1207,9 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
       await screen.findByText('Sushi ideas');
 
-      expect(screen.queryByRole('button', { name: 'Thread actions' })).toBeNull();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thread actions' })[1]);
+      expect(await screen.findByRole('menuitem', { name: 'Pin' })).not.toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull();
     });
   });
 

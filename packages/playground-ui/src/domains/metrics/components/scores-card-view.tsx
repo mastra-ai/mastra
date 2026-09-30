@@ -15,7 +15,7 @@ const SERIES_COLORS = [
   CHART_COLORS.purple,
   CHART_COLORS.orange,
   CHART_COLORS.pink,
-  CHART_COLORS.yellow,
+  CHART_COLORS.amber,
 ] as const;
 
 export interface ScoresCardViewProps {
