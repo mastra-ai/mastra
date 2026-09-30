@@ -35,6 +35,7 @@ import type {
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
+import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -83,6 +84,9 @@ const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
 // exists to catch results missed at run end, so it runs on a slow cadence off
 // the claim path rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
+
+/** The card moved on before this run could act; it settles as superseded, not succeeded. */
+class FactoryDecisionSuperseded extends Error {}
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
@@ -723,6 +727,10 @@ export class FactoryDecisionDispatcher {
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
+      if (error instanceof FactoryDecisionSuperseded) {
+        await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
+        return;
+      }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
       const failed = await this.#storage.failDeferredDecision({
@@ -878,7 +886,13 @@ export class FactoryDecisionDispatcher {
       case 'invokeSkill': {
         // A retry for a role the card has already been handed past cannot win:
         // no seat can be minted for it, and the work it was for is done.
-        if (await this.#roleSuperseded(record, decision.role)) return;
+        // Checked before a seat is prepared: a stale run must not mint one for a role the card left.
+        if (
+          (await this.#roleSuperseded(record, decision.role)) ||
+          (await this.#decisionOvertaken(record, decision.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
         const binding = await this.#requireOrPrepareBinding(record, decision.role);
         await this.#withBindingSkillRun(binding.id, async () => {
           const item = record.workItemId
@@ -916,44 +930,10 @@ export class FactoryDecisionDispatcher {
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
             (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
-          // The card moved on once any stage it now sits in was entered after this
-          // decision was made. Anchored on the decision, not on this attempt, so a
-          // retry after the move is still recognised as stale.
-          const kickoffStale = async () => {
-            if (await this.#roleSuperseded(record, decision.role)) return true;
-            if ((await this.#findBinding(record, decision.role))?.id !== binding.id) return true;
-            if (!record.workItemId) return false;
-            const current = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-            if (current === null) return true;
-            const decidedAt = record.createdAt.getTime();
-            const enteredSince = current.stageHistory.filter(
-              entry => entry.exitedAt === undefined && new Date(entry.enteredAt).getTime() > decidedAt,
-            );
-            // A run decided while the card sat outside its seat's stages (a held
-            // triage in Intake) is fulfilled, not overtaken, when the card first
-            // enters a stage that seat carries — e.g. the Investigate click.
-            const board = boardForWorkItem(current);
-            const carriesRole = (stage: string) =>
-              resolvePhaseSemantics(this.#boards, board, stage)?.role === decision.role;
-            const decidedOutsideRole = !current.stageHistory.some(
-              entry =>
-                new Date(entry.enteredAt).getTime() <= decidedAt &&
-                (entry.exitedAt === undefined || new Date(entry.exitedAt).getTime() > decidedAt) &&
-                carriesRole(entry.stage),
-            );
-            const movedOn = decidedOutsideRole ? enteredSince.filter(entry => !carriesRole(entry.stage)) : enteredSince;
-            if (movedOn.length === 0) return false;
-            // A transition from the same rule evaluation lands after this decision
-            // was created; entering that stage is part of this kickoff's intent.
-            const siblingStages = new Set(
-              (await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId))
-                .filter(
-                  sibling => sibling.evaluationId === record.evaluationId && sibling.decision.type === 'transition',
-                )
-                .map(sibling => sibling.decision.stage),
-            );
-            return movedOn.some(entry => !siblingStages.has(entry.stage));
-          };
+          const kickoffStale = async () =>
+            (await this.#roleSuperseded(record, decision.role)) ||
+            (await this.#findBinding(record, decision.role))?.id !== binding.id ||
+            (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
           // Only a *live* run on this binding can be duplicated by a second
@@ -989,7 +969,7 @@ export class FactoryDecisionDispatcher {
             }
             await waitForSessionRunAudit(session);
           }
-          if (await this.#roleSuperseded(record, decision.role)) return;
+          if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
             throw new FactoryDispatchError(
@@ -998,7 +978,7 @@ export class FactoryDecisionDispatcher {
             );
           }
           if (await kickoffLanded()) return;
-          if (await kickoffStale()) return;
+          if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
@@ -1093,7 +1073,7 @@ export class FactoryDecisionDispatcher {
               // the card has moved on or the seat was handed over or revoked —
               // a stale kickoff would restart a phase that already finished.
               if (await kickoffLanded()) break;
-              if (await kickoffStale()) return;
+              if (await kickoffStale()) throw new FactoryDecisionSuperseded();
               run.arm();
               settled = await sendKickoff();
             }
@@ -1411,6 +1391,15 @@ export class FactoryDecisionDispatcher {
    * fresh decision for the role (the card came back to it) must still dispatch
    * even though an older revoked binding for that role is on record.
    */
+  async #decisionOvertaken(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
+    if (!record.workItemId) return false;
+    const [item, siblings] = await Promise.all([
+      this.#storage.get({ orgId: record.orgId, id: record.workItemId }),
+      this.#storage.listDecisionsForEvaluations(record.orgId, record.factoryProjectId, [record.evaluationId]),
+    ]);
+    return decisionOvertaken({ boards: this.#boards, item, record, role, siblings });
+  }
+
   async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
     if (!record.workItemId) return false;
     const bindings = await this.#storage.listRunBindings(record.orgId, record.factoryProjectId, record.workItemId);
