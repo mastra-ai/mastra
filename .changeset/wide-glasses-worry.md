@@ -9,6 +9,7 @@ Improved warning and error colors so alerts, status dots, badges, buttons, chart
 - Added `--warning-foreground` and `--destructive-foreground` for colored text and icons. `*-indicator` is the fill for dots, bars, chart marks, and borders. The warning fill is too light to read as text in light mode, so text needs its own token.
 - Dark-mode red surfaces (alerts, red badges, error washes) use a clear red instead of a brownish maroon, with a softer border.
 - Destructive and warning badges use the same text color as the values beside them.
+- Badge fills are translucent tints, so a badge follows the card or row under it on hover instead of sitting on it as a solid patch. On a resting surface they look the same as before. Product avatars stay solid.
 - The disabled destructive button uses a softer fill with muted text, so it no longer looks like an enabled button in a darker red.
 
 **Removed**
