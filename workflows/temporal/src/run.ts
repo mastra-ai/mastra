@@ -86,7 +86,7 @@ export class TemporalRun<
 
   async cancel() {
     await this.client.workflow.getHandle(this.runId).cancel();
-    await super.cancel();
+    return super.cancel();
   }
 
   private unsupported(method: string): never {

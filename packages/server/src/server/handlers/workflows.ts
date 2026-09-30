@@ -1353,7 +1353,15 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
-      await _run.cancel();
+      const { failed } = await _run.cancel();
+
+      // Cancel is idempotent, so a 500 lets the client retry until every run is canceled.
+      if (failed.length > 0) {
+        const runs = failed.map(f => `${f.workflowName}/${f.runId}`).join(', ');
+        throw new HTTPException(500, {
+          message: `Workflow run cancellation incomplete: could not cancel ${runs}`,
+        });
+      }
 
       return { message: 'Workflow run cancelled' };
     } catch (error) {
