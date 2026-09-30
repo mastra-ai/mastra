@@ -1,4 +1,5 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
+import { normalizedVerdictLine } from '../../review-verdict.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
@@ -256,16 +257,9 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
  * inspected — a verdict quoted later in the findings must not count.
  */
 function requestsChangesVerdict(body: string | undefined): boolean {
-  const firstLine = body
-    ?.split('\n')
-    .map(line => line.trim())
-    .find(line => line.length > 0);
-  if (!firstLine) return false;
   // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = firstLine
-    .replaceAll(/[*_`#>\s]+/g, ' ')
-    .trim()
-    .toLowerCase();
+  const normalized = normalizedVerdictLine(body);
+  if (!normalized) return false;
   // Match the verdict exactly so negated phrasings ("Verdict: do not request
   // changes") cannot wake the author.
   return /^verdict: ?(request changes|changes requested)$/.test(normalized);

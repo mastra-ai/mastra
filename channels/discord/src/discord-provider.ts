@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { AgentChannels, resolveWaitUntil } from '@mastra/core/channels';
 import type {
   ChannelAdapterConfig,
@@ -334,8 +333,8 @@ export class DiscordProvider implements ChannelProvider {
     const identity = resolvedIdentity ?? (await validateApp(app.botToken, this.#apiBaseUrl()));
     if (!persisted) await store.saveAppConfig(app);
 
-    const installationId = existing?.id ?? randomUUID();
-    const webhookId = existing?.webhookId ?? randomUUID();
+    const installationId = existing?.id ?? globalThis.crypto.randomUUID();
+    const webhookId = existing?.webhookId ?? globalThis.crypto.randomUUID();
     const displayName = options.name ?? identity.name;
     const installedAt = existing?.installedAt ?? new Date();
     const commands = normalizeCommands(options.commands ?? this.#config.commands ?? DEFAULT_COMMANDS);

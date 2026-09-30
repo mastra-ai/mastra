@@ -19,7 +19,12 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
+import type {
+  InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ErrorProcessorOrWorkflow,
+} from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
@@ -219,6 +224,12 @@ export interface SerializableDurableOptions {
   returnScorerData?: boolean;
   /** Whether error processors are configured (flag only, instances are non-serializable) */
   hasErrorProcessors?: boolean;
+  /**
+   * The call passed `errorProcessors: []`, replacing the agent's resolved list (defaults included)
+   * with none. Processor instances aren't serializable, so this marker is what lets a worker that
+   * rebuilds the pipeline honor that override.
+   */
+  emptyErrorProcessorOverride?: boolean;
   /** Provider-specific options passed to the language model */
   providerOptions?: SharedProviderOptions;
   /** Structured output configuration */
@@ -689,7 +700,7 @@ export interface RunRegistryEntry {
    * can invoke each processor's `processLLMRequest` method. When absent the
    * durable `llm-execution` step falls back to `inputProcessors`.
    */
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */

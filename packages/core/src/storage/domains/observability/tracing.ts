@@ -564,6 +564,8 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
     entityType: span.entityType,
     entityId: span.entityId,
     entityName: span.entityName,
+    threadId: span.threadId,
+    resourceId: span.resourceId,
     metadata: span.metadata,
     inputPreview: buildInputPreview(span.input),
     createdAt: span.createdAt,
@@ -599,6 +601,11 @@ export const lightSpanRecordSchema = z
     entityType: spanContextFields.entityType,
     entityId: spanContextFields.entityId,
     entityName: spanContextFields.entityName,
+
+    // Memory context, so trace lists can render their Thread ID / Resource ID columns.
+    // Nullable and optional for rows that predate the fields.
+    threadId: spanContextFields.threadId.nullable(),
+    resourceId: spanContextFields.resourceId.nullable(),
 
     // Span metadata, so user-configured metadata columns can render on the light list.
     // Nullable and optional for rows that predate the field.

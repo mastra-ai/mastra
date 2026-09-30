@@ -1639,6 +1639,64 @@ describe('useChat optimistic pending user message', () => {
     }
   });
 
+  it('shows a first message once when its history snapshot lands before the thread echo', async () => {
+    const echo = Promise.withResolvers<unknown>();
+    subscribeToThreadMock.mockImplementationOnce(async () => ({
+      abort: threadSubscriptionAbortMock,
+      unsubscribe: threadSubscriptionUnsubscribeMock,
+      processDataStream: async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+        await onChunk(await echo.promise);
+        await Promise.withResolvers<never>().promise;
+      },
+    }));
+    const noHistory: MastraDBMessage[] = [];
+    const { result, rerender } = renderHook(
+      ({ initialMessages }: { initialMessages: MastraDBMessage[] }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+          enableThreadSignals: true,
+        }),
+      { wrapper, initialProps: { initialMessages: noHistory } },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+    const clientMessageId = result.current.messages[0]?.id;
+
+    const persistedSignal: MastraDBMessage = {
+      id: 'sig-1',
+      role: 'signal',
+      type: 'user',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'hello' }],
+        metadata: { signal: { id: 'sig-1', type: 'user', tagName: 'user', metadata: { clientMessageId } } },
+      },
+    };
+    rerender({ initialMessages: [persistedSignal] });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
+    expect(result.current.messages[0]?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
+
+    await act(async () => {
+      echo.resolve({
+        type: 'data-user-message',
+        runId: 'run-1',
+        data: { id: 'sig-1', type: 'user', contents: 'hello', metadata: { clientMessageId } },
+      });
+      await echo.promise;
+    });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
+  });
+
   it('does not mark the user message pending on the legacy stream path', async () => {
     const { result } = renderHook(
       () =>
