@@ -11,7 +11,6 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1282,7 +1281,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
 
         const requestedTitle = body.title;
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {

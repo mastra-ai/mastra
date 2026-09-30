@@ -278,6 +278,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }),
     };
 
+    // Set once map-tool-calls has computed the per-call limit for this instance.
+    let emittedConcurrencyResolved = false;
+
     // Eager dispatch is a regular-streaming-only contract. The 'called' strategy is
     // excluded because its limit depends on the full set of tools the model ends up
     // calling, which is unknowable while the model is still streaming.
@@ -374,12 +377,35 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
             logger: rest.logger,
           });
+          emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
       )
-      .foreach(toolCallStep, toolCallForeachOptions)
+      .foreach(toolCallStep, {
+        // On a resume that re-enters the suspended foreach, map-tool-calls already
+        // completed in the snapshot and is skipped, so the limit above was never
+        // recomputed for this instance. Derive it from the persisted tool-call batch
+        // instead of falling back to the conservative construction-time value.
+        concurrency: ({ inputData }) => {
+          if (emittedConcurrencyResolved) {
+            return toolCallForeachOptions.concurrency;
+          }
+          const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
+          return resolveToolCallConcurrency({
+            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
+            tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
+            activeTools:
+              readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
+              (rest.activeTools as string[] | undefined),
+            configuredConcurrency: configuredToolCallConcurrency,
+            strategy: toolCallConcurrencyStrategy,
+            calledToolNames: toolCalls.flatMap(call => (typeof call?.toolName === 'string' ? [call.toolName] : [])),
+          });
+        },
+      })
       .then(llmMappingStep)
       .then(backgroundTaskCheckStep)
       .then(signalDrainStep)

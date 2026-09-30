@@ -7,7 +7,6 @@
  * stdout/stderr streams.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
@@ -404,7 +403,7 @@ export class DockerProcessManager extends SandboxProcessManager {
 
     // Private file (unguessable name) where the command's process group records
     // its PGID, so kill() can signal the whole kernel-owned group later.
-    const pgidFile = `${PROC_DIR}/${randomUUID()}`;
+    const pgidFile = `${PROC_DIR}/${globalThis.crypto.randomUUID()}`;
     const envArray = Object.entries({ ...options.env })
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
       .map(([k, v]) => `${k}=${v}`);

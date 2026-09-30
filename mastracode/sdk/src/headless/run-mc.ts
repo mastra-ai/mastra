@@ -385,6 +385,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
           await session.thread.switch({ threadId: sorted[0]!.id });
         }
+      } else if (!thread?.clone) {
+        await session.thread.create();
       }
     } catch (err) {
       return fail(`Failed to select thread: ${(err as Error).message}`);

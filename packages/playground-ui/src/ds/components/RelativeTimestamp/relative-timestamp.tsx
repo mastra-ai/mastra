@@ -109,7 +109,7 @@ export function RelativeTimestamp({ value, label, className }: RelativeTimestamp
           <time
             dateTime={date.toISOString()}
             tabIndex={0}
-            className={cn('rounded-sm font-mono whitespace-nowrap tabular-nums', focusRing.visible, className)}
+            className={cn('rounded-sm font-mono whitespace-nowrap tabular-nums', focusRing, className)}
           />
         }
       >

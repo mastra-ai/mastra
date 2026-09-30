@@ -11,7 +11,7 @@ import {
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -63,15 +63,19 @@ export const buttonVariants = cva(
         // covers read through the hover it is meant to answer.
         primary: cn(
           'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-fill-destructive text-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
-          'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground/75 aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground/75',
+          'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
+          'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-disabled-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-disabled-foreground',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
-          'disabled:bg-transparent disabled:text-destructive/50 aria-disabled:bg-transparent aria-disabled:text-destructive/50',
+          'border border-transparent bg-transparent text-destructive-foreground not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
+          'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',

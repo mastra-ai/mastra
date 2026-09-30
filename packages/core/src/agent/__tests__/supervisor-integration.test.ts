@@ -2835,9 +2835,25 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
  * - `suppressFeedback` stores a flag in the is-task-complete chunk payload and in the
  *   feedback message's metadata; it does NOT prevent the message from being added to
  *   the messageList or from being sent to the model in the next iteration.
- * - maxSteps does NOT terminate the loop when an isTaskComplete scorer keeps failing
- *   (unlike the network flow).  Always ensure a scorer eventually passes to avoid
- *   an infinite loop.
+ * - A positive maxSteps value caps scorer-driven continuation: once the accumulated
+ *   step count reaches it, a failing isTaskComplete scorer can no longer buy
+ *   another turn; its feedback is still injected for that final iteration.
+ *   One hook path looks like it should escape the budget but does not: `maxSteps`
+ *   is sugar for the stop condition `stepCountIs(maxSteps)`, which the model layer
+ *   composes in alongside any caller-supplied `stopWhen`
+ *   (`llm/model/model.loop.ts:156-162`). That condition has already matched at the
+ *   boundary, so an `onIterationComplete` hook returning
+ *   `{ feedback, continue: false }` cannot clear `isFinal`: the feedback is
+ *   injected, the run halts, and the feedback goes unused
+ *   (`loop/shared/continuation-core.ts:288-296`, pinned by
+ *   `loop/shared/continuation-core.test.ts:186-200`).
+ *   An unset or zero maxSteps disables only the ceiling; `stopWhen` still
+ *   applies, and with no custom condition the model layer defaults it to
+ *   `stepCountIs(5)`. The durable loop resolves unset to
+ *   DurableAgentDefaults.MAX_STEPS and keeps `maxSteps: 0` as a zero budget, so
+ *   its budget is always finite. The plain loop gained the ceiling in the #24569
+ *   loop extraction and keeps it deliberately; the durable ladder enforces the
+ *   same one.
  */
 describe('Supervisor Pattern - IsTaskComplete feedback', () => {
   it('should require all scorers to pass with "all" strategy', async () => {

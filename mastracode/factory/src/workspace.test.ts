@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
     // installed through setOnStart invoked inside start() with outcome
@@ -26,6 +26,10 @@ const mocks = vi.hoisted(() => ({
     let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
     const sandbox: any = {
       id: `sbx-${ctx.sessionId}`,
+      // Physical, reattachable VM id — distinct from the logical `id` — as a
+      // real provider (e.g. Railway) exposes. Reflects the reattach id when the
+      // callback is given one, else the freshly provisioned VM id.
+      sandboxId: ctx.sandboxId ?? `vm-${ctx.sessionId}`,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -358,7 +362,7 @@ describe('bundled Factory skill assets', () => {
       expect(instructions).toContain('source_control_get_change_request');
       expect(instructions).toContain('source_control_list_change_request_reviews');
       expect(instructions).toContain('source_control_review_change_request');
-      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).toContain('factory_record_review_verdict');
       expect(instructions).not.toMatch(/`gh pr |`glab mr /);
     }
   });
@@ -373,10 +377,10 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
-    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/pr-<number>-<headSha>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
-    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>-<headSha>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     for (const instructions of [review, rereview]) {
@@ -404,8 +408,11 @@ describe('bundled Factory skill assets', () => {
 
     for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
       const prose = await read(skillName);
-      // Terminal batched handoff + governed transition, never a mid-run human gate.
-      expect(prose).toContain('factory_transition_work_item');
+      // Terminal batched handoff + governed terminal call, never a mid-run human gate.
+      // Review passes end by recording the verdict; the card stays in Reviewing.
+      expect(prose).toContain(
+        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+      );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
       expect(prose).not.toContain('ask_user');
@@ -590,7 +597,7 @@ describe('bundled Factory skill assets', () => {
       "Don't send either to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
       'post the **session handoff**',
       'as your final conversation message',
     );
@@ -642,7 +649,7 @@ describe('bundled Factory skill assets', () => {
     // qualify as follow-up work — both rules inside the follow-up procedure.
     const followUps = section(
       'Non-blocking follow-ups become a PR, not homework',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
     );
     expect(followUps).toContain('Never mix blocking findings into a follow-up PR');
     expect(followUps).toContain(
@@ -741,7 +748,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain('The verdict and the requests must tell the same story');
 
     // The handoff carries the approach judgment and unhedged requests.
-    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Approach**');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
@@ -913,7 +920,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
-    const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
@@ -1081,6 +1088,30 @@ describe('GitHub session workspace preparation', () => {
     );
     expect(lastGhToken()).toBeUndefined();
     expect(mocks.setEnv).not.toHaveBeenCalled();
+  });
+
+  it("persists the provider's physical sandboxId, not the logical session id", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The bug persisted `target.id` (logical) as sandboxId; it must now persist
+    // the provider's physical VM id so resume can reattach to the same VM.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('vm-session-a');
+  });
+
+  it('forwards a persisted physical sandboxId back into the sandbox callback on resume', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', sandboxId: 'vm-original' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The persisted physical id must reach the host callback so a physical-id
+    // reattach provider (e.g. Railway) resumes the original VM.
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {

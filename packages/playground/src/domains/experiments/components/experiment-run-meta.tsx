@@ -81,7 +81,7 @@ export function ExperimentRunMeta({ experiment, metrics }: ExperimentRunMetaProp
               {experiment.totalItems} item{experiment.totalItems === 1 ? '' : 's'}
             </span>
             {(experiment.failedCount ?? 0) > 0 && (
-              <span className="text-error">· {experiment.failedCount} errored</span>
+              <span className="text-destructive-foreground">· {experiment.failedCount} errored</span>
             )}
           </>
         )}

@@ -6,6 +6,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -414,7 +415,7 @@ export default function Workspace() {
                 <Button
                   size="md"
                   className="w-full max-w-md justify-start"
-                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-accent1" /> : <Server />}
+                  icon={selectedWorkspace?.source === 'agent' ? <Bot className="text-span-agent" /> : <Server />}
                 >
                   <span className="flex-1 truncate text-left">
                     {selectedWorkspace?.name ?? 'Select workspace'}
@@ -431,7 +432,7 @@ export default function Workspace() {
                 {workspaces.map(workspace => (
                   <DropdownMenu.RadioItem key={workspace.id} value={workspace.id} className="gap-3">
                     {workspace.source === 'agent' ? (
-                      <Bot className="shrink-0 text-accent1" />
+                      <Bot className="shrink-0 text-span-agent" />
                     ) : (
                       <Server className="shrink-0" />
                     )}
@@ -443,7 +444,7 @@ export default function Workspace() {
                     </div>
                     <div className="flex shrink-0 gap-1">
                       {workspace.safety?.readOnly && (
-                        <Badge size="xs" variant="yellow">
+                        <Badge size="xs" variant="warning">
                           Read-only
                         </Badge>
                       )}
@@ -461,7 +462,7 @@ export default function Workspace() {
         {workspaces.length === 1 && selectedWorkspace && (
           <div className="flex items-center gap-2 text-body text-muted-foreground">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="h-4 w-4 text-accent1" />
+              <Bot className="h-4 w-4 text-span-agent" />
             ) : (
               <Server className="h-4 w-4" />
             )}
@@ -470,7 +471,7 @@ export default function Workspace() {
               <span className="text-muted-foreground">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
-              <Badge size="xs" variant="yellow">
+              <Badge size="xs" variant="warning">
                 Read-only
               </Badge>
             )}
@@ -635,15 +636,15 @@ function WorkspaceSearchPanel({
     <div className="space-y-4 rounded-lg border border-border bg-fill-subtle p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink" className="mb-3 flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Search Indexed Files
-          </h3>
+          </Txt>
           {showInitWarning && (
-            <p className="mb-3 text-caption text-amber-400">
-              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
-              configured <code className="text-amber-300">autoIndexPaths</code>.
-            </p>
+            <Txt variant="caption" className="mb-3 text-warning-foreground">
+              File search requires <code className="text-warning-foreground">workspace.init()</code> to index files from
+              your configured <code className="text-warning-foreground">autoIndexPaths</code>.
+            </Txt>
           )}
           <SearchWorkspacePanel
             onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
@@ -665,10 +666,10 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink" className="mb-3 flex items-center gap-2">
             <Wand2 className="h-4 w-4" />
             Search Skills
-          </h3>
+          </Txt>
           <SearchSkillsPanel
             onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
             results={searchSkills.data?.results ?? []}

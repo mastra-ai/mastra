@@ -138,14 +138,14 @@ type InputShared_Auxiliary_223 =
       arg: InputShared_Auxiliary_223;
     };
 
-type InputShared_Auxiliary_251 =
+type InputShared_Auxiliary_254 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_251[];
+      args: InputShared_Auxiliary_254[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_251;
+      arg: InputShared_Auxiliary_254;
     }
   | {
       traces:
@@ -157,7 +157,7 @@ type InputShared_Auxiliary_251 =
           };
     };
 
-type InputShared_Auxiliary_667 =
+type InputShared_Auxiliary_670 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -202,27 +202,27 @@ type InputShared_Auxiliary_667 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_667[];
+      args: InputShared_Auxiliary_670[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_667;
+      arg: InputShared_Auxiliary_670;
     };
 
-type InputShared_Auxiliary_741 = {
+type InputShared_Auxiliary_744 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_741[] | undefined;
+  children?: InputShared_Auxiliary_744[] | undefined;
 };
 
-type Shared_Auxiliary_750 = {
+type Shared_Auxiliary_752 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_750[] | undefined;
+  children?: Shared_Auxiliary_752[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1744,7 +1744,7 @@ type InputShared_Type_86 = {
       }
     | undefined;
   steps: InputShared_Type_81[];
-  predicates: InputShared_Auxiliary_667[];
+  predicates: InputShared_Auxiliary_670[];
 };
 
 type InputShared_Type_87 = {
@@ -1758,7 +1758,7 @@ type InputShared_Type_87 = {
     | undefined;
   step: InputShared_Type_81;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_667;
+  predicate: InputShared_Auxiliary_670;
 };
 
 type InputShared_Type_88 =
@@ -3411,6 +3411,8 @@ type Shared_Type_60 = {
   entityType?: (Shared_Type_58 | null) | undefined;
   entityId?: (string | null) | undefined;
   entityName?: (string | null) | undefined;
+  threadId?: ((string | null) | undefined) | null;
+  resourceId?: ((string | null) | undefined) | null;
   metadata?:
     | ({
         [key: string]: unknown;
@@ -3600,6 +3602,8 @@ type Shared_Type_65 = {
   traceQuery: boolean;
   /** `durationMs` predicates in trace and thread queries */
   traceQueryRootDuration: boolean;
+  /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
+  traceQueryContextIds: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -4115,7 +4119,7 @@ type Shared_Type_81 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_750[] | undefined;
+  files?: Shared_Auxiliary_752[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -7794,7 +7798,7 @@ export type GetProcessors_Response = {
     id: string;
     name?: string | undefined;
     description?: string | undefined;
-    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
+    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
     agentIds: string[];
     configurations: {
       agentId: string;
@@ -7831,7 +7835,7 @@ export type GetProcessorsProcessorId_Response = {
   id: string;
   name?: string | undefined;
   description?: string | undefined;
-  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
+  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest')[];
   configurations: {
     agentId: string;
     agentName: string;
@@ -7861,7 +7865,7 @@ export interface GetProcessorsProcessorId_RouteContract {
 export type PostProcessorsProcessorIdExecute_PathParams = GetProcessorsProcessorId_PathParams;
 
 export type PostProcessorsProcessorIdExecute_Body = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'llmRequest';
   messages: {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
@@ -10252,6 +10256,87 @@ export interface PostObservabilityTracesQuery_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /observability/traces/aggregate
+// ============================================================================
+export type PostObservabilityTracesAggregate_Body = {
+  timeRange: {
+    from: string;
+    to: string;
+  };
+  where?: InputShared_Auxiliary_204 | undefined;
+  groupBy?: string[];
+  interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
+  measures: (
+    | (
+        | 'count'
+        | 'duration.avg'
+        | 'duration.min'
+        | 'duration.max'
+        | 'duration.p50'
+        | 'duration.p90'
+        | 'duration.p95'
+        | 'duration.p99'
+        | 'errorCount'
+        | 'errorRate'
+      )
+    | `countDistinct.${string}`
+  )[];
+  having?: InputShared_Auxiliary_223 | undefined;
+  orderBy?: {
+    field: string;
+    direction: 'asc' | 'desc';
+  };
+  limit?: number;
+};
+
+export type PostObservabilityTracesAggregate_Response = {
+  rows: {
+    dimensions?:
+      | {
+          [key: string]: string | null;
+        }
+      | undefined;
+    bucket?: string | undefined;
+    measures: {
+      [K in
+        | (
+            | 'count'
+            | 'duration.avg'
+            | 'duration.min'
+            | 'duration.max'
+            | 'duration.p50'
+            | 'duration.p90'
+            | 'duration.p95'
+            | 'duration.p99'
+            | 'errorCount'
+            | 'errorRate'
+          )
+        | `countDistinct.${string}`]?: number;
+    };
+  }[];
+  truncated: boolean;
+};
+
+export type PostObservabilityTracesAggregate_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesAggregate_Body
+        ? { body?: PostObservabilityTracesAggregate_Body }
+        : { body: PostObservabilityTracesAggregate_Body })
+>;
+
+export interface PostObservabilityTracesAggregate_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesAggregate_Body;
+  request: PostObservabilityTracesAggregate_Request;
+  response: PostObservabilityTracesAggregate_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /observability/threads/query
 // ============================================================================
 export type PostObservabilityThreadsQuery_Body = {
@@ -10262,7 +10347,7 @@ export type PostObservabilityThreadsQuery_Body = {
     };
     where?: InputShared_Auxiliary_204 | undefined;
   };
-  where?: InputShared_Auxiliary_251 | undefined;
+  where?: InputShared_Auxiliary_254 | undefined;
   page?: {
     limit?: number;
     after?: (string | null) | undefined;
@@ -18122,7 +18207,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_741[] | undefined;
+  files?: InputShared_Auxiliary_744[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18180,7 +18265,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_741[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_744[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22863,8 +22948,10 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body =
     | undefined;
 };
 
-export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response =
-  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response = {
+  ok: boolean;
+  reason?: ('not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension') | undefined;
+};
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request = Simplify<
   (PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams extends never
@@ -22911,7 +22998,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response =
-  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+  PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response;
 
 export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request = Simplify<
   (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams extends never
@@ -23739,6 +23826,7 @@ export interface RouteTypes {
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
+  'POST /observability/traces/aggregate': PostObservabilityTracesAggregate_RouteContract;
   'POST /observability/threads/query': PostObservabilityThreadsQuery_RouteContract;
   'POST /observability/traces/query/fields': PostObservabilityTracesQueryFields_RouteContract;
   'POST /observability/traces/query/values': PostObservabilityTracesQueryValues_RouteContract;
@@ -24700,6 +24788,9 @@ export interface Client {
   };
   '/observability/traces/:traceId/trajectory': {
     GET: GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  };
+  '/observability/traces/aggregate': {
+    POST: PostObservabilityTracesAggregate_RouteContract;
   };
   '/observability/traces/delete': {
     POST: PostObservabilityTracesDelete_RouteContract;

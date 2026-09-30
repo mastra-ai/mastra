@@ -6,9 +6,10 @@ import type { MessageMetadata } from '@/domains/chat';
 import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
+import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
 import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
 import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -38,10 +39,8 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   toolCalled?: boolean;
   isComplete?: boolean;
   keepOpenForStreamingChildMessages?: boolean;
-  status?: ToolCallStatus;
-  /** Error message when the delegation failed (tool part state `output-error`). */
+  status?: ActivityStatus;
   errorText?: string;
-  /** When set, shows a control that loads older messages from the sub-agent thread. */
   onLoadPrevious?: () => void;
   isLoadingPrevious?: boolean;
 }
@@ -95,6 +94,13 @@ export const AgentBadge = ({
 
   const isError = status === 'error';
   const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+  const shownError = isError ? errorText : undefined;
+  const hasBody =
+    Boolean(onLoadPrevious) ||
+    messages.length > 0 ||
+    Boolean(shownError) ||
+    Boolean(suspendPayload) ||
+    awaitsToolApproval({ toolApprovalMetadata, toolCalled });
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
@@ -108,7 +114,7 @@ export const AgentBadge = ({
   return (
     <BadgeWrapper
       data-testid="agent-badge"
-      icon={<AgentIcon className="text-accent1" />}
+      icon={<AgentIcon className="text-span-agent" />}
       title={agentId}
       status={status}
       initialCollapsed={shouldCollapseContent}
@@ -123,71 +129,74 @@ export const AgentBadge = ({
         ) : null
       }
     >
-      {onLoadPrevious && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onLoadPrevious}
-          disabled={isLoadingPrevious}
-          data-testid="agent-badge-load-previous"
-        >
-          {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
-        </Button>
+      {hasBody && (
+        <>
+          {onLoadPrevious && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onLoadPrevious}
+              disabled={isLoadingPrevious}
+              data-testid="agent-badge-load-previous"
+            >
+              {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
+            </Button>
+          )}
+
+          {messages.map((message, index) => {
+            if (message.type === 'text') {
+              return <Markdown key={index}>{message.content}</Markdown>;
+            }
+
+            let result;
+
+            try {
+              result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+            } catch {
+              result = message.toolOutput;
+            }
+
+            return (
+              <React.Fragment key={index}>
+                <ToolCard
+                  toolName={message.toolName}
+                  input={message.args}
+                  output={result}
+                  state="output-available"
+                  toolCallId={message.toolCallId}
+                  metadata={{
+                    mode: 'stream',
+                    requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
+                    suspendedTools: parentSuspendedTools,
+                  }}
+                />
+              </React.Fragment>
+            );
+          })}
+
+          {shownError && (
+            <ToolCallMono copyText={shownError} data-testid="agent-error" className="text-destructive-foreground">
+              {shownError}
+            </ToolCallMono>
+          )}
+
+          {suspendPayloadSlot !== undefined && suspendPayload && (
+            <div>
+              <SectionLabel>Agent suspend payload</SectionLabel>
+              {suspendPayloadSlot}
+            </div>
+          )}
+
+          <ToolApprovalButtons
+            toolCalled={toolCalled}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            isGenerateMode={metadata?.mode === 'generate'}
+          />
+        </>
       )}
-
-      {messages.map((message, index) => {
-        if (message.type === 'text') {
-          return <Markdown key={index}>{message.content}</Markdown>;
-        }
-
-        let result;
-
-        try {
-          result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
-        } catch {
-          result = message.toolOutput;
-        }
-
-        return (
-          <React.Fragment key={index}>
-            <ToolCard
-              toolName={message.toolName}
-              input={message.args}
-              output={result}
-              state="output-available"
-              toolCallId={message.toolCallId}
-              metadata={{
-                mode: 'stream',
-                // Delegation approvals belong to this badge, not its child tool cards.
-                requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
-                suspendedTools: parentSuspendedTools,
-              }}
-            />
-          </React.Fragment>
-        );
-      })}
-
-      {isError && errorText && (
-        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-error/90">
-          {errorText}
-        </ToolCallMono>
-      )}
-
-      {suspendPayloadSlot !== undefined && suspendPayload && (
-        <div>
-          <SectionLabel>Agent suspend payload</SectionLabel>
-          {suspendPayloadSlot}
-        </div>
-      )}
-
-      <ToolApprovalButtons
-        toolCalled={toolCalled}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
     </BadgeWrapper>
   );
 };

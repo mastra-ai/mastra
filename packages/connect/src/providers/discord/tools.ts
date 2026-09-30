@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addGuildMemberRoleTool } from './tools/add-guild-member-role.js';
 import { createChannelTool } from './tools/create-channel.js';
 import { createMessageTool } from './tools/create-message.js';
@@ -73,5 +73,5 @@ export function createDiscordTools(options?: ProviderToolsOptions) {
     discord_update_role: updateRoleTool(platformProxy),
     discord_update_webhook: updateWebhookTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

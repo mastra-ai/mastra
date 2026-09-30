@@ -2,7 +2,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { AuditAction } from '../storage/domains/audit/actions.js';
@@ -15,6 +17,7 @@ interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
+  boards: BoardRegistry;
   audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
@@ -52,6 +55,14 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
       inputSchema: z.object({ decisionId: z.string().min(1) }),
       requireApproval: true,
       execute: async ({ decisionId }) => {
+        const current = await deps.workItems.getDeferredDecision(
+          deps.scope.orgId,
+          deps.scope.factoryProjectId,
+          decisionId,
+        );
+        if (current && (await overtakenDecisionIds(deps.workItems, deps.boards, deps.scope, [current])).size > 0) {
+          throw new Error('The work item has moved on from the phase this run was decided for; it cannot be retried.');
+        }
         const decision = await deps.workItems.retryDeferredDecision(
           deps.scope.orgId,
           deps.scope.factoryProjectId,

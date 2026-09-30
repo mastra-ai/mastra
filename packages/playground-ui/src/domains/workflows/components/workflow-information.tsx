@@ -15,7 +15,7 @@ import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout'
 import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -123,10 +123,9 @@ function WorkflowInformationTopSection({
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
             className="min-h-0 flex-1 border-t border-border/50"
-            viewPortClassName="h-full"
             mask={{ top: false, bottom: false }}
           >
-            {children}
+            <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>

@@ -18,7 +18,7 @@ Describe each model alongside the kind of request it should handle. The processo
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { ModelSelectionProcessor } from '@mastra/core/processors'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 export const agent = new Agent({
   name: 'support-agent',
@@ -26,9 +26,7 @@ export const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new ModelSelectionProcessor({
-      model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-        '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-      ),
+      model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
       choices: [
         {
           model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -156,13 +154,13 @@ By default the decision applies to every step of the run. Set `scope: 'first-ste
 
 ```typescript
 import { ModelSelectionProcessor } from '@mastra/core/processors'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { PinoLogger } from '@mastra/loggers'
 
 const logger = new PinoLogger({ name: 'model-selection' })
 
 new ModelSelectionProcessor({
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   choices: [
     { model: '__GATEWAY_OPENAI_MODEL_MINI__', criteria: 'Simple lookups' },
     { model: '__GATEWAY_OPENAI_MODEL__', criteria: 'Multi-step reasoning' },
@@ -211,11 +209,11 @@ Pass `classifier` instead of `choices` to route on a [Classifier](/reference/cla
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const triage = new Classifier({
   id: 'triage',
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     complexity: {
       type: 'choice',
@@ -252,12 +250,12 @@ Choice criteria are mutually exclusive, which is the wrong shape when routing de
 
 ```typescript
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { ModelSelectionProcessor } from '@mastra/core/processors'
 
 const triage = new Classifier({
   id: 'triage',
-  model: createTypeSafeAi({/* ... */}).evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     complexity: {
       type: 'choice',
@@ -320,7 +318,7 @@ Before enabling routing, run a sample of your traffic with and without the proce
 
 - The classifier runs **once per request**, in `processInput`, not once per step. The decision is stashed in per-request state and read on each step.
 - Only the **latest user message** is classified. The system prompt, retrieved context, and earlier turns aren't sent to the classifier, which keeps the routing call flat as context grows. A terse follow-up such as `"now apply that to the rest"` is therefore routed on that sentence alone. If your follow-ups often re-open hard reasoning rather than applying an earlier result, keep them on the capable model by leaving it as the default.
-- Only downgrade. Keep the capable model as the agent's configured default and use the processor to move down, so an incorrect decision costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run, so a run that turns out harder than its first message stays on the cheaper model.
+- Only downgrade. Keep the capable model as the agent's configured default and use the processor to move down. An incorrect decision then costs quality on that request. With the default `scope: 'run'`, a bad downgrade applies to every step of the run. A run that turns out harder than its first message stays on the cheaper model.
 - The processor adds a classifier round-trip to the critical path of every request, including those it ends up abstaining on.
 - With `choices`, each criterion is named after its model, so `onDecision` reports the chosen model as the `choice`.
 

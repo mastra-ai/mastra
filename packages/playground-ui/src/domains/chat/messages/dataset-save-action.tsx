@@ -1,13 +1,15 @@
 import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon, Save, X } from 'lucide-react';
+import { DatabaseIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useDatasetSaveContext } from '../context/dataset-save-context';
-import type { DatasetSaveContextValue } from '../context/dataset-save-context';
+import { useDatasetSaveContext } from '../context/dataset-save-context-value';
+import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
 import { useDatasetMutations, useDatasets } from '@/domains/datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -41,7 +43,6 @@ function DatasetSaveDialog({
   const [groundTruth, setGroundTruth] = useState(initialGroundTruth);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
 
-  // Sync ground truth when dialog opens with new initial value
   useEffect(() => {
     if (open) {
       setGroundTruth(initialGroundTruth);
@@ -96,13 +97,13 @@ function DatasetSaveDialog({
   }, [input, groundTruth, selectedDatasetId, requestContext, addItem, datasets, onOpenChange, onInputChange]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={addItem.isPending}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Save to Dataset</DialogTitle>
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-4 py-1">
+        <DialogBody>
           <div className="grid gap-2">
             <Label htmlFor="ds-target">Dataset</Label>
             <Select
@@ -142,19 +143,11 @@ function DatasetSaveDialog({
             />
           </div>
         </DialogBody>
-        <DialogFooter className="px-4">
-          <Button icon={<X />} variant="default" size="sm" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleSubmit}
-            disabled={addItem.isPending || !selectedDatasetId || datasets.length === 0}
-            icon={<Save />}
-          >
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleSubmit} disabled={!selectedDatasetId || datasets.length === 0}>
             {addItem.isPending ? 'Saving...' : 'Save Item'}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -233,8 +226,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
       });
       const messages = result?.messages ?? [];
 
-      // Split: everything up to (and including) the last user message is input,
-      // the final assistant response becomes the ground truth seed
       const lastAssistantIdx = messages.length - 1;
       const lastMessage = messages[lastAssistantIdx];
       if (lastMessage && lastMessage.role === 'assistant') {
@@ -242,7 +233,6 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         setInput(JSON.stringify(inputMessages, null, 2));
         setGroundTruth(JSON.stringify(lastMessage, null, 2));
       } else {
-        // No trailing assistant message — use all messages as input
         setInput(JSON.stringify(messages, null, 2));
         setGroundTruth('');
       }

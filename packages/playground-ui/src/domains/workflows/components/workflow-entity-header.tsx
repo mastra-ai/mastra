@@ -4,7 +4,9 @@ import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { cn } from '@/utils/cn';
 
 export interface WorkflowEntityHeaderProps {
   requestContext?: Record<string, any>;
@@ -48,7 +50,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 role="note"
                 tabIndex={0}
                 aria-label="Dynamic workflow"
-                className="rounded-[7px] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus focus-visible:outline-solid"
+                className={cn('rounded-[7px]', focusRing)}
               >
                 <Badge icon={<Database />} variant="blue">
                   Dynamic
