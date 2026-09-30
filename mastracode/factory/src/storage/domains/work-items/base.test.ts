@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyStageTransition,
+  containsEmailLikeAddress,
   factoryDecisionAttentionIdentity,
   isAgentActor,
   WorkItemRelationError,
@@ -71,6 +72,14 @@ function interceptTransactionOps(backend: any, overridesFor: (ops: any) => Recor
 }
 
 describe('WorkItemsStorage', () => {
+  it('detects embedded email-like values in linear time', () => {
+    expect(containsEmailLikeAddress('Ada <ada@example.com>')).toBe(true);
+    expect(containsEmailLikeAddress(`${'!'.repeat(100_000)}@example.com`)).toBe(true);
+    expect(containsEmailLikeAddress('Factory reviewer')).toBe(false);
+    expect(containsEmailLikeAddress('release@example')).toBe(false);
+    expect(containsEmailLikeAddress('release @ example.com')).toBe(false);
+  });
+
   it('clears every reference to a deleted session without touching other refs, items, or orgs', async () => {
     const storage = await makeStorage();
     const ref = (sessionId: string) => ({ sessionId, branch: `factory/${sessionId}`, threadId: `${sessionId}-thread` });

@@ -34,6 +34,61 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
+function isEmailTokenBoundary(character: string): boolean {
+  return character === '<' || character === '>' || character === '@' || character.trim().length === 0;
+}
+
+/**
+ * Detect the same `local@domain.tld` shape we reject from persisted display
+ * names without applying a backtracking regular expression to user input.
+ */
+export function containsEmailLikeAddress(value: string): boolean {
+  let localLength = 0;
+  let domainLength = 0;
+  let suffixLength = 0;
+  let sawAt = false;
+  let sawDomainDot = false;
+
+  const finishToken = (): boolean => sawAt && sawDomainDot && domainLength > 0 && suffixLength > 0;
+  const resetToken = () => {
+    localLength = 0;
+    domainLength = 0;
+    suffixLength = 0;
+    sawAt = false;
+    sawDomainDot = false;
+  };
+
+  for (const character of value) {
+    if (character === '@') {
+      if (!sawAt && localLength > 0) {
+        sawAt = true;
+        continue;
+      }
+      if (finishToken()) return true;
+      resetToken();
+      continue;
+    }
+    if (isEmailTokenBoundary(character)) {
+      if (finishToken()) return true;
+      resetToken();
+      continue;
+    }
+    if (!sawAt) {
+      localLength += 1;
+      continue;
+    }
+    if (character === '.' && domainLength > 0) {
+      sawDomainDot = true;
+      suffixLength = 0;
+      continue;
+    }
+    domainLength += 1;
+    if (sawDomainDot) suffixLength += 1;
+  }
+
+  return finishToken();
+}
+
 export function factoryDecisionHash(decision: Record<string, unknown>): string {
   return createHash('sha256').update(stableJson(decision)).digest('hex');
 }
@@ -2547,9 +2602,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   ): Promise<FactoryDeferredDecisionRecord | null> {
     const candidateDisplayName = approvedByProfile?.displayName?.trim();
     const safeDisplayName =
-      candidateDisplayName && !/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/u.test(candidateDisplayName)
-        ? candidateDisplayName
-        : undefined;
+      candidateDisplayName && !containsEmailLikeAddress(candidateDisplayName) ? candidateDisplayName : undefined;
     const verifiedProfile =
       approvedByProfile && approvedByProfile.userId === approvedBy
         ? { userId: approvedByProfile.userId, ...(safeDisplayName ? { displayName: safeDisplayName } : {}) }
@@ -3062,9 +3115,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const candidateDisplayName =
           input.initiator?.userId === input.userId ? input.initiator.displayName?.trim() || undefined : undefined;
         const startedByDisplayName =
-          candidateDisplayName && !/[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+/u.test(candidateDisplayName)
-            ? candidateDisplayName
-            : undefined;
+          candidateDisplayName && !containsEmailLikeAddress(candidateDisplayName) ? candidateDisplayName : undefined;
         const create = input.workItem.input;
         let row = input.workItem.id
           ? await ops.findOne<WorkItemDbRow>('work_items', {
