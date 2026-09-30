@@ -248,6 +248,29 @@ Passing this gate supports a claim of tested compatibility with the documented
 ACP v1 profile. It is not upstream certification or proof of every optional
 protocol feature. Live-provider authentication remains a separate integration test.
 
+### Experimental durable and evented agents
+
+Mastra Code can run its coding agent through `DurableAgent` or `EventedAgent` for experimental validation. The experiment is off by default. Select an implementation with the `MASTRACODE_EXPERIMENTAL_AGENT` environment variable:
+
+```bash
+MASTRACODE_EXPERIMENTAL_AGENT=durable mastracode
+MASTRACODE_EXPERIMENTAL_AGENT=evented mastracode
+```
+
+Or persist the selection in the Mastra Code settings file:
+
+```json
+{
+  "experimentalAgent": "evented"
+}
+```
+
+The environment variable takes precedence over the persisted setting. Unset the variable and store `null` to use the standard coding agent. Any other value fails at startup instead of silently disabling or changing the requested experiment.
+
+The `evented` selection also fails at startup unless the agent is registered on a Mastra host whose workflow storage reports atomic concurrent-update support. LibSQL and PostgreSQL satisfy this requirement. On successful startup, Mastra Code prints the selected implementation and resolved workflow engine, for example `Experimental agent: evented (workflow engine: evented)`.
+
+This experiment does not make controller-local approvals or adopted background-operation handles restart-safe. Restarting the TUI still ends in-flight background operations, stale task recovery remains disabled, and distributed ownership, lease-loss, and pubsub limitations remain unchanged.
+
 ## Documentation
 
 - [@mastra/code-sdk documentation](https://mastra.ai/reference/code-sdk/mount-agent-controller)

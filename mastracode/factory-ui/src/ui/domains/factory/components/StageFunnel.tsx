@@ -36,7 +36,7 @@ interface StripStyle extends CSSProperties {
 }
 
 const HATCH =
-  'repeating-linear-gradient(-45deg, var(--chart-sequential-3) 0 2.25px, var(--badge-purple-subtle) 2.25px 6px)';
+  'repeating-linear-gradient(-45deg, var(--badge-purple-edge) 0 2.25px, var(--badge-purple-subtle) 2.25px 6px)';
 
 function percent(part: number, whole: number): number {
   return whole === 0 ? 0 : Math.round((part / whole) * 100);
@@ -280,7 +280,7 @@ export function StageFunnel({
             </linearGradient>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--badge-purple-subtle)" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--chart-sequential-3)" strokeWidth="2.25" />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--badge-purple-edge)" strokeWidth="2.25" />
             </pattern>
             {funnel.map((step, index) => (
               <clipPath key={step.stage} id={`${clipId}-${index}`}>
