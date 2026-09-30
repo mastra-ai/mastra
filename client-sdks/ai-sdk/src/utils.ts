@@ -99,3 +99,10 @@ export const isWorkflowExecutionDataChunkType = (
     chunk.payload.type?.startsWith('data-')
   );
 };
+
+export const toUIDataChunk = ({ type, data, id, transient }: DataChunkType): DataChunkType => ({
+  type,
+  data,
+  ...(id !== undefined && { id }),
+  ...(transient !== undefined && { transient }),
+});
