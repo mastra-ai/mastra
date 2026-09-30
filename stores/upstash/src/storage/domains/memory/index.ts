@@ -1406,7 +1406,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       for (const mid of messageIds) {
         pipeline.get(getMessageKey(sourceThreadId, mid as string));
       }
-      const results = await pipeline.exec();
+      // Upstash rejects executing an empty pipeline, which happens when the source thread has no messages.
+      const results: (MastraDBMessage | null)[] = messageIds.length > 0 ? await pipeline.exec() : [];
 
       // Parse and filter messages
       let sourceMessages = results
