@@ -459,7 +459,8 @@ export async function getScoreAggregate(
   client: ClickHouseClient,
   args: GetScoreAggregateArgs,
 ): Promise<GetScoreAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  // ClickHouse returns type defaults (0 / nan) for aggregates over an empty set; other stores return NULL.
+  const aggSql = `if(count() = 0, NULL, ${getAggregationSql(args.aggregation)})`;
   const identity = buildScoreIdentityFilter(args);
   const signalFilter = buildScoresFilterConditions(args.filters);
   const combined = mergeFilters(identity, signalFilter);

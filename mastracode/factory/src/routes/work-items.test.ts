@@ -425,6 +425,29 @@ describe('work item read wire', () => {
     expect(stored?.metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]).toBe('merged');
   });
 
+  it('hides the reconciler missing-source marker from list responses', async () => {
+    await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '43',
+          url: 'https://github.com/acme/app/issues/43',
+        },
+        title: 'Gone upstream',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { number: 43, externalSourceMissingAt: '2026-09-30T00:00:00.000Z' },
+      },
+    });
+
+    const listed = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`);
+    expect((await listed.json()).workItems[0].metadata).toEqual({ number: 43 });
+  });
+
   it('drops internal tokens from browser writes', async () => {
     const created = await json(
       'POST',

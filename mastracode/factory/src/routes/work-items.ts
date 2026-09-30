@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
@@ -75,7 +76,8 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
   if (
     !item.metadata ||
     (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
-      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata))
+      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata) &&
+      !(EXTERNAL_SOURCE_MISSING_KEY in item.metadata))
   ) {
     return item;
   }
@@ -104,6 +106,7 @@ function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<s
   const {
     [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
     [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
+    [EXTERNAL_SOURCE_MISSING_KEY]: _externalSourceMissingAt,
     ...metadata
   } = value;
   return metadata;
