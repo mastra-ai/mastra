@@ -1138,6 +1138,9 @@ import { aliasValidators } from '@inner/alias-source';
 (globalThis as any).MASTRA_ALIAS_VALIDATORS = aliasValidators;
 
 class AliasDeployer extends Deployer {
+  protected platform = 'browser' as const;
+  protected defaultExternalsPreset = true;
+
   constructor() { super({ name: 'alias-test' }); }
 
   async bundle(entryFile: string, outputDirectory: string, { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string }) {
@@ -1156,7 +1159,7 @@ class AliasDeployer extends Deployer {
       outputDirectory,
       projectRoot,
       alias: {
-        ajv: './src/ajv-shim.mjs',
+        ajv: '@inner/alias-source/replacement',
         'ajv/dist/2020.js': './src/ajv-2020-shim.mjs',
         'ajv-formats': './src/ajv-formats-shim.mjs',
       },
@@ -1191,7 +1194,8 @@ class AliasDeployer extends Deployer {
           const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join(
             '\n',
           );
-          expect(output).toContain('MASTRA_AJV_SHIM');
+          expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
+          expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');

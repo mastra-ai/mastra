@@ -3,7 +3,13 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./replacement": {
+      "browser": "./src/replacement-browser.cjs",
+      "worker": "./src/replacement-browser.cjs",
+      "node": "./src/replacement-node.js",
+      "default": "./src/replacement-node.js"
+    }
   },
   "dependencies": {
     "ajv": "^8.20.0"
