@@ -1370,8 +1370,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     resolveSubagentModel: (modelId, { requestContext }) =>
       routesToOtherGateway(
         modelId,
-        // The router ignores disabled gateways, so they can't claim an id here either.
-        Object.values(controller.getMastra()?.listGateways() ?? {}).filter(gateway => gateway.shouldEnable?.() ?? true),
+        Object.values(controller.getMastra()?.listGateways() ?? {}),
         new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
       )
         ? modelId

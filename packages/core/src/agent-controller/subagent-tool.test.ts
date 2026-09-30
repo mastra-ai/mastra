@@ -161,13 +161,19 @@ describe('createSubagentTool requestContext forwarding', () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
     const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
     const requestContext = new RequestContext();
+    requestContext.set('tenant', 'org-1');
+    requestContext.set('controller', { threadId: 'parent-thread', resourceId: 'parent-resource' });
 
     await (tool as any).execute(
       { agentType: 'explore', task: 'task' },
       { requestContext, agent: { toolCallId: 'tc-model' } },
     );
 
-    expect(resolveModel).toHaveBeenCalledWith('test-model', { requestContext });
+    const [modelId, options] = resolveModel.mock.calls.at(-1)!;
+    expect(modelId).toBe('test-model');
+    expect(options.requestContext).not.toBe(requestContext);
+    expect(options.requestContext.get('tenant')).toBe('org-1');
+    expect(options.requestContext.get('controller')).toMatchObject({ threadId: null, resourceId: '' });
   });
 
   it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
