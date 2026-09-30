@@ -295,6 +295,8 @@ export class LanceDB extends MastraBase {
         text: 'string',
         integer: 'int',
         bigint: 'bigint',
+        // Matches translateSchema: Lance stores timestamps as Float64 epoch millis, so columns
+        // added later must use the same type as columns created with the table.
         timestamp: 'double',
         jsonb: 'string',
         uuid: 'string',

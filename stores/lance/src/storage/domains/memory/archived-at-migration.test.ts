@@ -35,7 +35,8 @@ describe('Lance threads archivedAt migration', () => {
     await memory!.init();
 
     const reopened = await client.openTable('mastra_threads');
-    expect(await reopened.schema().then(s => s.fields.some(f => f.name === 'archivedAt'))).toBe(true);
+    const archivedField = (await reopened.schema()).fields.find(f => f.name === 'archivedAt');
+    expect(String(archivedField?.type)).toBe(String(new Float64()));
     expect((await memory!.getThreadById({ threadId: 'legacy' }))?.archivedAt).toBeNull();
     const active = await memory!.listThreads({ filter: { resourceId: 'r', archived: false } });
     expect(active.threads.map(t => t.id)).toEqual(['legacy']);

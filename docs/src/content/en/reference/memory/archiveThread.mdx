@@ -7,9 +7,23 @@ packages:
 
 # Memory.archiveThread()
 
-The `.archiveThread()` method archives a thread by setting its `archivedAt` timestamp. The thread and its messages are kept, and it can be restored with [`.unarchiveThread()`](/reference/memory/unarchiveThread). Archiving doesn't change the thread's `updatedAt`, so thread ordering stays the same.
+The `.archiveThread()` method archives a thread by setting its `archivedAt` timestamp. The thread and its messages are kept, and it can be restored with [`.unarchiveThread()`](/reference/memory/unarchiveThread). Archiving doesn't change the thread's `updatedAt`, so thread ordering stays the same (except on ClickHouse, see below).
 
-Use the `archived` filter on [`.listThreads()`](/reference/memory/listThreads) to include or exclude archived threads.
+`.listThreads()` returns archived threads unless you pass `filter: { archived: false }`. Use the `archived` filter on [`.listThreads()`](/reference/memory/listThreads) to include or exclude archived threads.
+
+## Behavior
+
+- Archiving is idempotent. Archiving a thread that is already archived returns it unchanged and keeps the original `archivedAt`.
+- Archived threads stay writable. You can still save messages to them, run agents on them, and update their title or metadata. Archiving only changes how the thread is listed.
+- Moving a thread to another resource keeps its `archivedAt`. Cloning an archived thread creates an active clone.
+- If the storage adapter doesn't persist `archivedAt`, the method throws a `MastraError` with the ID `MASTRA_MEMORY_THREAD_ARCHIVING_UNSUPPORTED` instead of reporting success.
+
+## Storage adapter notes
+
+- **ClickHouse**: Archiving writes a new version of the thread row, so it also updates the thread's `updatedAt`.
+- **DynamoDB, Cloudflare KV, Redis, Upstash, Valkey, Elasticsearch, and Convex**: The `archived` filter runs after the threads of a resource are loaded, so the cost of filtered listing grows with the number of threads per resource.
+- **Cloudflare KV, Redis, Upstash, Valkey, and Elasticsearch**: Each thread is stored as a single document. If two updates to the same thread run at the same time, for example archiving and renaming, one can overwrite the other.
+- **Cloudflare KV**: KV is eventually consistent, so a newly archived thread can take a short time to be excluded from listings.
 
 ## Usage example
 

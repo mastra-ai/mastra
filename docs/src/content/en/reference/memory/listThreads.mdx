@@ -72,7 +72,7 @@ const result = await memory.listThreads({
 
 ### Filter by archive state
 
-Pass `archived: false` to hide threads archived with [`.archiveThread()`](/reference/memory/archiveThread), or `archived: true` to list only archived threads. Omit it to return both.
+Pass `archived: false` to hide threads archived with [`.archiveThread()`](/reference/memory/archiveThread), or `archived: true` to list only archived threads. Omit it to return both. Archived threads are included by default, so pass `archived: false` wherever you show a list of active conversations.
 
 ```typescript
 const result = await memory.listThreads({

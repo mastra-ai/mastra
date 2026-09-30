@@ -1240,6 +1240,34 @@ export function createThreadsTest({
       },
     );
 
+    it('given an archived thread, when it is moved to another resource, then it stays archived', async () => {
+      const thread = await givenThread();
+      const archivedAt = new Date('2026-04-05T06:07:08.000Z');
+      await memoryStorage.updateThread({ id: thread.id, archivedAt });
+
+      await memoryStorage.updateThreadResourceId({ threadId: thread.id, resourceId: `resource-${randomUUID()}` });
+      const retrieved = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      expect(toTime(retrieved?.archivedAt)).toBe(archivedAt.getTime());
+    });
+
+    it('given an archived thread, when it is cloned, then the clone is active', async () => {
+      const thread = await givenThread();
+      await memoryStorage.updateThread({ id: thread.id, archivedAt: new Date() });
+
+      let clone;
+      try {
+        ({ thread: clone } = await memoryStorage.cloneThread({ sourceThreadId: thread.id }));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('not implemented')) return;
+        throw error;
+      }
+      const retrieved = await memoryStorage.getThreadById({ threadId: clone.id });
+
+      expect(clone.archivedAt ?? null).toBeNull();
+      expect(retrieved?.archivedAt ?? null).toBeNull();
+    });
+
     describe('listThreads archived filter', () => {
       let resourceId: string;
       let archivedIds: string[];
