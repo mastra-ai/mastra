@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
@@ -278,6 +279,64 @@ describe('WorkspaceAttachmentsProcessor', () => {
 
         expect(pathFromNote).not.toBe('');
         expect(toolRead).toEqual(BYTES);
+      },
+    );
+
+    it.each(['stream', 'generate'] as const)(
+      '%s shows the skills of the workspace the upload was written to',
+      async method => {
+        // Each factory call gets its own directory and its own skill, so a mismatched instance shows the wrong skill.
+        const created: { basePath: string; skill: string }[] = [];
+        const factory = vi.fn(async () => {
+          const basePath = await tempDir();
+          const skill = `reader-${created.length}`;
+          await mkdir(join(basePath, 'skills', skill), { recursive: true });
+          await writeFile(
+            join(basePath, 'skills', skill, 'SKILL.md'),
+            `---\nname: ${skill}\ndescription: Reads uploads\n---\nRead the file.\n`,
+          );
+          created.push({ basePath, skill });
+          return new Workspace({ filesystem: new LocalFilesystem({ basePath }), skills: ['skills'] });
+        });
+        const prompts: any[] = [];
+        const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+        const model = new MockLanguageModelV2({
+          doGenerate: async ({ prompt }) => {
+            prompts.push(prompt);
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              usage,
+              finishReason: 'stop',
+              content: [{ type: 'text', text: 'ok' }],
+            } as any;
+          },
+          doStream: async ({ prompt }) => {
+            prompts.push(prompt);
+            return { rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [], stream: textStream() };
+          },
+        });
+        const agent = new Agent({
+          id: 'skills-agent',
+          name: 'skills-agent',
+          instructions: 'test',
+          model,
+          workspace: factory as any,
+          inputProcessors: [sheets()],
+        });
+
+        if (method === 'stream') await (await agent.stream([xlsxMessage()])).consumeStream();
+        else await agent.generate([xlsxMessage()]);
+
+        const prompt = prompts[0]!;
+        const path = uploadedPath(noteText(prompt));
+        const owner = created.find(({ basePath }) => existsSync(join(basePath, path)));
+        expect(owner).toBeDefined();
+        const serialized = JSON.stringify(prompt);
+        for (const { skill } of created) {
+          if (skill === owner!.skill) expect(serialized).toContain(skill);
+          else expect(serialized).not.toContain(skill);
+        }
       },
     );
 
