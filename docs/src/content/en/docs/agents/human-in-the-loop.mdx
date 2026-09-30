@@ -129,14 +129,12 @@ The function can be asynchronous. For decisions that depend on the tool name and
 
 ```typescript title="src/mastra/agents/run-with-approval.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { agent } from './agent'
 
 const approvalClassifier = new Classifier({
   id: 'tool-approval-classifier',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
   questions: {
     requiresApproval: {
       type: 'boolean',

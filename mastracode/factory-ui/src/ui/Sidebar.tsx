@@ -19,14 +19,9 @@ function useSettingsOpen() {
   return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
 }
 
-/**
- * Beta status tag rendered as a dashed-outline chip (Clerk-style), so it reads
- * as a subtle stage marker rather than a solid pill competing with the nav items.
- * Colored with the green badge tokens, which resolve per theme.
- */
 function BetaBadge() {
   return (
-    <span className="bg-badge-green-subtle text-badge-green-foreground relative px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide uppercase">
+    <span className="bg-badge-green-subtle text-brand-green-indicator relative m-[0.1875rem] inline-block px-[0.1875rem] align-middle text-[0.625rem]/[0.875rem] font-medium tracking-wide uppercase">
       Beta
       <span className="text-badge-green-edge absolute inset-x-[-0.1875rem] -top-px block transform-gpu">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">

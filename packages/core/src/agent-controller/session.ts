@@ -36,7 +36,7 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
 import { SessionStartupCancelledError } from './errors';
-import { readCallerId, readMessageAuthor, withMessageAuthor } from './message-author';
+import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -605,32 +605,14 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    const callerId = readCallerId(requestContext);
     if (session.stream.matches({ key })) {
-      const boundCallerId = session.stream.callerId();
-      // The subscription resolved memory with the opening caller's context. A
-      // different identified caller must not read or write through it: rebind
-      // when idle, refuse while a run is in flight (rebinding tears it down).
-      if (callerId === undefined || callerId === boundCallerId) {
-        session.ensureFollowUpBinding(agent, resourceId, threadId);
-        return;
-      }
-      if (session.stream.isActive() || session.run.isRunning()) {
-        throw new Error(`Thread ${threadId} is running for another caller; retry once the current run has finished`);
-      }
+      session.ensureFollowUpBinding(agent, resourceId, threadId);
+      return;
     }
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId, requestContext });
-    // A concurrent caller may have attached and started a run while we awaited;
-    // never replace a live subscription mid-run, and dispose any idle one we supersede.
-    if (session.stream.isActive() || session.run.isRunning()) {
-      // Unsubscribe only: aborting would reach the other caller's run on this thread.
-      subscription.unsubscribe();
-      throw new Error(`Thread ${threadId} is running for another caller; retry once the current run has finished`);
-    }
-    this.cleanupSubscription();
-    session.stream.attach({ subscription, agent, key, callerId });
+    session.stream.attach({ subscription, agent, key });
     session.ensureFollowUpBinding(agent, resourceId, threadId);
     session.stream.trackConsumer(subscription, session.processSubscribedThreadStream(subscription));
   }
@@ -1093,8 +1075,6 @@ export class SessionStream {
   #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
-  /** Message-author id of the caller whose context opened the subscription, if any. */
-  #callerId: string | undefined = undefined;
   readonly #teardownWaiters = new Set<() => void>();
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
@@ -1171,23 +1151,15 @@ export class SessionStream {
     subscription,
     agent,
     key,
-    callerId,
   }: {
     subscription: AgentThreadSubscription<any, true>;
     agent?: Agent;
     key: string;
-    callerId?: string;
   }): void {
     this.#subscription = subscription;
     this.#agent = agent ?? null;
     this.#key = key;
     this.#consumerFailure = null;
-    this.#callerId = callerId;
-  }
-
-  /** Message-author id bound to the open subscription, if its opener was identified. */
-  callerId(): string | undefined {
-    return this.#callerId;
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1232,7 +1204,6 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
-    this.#callerId = undefined;
     this.#notifyTeardown();
   }
 
@@ -1247,7 +1218,6 @@ export class SessionStream {
     this.#subscription = null;
     this.#agent = null;
     this.#key = null;
-    this.#callerId = undefined;
     this.#notifyTeardown();
   }
 }

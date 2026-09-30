@@ -7,6 +7,8 @@ import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const data = [
   { channel: 'Search', region: 'Europe', outcome: 'Won' },
@@ -92,7 +94,7 @@ function UserLandControls() {
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="rounded-sm text-muted-foreground outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus"
+                        className={cn('rounded-sm text-muted-foreground', focusRing)}
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />
@@ -185,7 +187,7 @@ const semanticNodeColors = new Map([
   ['Search', 'var(--chart-blue)'],
   ['Referral', 'var(--chart-purple)'],
   ['Partner', 'var(--chart-orange)'],
-  ['Europe', 'var(--chart-yellow)'],
+  ['Europe', 'var(--chart-amber)'],
   ['North America', 'var(--chart-green)'],
   ['Asia Pacific', 'var(--chart-pink)'],
   ['Won', 'var(--chart-blue)'],

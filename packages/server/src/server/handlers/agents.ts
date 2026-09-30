@@ -88,6 +88,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
@@ -225,9 +226,13 @@ async function validateDurableToolCallAccess({
       input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
     ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
   );
-  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+  const contextResourceId = getContextResourceId(requestContext);
   const [persistedResourceId] = persistedResourceIds;
-  if (persistedResourceIds.size > 1 || (persistedResourceId && persistedResourceId !== effectiveResourceId)) {
+  if (
+    persistedResourceIds.size > 1 ||
+    (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+  ) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
   }
 

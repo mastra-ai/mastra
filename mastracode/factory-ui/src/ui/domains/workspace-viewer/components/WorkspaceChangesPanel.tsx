@@ -28,11 +28,11 @@ const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
   modified: 'text-info-indicator!',
   added: 'text-success-indicator!',
-  deleted: 'text-destructive-indicator!',
+  deleted: 'text-destructive-foreground!',
   renamed: 'text-info-indicator!',
   copied: 'text-success-indicator!',
   untracked: 'text-success-indicator!',
-  conflicted: 'text-destructive-indicator!',
+  conflicted: 'text-destructive-foreground!',
 };
 const FOLDER_CLASS = 'text-muted-foreground!';
 
@@ -57,7 +57,7 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
       }`}
     >
       <span className="text-success-indicator">+{additions}</span>
-      <span className="text-destructive-indicator">−{deletions}</span>
+      <span className="text-destructive-foreground">−{deletions}</span>
     </Txt>
   );
 }
@@ -255,7 +255,7 @@ function DiffViewer({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-destructive-indicator">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>
@@ -367,7 +367,7 @@ export function WorkspaceChangesPanel({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-destructive-indicator">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>

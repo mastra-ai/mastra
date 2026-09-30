@@ -216,6 +216,8 @@ export {
   ModelsDevGateway,
   AzureOpenAIGateway,
   MastraGateway,
+  findGatewayForModel,
+  getGatewayId,
 } from './model/gateways';
 export type {
   AzureAccessToken,

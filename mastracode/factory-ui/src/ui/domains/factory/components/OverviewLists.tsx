@@ -223,11 +223,11 @@ export function ActivityFeed({
 
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
   mention: { Glyph: MessageSquare, tone: 'text-badge-blue-indicator', label: 'Mention' },
-  'automation-failed': { Glyph: CircleAlert, tone: 'text-destructive-indicator', label: 'Failed run' },
-  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning-indicator', label: 'Suggested run' },
+  'automation-failed': { Glyph: CircleAlert, tone: 'text-destructive-foreground', label: 'Failed run' },
+  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning-foreground', label: 'Suggested run' },
   'supervisor-finding': { Glyph: Brain, tone: 'text-badge-green-indicator', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
-  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning-indicator', label: 'Agent waiting' },
+  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning-foreground', label: 'Agent waiting' },
 };
 
 /** What landed. Unread lives at the row's edge instead, so the titles stay aligned. */

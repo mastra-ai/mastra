@@ -72,7 +72,7 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <AmazonIcon className="h-4 w-4 text-badge-orange-indicator" />;
+      return <AmazonIcon className="h-4 w-4 text-foreground" />;
     case 'google-cloud':
     case 'google-cloud-storage':
     case 'gcs':
@@ -90,7 +90,7 @@ function getMountIcon(mount: FileEntry['mount']) {
       return <Database className="h-4 w-4 text-badge-green-indicator" />;
     case 'local':
     case 'folder':
-      return <Folder className="h-4 w-4 text-badge-yellow-indicator" />;
+      return <Folder className="h-4 w-4 text-badge-amber-indicator" />;
     case 'hard-drive':
       return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     case 'cloud':
@@ -110,9 +110,9 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
       return getMountIcon(mount);
     }
     return isOpen ? (
-      <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
+      <FolderOpen className="h-4 w-4 text-badge-amber-indicator" />
     ) : (
-      <Folder className="h-4 w-4 text-badge-yellow-indicator" />
+      <Folder className="h-4 w-4 text-badge-amber-indicator" />
     );
   }
 
@@ -124,7 +124,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'jsx':
       return <FileCode className="h-4 w-4 text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="h-4 w-4 text-badge-yellow-indicator" />;
+      return <FileJson className="h-4 w-4 text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
       return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -320,7 +320,7 @@ export function FileBrowser({
         ) : error ? (
           <div className="px-4 py-8 text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-destructive-subtle">
-              <AlertCircle className="h-6 w-6 text-destructive-indicator" />
+              <AlertCircle className="h-6 w-6 text-destructive-foreground" />
             </div>
             <Txt variant="subheading" tone="ink" className="mb-1">
               Failed to load directory
@@ -346,7 +346,7 @@ export function FileBrowser({
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-fill-subtle"
                   >
-                    <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
+                    <FolderOpen className="h-4 w-4 text-badge-amber-indicator" />
                     <Txt as="span" tone="ink">
                       ..
                     </Txt>
@@ -373,11 +373,11 @@ export function FileBrowser({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span tabIndex={0} className="flex items-center">
-                                <AlertCircle className="h-4 w-4 text-destructive-indicator" />
+                                <AlertCircle className="h-4 w-4 text-destructive-foreground" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <span className="text-destructive-indicator">Error:</span>{' '}
+                              <span className="text-destructive-foreground">Error:</span>{' '}
                               {entry.mount.error || 'Failed to connect to this filesystem'}
                             </TooltipContent>
                           </Tooltip>
@@ -413,7 +413,7 @@ export function FileBrowser({
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-indicator"
+                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-foreground"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

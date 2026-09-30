@@ -2,6 +2,7 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
@@ -35,20 +36,20 @@ const KIND = {
   'automation-failed': {
     glyph: TriangleAlert,
     label: 'failed',
-    tone: 'text-destructive-indicator',
+    tone: 'text-destructive-foreground',
     badge: 'destructive',
   },
   'automation-proposed': {
     glyph: Sparkles,
     label: 'suggested',
-    tone: 'text-warning-indicator',
+    tone: 'text-warning-foreground',
     badge: 'orange',
   },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
   'agent-waiting': {
     glyph: Hourglass,
     label: 'waiting',
-    tone: 'text-warning-indicator',
+    tone: 'text-warning-foreground',
     badge: 'orange',
   },
 } satisfies Record<
@@ -140,7 +141,7 @@ export function AttentionItemRow({
         to={factoryAttentionTargetPath(factoryId, item.target)}
         onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
-        className="focus-visible:outline-border-focus absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+        className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>

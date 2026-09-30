@@ -27,6 +27,7 @@ describe('shipped provider registry', () => {
       'incident-io',
       'jira',
       'linear',
+      'microsoft-teams',
       'notion',
       'openai',
       'posthog',

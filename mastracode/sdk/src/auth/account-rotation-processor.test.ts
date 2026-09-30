@@ -9,7 +9,7 @@
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { TripWire } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -628,6 +628,173 @@ describe('AccountStartNoticeProcessor.processInput', () => {
     };
   }
 
+  function makeSharedFileRoute(seeded: SeededStorage, targetAccountId?: string) {
+    const settingsPath = join(dirname(seeded.authPath), 'settings.json');
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        models: {
+          activeModelPackId: 'anthropic',
+          packAccountPreferences: targetAccountId ? { anthropic: { 'anthropic/claude-fable-5': targetAccountId } } : {},
+        },
+      }),
+    );
+    const requestContext = new RequestContext();
+    const emitEvent = vi.fn();
+    requestContext.set('controller', {
+      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
+      getState: () => ({ activeModelPackId: 'anthropic' }),
+      emitEvent,
+    });
+    return { settingsPath, requestContext, emitEvent };
+  }
+
+  it.each([false, true])(
+    'reloads ten routing stores after a peer switches accounts (remove old: %s)',
+    async removeOld => {
+      const seeded = await makeTwoAccountStorage();
+      const peers = Array.from({ length: 10 }, () => new AuthStorage(seeded.authPath));
+      seeded.storage.activateAccount(PROVIDER, seeded.accountB.id);
+      if (removeOld) seeded.storage.removeAccount(PROVIDER, seeded.accountA.id);
+
+      for (const peer of peers) {
+        expect(peer.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+        const { settingsPath, requestContext } = makeSharedFileRoute(seeded);
+        const args = makeInputArgs({ requestContext });
+        await new AccountStartNoticeProcessor({ credentialStore: peer, settingsPath }).processInput(args as never);
+        expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(seeded.accountB.id);
+        const gateway = createRequestScopedCredentialStore(new AuthStorage(seeded.authPath), requestContext);
+        expect(await gateway.getOAuthCredential?.(PROVIDER)).toMatchObject({ access: 'token-b' });
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'recovers a removed in-flight selection without refreshing the survivor (reloaded: %s)',
+    async reloaded => {
+      const seeded = await makeTwoAccountStorage();
+      const { settingsPath, requestContext } = makeSharedFileRoute(seeded);
+      const input = makeInputArgs({ requestContext });
+      await new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath }).processInput(
+        input as never,
+      );
+      expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(seeded.accountA.id);
+
+      const peer = new AuthStorage(seeded.authPath);
+      peer.activateAccount(PROVIDER, seeded.accountB.id);
+      peer.removeAccount(PROVIDER, seeded.accountA.id);
+      if (reloaded) seeded.storage.reload();
+      const gateway = createRequestScopedCredentialStore(new AuthStorage(seeded.authPath), requestContext);
+      expect(await gateway.getOAuthCredential?.(PROVIDER)).toBeUndefined();
+      const refresh = vi.spyOn(seeded.storage, 'forceRefreshActiveAccount').mockResolvedValue('token-b');
+      const processor = new AccountRotationProcessor({
+        credentialStore: seeded.storage,
+        settingsPath,
+        maxProcessorRetries: 22,
+      });
+      const args = makeArgs({ requestContext, error: new ProviderAuthRequiredError('Not logged in to Anthropic.') });
+
+      expect(await processor.processAPIError(args as never)).toEqual({ retry: true });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(seeded.accountB.id);
+      expect(await gateway.getOAuthCredential?.(PROVIDER)).toMatchObject({ access: 'token-b' });
+      expect(args.rotateResponseMessageId).toHaveBeenCalledOnce();
+      // The survivor is available once, not an infinite retry escape hatch.
+      expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
+    },
+  );
+
+  it.each([false, true])(
+    'never substitutes a sibling for a removed explicit target (in flight: %s)',
+    async inFlight => {
+      const seeded = await makeTwoAccountStorage();
+      const { settingsPath, requestContext } = makeSharedFileRoute(seeded, seeded.accountA.id);
+      const input = makeInputArgs({ requestContext });
+      const start = new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath });
+      if (inFlight) await start.processInput(input as never);
+      new AuthStorage(seeded.authPath).removeAccount(PROVIDER, seeded.accountA.id);
+      if (!inFlight) await start.processInput(input as never);
+      const gateway = createRequestScopedCredentialStore(new AuthStorage(seeded.authPath), requestContext);
+      expect(await gateway.getOAuthCredential?.(PROVIDER)).toBeUndefined();
+      const refresh = vi.spyOn(seeded.storage, 'forceRefreshActiveAccount').mockResolvedValue('token-b');
+      const activate = vi.spyOn(seeded.storage, 'activateAccount');
+      const args = makeArgs({ requestContext, error: new ProviderAuthRequiredError('Not logged in to Anthropic.') });
+      const processor = new AccountRotationProcessor({
+        credentialStore: seeded.storage,
+        settingsPath,
+        maxProcessorRetries: 22,
+      });
+      expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(activate).not.toHaveBeenCalled();
+      expect(await gateway.getOAuthCredential?.(PROVIDER)).toBeUndefined();
+    },
+  );
+
+  it('does not announce or select an account removed between route selection and activation', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const { settingsPath, requestContext, emitEvent } = makeSharedFileRoute(seeded, seeded.accountB.id);
+    const activate = seeded.storage.activateAccount.bind(seeded.storage);
+    vi.spyOn(seeded.storage, 'activateAccount').mockImplementation((providerId, accountId) => {
+      new AuthStorage(seeded.authPath).removeAccount(PROVIDER, accountId);
+      return activate(providerId, accountId);
+    });
+    const args = makeInputArgs({ requestContext });
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath }).processInput(
+      args as never,
+    );
+    expect(getRequestAccountSelection(requestContext, PROVIDER)).toBeUndefined();
+    expect(isRequestAccountRoutingExhausted(requestContext, PROVIDER)).toBe(true);
+    expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(emitEvent).not.toHaveBeenCalled();
+  });
+
+  it('lets error recovery reach a survivor when an automatic route loses its account during activation', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const accountC = await addThirdAccount(seeded.storage);
+    seeded.storage.activateAccount(PROVIDER, seeded.accountA.id);
+    const { settingsPath, requestContext, emitEvent } = makeSharedFileRoute(seeded);
+    const activate = seeded.storage.activateAccount.bind(seeded.storage);
+    vi.spyOn(seeded.storage, 'activateAccount').mockImplementation((providerId, accountId) => {
+      if (accountId === seeded.accountB.id) new AuthStorage(seeded.authPath).removeAccount(PROVIDER, accountId);
+      return activate(providerId, accountId);
+    });
+    const state: Record<string, unknown> = { triedInstances: new Set([seeded.accountA.id]) };
+    const input = makeInputArgs({ requestContext, state });
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath }).processInput(
+      input as never,
+    );
+    expect(isRequestAccountRoutingExhausted(requestContext, PROVIDER)).toBe(false);
+    expect(input.writer.custom).not.toHaveBeenCalled();
+    expect(emitEvent).not.toHaveBeenCalled();
+
+    const processor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      settingsPath,
+      maxProcessorRetries: 22,
+    });
+    const args = makeArgs({ requestContext, state, error: apiError(429) });
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: true });
+    expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(accountC.id);
+    const gateway = createRequestScopedCredentialStore(new AuthStorage(seeded.authPath), requestContext);
+    expect(await gateway.getOAuthCredential?.(PROVIDER)).toMatchObject({ access: 'token-c' });
+  });
+
+  it('silently applies an explicit account on every turn, whether switching or already active', async () => {
+    const seeded = await makeTwoAccountStorage();
+    for (let turn = 0; turn < 2; turn++) {
+      const { settingsPath, requestContext, emitEvent } = makeSharedFileRoute(seeded, seeded.accountB.id);
+      const args = makeInputArgs({ requestContext });
+      await new AccountStartNoticeProcessor({ credentialStore: seeded.storage, settingsPath }).processInput(
+        args as never,
+      );
+      expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(seeded.accountB.id);
+      expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+      expect(args.writer.custom).not.toHaveBeenCalled();
+      expect(emitEvent).not.toHaveBeenCalled();
+    }
+  });
+
   it('emits the start notice once when the active account is not the first entry', async () => {
     const seeded = await makeTwoAccountStorage();
     seeded.storage.activateAccount(PROVIDER, seeded.accountB.id);
@@ -756,8 +923,9 @@ describe('AccountStartNoticeProcessor.processInput', () => {
       .map(call => call[0])
       .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
       .map(part => part.data.to.id);
-    // Only the request-start activation of the target — never account A or C.
-    expect(switchedTo).toEqual([seeded.accountB.id]);
+    // The explicit target is applied silently; failures still report unavailability.
+    expect(getRequestAccountSelection(requestContext, PROVIDER)).toBe(seeded.accountB.id);
+    expect(switchedTo).toEqual([]);
     expect(switchedTo).not.toContain(seeded.accountA.id);
     expect(switchedTo).not.toContain(accountC.id);
     // The pool is announced unavailable so the hop is visible, flagged
@@ -1125,14 +1293,8 @@ describe('pack-fallback parts', () => {
     expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
     expect(
       args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
-    ).toMatchObject({
-      type: ACCOUNT_SWITCH_PART_TYPE,
-      data: {
-        provider: 'openai-codex',
-        from: { id: openaiA!.id },
-        to: { id: openaiB!.id },
-      },
-    });
+    ).toBeUndefined();
+    expect(getRequestAccountSelection(args.requestContext, 'openai-codex')).toBe(openaiB!.id);
   });
 
   it('does not activate the target pack preferred account when the hop transcript write fails', async () => {
@@ -1227,7 +1389,8 @@ describe('pack-fallback parts', () => {
     expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
     expect(
       args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
-    ).toMatchObject({ data: { to: { id: openaiB!.id } } });
+    ).toBeUndefined();
+    expect(getRequestAccountSelection(retryContext, 'openai-codex')).toBe(openaiB!.id);
   });
 
   it('does not reuse exhausted accounts when the fallback pack uses the same provider', async () => {

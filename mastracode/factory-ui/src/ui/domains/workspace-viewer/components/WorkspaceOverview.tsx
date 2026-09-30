@@ -54,7 +54,7 @@ export function WorkspaceOverview({
   const changesStatus = hasChangeStats ? (
     <span className="flex items-center gap-1 font-mono tabular-nums">
       <span className="text-success-indicator">+{changes.additions}</span>
-      <span className="text-destructive-indicator">−{changes.deletions}</span>
+      <span className="text-destructive-foreground">−{changes.deletions}</span>
     </span>
   ) : (
     <span className="text-muted-foreground">{changesLabel}</span>

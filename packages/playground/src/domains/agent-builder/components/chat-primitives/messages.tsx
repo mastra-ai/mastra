@@ -309,7 +309,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-indicator" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.

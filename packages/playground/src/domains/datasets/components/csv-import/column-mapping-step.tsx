@@ -128,7 +128,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <div className="text-body text-warning-indicator">At least one column must be mapped to Input</div>
+          <div className="text-body text-warning-foreground">At least one column must be mapped to Input</div>
         )}
       </div>
     </DragDropContext>

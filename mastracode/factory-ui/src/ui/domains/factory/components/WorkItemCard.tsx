@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -255,7 +256,7 @@ export function WorkItemCard({
           draggable={false}
           aria-label={`Details for ${item.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-border-focus rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
         />
         <WorkItemCardRows
