@@ -10,13 +10,14 @@ import {
   type MarkerSeverity,
   type TextEdit as PierreTextEdit,
 } from '@pierre/diffs/edit';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { BlameLine, EditorLspDiagnostic, EditorLspTextEdit } from '../../../api/types';
 import type { CodeLensActionHandler, CodeLensEntry } from './editor-code-lens';
 import type { EditorLspQueryFn } from './editor-lsp';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from './editor-settings';
 import type { CollabBinding } from './use-editor-collab';
+import { candidatesForPrefix, currentPrefix } from './pierre-autocomplete';
 
 export interface LineRange {
   start: number;
@@ -48,8 +49,9 @@ interface PierreFileSurfaceProps {
   onCursorLineChange?: (line: number) => void;
   apiRef?: React.RefObject<PierreEditorApi | null>;
   settings?: EditorSettings;
-  /** Reserved: LSP + collab + code lens hookups tracked in follow-up phases. */
   lspQuery?: EditorLspQueryFn;
+  /** Fires with the attached Pierre editor for external bindings (collab, …). */
+  onEditor?: (editor: Editor<'file', SurfaceAnnotation, undefined> | null) => void;
   collab?: CollabBinding | null;
   codeLenses?: CodeLensEntry[];
   onCodeLensAction?: CodeLensActionHandler;
@@ -103,7 +105,7 @@ function lspEditsToPierre(edits: EditorLspTextEdit[]): PierreTextEdit[] {
  * blame metadata rendered inline, and agent code lenses rendered above
  * symbols. Everything else is deferred to a follow-up phase.
  */
-type SurfaceAnnotation =
+export type SurfaceAnnotation =
   | { readonly kind: 'blame'; readonly blame: BlameLine }
   | {
       readonly kind: 'code-lens';
@@ -196,7 +198,15 @@ export function PierreFileSurface({
   onCursorLineChange,
   apiRef,
   settings = DEFAULT_EDITOR_SETTINGS,
+  lspQuery,
+  onEditor,
 }: PierreFileSurfaceProps) {
+  const lspQueryRef = useRef(lspQuery);
+  const onEditorRef = useRef(onEditor);
+  useEffect(() => {
+    lspQueryRef.current = lspQuery;
+    onEditorRef.current = onEditor;
+  }, [lspQuery, onEditor]);
   const editorRef = useRef<Editor<'file', SurfaceAnnotation, undefined> | null>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSaveShortcut);
@@ -215,18 +225,45 @@ export function PierreFileSurface({
     () => ({
       onAttach(editor) {
         editorRef.current = editor;
+        onEditorRef.current?.(editor);
       },
     }),
     [],
   );
 
-  // Container-level keydown handler for save. Pierre's EditorKeymap only
-  // maps to its built-in commands, so we handle Mod-S ourselves.
+  // Container-level keydown handler for save + autocomplete navigation.
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const acceptCompletionRef = useRef<(item: string) => void>(() => undefined);
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
     const handler = (event: KeyboardEvent) => {
+      const active = autocompleteRef.current;
+      if (active && active.items.length) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          setAutocomplete({ ...active, selected: (active.selected + 1) % active.items.length });
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          setAutocomplete({
+            ...active,
+            selected: (active.selected - 1 + active.items.length) % active.items.length,
+          });
+          return;
+        }
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          event.preventDefault();
+          acceptCompletionRef.current(active.items[active.selected]);
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setAutocomplete(null);
+          return;
+        }
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         onSaveRef.current?.();
@@ -236,6 +273,46 @@ export function PierreFileSurface({
     return () => node.removeEventListener('keydown', handler);
   }, []);
 
+  // Accept a completion: replace the current prefix with the picked word and
+  // let Pierre's undo timeline record it as a normal edit.
+  const acceptCompletion = useCallback((item: string) => {
+    const editor = editorRef.current;
+    const active = autocompleteRef.current;
+    if (!editor || !active) return;
+    const doc = editor.getEditState()?.document;
+    const selection = editor.getViewState()?.selections?.[0];
+    if (!doc || !selection) return;
+    const insertText = item.slice(active.prefix.length);
+    editor.applyEdits([
+      {
+        range: { start: selection.end, end: selection.end },
+        newText: insertText,
+      },
+    ]);
+    setAutocomplete(null);
+  }, []);
+  useEffect(() => {
+    acceptCompletionRef.current = acceptCompletion;
+  }, [acceptCompletion]);
+
+  // Hover popover: debounce identifier hovers 350ms, then fetch LSP hover and
+  // pin a tooltip to the token's bounding rect. onTokenLeave cancels + hides.
+  const [hover, setHover] = useState<{
+    x: number;
+    y: number;
+    value: string;
+    kind: string;
+  } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverSeqRef = useRef(0);
+  const cancelHover = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+    hoverSeqRef.current += 1;
+    setHover(null);
+  }, []);
+  const isIdentifier = (text: string) => /^[A-Za-z_$][\w$]*$/.test(text);
+
   const options = useMemo<FileOptions<SurfaceAnnotation, undefined>>(
     () => ({
       theme: { light: 'pierre-light', dark: 'pierre-dark' },
@@ -243,8 +320,40 @@ export function PierreFileSurface({
       disableLineNumbers: !settings.lineNumbers,
       overflow: settings.wordWrap ? 'wrap' : 'scroll',
       renderAnnotation: renderSurfaceAnnotation,
+      onTokenEnter(props) {
+        const query = lspQueryRef.current;
+        if (!query) return;
+        if (!isIdentifier(props.tokenText)) return;
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        const seq = ++hoverSeqRef.current;
+        const tokenElement = props.tokenElement;
+        const lineNumber = props.lineNumber;
+        const character = props.lineCharStart + 1;
+        hoverTimerRef.current = setTimeout(async () => {
+          if (seq !== hoverSeqRef.current) return;
+          const response = await query({
+            path,
+            line: lineNumber,
+            character,
+            kind: 'hover',
+            content: editorRef.current?.getText() ?? initialContent,
+          });
+          if (seq !== hoverSeqRef.current) return;
+          if (!response?.available || !response.hover) return;
+          const rect = tokenElement.getBoundingClientRect();
+          setHover({
+            x: rect.left,
+            y: rect.bottom + 4,
+            value: response.hover.value,
+            kind: response.hover.kind,
+          });
+        }, 350);
+      },
+      onTokenLeave() {
+        cancelHover();
+      },
     }),
-    [settings.lineNumbers, settings.wordWrap],
+    [settings.lineNumbers, settings.wordWrap, path, initialContent, cancelHover],
   );
 
   const lineAnnotations = useMemo(
@@ -252,10 +361,23 @@ export function PierreFileSurface({
     [blame, codeLenses, onCodeLensAction],
   );
 
+  // Autocomplete popover state — driven off document edits.
+  const [autocomplete, setAutocomplete] = useState<{
+    items: string[];
+    selected: number;
+    x: number;
+    y: number;
+    prefix: string;
+  } | null>(null);
+  const autocompleteRef = useRef(autocomplete);
+  useEffect(() => {
+    autocompleteRef.current = autocomplete;
+  }, [autocomplete]);
   const handleEditChange = useCallback(
     (event: EditorChangeEvent<'file', SurfaceAnnotation, undefined>) => {
       onChangeRef.current?.(event.file.contents);
-      const selection = event.editor.getViewState()?.selections?.[0];
+      const editor = event.editor;
+      const selection = editor.getViewState()?.selections?.[0];
       if (selection) {
         const line = selection.end.line + 1;
         if (cursorLineRef.current !== line) {
@@ -263,6 +385,31 @@ export function PierreFileSurface({
           onCursorLineRef.current?.(line);
         }
       }
+
+      // Refresh autocomplete candidates around the caret.
+      const document = editor.getEditState()?.document;
+      if (!document || !selection) {
+        setAutocomplete(null);
+        return;
+      }
+      const offset = document.offsetAt(selection.end);
+      const text = document.getText();
+      const prefix = currentPrefix(text, offset);
+      if (prefix.length < 2) {
+        setAutocomplete(null);
+        return;
+      }
+      const items = candidatesForPrefix(text, offset);
+      if (!items.length) {
+        setAutocomplete(null);
+        return;
+      }
+      // Pinned to the container's upper-right for now (caret-rect measurement
+      // via a Pierre API is a follow-up).
+      const rect = containerRef.current?.getBoundingClientRect();
+      const x = rect ? rect.right - 260 : 0;
+      const y = rect ? rect.top + 8 : 0;
+      setAutocomplete({ items, selected: 0, x, y, prefix });
     },
     [],
   );
@@ -270,6 +417,7 @@ export function PierreFileSurface({
   const handleEditComplete = useCallback(
     (event: FileEditCompleteEvent<SurfaceAnnotation, undefined>) => {
       editorRef.current = null;
+      onEditorRef.current?.(null);
       onChangeRef.current?.(event.file.contents);
       return 'accept' as const;
     },
@@ -354,7 +502,7 @@ export function PierreFileSurface({
 
   return (
     <EditProvider createEditor={createEditor}>
-      <div ref={containerRef} className="h-full w-full overflow-auto">
+      <div ref={containerRef} className="relative h-full w-full overflow-auto">
         <File<SurfaceAnnotation, undefined>
           file={file}
           options={options}
@@ -365,6 +513,51 @@ export function PierreFileSurface({
           onEditChange={handleEditChange}
           onEditComplete={handleEditComplete}
         />
+        {hover && (
+          <div
+            role="tooltip"
+            className="border-border bg-popover/95 fixed z-50 max-w-[36rem] rounded border shadow-lg backdrop-blur-sm"
+            style={{ left: hover.x, top: hover.y }}
+          >
+            <pre className="text-caption text-foreground m-0 max-h-64 overflow-auto whitespace-pre-wrap p-2 font-mono">
+              {hover.value}
+            </pre>
+          </div>
+        )}
+        {autocomplete && (
+          <div
+            role="listbox"
+            aria-label="Autocomplete"
+            className="border-border bg-popover/95 fixed z-50 w-64 rounded border shadow-lg backdrop-blur-sm"
+            style={{ left: autocomplete.x, top: autocomplete.y }}
+          >
+            <div className="border-border/60 text-meta text-muted-foreground flex items-center justify-between border-b px-2 py-1">
+              <span>Suggestions</span>
+              <span className="text-caption">
+                <kbd className="border-border bg-fill-subtle rounded border px-1 font-mono">↵</kbd> accept
+              </span>
+            </div>
+            <ul className="max-h-56 overflow-auto py-1">
+              {autocomplete.items.map((item, idx) => (
+                <li
+                  key={item}
+                  role="option"
+                  aria-selected={idx === autocomplete.selected}
+                  className={`cursor-pointer px-2 py-1 font-mono text-caption ${
+                    idx === autocomplete.selected ? 'bg-accent3/15 text-foreground' : 'text-muted-foreground'
+                  }`}
+                  onMouseDown={event => {
+                    event.preventDefault();
+                    acceptCompletion(item);
+                  }}
+                >
+                  <span className="text-foreground">{item.slice(0, autocomplete.prefix.length)}</span>
+                  {item.slice(autocomplete.prefix.length)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </EditProvider>
   );

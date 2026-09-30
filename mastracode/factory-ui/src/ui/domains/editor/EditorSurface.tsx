@@ -38,7 +38,10 @@ import { queryKeys } from '../../../api/keys';
 import type { EditorLspCodeAction } from '../../../api/types';
 
 import { CodeMirrorSurface, type CodeMirrorApi, type LineRange } from './CodeMirrorSurface';
-import { PierreFileSurface } from './PierreFileSurface';
+import { PierreFileSurface, type SurfaceAnnotation } from './PierreFileSurface';
+import { usePierreLspDiagnostics } from './use-pierre-lsp-diagnostics';
+import { usePierreCollabBinding } from './use-pierre-collab-binding';
+import type { Editor as PierreEditor } from '@pierre/diffs/edit';
 import type { CodeLensAction, CodeLensEntry } from './editor-code-lens';
 import { EditorContextMenu } from './EditorContextMenu';
 import { EditorTabs } from './EditorTabs';
@@ -351,12 +354,20 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     return params.get('editor') === 'pierre';
   }, []);
 
-  // Pierre surface uses its own polled LSP diagnostics fetch instead of the
-  // in-editor lint extension. Leaving null keeps markers off until wired.
-  const diagnostics = null;
-
   // ── LSP: hover + go-to commands ──────────────────────────────────────────
   const lspQuery = useEditorLspQuery(workspacePath);
+
+  // Pierre surface uses its own polled LSP diagnostics fetch (the CodeMirror
+  // path fetches inline via `lspLintExtension`).
+  const diagnostics = usePierreLspDiagnostics(
+    usePierreEditor && !activeIsExternal ? lspQuery : null,
+    activePath ?? null,
+    editorContent,
+  );
+
+  // Pierre editor reference used by the cursor-only collab binding.
+  const [pierreEditor, setPierreEditor] = useState<PierreEditor<'file', SurfaceAnnotation, undefined> | null>(null);
+  usePierreCollabBinding(usePierreEditor ? pierreEditor : null, collab.binding);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; line: number; character: number } | null>(
     null,
   );
@@ -1037,6 +1048,8 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     onSaveShortcut={handleSave}
                     apiRef={editorApiRef}
                     settings={settings}
+                    lspQuery={activeIsExternal ? undefined : lspQuery}
+                    onEditor={setPierreEditor}
                   />
                 ) : (
                   <CodeMirrorSurface
