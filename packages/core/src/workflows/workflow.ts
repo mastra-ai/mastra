@@ -5332,6 +5332,7 @@ export class Run<
 
     if (inputDataToUse && steps.length === 1) {
       const step = this.workflowSteps[steps[0]!]!;
+      // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
       const isForeachEntry = this.executionGraph.steps.some(
         entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
       );
