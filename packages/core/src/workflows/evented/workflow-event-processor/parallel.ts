@@ -20,6 +20,7 @@ export async function processWorkflowParallel(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     perStep,
     state,
     outputOptions,
@@ -33,15 +34,18 @@ export async function processWorkflowParallel(
   },
 ) {
   const pathsToRun: Record<string, boolean> = {};
+  const isRestartedEntry = restart?.activePaths[0] === executionPath[0];
+  const branchPath = (idx: number) =>
+    (isRestartedEntry && !restart?.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep) {
       const nestedStepId = getSingleStepEntryId(nestedStep);
-      //if restart, only run the step if it's in the active steps path
-      if (restart) {
-        pathsToRun[nestedStepId] = !!restart.activeStepsPath[nestedStepId];
+      // Only filter branches while routing the entry captured by the restart snapshot.
+      if (isRestartedEntry) {
+        pathsToRun[nestedStepId] = !!restart?.activeStepsPath[nestedStepId];
       } else {
         pathsToRun[nestedStepId] = true;
       }
@@ -66,7 +70,7 @@ export async function processWorkflowParallel(
         data: {
           workflowId,
           runId,
-          executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          executionPath: branchPath(idx),
           resumeSteps,
           stepResults,
           prevResult,
@@ -76,6 +80,7 @@ export async function processWorkflowParallel(
           parentWorkflow,
           activeStepsPath,
           requestContext,
+          actor,
           perStep,
           state: currentState,
           outputOptions,
@@ -99,6 +104,7 @@ export async function processWorkflowConditional(
     resumeData,
     parentWorkflow,
     requestContext,
+    actor,
     perStep,
     state,
     outputOptions,
@@ -116,8 +122,10 @@ export async function processWorkflowConditional(
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
 
-  // On restart, executionPath already includes the persisted branch index, so replace it instead of appending.
-  const branchPath = (idx: number) => (restart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
+  // On an in-flight restart of this entry, executionPath includes the persisted branch index, so replace it.
+  const isRestartedEntry = restart?.activePaths[0] === executionPath[0];
+  const branchPath = (idx: number) =>
+    (isRestartedEntry && !restart?.isPreFirstStepRestart ? executionPath.slice(0, -1) : executionPath).concat([idx]);
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -129,6 +137,7 @@ export async function processWorkflowConditional(
     stepResults,
     state: currentState,
     requestContext: reqContext,
+    actor,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -165,6 +174,7 @@ export async function processWorkflowConditional(
         parentWorkflow,
         activeStepsPath,
         requestContext,
+        actor,
         perStep,
         state: currentState,
         outputOptions,
@@ -193,6 +203,7 @@ export async function processWorkflowConditional(
               parentWorkflow,
               activeStepsPath,
               requestContext,
+              actor,
               perStep,
               state: currentState,
               outputOptions,
@@ -213,6 +224,7 @@ export async function processWorkflowConditional(
               parentWorkflow,
               activeStepsPath,
               requestContext,
+              actor,
               perStep,
               state: currentState,
               outputOptions,

@@ -69,7 +69,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 
 export interface CreateSubagentToolOptions {
   subagents: AgentControllerSubagent[];
-  resolveModel: (modelId: string) => MastraModelConfig;
+  resolveModel: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
   /** Resolved controller tools (already evaluated from DynamicArgument) */
   controllerTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
@@ -311,9 +311,27 @@ Use this tool when:
         }
         resolvedModelId = maybeModelId;
 
+        // Build a request context for the subagent that inherits sandbox paths
+        // and controller state but strips threadId/resourceId so the subagent
+        // doesn't trigger OM enrichment on the parent's memory thread. Model
+        // resolution uses it too, so the parent's thread identity never reaches
+        // the subagent's model endpoint. This subagent runs on a fresh Agent
+        // with no channels, so no output processor attaches and it never
+        // renders to the chat platform.
+        if (context?.requestContext) {
+          subagentRequestContext = new RequestContext(context.requestContext.entries());
+          if (controllerCtx) {
+            subagentRequestContext.set('controller', {
+              ...controllerCtx,
+              threadId: null,
+              resourceId: '',
+            });
+          }
+        }
+
         let model: MastraModelConfig;
         try {
-          model = resolveModel(resolvedModelId);
+          model = resolveModel(resolvedModelId, { requestContext: subagentRequestContext });
         } catch (err) {
           return {
             content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
@@ -355,22 +373,6 @@ Use this tool when:
                 activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs.has(k)),
               })
             : undefined;
-
-        // Build a request context for the subagent that inherits sandbox paths
-        // and controller state but strips threadId/resourceId so the subagent
-        // doesn't trigger OM enrichment on the parent's memory thread. This
-        // subagent runs on a fresh Agent with no channels, so no output
-        // processor attaches and it never renders to the chat platform.
-        if (context?.requestContext) {
-          subagentRequestContext = new RequestContext(context.requestContext.entries());
-          if (controllerCtx) {
-            subagentRequestContext.set('controller', {
-              ...controllerCtx,
-              threadId: null,
-              resourceId: '',
-            });
-          }
-        }
       }
 
       const startTime = Date.now();

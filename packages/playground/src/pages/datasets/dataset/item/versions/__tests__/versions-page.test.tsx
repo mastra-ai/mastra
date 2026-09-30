@@ -102,7 +102,7 @@ describe('DatasetItemVersionsComparePage', () => {
     expect(screen.queryByText('No version selected')).toBeNull();
   });
 
-  describe('given ?view=diff with two versions selected', () => {
+  describe('when ?view=diff with two versions selected', () => {
     it('keeps the exact same two-card layout and only highlights changed lines in the editors', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
 
@@ -124,14 +124,14 @@ describe('DatasetItemVersionsComparePage', () => {
 
       const grid = container.querySelector('.md\\:grid-cols-2')!;
       const [leftCard, rightCard] = Array.from(grid.children);
-      expect(leftCard.querySelector('.code-diff-added')).not.toBeNull();
+      expect(leftCard.querySelector('.code-diff-added')?.textContent).toContain('newer');
       expect(leftCard.querySelector('.code-diff-removed')).toBeNull();
-      expect(rightCard.querySelector('.code-diff-removed')).not.toBeNull();
+      expect(rightCard.querySelector('.code-diff-removed')?.textContent).toContain('older');
       expect(rightCard.querySelector('.code-diff-added')).toBeNull();
     });
   });
 
-  describe('given the Diff View button is clicked', () => {
+  describe('when the Diff View button is clicked', () => {
     it('stores ?view=diff in the URL and highlights the changes', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
       expect(container.querySelector('.code-diff-removed')).toBeNull();

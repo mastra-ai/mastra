@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { PubSub, UnixSocketPubSub } from '@mastra/core/events';
-import type { PubSubDeliveryMode, Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 
 const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
 
@@ -13,7 +12,8 @@ const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
  *
  * Socket paths use `/tmp/mc/<resourceId>/<sanitized-topic>.sock` for
  * inspectability and automatic OS cleanup. Each topic gets its own isolated
- * socket so broker election and message routing are per-topic.
+ * socket so broker election and message routing are per-topic. A dedicated
+ * resource-wide socket exposes filesystem leases shared by every topic.
  *
  * Stale sockets from crashed processes are handled by
  * {@link UnixSocketPubSub}'s built-in election logic: it detects
@@ -23,6 +23,7 @@ const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
+  readonly #leaseProvider: UnixSocketPubSub;
   readonly #sockets = new Map<string, UnixSocketPubSub>();
   readonly #pending = new Map<string, Promise<UnixSocketPubSub>>();
   #closed = false;
@@ -30,10 +31,16 @@ class SignalsPubSub extends PubSub {
   constructor(resourceId: string) {
     super();
     this.#resourceId = resourceId;
+    this.#leaseProvider = new UnixSocketPubSub(join('/tmp/mc', resourceId, '.leases.sock'));
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['push'];
+  }
+
+  /** Exposes the resource-wide filesystem lease provider shared by every topic socket. */
+  getLeaseProvider(): LeaseProvider {
+    return this.#leaseProvider;
   }
 
   async publish(
@@ -62,7 +69,7 @@ class SignalsPubSub extends PubSub {
 
   async close(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled([...this.#sockets.values()].map(s => s.close()));
+    await Promise.allSettled([this.#leaseProvider.close(), ...[...this.#sockets.values()].map(s => s.close())]);
     this.#sockets.clear();
   }
 
@@ -108,7 +115,9 @@ class SignalsPubSub extends PubSub {
     // conservative bound. When the path is too long, replace the key with
     // a short hash so the socket can still be created.
     if (Buffer.byteLength(candidate) > 104) {
-      key = createHash('sha256').update(key).digest('hex').slice(0, 16);
+      key = Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)))
+        .toString('hex')
+        .slice(0, 16);
       return join(dir, `${key}.sock`);
     }
     return candidate;

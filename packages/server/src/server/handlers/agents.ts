@@ -12,7 +12,7 @@ import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
-import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -88,6 +88,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
@@ -177,24 +178,30 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
+  return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
   runId,
   toolCallId,
   requestContext,
+  threadId,
 }: {
   mastra: any;
   agent: Agent;
   runId: string;
-  toolCallId: string;
+  toolCallId?: string;
   requestContext: RequestContext;
+  threadId?: string;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: DurableStepIds.AGENTIC_LOOP,
+    workflowName: getDurableLoopWorkflowName(agent),
     runId,
   });
   if (!workflowRun) {
@@ -219,17 +226,26 @@ async function validateDurableToolCallAccess({
       input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
     ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
   );
-  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+  const contextResourceId = getContextResourceId(requestContext);
   const [persistedResourceId] = persistedResourceIds;
-  if (persistedResourceIds.size > 1 || (persistedResourceId && persistedResourceId !== effectiveResourceId)) {
+  if (
+    persistedResourceIds.size > 1 ||
+    (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+  ) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
+
+  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+  if (threadId && persistedThreadId !== threadId) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
   }
 
   if (
     !snapshot ||
     snapshot.status !== 'suspended' ||
     input?.agentId !== agent.id ||
-    !hasSuspendedToolCall(snapshot, toolCallId)
+    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
   ) {
     throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
   }
@@ -1713,39 +1729,34 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
 
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-      allProviders[id] = provider as ProviderConfig;
+      allProviders[id] = provider;
     }
   }
 
-  // Include gateway providers (defaults + user-registered)
-  if (mastra) {
-    const allGateways = mastra.listGateways();
-    if (allGateways) {
-      for (const gateway of Object.values(allGateways)) {
-        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-        if (gateway.id === 'models.dev') continue;
-        // When blocking external providers, skip the built-in default gateways
-        // so only user-registered custom gateways remain.
-        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
-        try {
-          const gatewayProviders = await gateway.fetchProviders();
-          for (const [providerId, config] of Object.entries(gatewayProviders)) {
-            // Apply the same prefixing logic as registry-generator to avoid
-            // creating duplicate entries alongside PROVIDER_REGISTRY data.
-            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-            // Only add if not already present from PROVIDER_REGISTRY to prevent
-            // duplicates when PROVIDER_REGISTRY already has the prefixed key
-            // (e.g. dev mode where GatewayRegistry includes custom gateways).
-            if (!(prefixedId in allProviders)) {
-              allProviders[prefixedId] = config;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+  const gateways = mastra ? Object.values(mastra.listGateways() ?? {}) : [];
+  for (const gateway of gateways) {
+    // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+    if (gateway.id === 'models.dev') continue;
+    // When blocking external providers, skip the built-in default gateways
+    // so only user-registered custom gateways remain.
+    if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
+    try {
+      const gatewayProviders = await gateway.fetchProviders();
+      for (const [providerId, config] of Object.entries(gatewayProviders)) {
+        // Apply the same prefixing logic as registry-generator to avoid
+        // creating duplicate entries alongside PROVIDER_REGISTRY data.
+        // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+        // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+        const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+        // Only add if not already present from PROVIDER_REGISTRY to prevent
+        // duplicates when PROVIDER_REGISTRY already has the prefixed key
+        // (e.g. dev mode where GatewayRegistry includes custom gateways).
+        if (!(prefixedId in allProviders)) {
+          allProviders[prefixedId] = config;
         }
       }
+    } catch (error) {
+      console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
     }
   }
 
@@ -1753,14 +1764,33 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     return {
       id,
       name: provider.name,
-      label: (provider as any).label || provider.name,
-      description: (provider as any).description || '',
+      label: readStringField(provider, 'label') || provider.name,
+      description: readStringField(provider, 'description') || '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders),
+      connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
     };
   });
+}
+
+function isClaimedByGateway(
+  providerId: string,
+  models: readonly string[],
+  gateways: MastraModelGatewayInterface[],
+): boolean {
+  const [firstModel] = models;
+  if (!firstModel) return false;
+  const routerId = `${providerId}/${firstModel}`;
+  return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
+}
+
+function readStringField<Field extends string>(
+  source: object & Partial<Record<Field, unknown>>,
+  field: Field,
+): string | undefined {
+  const value = source[field];
+  return typeof value === 'string' ? value : undefined;
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({
@@ -2309,7 +2339,15 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
-  handler: async ({ mastra, agentId, resourceId, threadId, abortSignal, requestContext: serverRequestContext }) => {
+  handler: async ({
+    mastra,
+    agentId,
+    resourceId,
+    threadId,
+    withInitialHistory,
+    abortSignal,
+    requestContext: serverRequestContext,
+  }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
@@ -2325,7 +2363,20 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'threadId is required' });
       }
 
-      if (effectiveResourceId) {
+      if (withInitialHistory) {
+        // History returns stored messages, so apply the same checks as the messages route.
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext: serverRequestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+      } else if (effectiveResourceId) {
         const memory = await agent.getMemory({ requestContext: serverRequestContext });
         if (memory) {
           const thread = await memory.getThreadById({ threadId: effectiveThreadId });
@@ -2336,6 +2387,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const subscription = await agent.subscribeToThread({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
+        ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
       });
 
       let cleanedUp = false;
@@ -2951,6 +3003,15 @@ export const RESUME_STREAM_ROUTE = createRoute({
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId,
+        toolCallId,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+      });
+
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
@@ -3038,7 +3099,7 @@ export const RECOVER_ROUTE = createRoute({
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
+        workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
@@ -3143,6 +3204,15 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
           ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId,
+        toolCallId,
+        requestContext: serverRequestContext,
+        threadId: effectiveThreadId,
+      });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });

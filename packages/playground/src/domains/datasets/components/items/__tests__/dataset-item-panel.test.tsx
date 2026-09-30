@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { DatasetItem } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -10,7 +11,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import { DatasetItemPanel } from '../dataset-item-panel';
 import { baseItem, itemWithEmptyScorers, itemWithMocks, itemWithScorers } from './fixtures/dataset-item-panel';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

@@ -93,6 +93,20 @@ describe('parseStreamErrorText', () => {
     expect(parsed.details).toBe(openAIServerErrorPayload);
   });
 
+  describe('when the provider error is an OpenAI Responses response.failed envelope', () => {
+    const responseFailedPayload = JSON.stringify({
+      message:
+        '{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"server_error","message":"The server had an error while processing your request. Sorry about that! You can retry your request. "}}}',
+      name: 'AI_APICallError',
+    });
+
+    it('extracts the nested response.error.message as the summary', () => {
+      expect(parseStreamErrorText(responseFailedPayload).summary).toBe(
+        'The server had an error while processing your request. Sorry about that! You can retry your request.',
+      );
+    });
+  });
+
   it('falls back to the first line for non-JSON error text', () => {
     const parsed = parseStreamErrorText('Network connection lost.\nMore details here.');
     expect(parsed.summary).toBe('Network connection lost.');

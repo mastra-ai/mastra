@@ -23,6 +23,7 @@ import {
   extractTasksFromToolResultChunk,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 
@@ -201,6 +202,12 @@ export interface MastraChatProps {
   enableThreadSignals?: boolean;
   /** Override the legacy stream route for editor-owned hidden agents. */
   streamPath?: string;
+  /**
+   * Load stored thread messages through the thread subscription instead of
+   * `initialMessages`. The subscription sends them as one `thread-history`
+   * chunk and skips run parts already covered by it. Requires thread signals.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
 }
 
 interface SharedArgs {
@@ -304,6 +311,7 @@ export const useChat = ({
   onThreadSignalsUnsupported,
   enableThreadSignals = false,
   streamPath,
+  withInitialHistory,
 }: MastraChatProps) => {
   const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
@@ -341,6 +349,12 @@ export const useChat = ({
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
+  const [subscriptionHistory, setSubscriptionHistory] = useState<
+    { key: string; messages: MastraDBMessage[] } | undefined
+  >(undefined);
+  const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
+  const hydratedMessages =
+    withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
 
   const lastHydration = useRef<
     | {
@@ -357,23 +371,18 @@ export const useChat = ({
     const previous = lastHydration.current;
     const sameThread =
       previous?.agentId === agentId && previous.resourceId === resourceId && previous.threadId === threadId;
-    if (sameThread && previous.initialMessages === initialMessages) return;
-    const formattedMessages = resolveInitialMessages(initialMessages ?? []);
-    lastHydration.current = { agentId, resourceId, threadId, initialMessages, formattedMessages };
+    if (sameThread && previous.initialMessages === hydratedMessages) return;
+    const formattedMessages = resolveInitialMessages(hydratedMessages ?? []);
+    lastHydration.current = { agentId, resourceId, threadId, initialMessages: hydratedMessages, formattedMessages };
 
     if (sameThread) {
-      // Accumulation replaces changed messages immutably. Keep those local edits
-      // over history snapshots, even if the request returns after the run finishes.
-      const previousById = new Map(previous.formattedMessages.map(message => [message.id, message]));
-      setMessages(current => {
-        const live = current.filter(message => previousById.get(message.id) !== message);
-        const liveById = new Map(live.map(message => [message.id, message]));
-        const historyIds = new Set(formattedMessages.map(message => message.id));
-        return [
-          ...formattedMessages.map(message => liveById.get(message.id) ?? message),
-          ...live.filter(message => !historyIds.has(message.id)),
-        ];
-      });
+      setMessages(current =>
+        mergeHistoryIntoConversation({
+          conversation: current,
+          history: formattedMessages,
+          previousHistory: previous.formattedMessages,
+        }),
+      );
       setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
       // History may arrive before the live approval event, but must not undo
       // a live approval decision or terminal event, nor switch the active run.
@@ -397,7 +406,7 @@ export const useChat = ({
     pendingToolApprovalIdsRef.current = pendingApprovals;
     setIsAwaitingToolApproval(pendingApprovals.size > 0);
     _currentRunId.current = liveRunId.current ?? extractRunIdFromMessages(formattedMessages);
-  }, [agentId, resourceId, threadId, initialMessages, isRunning, isAwaitingToolApproval]);
+  }, [agentId, resourceId, threadId, hydratedMessages, isRunning, isAwaitingToolApproval]);
 
   useEffect(() => {
     _activeContinuation.current = {
@@ -540,6 +549,17 @@ export const useChat = ({
           pendingToolApprovalIdsRef.current.add(toolCallId);
           setIsAwaitingToolApproval(true);
         }
+        // Some runs (e.g. Inngest durable agents) emit no `start` chunk, so the
+        // approval chunk is the only place the run ID reaches the client.
+        if (runId) {
+          if (!liveRunId.current || liveRunFinished.current) {
+            liveRunId.current = runId;
+            liveRunFinished.current = false;
+          }
+          if (liveRunId.current === runId) {
+            _currentRunId.current = runId;
+          }
+        }
         setIsRunning(false);
       }
 
@@ -586,7 +606,7 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId })
+        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
@@ -597,7 +617,23 @@ export const useChat = ({
           _threadSubscriptionRef.current = subscription;
           void subscription
             .processDataStream({
-              onChunk: chunk => processStreamChunk(chunk),
+              onChunk: chunk => {
+                if (chunk.type === 'thread-history') {
+                  // Merge history into `messages` now, as a queued update, so the
+                  // live chunks right behind it accumulate onto the stored parts.
+                  const history = resolveInitialMessages(chunk.payload.messages);
+                  const previousHistory = lastHydration.current?.formattedMessages ?? [];
+                  setMessages(current =>
+                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
+                  );
+                  setSubscriptionHistory({
+                    key: `${agentId}:${resourceId ?? ''}:${threadId}`,
+                    messages: chunk.payload.messages,
+                  });
+                  return;
+                }
+                return processStreamChunk(chunk);
+              },
             })
             .catch(error => {
               if (!isAbortError(error)) {
@@ -632,7 +668,15 @@ export const useChat = ({
 
       await _threadSubscriptionPromiseRef.current;
     },
-    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk, streamPath],
+    [
+      agentId,
+      baseClient,
+      closeThreadSubscription,
+      markThreadSignalsUnsupported,
+      processStreamChunk,
+      streamPath,
+      withInitialHistory,
+    ],
   );
 
   useEffect(() => {

@@ -160,60 +160,55 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       expect(parts.at(-1)?.totalUsage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
     }, 15_000);
 
-    it('replays completed runs identically on origin and peer', async () => {
+    it('trims a saved persisted signal so a later peer does not replay it', async () => {
       const resourceId = `replay-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
       const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '100' };
       const origin = spawnWorker('replay-origin', env);
       workers = [origin];
       await waitForLine(origin, '"type":"ready"');
+      origin.send({ cmd: 'collect-default' });
       origin.send({ cmd: 'persist', text: 'retained replay' });
       await waitForLine(origin, '"type":"persisted"');
-      await new Promise(r => setTimeout(r, 300));
+
+      // The live subscriber sees the persisted signal as a complete run.
+      await waitFor(async () => eventsByType(origin, 'subscription-result').length > 0, 5_000);
+      expect(eventsByType(origin, 'command-error')).toHaveLength(0);
+      const originParts = eventsByType(origin, 'subscription-result')[0]?.parts as any[];
+      expect(originParts.map(part => part.type)).toEqual(['start', 'data-user-message', 'finish']);
 
       const redis = createClient({ url: REDIS_URL });
       await redis.connect();
       try {
+        // Once saved, the run's parts leave the thread topic.
         const streamKey = threadStreamKeyFor(resourceId, threadId);
-        const groupsBefore = await redis.xInfoGroups(streamKey);
-        origin.send({ cmd: 'collect-fresh' });
-        await waitForLine(origin, '"type":"fresh-subscription-created"');
-        await waitFor(async () => (await redis.xInfoGroups(streamKey)).length > groupsBefore.length, 5_000);
-
-        const peer = spawnWorker('replay-peer', env);
-        workers.push(peer);
-        await waitForLine(peer, '"type":"ready"');
-        peer.send({ cmd: 'collect-default' });
-
-        await waitFor(
-          async () =>
-            eventsByType(origin, 'subscription-result').length + eventsByType(origin, 'command-error').length > 0,
-          5_000,
-        );
-        await waitFor(
-          async () => eventsByType(peer, 'subscription-result').length + eventsByType(peer, 'command-error').length > 0,
-          5_000,
-        );
-        expect(eventsByType(origin, 'command-error')).toHaveLength(0);
-        expect(eventsByType(peer, 'command-error')).toHaveLength(0);
-        const originParts = eventsByType(origin, 'subscription-result')[0]?.parts as any[];
-        const peerParts = eventsByType(peer, 'subscription-result')[0]?.parts as any[];
-        expect(originParts).toEqual(peerParts);
-        expect(originParts.map(part => part.type)).toEqual(['start', 'data-user-message', 'finish']);
-
-        origin.send({ cmd: 'send', sigId: 'after-replay' });
-        await waitFor(
-          async () => eventsByType(origin, 'owner-stream-resolved').some(event => event.sigId === 'after-replay'),
-          5_000,
-        );
-        expect(
-          eventsByType(origin, 'owner-stream-resolved').find(event => event.sigId === 'after-replay'),
-        ).toMatchObject({
-          defined: true,
-        });
+        await waitFor(async () => {
+          const entries = await redis.xRange(streamKey, '-', '+');
+          return !entries.some(entry => String(entry.message.event ?? '').includes('"stream-part"'));
+        }, 5_000);
       } finally {
         await redis.quit();
       }
+
+      // A peer joining afterwards gets no replay of the saved run.
+      const peer = spawnWorker('replay-peer', env);
+      workers.push(peer);
+      await waitForLine(peer, '"type":"ready"');
+      peer.send({ cmd: 'collect-default' });
+      await new Promise(r => setTimeout(r, 1_000));
+      expect(eventsByType(peer, 'subscription-result')).toHaveLength(0);
+
+      // The thread is idle, so the next signal still wakes a run.
+      origin.send({ cmd: 'send', sigId: 'after-replay' });
+      await waitFor(
+        async () => eventsByType(origin, 'owner-stream-resolved').some(event => event.sigId === 'after-replay'),
+        5_000,
+      );
+      expect(eventsByType(origin, 'owner-stream-resolved').find(event => event.sigId === 'after-replay')).toMatchObject(
+        {
+          defined: true,
+        },
+      );
     }, 20_000);
 
     it('ignores ghost registrations before waking a new run', async () => {

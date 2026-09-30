@@ -3458,7 +3458,7 @@ describe('Observability Handlers', () => {
       const { ObservabilityStorage } = await import('@mastra/core/storage');
       class DeclaredStore extends ObservabilityStorage {
         override getFeatures() {
-          return ['metrics', 'tag-discovery', 'trace-query'] as const;
+          return ['metrics', 'tag-discovery', 'trace-query', 'trace-query-context-ids', 'feedback'] as const;
         }
       }
       const storage = createMockStorage(
@@ -3471,7 +3471,14 @@ describe('Observability Handlers', () => {
       });
 
       expect(result.observabilityStorageType).toBe('DeclaredStore');
-      expect(result.capabilities).toMatchObject({ metrics: true, logs: false, traceQuery: true });
+      expect(result.capabilities).toMatchObject({
+        metrics: true,
+        logs: false,
+        traceQuery: true,
+        traceQueryContextIds: true,
+        traceQueryRootDuration: false,
+        feedback: true,
+      });
       expect(result.capabilities.discovery.tags).toBe(true);
     });
 

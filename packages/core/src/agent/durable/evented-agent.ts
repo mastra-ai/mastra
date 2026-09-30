@@ -36,13 +36,29 @@ export interface EventedAgentConfig<
  * - You don't need an external execution engine (like Inngest)
  * - You want fire-and-forget execution with pubsub streaming
  * - You need resumable streams with event caching
+ * - You need runs to survive process death: an active run can be picked up by
+ *   a fresh process over the same storage via `recover(runId)` /
+ *   `recoverActiveRuns()` (running step state is persisted before execution)
  *
  * The key difference from DurableAgent is the execution strategy:
  * - DurableAgent: Runs the workflow synchronously via createRun + start
- * - EventedAgent: Starts the run without awaiting it (fire-and-forget)
+ * - EventedAgent: Starts the run without awaiting it (fire-and-forget); steps
+ *   execute via events on `mastra.pubsub`, so any worker sharing that bus can
+ *   process them. The agent's stream follows `mastra.pubsub`, so streaming,
+ *   suspend/resume, and finish events work even when the agent was constructed
+ *   with its own pubsub.
+ *
+ * Register the EventedAgent on a `Mastra` instance (with storage) to get
+ * evented execution — the evented engine needs the host's pubsub, storage,
+ * and event workers. Without a host, the agent falls back to the default
+ * in-process engine (with a warning), preserving the released behavior of a
+ * standalone evented agent. Recovery entry points (`recover`,
+ * `listActiveRuns`, `recoverActiveRuns`) still require a host and throw
+ * directly without one.
  *
  * @example
  * ```typescript
+ * import { Mastra } from '@mastra/core';
  * import { Agent } from '@mastra/core/agent';
  * import { EventedAgent } from '@mastra/core/agent/durable';
  *
@@ -54,9 +70,19 @@ export interface EventedAgentConfig<
  *
  * const eventedAgent = new EventedAgent({ agent });
  *
+ * // Register on a Mastra host to get evented execution (a hostless agent
+ * // falls back to the default in-process engine).
+ * const mastra = new Mastra({
+ *   agents: { myAgent: eventedAgent },
+ *   storage: new LibSQLStore({ url: 'file:mastra.db' }),
+ * });
+ *
  * const { output, runId, cleanup } = await eventedAgent.stream('Hello!');
  * const text = await output.text;
  * cleanup();
+ *
+ * // After a crash/restart, a fresh process over the same storage can resume:
+ * // await eventedAgent.recoverActiveRuns();
  * ```
  */
 export class EventedAgent<
@@ -69,6 +95,16 @@ export class EventedAgent<
    */
   constructor(config: EventedAgentConfig<TAgentId, TTools, TOutput>) {
     super(config);
+  }
+
+  /**
+   * EventedAgent runs the durable agentic loop on the evented execution
+   * engine (pubsub + WorkflowEventProcessor) instead of the default
+   * in-process engine.
+   * @internal
+   */
+  protected override get workflowEngine(): 'default' | 'evented' {
+    return 'evented';
   }
 
   /**
@@ -119,15 +155,31 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     try {
       const workflow = this.getWorkflow();
+      // The evented engine executes via pubsub events consumed by in-process
+      // workers — without them `run.start()` never resolves (it waits on the
+      // `workflows-finish` topic). Idempotent; a no-op when the server has
+      // already booted the workers.
+      await this.ensureEngineWorkersStarted();
       // Populate the run row's resourceId column so storage-level resource
       // filters (listSuspendedRuns / listActiveRuns) can narrow the query.
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
+      // Note: unlike the default engine, evented `createRun` accepts no
+      // `pubsub` — the engine always publishes on `mastra.pubsub` so any
+      // worker in a fleet can execute a step. The agent's stream still sees
+      // those events because its CachingPubSub follows `mastra.pubsub` as its
+      // source (wired at registration; see #ensurePubsubInitialized).
+      //
+      // On the hostless fallback (default engine, see resolveWorkflowEngine)
+      // there is no `mastra.pubsub`: the default engine publishes on the
+      // pubsub handed to `createRun`, so pass the agent's own transport —
+      // otherwise the caller's stream never sees a single event and hangs.
+      // This mirrors the previously shipped standalone behavior.
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        pubsub: this.pubsubInternal,
+        ...(this.resolveWorkflowEngine() === 'default' ? { pubsub: this.pubsubInternal } : {}),
       });
       // Fire and forget - don't await the run, so stream() returns immediately.
       // Pass the caller's requestContext (so config selectors pick the same observability
@@ -141,6 +193,16 @@ export class EventedAgent<
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
         .then(async result => {
+          // A failure the loop itself didn't catch resolves (not rejects) with
+          // status 'failed' — mirror DurableAgent.executeWorkflow and publish
+          // an ERROR event, otherwise the caller's stream never terminates
+          // (#17727's idle-start gap on the evented transport).
+          if (result?.status === 'failed') {
+            const error = new Error((result as any).error?.message || 'Workflow execution failed');
+            // Background variant: a pubsub already closing during shutdown must
+            // not turn the run's own failure into an unhandledRejection (#23168).
+            this.emitErrorInBackground(runId, error);
+          }
           // Reaching any non-suspended terminal status means the run is done and
           // its persisted snapshot rows will never be resumed. Delete them so
           // finished runs stop showing up in listActiveRuns() and being re-driven

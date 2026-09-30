@@ -52,9 +52,12 @@ const EXPORT_TO_SUBPATH: Record<string, string> = {
   CloudExporter: '@mastra/observability',
   MastraPlatformExporter: '@mastra/observability',
 
+  // Messages
+  MastraMessageV2: '@mastra/core/agent',
+  MastraDBMessage: '@mastra/core/agent',
+
   // Streaming
   ChunkType: '@mastra/core/stream',
-  MastraMessageV2: '@mastra/core/stream',
 
   // LLM/Models
   ModelRouterEmbeddingModel: '@mastra/core/llm',

@@ -24,6 +24,7 @@ import { getIsLinkActive, MainSidebar, MainSidebarProvider, useMainSidebar } fro
 import type { MainSidebarProviderProps, NavSection } from './main-sidebar';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -40,7 +41,6 @@ import {
   MetricsIcon,
   ProcessorIcon,
   PromptIcon,
-  RequestContextIcon,
   ScorersIcon,
   SettingsIcon,
   ToolsIcon,
@@ -57,10 +57,6 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
     {children}
   </a>
 ));
-
-/* ------------------------------------------------------------------------- */
-/* Layout frames — plain components so `render` source shows the real markup */
-/* ------------------------------------------------------------------------- */
 
 const HelperCopy = () => (
   <>
@@ -121,7 +117,7 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
                     <span className="text-right text-meta text-muted-foreground">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
-                    <span className="text-right text-meta text-accent1">ok</span>
+                    <span className="text-right text-meta text-success-indicator">ok</span>
                   </div>
                 ))}
               </div>
@@ -167,11 +163,6 @@ const MobileFrame = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-/* ------------------------------------------------------------------------- */
-/* Decorator — providers only (TooltipProvider + MainSidebarProvider).        */
-/* The frame lives inside `render` so Storybook's "Show code" is accurate.    */
-/* ------------------------------------------------------------------------- */
-
 const withProvider = (provider?: Omit<MainSidebarProviderProps, 'children'>) => (Story: React.ComponentType) => (
   <TooltipProvider>
     <MainSidebarProvider LinkComponent={StoryLink} {...provider}>
@@ -192,7 +183,6 @@ const studioSections: NavSection[] = [
       { name: 'MCP Servers', url: '/mcps', icon: <McpServerIcon /> },
       { name: 'Tools', url: '/tools', icon: <ToolsIcon /> },
       { name: 'Workspaces', url: '/workspaces', icon: <WorkspacesIcon /> },
-      { name: 'Request Context', url: '/request-context', icon: <RequestContextIcon /> },
     ],
   },
   {
@@ -478,10 +468,6 @@ export const FullSidebar: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Resizable / Collapsed variants — NavLink/NavHeader auto-inherit state      */
-/* ------------------------------------------------------------------------- */
-
 const SidebarBody = () => (
   <MainSidebar className="border-r border-border bg-background">
     <MainSidebar.Nav>
@@ -559,10 +545,6 @@ export const FullyCollapsible: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Floating variant — consumer composition, not a new prop                   */
-/* ------------------------------------------------------------------------- */
-
 export const Floating: Story = {
   decorators: [withProvider({ defaultWidth: 240, minWidth: 200, maxWidth: 400, collapseBelow: 180 })],
   parameters: {
@@ -594,10 +576,6 @@ export const Floating: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* State parity — expanded vs collapsed side-by-side                         */
-/* ------------------------------------------------------------------------- */
-
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
   <div className="flex h-125 w-210 gap-4 rounded-lg border border-border bg-sidebar p-3">{children}</div>
 );
@@ -624,8 +602,6 @@ const ParityBody = () => (
 );
 
 export const StateParity: Story = {
-  // No global decorator — each panel owns its own provider so the two
-  // sidebars can render in opposite states simultaneously.
   decorators: [Story => <TooltipProvider>{Story()}</TooltipProvider>],
   parameters: {
     docs: {
@@ -647,14 +623,6 @@ export const StateParity: Story = {
   ),
 };
 
-/* ------------------------------------------------------------------------- */
-/* Mobile drawer                                                             */
-/* ------------------------------------------------------------------------- */
-
-/* ------------------------------------------------------------------------- */
-/* asChild — slot any element (button, custom Link, anything) as the item.    */
-/* ------------------------------------------------------------------------- */
-
 export const AsChild: Story = {
   parameters: {
     docs: {
@@ -675,13 +643,11 @@ export const AsChild: Story = {
             <MainSidebar.NavSection>
               <MainSidebar.NavHeader>Navigation</MainSidebar.NavHeader>
               <MainSidebar.NavList>
-                {/* Default anchor (link={...}) */}
                 <MainSidebar.NavLink
                   link={{ name: 'Home', url: '/', icon: <Home /> }}
                   isActive={activeKey === 'home'}
                 />
 
-                {/* asChild: <button> as the item — fires onClick instead of navigating. */}
                 <MainSidebar.NavLink asChild isActive={activeKey === 'agents'}>
                   <button type="button" onClick={() => setActiveKey('agents')}>
                     <Bot />
@@ -689,28 +655,26 @@ export const AsChild: Story = {
                   </button>
                 </MainSidebar.NavLink>
 
-                {/* asChild: opens a Dialog. Replaces the old `<div onClick>` wrapper hack. */}
                 <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
-                  <DialogTrigger asChild>
-                    <MainSidebar.NavLink asChild>
-                      <button type="button">
-                        <LifeBuoy />
-                        <MainSidebar.NavLabel>Contact support</MainSidebar.NavLabel>
-                      </button>
-                    </MainSidebar.NavLink>
-                  </DialogTrigger>
+                  <DialogTrigger
+                    render={
+                      <MainSidebar.NavLink asChild>
+                        <button type="button">
+                          <LifeBuoy />
+                          <MainSidebar.NavLabel>Contact support</MainSidebar.NavLabel>
+                        </button>
+                      </MainSidebar.NavLink>
+                    }
+                  />
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Contact support</DialogTitle>
                       <DialogDescription>asChild lets a NavLink act as a Dialog trigger.</DialogDescription>
                     </DialogHeader>
-                    <p className="text-caption text-muted-foreground">
-                      Anything that can be clicked can be a sidebar item.
-                    </p>
+                    <DialogBody>Anything that can be clicked can be a sidebar item.</DialogBody>
                   </DialogContent>
                 </Dialog>
 
-                {/* asChild: external link with custom attrs. */}
                 <MainSidebar.NavLink asChild>
                   <a href="https://mastra.ai/docs" target="_blank" rel="noreferrer">
                     <BookOpen />

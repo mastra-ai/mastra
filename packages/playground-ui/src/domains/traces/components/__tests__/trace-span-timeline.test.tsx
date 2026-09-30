@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -140,6 +141,6 @@ describe('TraceSpanTimeline', () => {
   it('labels the time axis from zero to the trace duration', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
-    expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.00 s');
+    expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.000 s');
   });
 });

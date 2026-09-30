@@ -23,10 +23,14 @@ export const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling'
 export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
   'Delta polling requires a newer @mastra/core with observability delta polling support. Please upgrade.';
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
+const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
+const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
+const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
+const OBSERVABILITY_FEEDBACK_STORAGE_FEATURE = 'feedback';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE = 'observability-trace-query-tenant-scope';
 export const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE =
   'Trusted tenant scope requires a newer @mastra/core with trace-query tenant scope support. Please upgrade.';
@@ -41,6 +45,14 @@ export function supportsTraceQueryDiscoveryCore() {
     typeof coreStorage.planTraceQueryValues === 'function' &&
     typeof coreStorage.getTraceQueryCanonicalFieldDescriptors === 'function' &&
     typeof coreStorage.TraceQueryResourceLimitError === 'function'
+  );
+}
+
+export function supportsTraceAggregateCore() {
+  return (
+    coreStorage.traceAggregateRequestSchema !== undefined &&
+    coreStorage.traceAggregateResponseSchema !== undefined &&
+    typeof coreStorage.planTraceAggregate === 'function'
   );
 }
 
@@ -104,6 +116,14 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Trace aggregation is not supported by the configured observability store',
+  });
+}
+
 function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
   if (!predicate) return false;
   if (predicate.type === 'boolean') return predicate.args.some(usesRootDuration);
@@ -126,6 +146,33 @@ export function assertObservabilityTraceQueryRootDurationSupported(
 
   throw new HTTPException(501, {
     message: 'Root duration predicates are not supported by the configured observability store',
+  });
+}
+
+function usesContextId(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
+  if (!predicate) return false;
+  if (predicate.type === 'boolean') return predicate.args.some(usesContextId);
+  if (predicate.type === 'not') return usesContextId(predicate.arg);
+  if (predicate.type === 'relation') return usesContextId(predicate.predicate);
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(predicate.field);
+}
+
+export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE) === true;
+}
+
+export function isTraceQueryContextIdField(path: string): boolean {
+  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(path);
+}
+
+export function assertObservabilityTraceQueryContextIdsSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (!usesContextId(predicate) || supportsObservabilityTraceQueryContextIds(observabilityStore)) return;
+
+  throw new HTTPException(501, {
+    message: 'Context identifier predicates are not supported by the configured observability store',
   });
 }
 
@@ -204,9 +251,11 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
+  traceQueryContextIds: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   threadQuery: boolean;
+  feedback: boolean;
 };
 
 export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabilities = {
@@ -223,9 +272,11 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryRootDuration: false,
+  traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,
+  feedback: false,
 };
 
 /**
@@ -237,7 +288,9 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
  * store implements the underlying method, so those packages report accurately
  * without being upgraded. Delta polling and the trace/thread query APIs depend
  * on runtime behavior a method check can't see, so they are only reported for
- * stores that declare them.
+ * stores that declare them. Feedback is also declaration-only: Studio hides
+ * the feedback UI behind this flag, and store versions that implement feedback
+ * without declaring it simply don't advertise it until upgraded.
  */
 export function getObservabilityStorageCapabilities(
   observabilityStore: ObservabilityStorage,
@@ -290,6 +343,8 @@ export function getObservabilityStorageCapabilities(
     traceQuery,
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
+    traceQueryContextIds:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:
@@ -297,6 +352,7 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
     threadQuery,
+    feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
 
@@ -361,6 +417,15 @@ export const NEW_ROUTE_DEFS = {
     summary: 'Query traces',
     description:
       'Returns completed logical traces or distinct thread groups matching an advanced trace query. Thread grouping remains supported but is deprecated; use queryTraceThreads instead.',
+    requiresPermission: 'observability:read',
+  },
+
+  AGGREGATE_TRACES: {
+    method: 'POST',
+    path: '/observability/traces/aggregate',
+    summary: 'Aggregate traces',
+    description:
+      'Returns grouped and optionally time-bucketed measures (counts, durations, error rates) over completed logical traces matching an advanced trace predicate',
     requiresPermission: 'observability:read',
   },
 

@@ -38,11 +38,19 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead.',
     ),
   traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
+  traceQueryContextIds: z
+    .boolean()
+    .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
+  feedback: z
+    .boolean()
+    .describe(
+      'Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501.',
+    ),
 });
 
 export const editorSourceSchema = z.enum(['code', 'db']);

@@ -48,7 +48,7 @@ import type { MastraToolInvocation, MastraToolInvocationPart } from './state/typ
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { dropCrossProviderExecutedParts, ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
-import { stampPart } from './utils/stamp-part';
+import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
@@ -250,6 +250,15 @@ function prefixFingerprint(parts: MastraMessagePart[], index: number): BoundaryT
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
+  // Derived lookup state for `this.messages` so adding a message doesn't scan the whole list.
+  // Trusted only while `messages` is still the same array at the same length; anything else
+  // (reassignment, splice, external pushes) makes getMessageIndex() rebuild it.
+  private messageIndex?: {
+    messages: MastraDBMessage[];
+    length: number;
+    byId: Map<string, MastraDBMessage[]>;
+    sorted: boolean;
+  };
 
   // passed in by dev in input or context
   private systemMessages: AIV4Type.CoreSystemMessage[] = [];
@@ -535,13 +544,15 @@ export class MessageList {
   }
 
   public serialize(): SerializedMessageListState {
-    return this.stateManager.serializeAll({
+    const state = this.stateManager.serializeAll({
       messages: this.messages,
       systemMessages: this.systemMessages,
       taggedSystemMessages: this.taggedSystemMessages,
       memoryInfo: this.memoryInfo,
       agentNetworkAppend: this._agentNetworkAppend,
     });
+    const lastStepBoundary = this.#locateLastStepBoundary();
+    return lastStepBoundary ? { ...state, lastStepBoundary } : state;
   }
 
   /**
@@ -583,6 +594,16 @@ export class MessageList {
     this._agentNetworkAppend = data.agentNetworkAppend;
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
+    }
+    this.#lastStepBoundary = undefined;
+    if (state.lastStepBoundary) {
+      const { messageId, partIndex } = state.lastStepBoundary;
+      const parts = this.messages.find(m => m.id === messageId)?.content.parts;
+      const part = parts?.[partIndex];
+      if (parts && part?.type === 'step-start') {
+        this.#rememberBoundaryFingerprint(messageId, parts, part);
+        this.#lastStepBoundary = part;
+      }
     }
     return this;
   }
@@ -1300,6 +1321,23 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /**
+   * Apply transcript payload transforms to messages without draining them.
+   *
+   * Persistence paths that read messages directly instead of draining (e.g.
+   * the MessageHistory output processor persisting `get.response.db()`) must
+   * apply the same transcript redaction as {@link drainUnsavedMessages}.
+   * Otherwise the two writers race last-writer-wins on the same message id: a
+   * background tool result committed via {@link updateToolInvocation} holds
+   * the raw payload plus its transcript transform in providerMetadata, and a
+   * direct save landing after the redacting save-queue flush would persist
+   * the raw payload. The transform is idempotent — re-applying it to an
+   * already-transformed message writes the same values.
+   */
+  public transformMessagesForTranscript(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages.map(message => this.transformMessageForTranscript(message));
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;
@@ -1723,7 +1761,7 @@ export class MessageList {
           })()
         : undefined;
 
-    msg.content.parts![i] = {
+    const mergedPart: Extract<MastraMessagePart, { type: 'tool-invocation' }> = {
       ...inputPart,
       toolInvocation: {
         ...inputPart.toolInvocation,
@@ -1736,6 +1774,9 @@ export class MessageList {
       ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
+    if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
+    stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
+    msg.content.parts![i] = mergedPart;
 
     // `backgroundTasks` is a per-toolCallId record — merge instead of
     // overwrite so multiple concurrent background dispatches on the
@@ -1838,6 +1879,7 @@ export class MessageList {
     const boundary = appended ? stampPart({ type: 'step-start' as const }) : stampPart(lastPart);
     if (appended) lastMsg.content.parts.push(boundary);
     this.#rememberBoundaryFingerprint(lastMsg.id, lastMsg.content.parts, boundary);
+    this.#lastStepBoundary = boundary;
 
     // Ensure the mutated message is persisted. The reused branch stamps too, so it needs this as
     // much as the appended one does. When the reused marker was already stamped there is nothing
@@ -1856,6 +1898,33 @@ export class MessageList {
    * to tell a recovered boundary from a same-millisecond marker that merely took its place.
    */
   #boundaryFingerprints = new WeakMap<MastraStepStartPart, BoundaryCheckpoint>();
+
+  #lastStepBoundary: MastraStepStartPart | undefined;
+
+  /**
+   * The parts of `message` written by the current loop iteration: those after the boundary the
+   * latest `openStepBoundary()` opened, or all of them when that boundary is not in `message`
+   * (a first iteration opens none, and a later one may have started a new message).
+   * Intra-response `step-start` markers are not boundaries, so this never splits a single response.
+   */
+  public partsSinceStepBoundary(message: MastraDBMessage): MastraMessagePart[] {
+    const parts = message.content.parts ?? [];
+    const boundary = this.#lastStepBoundary;
+    if (!boundary) return parts;
+    const index = findBoundaryIndex(parts, boundary, message.id, this.#boundaryFingerprints.get(boundary));
+    return index === -1 ? parts : parts.slice(index + 1);
+  }
+
+  #locateLastStepBoundary(): { messageId: string; partIndex: number } | undefined {
+    const boundary = this.#lastStepBoundary;
+    if (!boundary) return undefined;
+    const checkpoint = this.#boundaryFingerprints.get(boundary);
+    for (const message of this.messages) {
+      const partIndex = findBoundaryIndex(message.content.parts ?? [], boundary, message.id, checkpoint);
+      if (partIndex !== -1) return { messageId: message.id, partIndex };
+    }
+    return undefined;
+  }
 
   #rememberBoundaryFingerprint(messageId: string, parts: MastraMessagePart[], boundary: MastraStepStartPart) {
     const index = parts.indexOf(boundary);
@@ -2040,8 +2109,57 @@ export class MessageList {
     );
   }
 
+  private getMessageIndex() {
+    const index = this.messageIndex;
+    if (index && index.messages === this.messages && index.length === this.messages.length) return index;
+
+    const byId = new Map<string, MastraDBMessage[]>();
+    for (const message of this.messages) {
+      const withId = byId.get(message.id);
+      if (withId) withId.push(message);
+      else byId.set(message.id, [message]);
+    }
+    this.messageIndex = { messages: this.messages, length: this.messages.length, byId, sorted: false };
+    return this.messageIndex;
+  }
+
+  private getMessagesWithId(id: string): readonly MastraDBMessage[] {
+    return this.getMessageIndex().byId.get(id) ?? [];
+  }
+
   private getMessageById(id: string) {
-    return this.messages.find(m => m.id === id);
+    return this.getMessagesWithId(id)[0];
+  }
+
+  private appendMessage(message: MastraDBMessage) {
+    const index = this.getMessageIndex();
+    const previous = this.messages.at(-1);
+    this.messages.push(message);
+    index.length = this.messages.length;
+    index.sorted &&= !previous || previous.createdAt.getTime() <= message.createdAt.getTime();
+    const withId = index.byId.get(message.id);
+    if (withId) withId.push(message);
+    else index.byId.set(message.id, [message]);
+  }
+
+  private replaceMessageAt(position: number, message: MastraDBMessage) {
+    const index = this.getMessageIndex();
+    const previous = this.messages[position]!;
+    this.messages[position] = message;
+    index.sorted = false;
+
+    const previousWithId = index.byId.get(previous.id)?.filter(m => m !== previous) ?? [];
+    if (previousWithId.length) index.byId.set(previous.id, previousWithId);
+    else index.byId.delete(previous.id);
+    const withId = index.byId.get(message.id);
+    if (withId) withId.push(message);
+    else index.byId.set(message.id, [message]);
+  }
+
+  // make sure messages are always stored in order of when they were created!
+  private sortMessages() {
+    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    this.getMessageIndex().sorted = true;
   }
 
   private shouldReplaceMessage(message: MastraDBMessage): { exists: boolean; shouldReplace?: boolean; id?: string } {
@@ -2131,12 +2249,10 @@ export class MessageList {
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
-    const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
     const latestMessage = this.messages.at(-1);
-    const latestMessageIndex = this.messages.length - 1;
-    const latestMessageIsAfterSealedBoundary = latestSealedIndex === -1 || latestMessageIndex > latestSealedIndex;
+    const latestMessageIsAfterSealedBoundary = !latestMessage || !MessageMerger.isSealed(latestMessage);
 
-    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+    const replacementTarget = exists && id ? this.getMessageById(id) : undefined;
 
     // Stored history loads as the base layer, underneath whatever this run already holds.
     // When a stored row shares an id with a live message (client input, or a response part
@@ -2183,16 +2299,17 @@ export class MessageList {
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }
       this.stateManager.removeMessage(replacementTarget);
-      this.messages[replacementIndex] = messageV2;
+      this.replaceMessageAt(replacementIndex, messageV2);
       this.pushMessageToSource(messageV2, 'memory');
       this.pushMessageToSource(messageV2, replacementTargetSource);
       this.updateLastCreatedAt(messageV2);
-      this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      this.sortMessages();
       return this;
     }
 
     if (messageSource === `memory`) {
-      for (const existingMessage of this.messages) {
+      // messagesAreEqual only matches stored messages that share the incoming id
+      for (const existingMessage of this.getMessagesWithId(messageV2.id)) {
         // don't double store any messages
         if (messagesAreEqual(existingMessage, messageV2)) {
           return;
@@ -2229,6 +2346,8 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
+        // Scan on demand rather than caching: observational memory seals messages in place.
+        const latestSealedIndex = this.messages.findLastIndex(message => MessageMerger.isSealed(message));
         const existingIsAtOrBeforeSealedBoundary = latestSealedIndex !== -1 && existingIndex <= latestSealedIndex;
 
         // If the existing message is sealed (e.g., after observation), don't replace it.
@@ -2283,7 +2402,7 @@ export class MessageList {
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
             }
-            this.messages.push(messageV2);
+            this.appendMessage(messageV2);
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else if (existingIsAtOrBeforeSealedBoundary) {
@@ -2291,7 +2410,7 @@ export class MessageList {
           if (messageV2.createdAt <= existingMessage.createdAt) {
             messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
           }
-          this.messages.push(messageV2);
+          this.appendMessage(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting =
@@ -2308,27 +2427,34 @@ export class MessageList {
             this.updateLastCreatedAt(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
-            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            this.sortMessages();
             return this;
           }
           // The replaced object must not linger in its old source set, otherwise a
           // client-echoed input message replaced by its stored copy would be re-persisted.
           this.stateManager.removeMessage(existingMessage);
-          this.messages[existingIndex] = messageV2;
+          this.replaceMessageAt(existingIndex, messageV2);
         }
       } else if (!exists) {
-        this.messages.push(messageV2);
+        this.appendMessage(messageV2);
       }
 
       this.pushMessageToSource(messageV2, messageSource);
+    }
+
+    // Appending in createdAt order keeps the list sorted, and then the newest message is last,
+    // so there's no need to walk and re-sort the whole list after every add.
+    if (this.getMessageIndex().sorted) {
+      const newestMessage = this.messages.at(-1);
+      if (newestMessage) this.updateLastCreatedAt(newestMessage);
+      return this;
     }
 
     for (const storedMessage of this.messages) {
       this.updateLastCreatedAt(storedMessage);
     }
 
-    // make sure messages are always stored in order of when they were created!
-    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    this.sortMessages();
 
     return this;
   }

@@ -5,7 +5,11 @@ import { Route, Routes, useLocation } from 'react-router';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkflowTraces from '..';
 import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { emptyTraceQueryFields, traceQueryPage } from '@/pages/traces/__tests__/fixtures/trace-query';
+import {
+  emptyTraceQueryFields,
+  traceQueryCapabilities,
+  traceQueryPage,
+} from '@/pages/traces/__tests__/fixtures/trace-query';
 import {
   branchList,
   emptyEntityNames,
@@ -32,6 +36,7 @@ const LocationProbe = () => {
 const setHandlers = (onQuery: (body: unknown) => void) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(metricsCapableSystemPackages)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
@@ -94,7 +99,10 @@ describe('WorkflowTraces page', () => {
       await waitFor(() =>
         expect(screen.getByTestId('location').textContent).toContain(`filterEntityId=${WORKFLOW_ID}`),
       );
-      await waitFor(() => expect(result.queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(result.queryClient.isFetching()).toBe(0);
+      });
       return { ...result, onQuery };
     };
 

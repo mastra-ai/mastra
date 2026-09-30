@@ -73,6 +73,14 @@ export function createAuthMiddleware({
       buildAuthorizeContext: () => toWebRequest(req),
     });
 
+    for (const [key, value] of Object.entries(result.headers ?? {})) {
+      if (key.toLowerCase() === 'set-cookie') {
+        res.append(key, value);
+      } else {
+        res.setHeader(key, value);
+      }
+    }
+
     if (result.action === 'next') {
       next();
       return;

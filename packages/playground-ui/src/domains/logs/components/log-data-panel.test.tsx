@@ -20,7 +20,7 @@ describe('LogDataPanel', () => {
     it('shows the full timestamp at heading size, not as caption', () => {
       render(<LogDataPanel log={log} onClose={vi.fn()} />);
 
-      const heading = screen.getByRole('heading', { name: /Sep 24, 09:40:48\.289/ });
+      const heading = screen.getByRole('heading', { name: /Sep 24, 2026, 9:40:48\.289 AM/ });
       expect(heading.querySelector('b')).toBeNull();
     });
 

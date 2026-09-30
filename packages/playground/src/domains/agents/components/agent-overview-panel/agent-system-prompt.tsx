@@ -4,6 +4,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { FileText, WrapText } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -76,7 +77,8 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 aria-label="System prompt source"
                 tabIndex={0}
                 className={cn(
-                  'min-w-0 overflow-x-auto font-mono text-caption leading-relaxed text-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
+                  'min-w-0 overflow-x-auto text-caption leading-relaxed text-foreground',
+                  focusRing,
                   wrapSource ? '[overflow-wrap:anywhere] whitespace-pre-wrap' : 'whitespace-pre',
                 )}
               />

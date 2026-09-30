@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -10,7 +11,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError } from './error';
+import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -80,6 +81,8 @@ interface ObserverCallOptions {
   /** Which pipeline path initiated this cycle; passed to transform hooks. */
   trigger?: ObserveTrigger;
   mainAgent?: ProcessorContext['agent'];
+  /** Zone the Observer sees message dates in: the record's `observedTimezone`. */
+  timeZone?: string;
 }
 
 interface ObserverCallResult {
@@ -157,16 +160,31 @@ export class ObserverRunner {
     memory?: MastraMemory,
     extractors = this.observationConfig.extractors ?? [],
   ): Agent {
+    // Read the model into the widened type before branching on it so the
+    // conditional does not force TypeScript to enumerate every model-id literal.
+    let agentModel: WidenModelId<ConcreteObservationModel> = model;
+    if (Array.isArray(agentModel)) {
+      agentModel = agentModel.map(fallback => ({ ...fallback, maxRetries: 0 }));
+    } else if (typeof agentModel === 'function') {
+      const resolveDynamicModel = agentModel;
+      agentModel = (async args => {
+        const resolvedModel = await resolveDynamicModel(args);
+        return Array.isArray(resolvedModel)
+          ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
+          : resolvedModel;
+      }) as typeof agentModel;
+    }
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
+      maxRetries: 0,
       instructions: buildObserverSystemPrompt(
         isMultiThread,
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
         extractors,
       ),
-      model,
+      model: agentModel,
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
@@ -306,7 +324,7 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
           extractors: activeExtractors,
         },
-        { attachmentFilter },
+        { attachmentFilter, timeZone: options?.timeZone },
       ),
     ];
 
@@ -356,11 +374,16 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  throw error;
+                  if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
+                  throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
           }),
-        { label: 'observer', abortSignal },
+        {
+          label: 'observer',
+          abortSignal,
+          maxRetries: this.observationConfig.maxRetries,
+        },
       );
     };
 
@@ -455,6 +478,7 @@ export class ObserverRunner {
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
     hookContext?: { resourceId?: string; trigger?: ObserveTrigger },
+    timeZone?: string,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -484,6 +508,7 @@ export class ObserverRunner {
       priorMetadataByThread,
       observabilityContext,
       model,
+      timeZone,
     );
 
     for (const threadId of allThreadOrder) {
@@ -515,6 +540,7 @@ export class ObserverRunner {
     >,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteObservationModel,
+    timeZone?: string,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -570,6 +596,7 @@ export class ObserverRunner {
             priorThreadTitle: priorMetadataByThread?.get(threadId)?.threadTitle,
             priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
             model: resolvedModel.model,
+            timeZone,
           },
         );
         results.set(threadId, {
@@ -587,6 +614,15 @@ export class ObserverRunner {
           totalUsage.totalTokens += threadResult.usage.totalTokens ?? 0;
         }
       }
+      // Same contract as the single-call branch below: mark only after every
+      // per-thread observer call succeeded, so a failure leaves the messages
+      // eligible for a later cycle.
+      for (const msgs of messagesByThread.values()) {
+        for (const msg of msgs) {
+          this.observedMessageIds.add(msg.id);
+        }
+      }
+
       return { results, usage: totalUsage };
     }
 
@@ -605,16 +641,9 @@ export class ObserverRunner {
         undefined,
         this.observationConfig.threadTitle,
         activeExtractors,
-        { attachmentFilter: multiThreadAttachmentFilter },
+        { attachmentFilter: multiThreadAttachmentFilter, timeZone },
       ),
     ];
-
-    // Mark all messages as observed
-    for (const msgs of messagesByThread.values()) {
-      for (const msg of msgs) {
-        this.observedMessageIds.add(msg.id);
-      }
-    }
 
     const doGenerate = async () => {
       return withRetry(
@@ -663,11 +692,16 @@ export class ObserverRunner {
                     hasRequestContext: Boolean(internalRequestContext),
                     aborted: abortSignal?.aborted ?? false,
                   });
-                  throw error;
+                  if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
+                  throw new OmModelExecutionError('observer-model', error);
                 }
               }, abortSignal),
           }),
-        { label: 'observer-multi-thread', abortSignal },
+        {
+          label: 'observer-multi-thread',
+          abortSignal,
+          maxRetries: this.observationConfig.maxRetries,
+        },
       );
     };
 
@@ -761,6 +795,12 @@ export class ObserverRunner {
     for (const threadId of threadOrder) {
       if (!results.has(threadId)) {
         results.set(threadId, { observations: '' });
+      }
+    }
+
+    for (const msgs of messagesByThread.values()) {
+      for (const msg of msgs) {
+        this.observedMessageIds.add(msg.id);
       }
     }
 

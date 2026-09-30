@@ -1,12 +1,16 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { Brain, ExternalLink, Info } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
@@ -19,8 +23,8 @@ const formatTokens = (n: number) => {
 };
 
 const getBarColor = (percentage: number) => {
-  if (percentage >= 60) return 'bg-blue-500';
-  return 'bg-green-500';
+  if (percentage >= 60) return 'bg-info-indicator';
+  return 'bg-success-indicator';
 };
 
 const getModelLabel = (model: unknown, modelRouting?: Array<{ upTo: number; model: string }>) => {
@@ -42,34 +46,6 @@ const getBaseThresholdValue = (threshold: ThresholdValue | undefined, defaultVal
   if (!threshold) return defaultValue;
   if (typeof threshold === 'number') return threshold;
   return threshold.min;
-};
-
-const useElapsedTime = (isActive: boolean) => {
-  const [state, setState] = useState({ isActive, elapsed: 0 });
-  const startTimeRef = useRef<number | null>(null);
-
-  if (state.isActive !== isActive) {
-    startTimeRef.current = isActive ? Date.now() : null;
-    setState({ isActive, elapsed: 0 });
-  }
-
-  useEffect(() => {
-    if (!isActive) return;
-
-    if (!startTimeRef.current) {
-      startTimeRef.current = Date.now();
-    }
-
-    const interval = setInterval(() => {
-      const startTime = startTimeRef.current;
-      if (!startTime) return;
-      setState(current => ({ ...current, elapsed: (Date.now() - startTime) / 1000 }));
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isActive]);
-
-  return state.isActive === isActive ? state.elapsed : 0;
 };
 
 const ProgressBar = ({
@@ -101,16 +77,18 @@ const ProgressBar = ({
   const showAdaptiveLabel = isAdaptive && percentage >= 100 && !isProcessing && baseThreshold && value < baseThreshold;
 
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
-  const fillColor = isProcessing ? 'bg-blue-500/10' : barColor;
-  const textColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-blue-600' : 'text-white';
-  const tokenBg = isProcessing ? 'bg-blue-500/10' : 'bg-fill';
-  const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-muted-foreground';
+  const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
+  const textColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
+  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
+  const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
+  const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-meta tracking-wider text-muted-foreground uppercase">{label}</span>
+        <Txt as="span" variant="meta" tone="muted" className="tracking-wider uppercase">
+          {label}
+        </Txt>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
@@ -147,7 +125,7 @@ const ProgressBar = ({
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-amber-400">Adaptive</span>{' '}
+                    <span className="text-badge-yellow-indicator">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
@@ -163,37 +141,51 @@ const ProgressBar = ({
           <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
           >
-            {isProcessing
-              ? `${activeText} ${elapsed.toFixed(1)}s`
-              : showAdaptiveLabel
-                ? 'adaptive'
-                : `${Math.round(percentage)}%`}
+            {isProcessing ? (
+              <>
+                {activeText}{' '}
+                <Txt as="span" variant="meta" font="mono">
+                  {formatElapsed(elapsed)}
+                </Txt>
+              </>
+            ) : showAdaptiveLabel ? (
+              'adaptive'
+            ) : (
+              `${Math.round(percentage)}%`
+            )}
           </span>
           <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
-            {isProcessing
-              ? `${activeText} ${elapsed.toFixed(1)}s`
-              : showAdaptiveLabel
-                ? 'adaptive'
-                : `${Math.round(percentage)}%`}
+            {isProcessing ? (
+              <>
+                {activeText}{' '}
+                <Txt as="span" variant="meta" font="mono">
+                  {formatElapsed(elapsed)}
+                </Txt>
+              </>
+            ) : showAdaptiveLabel ? (
+              'adaptive'
+            ) : (
+              `${Math.round(percentage)}%`
+            )}
           </span>
         </div>
 
         <span
-          className={`text-meta ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-meta ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
           {formatTokens(value)}
-          <span className={isProcessing ? 'text-blue-500' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
+          <span className={isProcessing ? 'text-info-indicator' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-amber-400">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-badge-yellow-indicator">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-caption">
-                  <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
+                  <span className="text-badge-yellow-indicator">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
@@ -210,8 +202,10 @@ const ProgressBar = ({
 
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-purple-400" />
-    <h3 className="text-subheading text-foreground">Observational Memory</h3>
+    <Brain className="h-4 w-4 text-badge-purple-indicator" />
+    <Txt as="h3" variant="subheading" tone="ink">
+      Observational Memory
+    </Txt>
   </div>
 );
 
@@ -219,19 +213,21 @@ const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
       <Brain className="h-4 w-4 text-muted-foreground" />
-      <h3 className="text-subheading text-foreground">Observational Memory</h3>
+      <Txt as="h3" variant="subheading" tone="ink">
+        Observational Memory
+      </Txt>
     </div>
     <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-      <p className="mb-3 text-body text-muted-foreground">
+      <Txt tone="muted" className="mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
-      </p>
+      </Txt>
       <a
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'inline-flex items-center gap-2 text-body text-blue-400 hover:text-blue-300',
+          'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
           controlStateColorTransition,
         )}
       >
@@ -317,7 +313,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId);
+  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,

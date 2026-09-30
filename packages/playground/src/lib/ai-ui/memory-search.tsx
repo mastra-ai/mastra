@@ -4,20 +4,10 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatRelativeTime } from '@mastra/playground-ui/utils/relative-time';
 import { Search, X, ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
-
-// Simple relative time formatter
-const formatRelativeTime = (date: Date): string => {
-  const now = new Date();
-  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
-  return date.toLocaleDateString();
-};
 
 interface MemorySearchProps {
   searchMemory: (query: string) => Promise<MemorySearchResponse>;
@@ -251,7 +241,7 @@ export const MemorySearch = ({
         <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-red-500">
+              <Txt variant="caption" className="text-destructive-indicator">
                 {error}
               </Txt>
             </div>
@@ -275,7 +265,7 @@ export const MemorySearch = ({
                   onClick={() => handleResultClick(result.id, result.threadId)}
                   className={cn(
                     'w-full border-b border-border px-4 py-3 text-left last:border-b-0 hover:bg-fill-subtle',
-                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-400',
+                    result.threadId !== currentThreadId && 'border-l-2 border-l-blue-600 dark:border-l-blue-400',
                   )}
                 >
                   <div className="flex flex-col gap-2">
@@ -295,18 +285,20 @@ export const MemorySearch = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2">
-                          <span
+                          <Txt
+                            as="span"
+                            variant="column"
                             className={cn(
-                              'rounded px-2 py-0.5 text-column',
+                              'rounded px-2 py-0.5',
                               result.role === 'user'
-                                ? 'bg-blue-500/20 text-blue-400'
-                                : 'bg-green-500/20 text-green-400',
+                                ? 'bg-badge-blue-strong text-badge-blue-foreground'
+                                : 'bg-badge-green-strong text-badge-green-foreground',
                             )}
                           >
                             {result.role}
-                          </span>
-                          <Txt variant="meta" tone="muted">
-                            {formatRelativeTime(new Date(result.createdAt))}
+                          </Txt>
+                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
+                            {formatRelativeTime(result.createdAt)}
                           </Txt>
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">
@@ -315,14 +307,14 @@ export const MemorySearch = ({
                                 tone={result.threadId !== currentThreadId ? undefined : 'muted'}
                                 className={cn(
                                   'max-w-[150px] truncate',
-                                  result.threadId !== currentThreadId && 'text-blue-400',
+                                  result.threadId !== currentThreadId && 'text-info-indicator',
                                 )}
                                 title={result.threadTitle}
                               >
                                 • {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
-                                <ExternalLink className="h-3 w-3 text-blue-400" />
+                                <ExternalLink className="h-3 w-3 text-info-indicator" />
                               )}
                             </div>
                           )}

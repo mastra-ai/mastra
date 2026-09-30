@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -22,6 +21,7 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -371,8 +371,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
       // Issue #10061: Always qualify with schema where vector extension is installed
       // This ensures the type is found regardless of the session's search_path
-      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
-      return `${validatedSchema}.${vectorType}`;
+      // Plain identifiers stay unquoted; other names (e.g. `my-tenant`) must be quoted.
+      const extensionSchema = parseSchemaName(this.vectorExtensionSchema, 'vector extension schema');
+      const qualifier = /^[A-Za-z_][A-Za-z0-9_]*$/.test(extensionSchema) ? extensionSchema : `"${extensionSchema}"`;
+      return `${qualifier}.${vectorType}`;
     }
 
     // Fallback to unqualified (will use search_path)
@@ -475,7 +477,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   private getSchemaName() {
-    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    return this.schema ? `"${parseSchemaName(this.schema)}"` : undefined;
   }
 
   private async ensureNamespaceSchema(indexName: string, client: pg.PoolClient): Promise<void> {
@@ -501,7 +503,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const state = await this.getNamespaceSchemaState(tableName, client);
     if (!state.composite_index) {
-      const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
       );
@@ -522,12 +524,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private getNamespaceIndexName(parsedIndexName: string): string {
+  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
     const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
     if (fullName.length <= 63) {
       return fullName;
     }
-    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const hash = Buffer.from(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(parsedIndexName)),
+    )
+      .toString('hex')
+      .slice(0, 32);
     const suffix = `_ns_${hash}_idx`;
     return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }

@@ -3,6 +3,7 @@ import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { LogDataPanel } from '@mastra/playground-ui/domains/logs/components/log-data-panel';
 import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/logs-error-content';
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
@@ -17,6 +18,7 @@ import {
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
@@ -24,10 +26,10 @@ import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useCallback, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/logs')];
 
@@ -36,7 +38,10 @@ const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const url = useLogsUrlState(searchParams, setSearchParams);
+  // Servers without the trace-query API list threads through `listTracesLight` and don't expose feedback.
+  const traceQuery = useTraceQueryAvailable();
   const { sort, onSortChange } = useUrlSort({
     searchParams,
     setSearchParams,
@@ -224,6 +229,9 @@ export default function LogsPage() {
         selectedSpanId={url.featuredSpanId ?? null}
         onSpanSelect={handleSpanSelect}
         onClose={handleTraceClose}
+        withQueryTrace={traceQuery.enabled}
+        withFeedback={traceQuery.enabled}
+        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
       />
     </PageLayout>
   );

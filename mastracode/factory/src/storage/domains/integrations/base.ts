@@ -195,9 +195,7 @@ interface SubscriptionRow extends Record<string, unknown> {
  * `FactoryStorageOps` surface — works on any `FactoryStorage` backend.
  */
 export class IntegrationStorage extends FactoryStorageDomain {
-  constructor(
-    private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption(),
-  ) {
+  constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('integrations');
   }
 

@@ -1,10 +1,10 @@
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptBlocksPage from '..';
 import { fewPromptBlocks, noPromptBlocks, pagedPromptBlocks, systemPackages } from './fixtures/prompt-blocks';
-import { LinkComponentProvider } from '@/lib/framework';
 import { Link } from '@/lib/link';
 import { stubLinkPaths, TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

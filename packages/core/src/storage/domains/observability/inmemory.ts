@@ -145,6 +145,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         'environment-discovery',
         'tag-discovery',
         'metric-discovery',
+        'feedback',
       ] as const;
     }
 
@@ -158,6 +159,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       'tag-discovery',
       'metric-discovery',
       'delta-polling',
+      'feedback',
     ] as const;
   }
 

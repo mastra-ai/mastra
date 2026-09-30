@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -88,7 +89,7 @@ export function WorkItemCard({
   sessionStatus?: SessionRowStatus;
   /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
-  onMove: (toStage: string, options?: { preapprovePlans?: boolean }) => void;
+  onMove: (toStage: string) => void;
   onRemove: () => void;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
@@ -179,9 +180,9 @@ export function WorkItemCard({
       morph.closeDetails();
       onApproveProposal(decisionId);
     },
-    onMove: (toStage, options) => {
+    onMove: toStage => {
       morph.closeDetails();
-      onMove(toStage, options);
+      onMove(toStage);
     },
     onRemove: () => {
       morph.closeDetails();
@@ -245,7 +246,7 @@ export function WorkItemCard({
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           busyLabel !== undefined && 'opacity-70',
-          highlighted && 'border-warning1/40 bg-warning1/5 ring-1 ring-warning1/30',
+          highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
         )}
       >
         {wickStatus && <ActivityWick status={wickStatus} />}
@@ -255,7 +256,7 @@ export function WorkItemCard({
           draggable={false}
           aria-label={`Details for ${item.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
           onClick={morph.openDetails}
         />
         <WorkItemCardRows

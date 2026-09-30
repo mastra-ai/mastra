@@ -23,7 +23,7 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
@@ -72,7 +72,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of WorkspacesPG.MANAGED_TABLES) {
@@ -94,7 +94,7 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return WorkspacesPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -372,13 +372,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       const updatedWorkspace = await this.#getById(this.#db.client, id);
       if (!updatedWorkspace) {

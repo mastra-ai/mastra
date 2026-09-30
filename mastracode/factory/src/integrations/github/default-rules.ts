@@ -1,3 +1,6 @@
+import { hasRecordedVerdict } from '../../boards/review.js';
+import { normalizedVerdictLine } from '../../review-verdict.js';
+import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GithubRuleOverrides = Partial<
@@ -18,6 +21,11 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // Re-triage would take over a card that is being built or reviewed.
+  const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
+  if (stage === 'execute' || stage === 'review') return;
+  // A finished card has nothing left to triage; talk on a closed issue must not park a run on it.
+  if (isTerminalFactoryRuleStage(context.item.stages)) return;
 
   const reason =
     context.event === 'issueEdited'
@@ -100,7 +108,11 @@ function issueClosed(context: FactoryGithubRuleContext) {
 
 function materializePullRequestIntake(
   context: FactoryGithubRuleContext,
-  { idempotencyKey, autoStartCandidate, stage = 'intake' }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+  {
+    idempotencyKey,
+    autoStartCandidate,
+    stage = 'intake',
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -137,8 +149,22 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // Opening a pull request is evaluated once per card it concerns. This rule
   // files the pull request's own Review card, which is the arrival — the
   // evaluation carrying `pullRequestIntake` — so the authoring Work item's own
-  // evaluation has nothing to file.
-  if (context.item && context.pullRequestIntake !== true) return;
+  // evaluation only moves it out for review: Building means "no pull request
+  // yet", Review means one is open. The card rests there through every round of
+  // feedback — the builder is woken in place — until the merge closes it.
+  if (context.item && context.pullRequestIntake !== true) {
+    if (context.board !== 'work' || context.pullRequest.state !== 'open') return;
+    if (!context.item.stages.includes('execute')) return;
+    // Resolution can match a Work item by branch alone, so a fork's pull
+    // request must not be able to move it: same bar as auto-starting a review.
+    if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:out-for-review`,
+      board: 'work',
+      stage: 'review',
+    } as const;
+  }
   // A GitHub App bot is never a collaborator, so Factory's own PRs score
   // untrusted; their authorship is the trust signal.
   const autoStartCandidate =
@@ -169,15 +195,26 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
-  // Provenance bound the event to the originating Work item instead: remind
-  // its agent to assess completion — never auto-complete the Work item.
+  // Provenance bound the event to the originating Work item instead: the merge
+  // is what finishes the work, so it closes the Work card alongside its Review card —
+  // unless the card has since opened another pull request, which is still out.
+  const openPullRequestNumber = context.item.metadata?.openPullRequestNumber;
+  if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
+    return {
+      type: 'sendMessage',
+      idempotencyKey: `${context.ingress.id}:work-merged`,
+      role: 'work',
+      message:
+        `Pull request #${context.pullRequest.number} merged. Pull request #${openPullRequestNumber} is still open, ` +
+        'so this Work card stays in Review until it merges.',
+    } as const;
+  }
   return {
-    type: 'sendMessage',
-    idempotencyKey: `${context.ingress.id}:assess-work-completion`,
-    role: 'work',
-    message:
-      `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
-      'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:work-merged`,
+    board: 'work',
+    stage: 'done',
+    message: { text: `Pull request #${context.pullRequest.number} merged; this Work card was moved to Done.` },
   } as const;
 }
 
@@ -220,16 +257,9 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
  * inspected — a verdict quoted later in the findings must not count.
  */
 function requestsChangesVerdict(body: string | undefined): boolean {
-  const firstLine = body
-    ?.split('\n')
-    .map(line => line.trim())
-    .find(line => line.length > 0);
-  if (!firstLine) return false;
   // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = firstLine
-    .replaceAll(/[*_`#>\s]+/g, ' ')
-    .trim()
-    .toLowerCase();
+  const normalized = normalizedVerdictLine(body);
+  if (!normalized) return false;
   // Match the verdict exactly so negated phrasings ("Verdict: do not request
   // changes") cannot wake the author.
   return /^verdict: ?(request changes|changes requested)$/.test(normalized);
@@ -310,14 +340,17 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
       stage: 'review',
     });
   }
-  // Already in Reviewing: a review pass is pending or running; re-entering
-  // would be a same-stage no-op anyway (stage rules only fire on change).
-  if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
+  // Already in Reviewing with no verdict yet: a pass is pending or running.
+  // Once a verdict is recorded the card rests in Reviewing, so a fresh request
+  // re-enters the stage to start another pass.
+  const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
+  if (reviewing && !hasRecordedVerdict(context.item)) return;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
     board: 'review',
     stage: 'review',
+    ...(reviewing ? { reenter: true } : {}),
   } as const;
 }
 
@@ -330,6 +363,9 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // stage to supersede it. `reviewPullRequest` cancels the stale run and picks
   // the right skill for the entry it sees.
   if (context.item.stages.some(stage => stage === 'intake')) return;
+  // A fork's author controls its head branch, so an untrusted push must not be
+  // able to start review passes on demand; a maintainer can still request one.
+  if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
   const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
   return {
     type: 'transition',

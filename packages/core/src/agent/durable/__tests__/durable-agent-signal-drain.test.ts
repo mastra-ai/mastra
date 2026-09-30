@@ -284,7 +284,8 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           installedDrain = true;
           const originalDrain = entry.drainPendingSignals;
           entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-            if (scope === 'pending') {
+            // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
+            if ((scope ?? 'pending') === 'pending') {
               drainCallCount++;
               // Exercise both producers: the signal-drain step, then the loop predicate.
               if (drainCallCount === drainAt) {
@@ -364,7 +365,8 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
           if (entry) {
             const originalDrain = entry.drainPendingSignals;
             entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-              if (scope === 'pending') {
+              // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
+              if ((scope ?? 'pending') === 'pending') {
                 pendingDrainCount++;
                 // Return signal on the first pending drain only
                 if (pendingDrainCount === 1) {

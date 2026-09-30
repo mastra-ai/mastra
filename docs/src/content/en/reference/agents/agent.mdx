@@ -849,6 +849,14 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
             description:
               'Use true to hide all recognized signals, false to show all, or an array to hide selected types from this subscription, including live, idle-persisted, and replayed signals. Other subscribers and the initiating stream keep their own policies.',
           },
+          {
+            name: 'withInitialHistory',
+            type: 'boolean | { perPage?: number }',
+            isOptional: true,
+            defaultValue: 'false',
+            description:
+              "Emit the stored thread messages as one `thread-history` chunk first, then only retained parts newer than that history, then live parts. Completed runs already in storage aren't replayed; pending tool approvals are still emitted. `perPage` limits how many recent messages are loaded (default 40). Requires agent memory; without it the subscription is live-only.",
+          },
         ],
       },
     ],
@@ -864,6 +872,19 @@ const filtered = await agent.subscribeToThread({
   threadId: 'thread-abc',
   hideSignals: ['reactive', 'system-reminder'],
 })
+```
+
+To render a thread without replaying finished runs, request initial history. The first chunk carries the stored messages:
+
+```ts
+const subscription = await agent.subscribeToThread({
+  threadId: 'thread-abc',
+  withInitialHistory: true,
+})
+for await (const chunk of subscription.stream) {
+  if (chunk.type === 'thread-history') render(chunk.payload.messages)
+  else handle(chunk)
+}
 ```
 
 `hideSignals: true` hides all recognized signal types. Set it to `false` to show all signals. An array accepts `user`, `state`, `reactive`, `notification`, `user-message`, and `system-reminder`. Matching normalizes `system-reminder` to `reactive` and `user-message` to `user`. An omitted option, `false`, or `[]` excludes nothing. Each subscriber filters its own live and replayed chunks, including remote pubsub events and idle-persisted signals. Filtering preserves non-signal chunks, unknown or malformed signal chunks, ordering, and completion/error events, even when every signal type is excluded.

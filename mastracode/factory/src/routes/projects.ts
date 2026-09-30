@@ -11,6 +11,7 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
@@ -143,6 +144,24 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+interface ModelApplySession {
+  thread: {
+    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
+    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
+  };
+}
+
+interface ModelApplyController {
+  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
+}
+
+function persistedThreadMode(metadata: Record<string, unknown> | null | undefined): string | undefined {
+  if (typeof metadata?.currentModeId === 'string' && metadata.currentModeId) return metadata.currentModeId;
+  const modeKeys = Object.keys(metadata ?? {}).filter(key => key.startsWith('modeModelId_'));
+  if (modeKeys.length !== 1) return undefined;
+  return modeKeys[0]?.slice('modeModelId_'.length) || undefined;
+}
+
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -166,8 +185,10 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain — retired sessions drop the refs work items hold on them. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /** Work-items domain used by session retirement and running-thread model updates. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
+  /** Controller used to reach the thread store behind each active binding. */
+  controller?: ModelApplyController;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -310,6 +331,99 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             await this.#projects()
           ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: 'Organization administrator access is required to update running sessions.',
+              },
+              403,
+            );
+          }
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, parsedPath.data.id);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const modelId = project.defaultModelId;
+          if (!modelId) {
+            return context.json(
+              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
+              400,
+            );
+          }
+          const { workItems, controller } = this.deps;
+          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+
+          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
+            binding => binding.status === 'active',
+          );
+          const seen = new Set<string>();
+          const applied: string[] = [];
+          const skipped: Array<{
+            threadId: string;
+            reason:
+              | 'not-running'
+              | 'work-item-missing'
+              | 'stage-inactive'
+              | 'thread-missing'
+              | 'mode-unknown'
+              | 'apply-failed';
+          }> = [];
+
+          for (const binding of bindings) {
+            const key = `${binding.sessionId}:${binding.threadId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+            if (!item || item.factoryProjectId !== project.id) {
+              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
+              continue;
+            }
+            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
+              continue;
+            }
+            const session = await controller.getSessionByResource(binding.resourceId);
+            if (!session) {
+              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
+              continue;
+            }
+            const thread = await session.thread.getById({ threadId: binding.threadId });
+            if (!thread) {
+              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
+              continue;
+            }
+            const modeId = persistedThreadMode(thread.metadata);
+            if (!modeId) {
+              skipped.push({ threadId: binding.threadId, reason: 'mode-unknown' });
+              continue;
+            }
+            try {
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: `modeModelId_${modeId}`,
+                value: modelId,
+              });
+              applied.push(binding.threadId);
+            } catch (error) {
+              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
+            }
+          }
+
+          return context.json({ modelId, applied, skipped });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {

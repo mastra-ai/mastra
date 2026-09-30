@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -68,10 +69,18 @@ describe('TracesListView columns', () => {
       assert(grid);
       assert(top);
       const headers = Array.from(top.children).map(cell => cell.textContent);
-      expect(headers).toEqual(['Start', 'Type', 'Name', 'Input', 'Status', 'Duration', 'Est. cost']);
+      expect(headers).toEqual([
+        'Start',
+        'Primitive type',
+        'Primitive name',
+        'Input',
+        'Status',
+        'Duration',
+        'Est. cost',
+      ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('9rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -90,7 +99,7 @@ describe('TracesListView columns', () => {
       );
 
       expect(screen.queryByText('Input')).toBeNull();
-      expect(screen.queryByText('Type')).toBeNull();
+      expect(screen.queryByText('Primitive type')).toBeNull();
       expect(screen.getByText('Duration')).toBeTruthy();
       expect(screen.getByText('Input tokens')).toBeTruthy();
       expect(screen.getByText('Output tokens')).toBeTruthy();
@@ -99,7 +108,7 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('9rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
     });
   });
 });
@@ -136,6 +145,24 @@ describe('TracesListView — status column', () => {
 
     const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
     expect(statuses).toEqual(['-']);
+  });
+});
+
+describe('TracesListView — name column', () => {
+  it('shows the primitive name, falling back to the span name', () => {
+    render(
+      <TracesListView
+        traces={[
+          makeTrace({ traceId: 'trace-named', entityName: 'Chef Agent V2 Model', name: 'chef-model-v2-agent' }),
+          makeTrace({ traceId: 'trace-unnamed', name: 'custom span' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Chef Agent V2 Model')).not.toBeNull();
+    expect(screen.queryByText('chef-model-v2-agent')).toBeNull();
+    expect(screen.getByText('custom span')).not.toBeNull();
   });
 });
 
@@ -340,8 +367,8 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Total tokens']);
-      expect(screen.getByText('12.4k')).toBeTruthy();
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Total tokens']);
+      expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
     it('leaves the cell blank when neither token count is known', () => {
@@ -371,9 +398,9 @@ describe('TracesListView — usage cells', () => {
       />,
     );
 
-    expect(screen.getByText('12.4k')).toBeTruthy();
+    expect(screen.getByText('12.4K')).toBeTruthy();
     expect(screen.getByText('800')).toBeTruthy();
-    expect(screen.getByText('0.0123 eur')).toBeTruthy();
+    expect(screen.getByText('0.01 eur')).toBeTruthy();
   });
 
   it('leaves the usage cells blank for a trace with no totals', () => {
@@ -386,7 +413,7 @@ describe('TracesListView — usage cells', () => {
       />,
     );
 
-    expect(screen.queryByText('12.4k')).toBeNull();
+    expect(screen.queryByText('12.4K')).toBeNull();
     expect(screen.getAllByRole('button')[0]?.textContent).not.toContain('NaN');
   });
 });
@@ -434,14 +461,14 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Environment']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
   });
 
   describe('when the end time column is visible', () => {
-    it('formats the end timestamp like the start one', () => {
+    it('formats the end timestamp like the start one, without the year', () => {
       render(
         <TracesListView
           traces={[makeTrace({ traceId: 'trace-1', endedAt: new Date(2026, 5, 10, 13, 7, 47) })]}
@@ -451,7 +478,23 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       expect(screen.getByText('End')).toBeTruthy();
-      expect(screen.getByText('Jun 10 13:07:47')).toBeTruthy();
+      const endedAt = new Date(2026, 5, 10, 13, 7, 47);
+      const title = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      const visible = new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(endedAt);
+      expect(screen.getByTitle(title).textContent).toBe(visible);
     });
   });
 });
@@ -468,7 +511,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Name', 'Status', 'Thread ID']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 

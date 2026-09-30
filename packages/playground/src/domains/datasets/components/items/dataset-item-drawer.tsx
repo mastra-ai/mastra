@@ -1,9 +1,9 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useDatasetItem } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { useMemo } from 'react';
 
 import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';
 import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
-import { useDatasetItem } from '@/domains/datasets/hooks/use-dataset-items';
 
 /**
  * Item drawer for the `items/:itemId` child route. Always mounted by the

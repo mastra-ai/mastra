@@ -8,7 +8,8 @@ import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { VolumeRow } from '../hooks/use-trace-volume-metrics';
-import { CHART_COLORS, formatCompact } from './metrics-utils';
+import { CHART_COLORS } from './metrics-utils';
+import { formatCompactNumber } from '@/lib/cost';
 
 export type VolumeTab = 'agents' | 'workflows' | 'tools';
 
@@ -52,7 +53,7 @@ function VolumeBars({
         { label: 'Errors', color: CHART_COLORS.pink },
       ]}
       maxVal={Math.max(...data.map(d => d.completed + d.errors))}
-      fmt={formatCompact}
+      fmt={formatCompactNumber}
     />
   );
 }
@@ -98,7 +99,7 @@ export function TracesVolumeCardView({
     <MetricsCard>
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Trace Volume" description="Runs and call counts." />
-        {hasData && <MetricsCard.Summary value={formatCompact(total)} label="Total runs" />}
+        {hasData && <MetricsCard.Summary value={formatCompactNumber(total)} label="Total runs" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
