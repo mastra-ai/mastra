@@ -38,7 +38,7 @@ describe('BlobsMySQL.putMany', () => {
 
     await store.putMany([
       { hash: 'h1', content: 'replacement', size: 11, mimeType: 'text/markdown', createdAt: new Date() },
-      { hash: 'h2', content: 'new', size: 3 },
+      { hash: 'h2', content: 'new', size: 3, createdAt: new Date() },
     ]);
 
     const existing = await store.get('h1');
