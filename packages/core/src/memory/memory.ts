@@ -582,18 +582,46 @@ https://mastra.ai/en/docs/memory/overview`,
 
   /**
    * Archive (soft-delete) a thread by setting `archivedAt` to now.
-   * Throws if the thread does not exist.
+   * Idempotent: an already archived thread is returned unchanged.
+   * Throws if the thread does not exist or the storage adapter ignores `archivedAt`.
    */
   archiveThread({ threadId }: { threadId: string }): Promise<StorageThreadType> {
-    return this.updateThread({ id: threadId, archivedAt: new Date() });
+    return this.setThreadArchived(threadId, true);
   }
 
   /**
    * Unarchive a thread by clearing `archivedAt`.
-   * Throws if the thread does not exist.
+   * Idempotent: an active thread is returned unchanged.
+   * Throws if the thread does not exist or the storage adapter ignores `archivedAt`.
    */
   unarchiveThread({ threadId }: { threadId: string }): Promise<StorageThreadType> {
-    return this.updateThread({ id: threadId, archivedAt: null });
+    return this.setThreadArchived(threadId, false);
+  }
+
+  private async setThreadArchived(threadId: string, archived: boolean): Promise<StorageThreadType> {
+    const existing = await this.getThreadById({ threadId });
+    if (!existing) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_THREAD_NOT_FOUND',
+        domain: ErrorDomain.STORAGE,
+        category: 'USER',
+        text: `Thread ${threadId} not found`,
+        details: { threadId },
+      });
+    }
+    if (Boolean(existing.archivedAt) === archived) return existing;
+
+    const updated = await this.updateThread({ id: threadId, archivedAt: archived ? new Date() : null });
+    if (Boolean(updated.archivedAt) !== archived) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_THREAD_ARCHIVING_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: 'USER',
+        text: 'The configured storage adapter does not support thread archiving (archivedAt was not persisted). Upgrade the storage adapter to a version that supports it.',
+        details: { threadId },
+      });
+    }
+    return updated;
   }
 
   /**

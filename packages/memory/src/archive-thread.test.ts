@@ -46,6 +46,13 @@ describe('Memory.archiveThread / unarchiveThread', () => {
     expect(archived.updatedAt).toEqual(new Date('2024-01-01T00:00:00Z'));
   });
 
+  it('given an archived thread, when archived again, then the original archivedAt is kept', async () => {
+    const first = await memory.archiveThread({ threadId: 'thread-1' });
+    await new Promise(r => setTimeout(r, 5));
+    const second = await memory.archiveThread({ threadId: 'thread-1' });
+    expect(second.archivedAt).toEqual(first.archivedAt);
+  });
+
   it('given an unknown thread, when archived, then it throws', async () => {
     await expect(memory.archiveThread({ threadId: 'missing' })).rejects.toThrow();
     await expect(memory.unarchiveThread({ threadId: 'missing' })).rejects.toThrow();
