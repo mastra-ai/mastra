@@ -430,7 +430,7 @@ mastra.listClassifiers()
 A classifier with constructor-configured questions can be added to a workflow with [`createStep(classifier)`](/reference/workflows/step) or [`.classifier()`](/reference/workflows/workflow-methods/classifier). Workflow output contains complete typed `answers` and normalized `usage`.
 
 ```typescript
-import { safety } from './mastra'
+import { safety } from '../index'
 
 const workflow = createWorkflow({
   id: 'ticket-triage',
