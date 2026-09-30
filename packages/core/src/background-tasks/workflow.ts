@@ -34,6 +34,43 @@ const bodyOutputSchema = z.object({
 const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting'];
 
 /**
+ * Drops the model request/response snapshots that `step-start`, `step-finish`
+ * and `finish` chunks carry (full prompt, file parts, message history) before a
+ * progress chunk is published to pubsub. Nested agent chunks are reached
+ * through `payload.output` (tool-output / workflow-step-output wrappers).
+ * Stream consumers only read lightweight fields from these chunks.
+ */
+export function slimProgressChunk(chunk: unknown, depth = 0): unknown {
+  if (!chunk || typeof chunk !== 'object' || depth > 20) return chunk;
+  const { type, payload } = chunk as { type?: unknown; payload?: unknown };
+  if (!payload || typeof payload !== 'object') return chunk;
+  const p = payload as Record<string, unknown>;
+
+  if (type === 'step-start') {
+    const { request: _request, inputMessages: _inputMessages, ...rest } = p;
+    return { ...chunk, payload: rest };
+  }
+  if (type === 'step-finish' || type === 'finish') {
+    const { messages: _messages, ...rest } = p;
+    if (type === 'finish') delete rest.response;
+    if (rest.metadata && typeof rest.metadata === 'object') {
+      const { request: _request, ...metadata } = rest.metadata as Record<string, unknown>;
+      rest.metadata = metadata;
+    }
+    if (rest.output && typeof rest.output === 'object') {
+      const { steps: _steps, ...output } = rest.output as Record<string, unknown>;
+      rest.output = output;
+    }
+    return { ...chunk, payload: rest };
+  }
+  if (p.output && typeof p.output === 'object') {
+    const output = slimProgressChunk(p.output, depth + 1);
+    if (output !== p.output) return { ...chunk, payload: { ...p, output } };
+  }
+  return chunk;
+}
+
+/**
  * Builds the per-task workflow that owns executor + retries.
  *
  * Uses the standard (default) execution engine so the workflow runs entirely
@@ -122,7 +159,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) return;
           lastProgressEmitMs = now;
         }
-        await manager.publishLifecycleEvent('task.output', { ...task, chunk });
+        await manager.publishLifecycleEvent('task.output', { ...task, chunk: slimProgressChunk(chunk) });
       };
 
       const abortController = new AbortController();
