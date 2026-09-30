@@ -1160,6 +1160,35 @@ describe('GitHub session workspace preparation', () => {
     expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
   });
 
+  it('keeps GitHub refresh available after a setup command failure', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { workspace, github } = await createLocalFactory();
+    addProject({ setupCommand: 'gh auth status' });
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext })).rejects.toThrow(/setup-failed|Setup command failed/);
+
+    mocks.githubPat = 'ghp_replaced';
+    const tool = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+    expect(await tool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+  });
+
+  it('does not register GitHub refresh after an infrastructure setup failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const infrastructureError = new Error('sandbox transport failed');
+    mocks.materializeRepo.mockRejectedValueOnce(infrastructureError);
+
+    await expect(workspace({ requestContext })).rejects.toBe(infrastructureError);
+    expect(() => requireGithubTokenInjector(requestContext)).toThrow('active Factory sandbox workspace');
+  });
+
   it('does not expose review skills to a work-role session workspace', async () => {
     const { resolver } = await createLocalFactory();
     addProject();

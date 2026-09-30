@@ -506,7 +506,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
-      await guardedSetup(args);
+      let setupError: SetupCommandError | undefined;
+      try {
+        await guardedSetup(args);
+      } catch (error) {
+        if (!(error instanceof SetupCommandError)) throw error;
+        setupError = error;
+      }
       // Re-check after the (long) setup: a session retired mid-setup must not
       // register credentials for a workspace whose retirement teardown has
       // already run — the entry would leak forever. The VM itself is left to
@@ -537,8 +543,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ?.skills?.refresh()
           .catch(() => {});
       };
-      if (!githubProvider) {
+      const finishStart = async () => {
+        if (setupError) throw setupError;
         await publishStartSideEffects();
+      };
+      if (!githubProvider) {
+        await finishStart();
         return;
       }
       const existingRegistration = githubTokenInjectors.get(workspaceId);
@@ -561,7 +571,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         existingRegistration.inject(existingRegistration.ghToken);
-        await publishStartSideEffects();
+        await finishStart();
         return;
       }
       // First start: resolve the credential and authorize every request that
@@ -589,7 +599,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      await publishStartSideEffects();
+      await finishStart();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
