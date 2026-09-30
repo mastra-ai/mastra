@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import { LocalAvatarStore, WorkspaceAvatarStore } from '../agent/avatar-store';
+import type { AvatarStore } from '../agent/avatar-store';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
@@ -498,6 +500,17 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
+   * Persistent store for agent avatars set via `agent.setAvatar(bytes, mime)`.
+   *
+   * When omitted, Mastra picks a default:
+   * - `WorkspaceAvatarStore(workspace)` if a `workspace` with a filesystem is attached
+   * - `LocalAvatarStore()` (tmpdir-backed) otherwise
+   *
+   * Pass an explicit store (e.g. an S3-backed implementation) to override.
+   */
+  avatarStore?: AvatarStore;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -841,6 +854,7 @@ export class Mastra<
   #memory?: TMemory;
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
+  #avatarStore?: AvatarStore;
   #server?: ServerConfig;
   #serverExplicit = false;
   #studio?: StudioConfig;
@@ -1829,6 +1843,19 @@ export class Mastra<
       this.#workspace = config.workspace;
       // Also register in the workspaces registry for direct lookup by ID
       this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
+    }
+
+    // Avatar store: user-provided > workspace-backed (if a filesystem exists) > local tmp.
+    if (config?.avatarStore) {
+      this.#avatarStore = config.avatarStore;
+    } else if (this.#workspace && (this.#workspace as { filesystem?: unknown }).filesystem) {
+      try {
+        this.#avatarStore = new WorkspaceAvatarStore(this.#workspace as any);
+      } catch {
+        this.#avatarStore = new LocalAvatarStore();
+      }
+    } else {
+      this.#avatarStore = new LocalAvatarStore();
     }
 
     if (config?.scorers) {
@@ -3534,6 +3561,15 @@ export class Mastra<
    */
   public getWorkspace(): Workspace | undefined {
     return this.#workspace;
+  }
+
+  /**
+   * Get the configured avatar store. Used by `agent.setAvatar` and by the
+   * server's `GET /agents/:agentId/avatar` route to persist and stream
+   * agent avatars set at runtime.
+   */
+  public getAvatarStore(): AvatarStore | undefined {
+    return this.#avatarStore;
   }
 
   /**

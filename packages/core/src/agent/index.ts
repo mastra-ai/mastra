@@ -29,6 +29,19 @@ export {
   type ListSchedulesFilter,
 } from '../schedules';
 export * from './agent';
+export {
+  LocalAvatarStore,
+  WorkspaceAvatarStore,
+  SUPPORTED_AVATAR_MIME_TYPES,
+  DEFAULT_AVATAR_MAX_BYTES,
+  extForMime,
+  mimeForExt,
+  isSupportedAvatarMime,
+  type AvatarStore,
+  type StoredAvatar,
+  type PutAvatarResult,
+  type SupportedAvatarMimeType,
+} from './avatar-store';
 export { getGoalActivityDurationMs } from './goal';
 export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';
