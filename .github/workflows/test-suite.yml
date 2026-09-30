@@ -129,10 +129,10 @@ jobs:
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
       - name: Run affected tests
-        env:
-          TEST_FILES: ${{ inputs.unit_test_files }}
         run: |
-          printf '%s\n' "$TEST_FILES" > /tmp/affected.txt
+          cat > /tmp/affected.txt <<'AFFECTED_TESTS'
+          ${{ inputs.unit_test_files }}
+          AFFECTED_TESTS
           pnpm vitest run \
             $(cat /tmp/affected.txt | tr '\n' ' ') \
             --project 'unit:*' --project 'typecheck:*' \
