@@ -1845,6 +1845,33 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
     expect(calls.some(cmd => cmd.includes('s3fs') && cmd.includes('/data/s3-sts-chmod'))).toBe(false);
   });
 
+  it('S3 mount rejects an invalid prefix before writing session credentials', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-sts-prefix',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        prefix: 'a/../b',
+        accessKeyId: 'ASIAKEY',
+        secretAccessKey: 'secret',
+        sessionToken: 'token',
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-sts-prefix');
+    expect(result.success).toBe(false);
+    expect(
+      mockSandbox.files.write.mock.calls.some((call: any[]) => String(call[0]).startsWith('/tmp/.passwd-s3fs-')),
+    ).toBe(false);
+  });
+
   it('S3 mount errors when sessionToken is provided without access keys', async () => {
     const sandbox = new E2BSandbox();
     await sandbox._start();

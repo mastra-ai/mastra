@@ -114,6 +114,14 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     );
   }
 
+  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax.
+  // Validated before credentials are written so invalid input can't leave them on disk.
+  let bucketArg = config.bucket;
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+  }
+
   const removeSessionCredentials = async () => {
     try {
       await sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
@@ -179,13 +187,6 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   if (config.readOnly) {
     mountOptions.push('ro');
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
-  }
-
-  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
-  let bucketArg = config.bucket;
-  if (config.prefix) {
-    const normalizedPrefix = validatePrefix(config.prefix);
-    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
   }
 
   // Mount with sudo (required for /dev/fuse access)
