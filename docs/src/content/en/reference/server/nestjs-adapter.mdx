@@ -225,7 +225,7 @@ async function bootstrap() {
 bootstrap()
 ```
 
-The module's shutdown handling drains in-flight requests but doesn't stop Mastra. To stop workers and let in-flight workflow runs finish, call `mastra.shutdown()` from a shutdown hook:
+The module's shutdown handling drains in-flight requests but doesn't stop Mastra. To stop workers and drain in-flight workflow runs, call `mastra.shutdown()` from a shutdown hook. The drain is bounded by `drainTimeout` (default 5 seconds), and runs that don't settle within it are abandoned with a warning:
 
 ```typescript title="src/mastra-lifecycle.service.ts"
 import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common'

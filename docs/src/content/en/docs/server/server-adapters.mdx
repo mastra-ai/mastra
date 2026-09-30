@@ -348,7 +348,7 @@ process.on('SIGTERM', async () => {
 })
 ```
 
-`startWorkers()` is idempotent, so a second call has no effect. `mastra.shutdown()` stops the workers and lets in-flight workflow runs finish before the process exits.
+`startWorkers()` is idempotent, so a second call has no effect. `mastra.shutdown()` stops the workers and drains in-flight workflow runs into a finished or suspended state before workers and pub/sub subscriptions are torn down. The drain is bounded by `drainTimeout` (default 5 seconds), and runs that don't settle within it are abandoned with a warning.
 
 If you run workers in a [separate process](/docs/deployment/workers#split-processes), skip `startWorkers()` in the API process and start them in the worker process instead.
 
