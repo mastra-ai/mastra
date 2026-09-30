@@ -590,6 +590,23 @@ describe('WorkspaceAttachmentsProcessor', () => {
         expect(executeCommand).not.toHaveBeenCalled();
       });
 
+      it('removes files already written through writeFiles when a later writeFiles call fails', async () => {
+        const { cwd, workspace, scripts } = await shellSandbox();
+        const { writeFile, mkdir } = await import('node:fs/promises');
+        const writeFiles = vi.fn(async ([f]: { path: string; content: Buffer }[]) => {
+          if (f!.path.endsWith('b.xlsx')) throw new Error('quota exceeded');
+          await mkdir(join(cwd, f!.path, '..'), { recursive: true });
+          await writeFile(join(cwd, f!.path), f!.content);
+        });
+        (workspace.sandbox as any).writeFiles = writeFiles;
+        await expect(run(workspace, [file(BASE64, 'a.xlsx'), file(BASE64, 'b.xlsx')])).rejects.toThrow(
+          /quota exceeded/,
+        );
+        expect(writeFiles).toHaveBeenCalledTimes(2);
+        expect(scripts).toEqual([expect.stringMatching(/^rm -rf 'uploads\/[0-9a-f-]{36}'$/)]);
+        expect(await readdir(join(cwd, 'uploads'))).toEqual([]);
+      });
+
       it('aborts without a workspace destination when the sandbox has neither writeFiles nor executeCommand', async () => {
         const workspace = { id: 'w', name: 'w', sandbox: {} } as unknown as AnyWorkspace;
         const { abort } = await run(workspace, [file(BASE64)]).catch(error => ({ abort: error }));

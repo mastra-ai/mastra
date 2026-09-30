@@ -211,17 +211,22 @@ async function resolveUploadTarget(
   }
 
   const sandbox = workspace.resolveSandbox ? await workspace.resolveSandbox({ requestContext }) : workspace.sandbox;
+  // writeFiles has no delete counterpart, so rollback goes through executeCommand when available
+  const remove = sandbox?.executeCommand
+    ? (path: string) => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'remove the upload directory')
+    : undefined;
   if (sandbox?.writeFiles) {
     return {
       directory: 'uploads',
       write: (path, content) => sandbox.writeFiles!([{ path, content: Buffer.from(content) }]),
+      remove,
     };
   }
   if (sandbox?.executeCommand) {
     return {
       directory: 'uploads',
       write: (path, content) => writeThroughCommands(sandbox, path, content),
-      remove: path => runShell(sandbox, `rm -rf ${shellQuote(parentDirectory(path))}`, 'remove the upload directory'),
+      remove,
     };
   }
   return {
