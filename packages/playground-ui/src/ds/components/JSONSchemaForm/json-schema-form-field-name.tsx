@@ -9,7 +9,12 @@ export type JSONSchemaFormFieldNameProps = Omit<InputProps, 'value' | 'onChange'
   labelIsHidden?: boolean;
 };
 
-export function FieldName({ label, labelIsHidden = true, className, ...props }: JSONSchemaFormFieldNameProps) {
+export function FieldName({
+  label = 'Field name',
+  labelIsHidden = true,
+  className,
+  ...props
+}: JSONSchemaFormFieldNameProps) {
   const { field, update } = useJSONSchemaFormField();
 
   const handleChange = React.useCallback(
@@ -21,7 +26,7 @@ export function FieldName({ label, labelIsHidden = true, className, ...props }: 
 
   return (
     <Field className={className}>
-      {label ? <FieldLabel className={labelIsHidden ? 'sr-only' : undefined}>{label}</FieldLabel> : null}
+      <FieldLabel className={labelIsHidden ? 'sr-only' : undefined}>{label}</FieldLabel>
       <Input {...props} size="md" value={field.name} onChange={handleChange} />
     </Field>
   );
