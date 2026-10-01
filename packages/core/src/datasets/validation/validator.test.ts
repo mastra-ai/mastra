@@ -90,3 +90,15 @@ describe('SchemaValidator regex patterns', () => {
     expect(() => assertSupportedPatterns({ const: { pattern: '(?=a)' }, default: { pattern: '(?=a)' } })).not.toThrow();
   });
 });
+
+describe('SchemaValidator cache', () => {
+  it('recompiles when the schema under a cache key changes', () => {
+    const validator = createValidator();
+    const numberSchema = { type: 'object', properties: { a: { type: 'number' } }, required: ['a'] } as const;
+    const stringSchema = { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] } as const;
+
+    expect(() => validator.validate({ a: 1 }, numberSchema, 'input', 'dataset:x:input')).not.toThrow();
+    expect(() => validator.validate({ a: 1 }, stringSchema, 'input', 'dataset:x:input')).toThrow(SchemaValidationError);
+    expect(() => validator.validate({ a: 1 }, { ...numberSchema }, 'input', 'dataset:x:input')).not.toThrow();
+  });
+});

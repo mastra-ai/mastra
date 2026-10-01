@@ -44,23 +44,18 @@ export function assertSupportedPatterns(node: unknown, isSchemaMap = false): voi
 
 /** Schema validator with compilation caching */
 export class SchemaValidator {
-  private cache = new Map<string, ZodSchema>();
+  private cache = new Map<string, { schema: JSONSchema7; validator: ZodSchema }>();
 
-  /** Get or compile validator for schema */
+  /** Get or compile validator for schema; a cached entry is only reused if it was compiled from the same schema */
   private getValidator(schema: JSONSchema7, cacheKey: string): ZodSchema {
-    let zodSchema = this.cache.get(cacheKey);
-    if (!zodSchema) {
-      assertSupportedPatterns(schema);
-      const zodString = jsonSchemaToZod(schema);
-      zodSchema = resolveZodSchema(zodString);
-      this.cache.set(cacheKey, zodSchema);
+    const cached = this.cache.get(cacheKey);
+    if (cached && (cached.schema === schema || JSON.stringify(cached.schema) === JSON.stringify(schema))) {
+      return cached.validator;
     }
-    return zodSchema;
-  }
-
-  /** Clear cached validator (call when schema changes) */
-  clearCache(cacheKey: string): void {
-    this.cache.delete(cacheKey);
+    assertSupportedPatterns(schema);
+    const validator = resolveZodSchema(jsonSchemaToZod(schema));
+    this.cache.set(cacheKey, { schema, validator });
+    return validator;
   }
 
   /** Validate data against schema */
