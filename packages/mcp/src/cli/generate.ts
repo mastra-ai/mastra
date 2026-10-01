@@ -163,7 +163,7 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       await rename(temporary, output);
     }
     console.log(`Generated ${prepared.length} MCP type file(s).`);
-    if (warnings) console.warn(`${warnings} unsupported schema portion(s) widened to unknown.`);
+    if (warnings) console.warn(`${warnings} schema portion(s) widened to unknown.`);
   } catch (error) {
     failure =
       error instanceof GenerationError

@@ -6,6 +6,7 @@ import { compile } from 'json-schema-to-typescript';
 import { describe, expect, it, vi } from 'vitest';
 import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
+import { MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
 import { generateToolTypes } from './typegen';
 
 vi.mock('json-schema-to-typescript', async importOriginal => {
@@ -417,6 +418,39 @@ describe('concrete MCP schema generation', () => {
     let deep: unknown = true;
     for (let i = 0; i < 130; i++) deep = { items: deep };
     await expect(generateToolTypes(catalog(deep))).rejects.toThrow(/schema/i);
+  });
+
+  it('widens a schema past the node budget without converting it', async () => {
+    vi.mocked(compile).mockClear();
+    const properties = Object.fromEntries(
+      Array.from({ length: MAX_JSON_SCHEMA_NODES + 1 }, (_, index) => [`p${index}`, { type: 'string' }]),
+    );
+    const result = await generateToolTypes(catalog({ type: 'object', properties }));
+    expect(result.warnings.some(warning => /maximum node count/.test(warning))).toBe(true);
+    expect(compile).not.toHaveBeenCalled();
+    check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
+  });
+
+  it('widens the rest of a catalogue that exceeds the total node budget', async () => {
+    // `dependencies` is counted by the budget but never converted, so the ceiling is reached
+    // without asking the converter to process 100k schema nodes.
+    const dependencies = Object.fromEntries(Array.from({ length: 9_000 }, (_, index) => [`p${index}`, {}]));
+    const tools: SerializableMCPToolCatalog[string] = {};
+    for (let index = 0; index < 12; index += 1) {
+      tools[`tool${String(index).padStart(2, '0')}`] = {
+        name: `tool${index}`,
+        inputSchema: { type: 'object', dependencies },
+      };
+    }
+    const result = await generateToolTypes({ big: tools });
+    expect(result.warnings.some(warning => /Catalogue exceeds the maximum node count/.test(warning))).toBe(true);
+    check(
+      result.source,
+      `type Last = MCPServers['big']['tools']['tool11']['input'];
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Assert<T extends true> = T;
+type A = Assert<Equal<Last, unknown>>;`,
+    );
   });
 
   it('rejects server identifier and flattened-tool collisions', async () => {
