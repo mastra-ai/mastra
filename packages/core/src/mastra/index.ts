@@ -4108,8 +4108,17 @@ export class Mastra<
       // Evented restarts are processed by the workflow event consumer. Defer
       // them until it is wired so the event isn't lost.
       if (workflow?.engineType === 'evented') {
-        const snapshot =
-          typeof runSnapshot.snapshot === 'string' ? JSON.parse(runSnapshot.snapshot) : runSnapshot.snapshot;
+        let snapshot;
+        try {
+          snapshot = typeof runSnapshot.snapshot === 'string' ? JSON.parse(runSnapshot.snapshot) : runSnapshot.snapshot;
+        } catch (error) {
+          this.#logger.warn('Skipping evented workflow run restart; snapshot could not be parsed', {
+            workflow: runSnapshot.workflowName,
+            runId: runSnapshot.runId,
+            error,
+          });
+          continue;
+        }
         if (!snapshot?.activePaths?.length) {
           this.#logger.warn('Skipping evented workflow run restart; no recorded execution position', {
             workflow: runSnapshot.workflowName,
