@@ -322,6 +322,23 @@ describe('handlePlanApproval goal mode', () => {
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
   });
+
+  it('still resumes the approved plan when setting the goal throws', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+    (ctx.setGoal as any).mockRejectedValue(new Error('storage unavailable'));
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onGoal();
+    await promise;
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to set goal: storage unavailable');
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.session.subscribe).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(0);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBeUndefined();
+  });
 });
 
 describe('handlePlanApproval regular approval', () => {

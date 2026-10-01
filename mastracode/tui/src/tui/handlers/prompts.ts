@@ -454,7 +454,14 @@ export async function handlePlanApproval(
         // the objective at every judge boundary, and an earlier goal (e.g. the
         // one that produced this plan) would otherwise judge the implementation
         // and only hand over to the plan once the work was already done.
-        const goal = await ctx.setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.');
+        // A failure to set the goal must not block approval: fall back to a
+        // plain approval so the suspended plan still resumes.
+        const goal = await ctx
+          .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
+          .catch((error: unknown) => {
+            ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+          });
         if (goal) {
           state.planStartedGoalId = goal.id;
         }
