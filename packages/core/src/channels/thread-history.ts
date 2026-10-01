@@ -1,7 +1,6 @@
 import type { Message, Thread } from 'chat';
 
-import { getErrorFromUnknown } from '../error/utils';
-import type { IMastraLogger } from '../logger/logger';
+import type { ChannelLogFields } from './agent-channels';
 import { chatModule } from './chat-lazy';
 
 /**
@@ -10,6 +9,9 @@ import { chatModule } from './chat-lazy';
  * at least 200 per call, so this costs at most a few calls.
  */
 export const THREAD_HISTORY_OMITTED_CAP = 500;
+
+/** Log sink shaped like `AgentChannels.log`. */
+export type ThreadHistoryLog = (level: 'warn' | 'debug', message: string, fields?: ChannelLogFields) => void;
 
 /** Identifiers attached to every thread-history log line. */
 export interface ThreadHistoryLogContext {
@@ -65,7 +67,7 @@ export async function collectThreadHistory(
   chatThread: Thread,
   excludeIds: ReadonlySet<string>,
   maxMessages: number,
-  logger?: IMastraLogger,
+  log: ThreadHistoryLog = () => {},
 ): Promise<ThreadHistoryWindow> {
   const recentLimit = Math.max(0, maxMessages - 1);
   const recent: Message[] = []; // newest first while walking
@@ -82,10 +84,10 @@ export async function collectThreadHistory(
       if (older.length >= THREAD_HISTORY_OMITTED_CAP) break;
     }
   } catch (err) {
-    logger?.warn(`[${chatThread.adapter.name}] Failed to fetch thread history`, {
+    log('warn', 'Failed to fetch thread history', {
       platform: chatThread.adapter.name,
       threadId: chatThread.id,
-      error: getErrorFromUnknown(err).message,
+      error: err,
     });
     return { root: undefined, omitted: 0, capped: false, recent: [] };
   }
@@ -105,10 +107,10 @@ export async function collectThreadHistory(
       break;
     }
   } catch (err) {
-    logger?.warn(`[${chatThread.adapter.name}] Failed to fetch thread root message`, {
+    log('warn', 'Failed to fetch thread root message', {
       platform: chatThread.adapter.name,
       threadId: chatThread.id,
-      error: getErrorFromUnknown(err).message,
+      error: err,
     });
     return { root: undefined, omitted: 0, capped: false, recent };
   }

@@ -67,6 +67,15 @@ import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
+/** Structured fields for {@link AgentChannels.log}. */
+export interface ChannelLogFields {
+  /** Prefixes the message as `[platform]`. */
+  platform?: string;
+  /** `Error` instances are normalized with `getErrorFromUnknown` so they serialize. */
+  error?: unknown;
+  [key: string]: unknown;
+}
+
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
@@ -335,7 +344,7 @@ export class AgentChannels {
         await accepted.output.consumeStream();
       } catch (err) {
         // The run already started; the output processor reports its failure.
-        this.log('debug', 'accepted consume failed', err);
+        this.log('debug', 'accepted consume failed', { threadId: memory.thread, error: err });
       }
     } else {
       this.log(
@@ -364,7 +373,7 @@ export class AgentChannels {
     });
     // Drive the run to completion so serverless runtimes don't kill it.
     void resumed.consumeStream().catch(err => {
-      this.log('error', 'Error consuming resumed approval stream', err);
+      this.log('error', 'Error consuming resumed approval stream', { error: err });
     });
   }
 
@@ -386,7 +395,7 @@ export class AgentChannels {
     });
     // Drive the run to completion so serverless runtimes don't kill it.
     void resumed.consumeStream().catch(err => {
-      this.log('error', 'Error consuming resumed decline stream', err);
+      this.log('error', 'Error consuming resumed decline stream', { error: err });
     });
   }
 
@@ -553,13 +562,13 @@ export class AgentChannels {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionId.split(':')[1];
               if (!toolCallId) {
-                this.log('info', `Missing toolCallId in action event actionId=${actionId}`);
+                this.log('info', 'Missing toolCallId in action event', { actionId });
                 return;
               }
 
               const chatThread = event.thread as Thread | null;
               if (!chatThread) {
-                this.log('info', `No thread in action event for toolCallId=${toolCallId}`);
+                this.log('info', 'No thread in action event', { toolCallId });
                 return;
               }
               const platform = event.adapter.name;
@@ -579,7 +588,11 @@ export class AgentChannels {
                 // Approval cards can only continue runs on threads created by an
                 // earlier message. Do not mint a replacement from the clicker's
                 // identity when that durable mapping is missing.
-                this.log('warn', `No mapped channel thread found for tool approval action toolCallId=${toolCallId}`);
+                this.log('warn', 'No mapped channel thread found for tool approval action', {
+                  platform,
+                  threadId: chatThread.id,
+                  toolCallId,
+                });
                 return;
               }
 
@@ -652,10 +665,11 @@ export class AgentChannels {
                             .filter((id): id is string => !!id),
                         );
                         if (!requesterId && authors.size > 1) {
-                          this.log(
-                            'info',
-                            `Ignoring tool approval action: requester for toolCallId=${toolCallId} is ambiguous`,
-                          );
+                          this.log('info', 'Ignoring tool approval action: requester is ambiguous', {
+                            platform,
+                            threadId: chatThread.id,
+                            toolCallId,
+                          });
                           return;
                         }
                         requesterId ??= [...authors][0];
@@ -668,7 +682,7 @@ export class AgentChannels {
               }
 
               if (!runId) {
-                this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
+                this.log('info', 'No pending approval found', { platform, threadId: chatThread.id, toolCallId });
                 return;
               }
 
@@ -676,10 +690,13 @@ export class AgentChannels {
               // its approval card. Skip the check when either identity is unknown.
               const actorId = event.user?.userId;
               if (requesterId && actorId && requesterId !== actorId) {
-                this.log(
-                  'info',
-                  `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer toolCallId=${toolCallId}`,
-                );
+                this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
+                  platform,
+                  threadId: chatThread.id,
+                  toolCallId,
+                  actorId,
+                  requesterId,
+                });
                 return;
               }
 
@@ -724,7 +741,11 @@ export class AgentChannels {
                       : 'markdown' in message && message.markdown.trim().length === 0;
                   return blank ? undefined : message;
                 } catch (err) {
-                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, err);
+                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, {
+                    platform,
+                    toolCallId,
+                    error: err,
+                  });
                   return undefined;
                 }
               };
@@ -739,7 +760,7 @@ export class AgentChannels {
                       formatToolDenied(displayName, argsSummary, byUser, useCards),
                   );
                 } catch (err) {
-                  this.log('debug', 'Failed to edit denied card', err);
+                  this.log('debug', 'Failed to edit denied card', { platform, toolCallId, error: err });
                 }
 
                 // Resume the suspended run with a denial so the agent can produce a
@@ -772,7 +793,11 @@ export class AgentChannels {
                 } catch (err) {
                   const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
                   if (isStaleApproval) {
-                    this.log('info', `Ignoring stale tool denial action (runId already consumed)`);
+                    this.log('info', 'Ignoring stale tool denial action (runId already consumed)', {
+                      platform,
+                      threadId: chatThread.id,
+                      toolCallId,
+                    });
                   } else {
                     throw err;
                   }
@@ -792,7 +817,7 @@ export class AgentChannels {
                   renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
                 );
               } catch (err) {
-                this.log('debug', 'Failed to edit approved card', err);
+                this.log('debug', 'Failed to edit approved card', { platform, toolCallId, error: err });
               }
 
               // Build request context for the resumed stream. Stash the render
@@ -826,17 +851,24 @@ export class AgentChannels {
             } catch (err) {
               const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
               if (isStaleApproval) {
-                this.log('info', `Ignoring stale tool approval action (runId already consumed)`);
+                this.log('info', 'Ignoring stale tool approval action (runId already consumed)', {
+                  platform,
+                  threadId: chatThread.id,
+                  toolCallId,
+                });
                 return;
               }
               // The resolver also runs on approval continuations, so a refusal
               // here means this clicker isn't allowed to act — same silence as the
               // inbound path (see handleChatMessage).
               if (err instanceof ChannelSessionRejectedError) {
-                this.log('info', 'Session resolver refused the tool approval action', { reason: err.message });
+                this.log('info', 'Session resolver refused the tool approval action', {
+                  actionId: event.actionId,
+                  reason: err.message,
+                });
                 return;
               }
-              this.log('error', 'Error handling tool approval action', err);
+              this.log('error', 'Error handling tool approval action', { actionId: event.actionId, error: err });
               try {
                 const thread = event.thread;
                 if (thread) {
@@ -848,7 +880,7 @@ export class AgentChannels {
                   await thread.post(errorMessage);
                 }
               } catch (err) {
-                this.log('debug', 'Failed to post error message for action', err);
+                this.log('debug', 'Failed to post error message for action', { actionId: event.actionId, error: err });
               }
             }
           };
@@ -1129,7 +1161,7 @@ export class AgentChannels {
       },
       err => {
         this.botDisplayNames.delete(key);
-        this.log('debug', `[${platform}] Failed to resolve bot display name`, err);
+        this.log('debug', 'Failed to resolve bot display name', { platform, error: err });
         return undefined;
       },
     );
@@ -1259,7 +1291,9 @@ export class AgentChannels {
     // authorization message into the chat thread and confirm the bot is
     // present to a sender who was just turned away.
     if (err instanceof ChannelSessionRejectedError) {
-      this.log('info', `[${chatThread.adapter.name}] Session resolver refused the message`, {
+      this.log('info', 'Session resolver refused the message', {
+        platform: chatThread.adapter.name,
+        threadId: chatThread.id,
         messageId: message.id,
         authorId: message.author?.userId,
         reason: error.message,
@@ -1289,13 +1323,17 @@ export class AgentChannels {
       authorId: message.author?.userId,
       error: loggedError,
     };
-    this.log('error', `[${chatThread.adapter.name}] Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
+    this.log('error', `Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
       await chatThread.post(errorMessage);
     } catch (postErr) {
-      this.log('debug', 'Failed to post error message to thread', postErr);
+      this.log('debug', 'Failed to post error message to thread', {
+        platform: chatThread.adapter.name,
+        threadId: chatThread.id,
+        error: postErr,
+      });
     }
   }
 
@@ -1320,7 +1358,8 @@ export class AgentChannels {
     // work happens. Custom handlers run ahead of this and still see the
     // message if they want it.
     if (batch.length === 0) {
-      this.log('debug', `[${platform}] Skipping message with no text and no attachments`, {
+      this.log('debug', 'Skipping message with no text and no attachments', {
+        platform,
         messageId: message.id,
       });
       return;
@@ -1370,9 +1409,14 @@ export class AgentChannels {
           mastraThreadId: mastraThread.id,
           messageId: message.id,
         };
-        this.log('debug', `[${platform}] Fetching thread history for first mention`, { ...logContext, maxMessages });
-        const history = await collectThreadHistory(chatThread, historyExcludeIds, maxMessages, this.logger);
-        this.log('debug', `[${platform}] Fetched thread history`, {
+        this.log('debug', 'Fetching thread history for first mention', { ...logContext, maxMessages });
+        const history = await collectThreadHistory(
+          chatThread,
+          historyExcludeIds,
+          maxMessages,
+          (level, message, fields) => this.log(level, message, fields),
+        );
+        this.log('debug', 'Fetched thread history', {
           ...logContext,
           fetched: history.recent.length + (history.root ? 1 : 0),
           omitted: formatOmittedCount(history),
@@ -1389,7 +1433,7 @@ export class AgentChannels {
           if (!persisted) legacyHistoryBlock = formatLegacyHistoryBlock(history, chatThread, platform);
         }
       } else {
-        this.log('debug', `[${platform}] Skipping thread history fetch, thread already subscribed`, {
+        this.log('debug', 'Skipping thread history fetch, thread already subscribed', {
           platform,
           threadId: chatThread.id,
           mastraThreadId: mastraThread.id,
@@ -1401,7 +1445,9 @@ export class AgentChannels {
     const messageTexts = batch.map(m => messageText(m));
     const text = [legacyHistoryBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
-    this.logger?.debug('[CHANNEL] Attachments', {
+    this.log('debug', 'Attachments', {
+      platform,
+      threadId: chatThread.id,
       count: attachments.length,
       attachments: attachments.map(a => ({
         type: a.type,
@@ -1462,7 +1508,7 @@ export class AgentChannels {
       // iMessage, custom gateways) must auto-resume or the thread gets stuck.
       (toolDisplay === 'hidden' && (adapterConfig?.approvalButtons ?? APPROVAL_BUTTON_PLATFORMS.has(platform)));
 
-    this.log('info', '[processChatMessage] tool approval config', {
+    this.log('info', 'Tool approval config', {
       platform,
       toolDisplay,
       toolDisplayFn: !!toolDisplayFn,
@@ -1495,7 +1541,7 @@ export class AgentChannels {
     requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
-      this.log('debug', 'chatThread.subscribe failed', err);
+      this.log('debug', 'chatThread.subscribe failed', { platform, threadId: chatThread.id, error: err });
     });
 
     // When the message is text-only, pass the bare string to the signal pipeline.
@@ -1552,7 +1598,7 @@ export class AgentChannels {
             const base64 = Buffer.from(bytes).toString('base64');
             data = `data:${mimeType};base64,${base64}`;
           } catch (err) {
-            this.logger?.warn('[CHANNEL] fetchData failed', { mimeType, error: String(err) });
+            this.log('warn', 'Attachment fetchData failed', { mimeType, error: err });
             fetchFailed = true;
           }
         } else {
@@ -1711,9 +1757,9 @@ export class AgentChannels {
     try {
       signals = await args.buildSignals();
     } catch (err) {
-      this.log('warn', `[${platform}] Failed to build thread history messages`, {
+      this.log('warn', 'Failed to build thread history messages', {
         ...args.logContext,
-        error: getErrorFromUnknown(err).message,
+        error: err,
       });
       return true;
     }
@@ -1724,13 +1770,13 @@ export class AgentChannels {
           createSignal(signal).toDBMessage({ resourceId: args.target.resource, threadId: args.target.thread }),
         ),
       });
-      this.log('debug', `[${platform}] Persisted thread history`, { ...args.logContext, rows: signals.length });
+      this.log('debug', 'Persisted thread history', { ...args.logContext, rows: signals.length });
       return true;
     } catch (err) {
-      this.log('warn', `[${platform}] Failed to persist thread history messages`, {
+      this.log('warn', 'Failed to persist thread history messages', {
         ...args.logContext,
         rows: signals.length,
-        error: getErrorFromUnknown(err).message,
+        error: err,
       });
       return false;
     }
@@ -1918,14 +1964,22 @@ export class AgentChannels {
             };
             result = typingStatusFn(chunk, ctx);
           } catch (e) {
-            this.logger?.debug('[CHANNEL] typingStatus function threw (continuing)', { error: e });
+            this.log('debug', 'typingStatus function threw (continuing)', {
+              platform,
+              threadId: chatThread.id,
+              error: e,
+            });
             result = undefined;
           }
           if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
             currentTypingStatus = result;
             statusSent = true;
             chatThread.startTyping(result).catch(e => {
-              this.logger?.debug('[CHANNEL] Typing indicator failed (best-effort)', { error: e });
+              this.log('debug', 'Typing indicator failed (best-effort)', {
+                platform,
+                threadId: chatThread.id,
+                error: e,
+              });
             });
           }
         }
@@ -1948,7 +2002,7 @@ export class AgentChannels {
       // status when it completes.
       if (statusSent && !typingGate.active) {
         chatThread.startTyping('').catch(e => {
-          this.logger?.debug('[CHANNEL] Typing clear failed (best-effort)', { error: e });
+          this.log('debug', 'Typing clear failed (best-effort)', { platform, threadId: chatThread.id, error: e });
         });
       }
     }
@@ -2172,9 +2226,9 @@ export class AgentChannels {
             DURATION,
           );
           await done;
-          this.log('info', `[${name}] Gateway session ended, reconnecting...`);
+          this.log('info', 'Gateway session ended, reconnecting...', { platform: name });
         } catch (err) {
-          this.log('error', `[${name}] Gateway error, retrying in ${RETRY_DELAY / 1000}s`, err);
+          this.log('error', `Gateway error, retrying in ${RETRY_DELAY / 1000}s`, { platform: name, error: err });
           await new Promise(r => setTimeout(r, RETRY_DELAY));
         }
       }
@@ -2261,26 +2315,29 @@ export class AgentChannels {
     if (isStreamingOnlyMode && !streamingEnabled) {
       if (!this.warnedToolDisplayFallback.has(platform)) {
         this.warnedToolDisplayFallback.add(platform);
-        this.log(
-          'warn',
-          `[${platform}] toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`,
-        );
+        this.log('warn', `toolDisplay: '${toolDisplay}' requires streaming: true; falling back to 'cards'.`, {
+          platform,
+        });
       }
       return { resolved: 'cards', fn };
     }
     return { resolved: toolDisplay, fn };
   }
 
-  protected log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {
+  /**
+   * Single entry point for channel logs. `fields.platform` also prefixes the
+   * message as `[platform]`, and `fields.error` is normalized so it serializes
+   * with its message, code and cause instead of as `{}`.
+   */
+  protected log(level: 'info' | 'warn' | 'error' | 'debug', message: string, fields?: ChannelLogFields): void {
     if (!this.logger) return;
-    if (level === 'error') {
-      this.logger.error(message, { args });
-    } else if (level === 'warn') {
-      this.logger.warn(message, { args });
-    } else if (level === 'debug') {
-      this.logger.debug(message, { args });
-    } else {
-      this.logger.info(message, { args });
+    const prefixed = fields?.platform ? `[${fields.platform}] ${message}` : message;
+    if (!fields) {
+      this.logger[level](prefixed);
+      return;
     }
+    // Already-sanitized diagnostics (plain objects) pass through untouched.
+    const payload = fields.error instanceof Error ? { ...fields, error: getErrorFromUnknown(fields.error) } : fields;
+    this.logger[level](prefixed, payload);
   }
 }

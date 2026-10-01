@@ -2133,7 +2133,7 @@ describe('AgentChannels', () => {
             const rendered = format(...output.mock.calls[0]!);
             expect(rendered).toMatch(/^\[CHANNEL\] \[/);
             const record = embeddedRecord(rendered.split('\n')[0]!);
-            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual({ args: [record] });
+            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual(record);
             return record;
           },
         };
@@ -2399,14 +2399,14 @@ describe('AgentChannels', () => {
           expect.objectContaining({
             component: 'CHANNEL',
             level: 'error',
-            args: [{ args: [record] }],
+            args: [record],
           }),
         );
         expect(embeddedRecord(filter.mock.calls[0]![0].message)).toEqual(record);
-        expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), { args: [record] });
-        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual({ args: [record] });
+        expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), record);
+        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual(record);
         expect(embeddedRecord(sink.error.mock.calls[0]![0])).toEqual(record);
-        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([{ args: [record] }]);
+        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([record]);
         expect(JSON.stringify(sink.error.mock.calls)).not.toContain('SENTINEL');
         expect(JSON.stringify(filter.mock.calls)).not.toContain('SENTINEL');
       });
@@ -2429,14 +2429,14 @@ describe('AgentChannels', () => {
         expect(capture).toHaveBeenCalledTimes(1);
         const [text, metadata] = capture.mock.calls[0]!;
         const record = embeddedRecord(text);
-        expect(JSON.parse(JSON.stringify(metadata))).toEqual({ args: [record] });
+        expect(JSON.parse(JSON.stringify(metadata))).toEqual(record);
         expect(record).toMatchObject({
           platform: 'slack',
           threadId: f.thread.id,
           messageId: f.incoming.id,
           authorId: 'U123',
         });
-        expect(metadata.args[0].error).toEqual(record.error);
+        expect(metadata.error).toEqual(record.error);
       });
 
       it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
@@ -3185,7 +3185,11 @@ describe('thread history', () => {
     expect(contents[0]).toBe('message 591');
     expect(t.logger.warn).toHaveBeenCalledWith(
       '[slack] Failed to fetch thread root message',
-      expect.objectContaining({ platform: 'slack', threadId: 'channel-1:thread-1', error: 'forward boom' }),
+      expect.objectContaining({
+        platform: 'slack',
+        threadId: 'channel-1:thread-1',
+        error: expect.objectContaining({ message: 'forward boom' }),
+      }),
     );
   });
 
@@ -3203,7 +3207,11 @@ describe('thread history', () => {
     expect(t.dispatches).toHaveLength(1);
     expect(t.logger.warn).toHaveBeenCalledWith(
       '[slack] Failed to fetch thread history',
-      expect.objectContaining({ platform: 'slack', threadId: 'channel-1:thread-1', error: 'backward boom' }),
+      expect.objectContaining({
+        platform: 'slack',
+        threadId: 'channel-1:thread-1',
+        error: expect.objectContaining({ message: 'backward boom' }),
+      }),
     );
   });
 
@@ -3322,17 +3330,16 @@ describe('thread history', () => {
       // History is only collected on the first mention, so a lost write must
       // not lose the context: the legacy block carries it on the trigger.
       await expect(t.hook.mock.results[0]!.value).resolves.toBe(false);
-      expect(t.logger.warn).toHaveBeenCalledWith('[slack] Failed to persist thread history messages', {
-        args: [
-          expect.objectContaining({
-            platform: 'slack',
-            threadId: 'channel-1:thread-1',
-            messageId: 'trigger',
-            rows: 11,
-            error: 'write boom',
-          }),
-        ],
-      });
+      expect(t.logger.warn).toHaveBeenCalledWith(
+        '[slack] Failed to persist thread history messages',
+        expect.objectContaining({
+          platform: 'slack',
+          threadId: 'channel-1:thread-1',
+          messageId: 'trigger',
+          rows: 11,
+          error: expect.objectContaining({ message: 'write boom' }),
+        }),
+      );
       expect(t.dispatches).toHaveLength(1);
       const text = t.dispatches[0].signalContents as string;
       expect(text).toContain('[Thread context — messages in this thread before you joined]');
@@ -3349,7 +3356,7 @@ describe('thread history', () => {
       expect(agent.memory.saveMessages).not.toHaveBeenCalled();
       expect(t.logger.warn).toHaveBeenCalledWith(
         '[slack] Failed to build thread history messages',
-        expect.objectContaining({ args: [expect.objectContaining({ platform: 'slack', error: 'build boom' })] }),
+        expect.objectContaining({ platform: 'slack', error: expect.objectContaining({ message: 'build boom' }) }),
       );
       expect(t.dispatches).toHaveLength(1);
       expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');

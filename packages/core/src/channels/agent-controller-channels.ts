@@ -407,7 +407,11 @@ export class AgentControllerChannels extends AgentChannels {
     if (!session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
-        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,
+        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval)`,
+        {
+          threadId: memory.thread,
+          toolCallId,
+        },
       );
       // Core still refuses to execute the action. The hook only lets a durable
       // host settle the attempt the click referred to, which is otherwise
@@ -539,7 +543,7 @@ export class AgentControllerChannels extends AgentChannels {
           // Best-effort by contract: a session that couldn't be configured
           // still answers the message, on whatever defaults it was created
           // with.
-          this.log('error', `Channel session-start hook failed for resourceId=${thread.resourceId}: ${error}`);
+          this.log('error', 'Channel session-start hook failed', { resourceId: thread.resourceId, error });
         }
       })();
       this.sessionStartRuns.set(session, run);
