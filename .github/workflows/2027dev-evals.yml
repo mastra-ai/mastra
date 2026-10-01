@@ -207,7 +207,7 @@ jobs:
           persist-credentials: false
 
       - name: Run 2027 eval
-        uses: team2027/evals-action@07eec4116b12c164e1fdef5fa9cb37cc024ad7f1
+        uses: team2027/evals-action@18bd0381b4a80ba7357de0330762d7cfb6e5e670 # v0.8.0
         with:
           api-key: ${{ secrets.EVALS_API_KEY }}
           prompt-id: ${{ matrix.promptId }}
