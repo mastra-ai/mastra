@@ -633,6 +633,17 @@ export async function analyzeBundle(
     import.meta.dirname,
   ];
 
+  // These packages remain external even when their imports originate inside prebuilt packages.
+  // That boundary hides them from source analysis, so keep them in the generated runtime manifest.
+  for (const dep of WORKSPACE_EXTERNALS) {
+    if (!mergedExternalDeps.has(dep)) {
+      const dependencyInfo = await resolveDependencyInfo(dep, undefined, externalMetadataParentPaths);
+      if (dependencyInfo.version || dependencyInfo.packageSpec) {
+        mergedExternalDeps.set(dep, dependencyInfo);
+      }
+    }
+  }
+
   // Retry externals that were discovered without install metadata (e.g. from entry analysis
   // where the package isn't resolvable from the entry's own location).
   for (const [dep, info] of mergedExternalDeps) {
