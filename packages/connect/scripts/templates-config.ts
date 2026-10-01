@@ -42,6 +42,19 @@ const PIN_677: TemplatePin = {
   sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
 };
 
+/**
+ * NangoHQ/integration-templates#699 fixes two production bugs: it moves the
+ * Drive-API tools `export-file` and `list-revisions` from `google-docs` onto
+ * `google-drive` where the proxy base URL resolves correctly (the google-docs
+ * connection rejects a `baseUrlOverride`), and it normalizes `google-mail`
+ * `list-filters` so a mailbox with zero filters returns an empty list instead
+ * of throwing. Move these providers back to `TEMPLATE_SHA` once #699 merges.
+ */
+const PIN_699: TemplatePin = {
+  repo: 'arctic-char/integration-templates',
+  sha: 'a1e6331202747a34dd849c913f8ed9c3ff71b29b',
+};
+
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   // NangoHQ/integration-templates#667
   resend: {
@@ -62,8 +75,11 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
   hubspot: PIN_677,
   fireflies: PIN_677,
   discord: PIN_677,
-  'google-mail': PIN_677,
   'google-calendar': PIN_677,
+  // NangoHQ/integration-templates#699 — supersedes #677 for these providers
+  'google-mail': PIN_699,
+  'google-docs': PIN_699,
+  'google-drive': PIN_699,
 };
 
 /** Resolves the template pin for a provider, falling back to the shared upstream pin. */

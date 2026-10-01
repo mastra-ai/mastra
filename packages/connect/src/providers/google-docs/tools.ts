@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from arctic-char/integration-templates @ a1e633120274 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyToolFilter } from '../../toolset.js';
@@ -17,7 +17,6 @@ import { deleteNamedRangeTool } from './tools/delete-named-range.js';
 import { deleteParagraphBulletsTool } from './tools/delete-paragraph-bullets.js';
 import { deleteTableColumnTool } from './tools/delete-table-column.js';
 import { deleteTableRowTool } from './tools/delete-table-row.js';
-import { exportDocumentTool } from './tools/export-document.js';
 import { insertInlineImageTool } from './tools/insert-inline-image.js';
 import { insertPageBreakTool } from './tools/insert-page-break.js';
 import { insertSectionBreakTool } from './tools/insert-section-break.js';
@@ -25,7 +24,6 @@ import { insertTableColumnTool } from './tools/insert-table-column.js';
 import { insertTableRowTool } from './tools/insert-table-row.js';
 import { insertTableTool } from './tools/insert-table.js';
 import { insertTextTool } from './tools/insert-text.js';
-import { listRevisionsTool } from './tools/list-revisions.js';
 import { mergeTableCellsTool } from './tools/merge-table-cells.js';
 import { pinTableHeaderRowsTool } from './tools/pin-table-header-rows.js';
 import { replaceAllTextTool } from './tools/replace-all-text.js';
@@ -58,7 +56,6 @@ export function createGoogleDocsTools(options?: ProviderToolsOptions) {
     google_docs_delete_paragraph_bullets: deleteParagraphBulletsTool(platformProxy),
     google_docs_delete_table_column: deleteTableColumnTool(platformProxy),
     google_docs_delete_table_row: deleteTableRowTool(platformProxy),
-    google_docs_export_document: exportDocumentTool(platformProxy),
     google_docs_insert_inline_image: insertInlineImageTool(platformProxy),
     google_docs_insert_page_break: insertPageBreakTool(platformProxy),
     google_docs_insert_section_break: insertSectionBreakTool(platformProxy),
@@ -66,7 +63,6 @@ export function createGoogleDocsTools(options?: ProviderToolsOptions) {
     google_docs_insert_table_row: insertTableRowTool(platformProxy),
     google_docs_insert_table: insertTableTool(platformProxy),
     google_docs_insert_text: insertTextTool(platformProxy),
-    google_docs_list_revisions: listRevisionsTool(platformProxy),
     google_docs_merge_table_cells: mergeTableCellsTool(platformProxy),
     google_docs_pin_table_header_rows: pinTableHeaderRowsTool(platformProxy),
     google_docs_replace_all_text: replaceAllTextTool(platformProxy),

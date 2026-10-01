@@ -1,11 +1,11 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from arctic-char/integration-templates @ a1e633120274 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const listRevisionsInputSchema = z.object({
-  documentId: z.string().describe('Google Docs document ID. Example: "1Kj3d86Z-Sfd56YP4dImQ-ggMRyP2QZ_BRO33zOO224c"'),
+  fileId: z.string().describe('The Drive file ID. Example: "1Kj3d86Z-Sfd56YP4dImQ-ggMRyP2QZ_BRO33zOO224c"'),
   pageToken: z.string().optional().describe('Pagination token from the previous response. Omit for the first page.'),
 });
 
@@ -38,21 +38,20 @@ const DriveRevisionsResponseSchema = z.object({
 
 export function listRevisionsTool(proxy: PlatformProxy) {
   return createTool({
-    id: 'google_docs_list_revisions',
-    description: 'List the revision history for a Google Doc.',
+    id: 'google_drive_list_revisions',
+    description: 'List the revision history for a Drive file.',
     inputSchema: listRevisionsInputSchema,
     outputSchema: listRevisionsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listRevisionsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
       // https://developers.google.com/workspace/drive/api/reference/rest/v3/revisions/list
       const response = await platformProxy.get({
-        endpoint: `/drive/v3/files/${encodeURIComponent(input.documentId)}/revisions`,
+        endpoint: `/drive/v3/files/${encodeURIComponent(input.fileId)}/revisions`,
         params: {
           fields: 'nextPageToken,revisions(id,modifiedTime,lastModifyingUser,keepForever,published)',
           pageSize: '100',
           ...(input.pageToken !== undefined && { pageToken: input.pageToken }),
         },
-        baseUrlOverride: 'https://www.googleapis.com',
         retries: 3,
       });
 

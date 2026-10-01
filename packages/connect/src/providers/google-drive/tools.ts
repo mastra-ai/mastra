@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from arctic-char/integration-templates @ a1e633120274 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyToolFilter } from '../../toolset.js';
@@ -11,6 +11,7 @@ import { deleteFileTool } from './tools/delete-file.js';
 import { deletePermissionTool } from './tools/delete-permission.js';
 import { deleteSharedDriveTool } from './tools/delete-shared-drive.js';
 import { emptyTrashTool } from './tools/empty-trash.js';
+import { exportFileTool } from './tools/export-file.js';
 import { findFileTool } from './tools/find-file.js';
 import { findFolderTool } from './tools/find-folder.js';
 import { getAboutTool } from './tools/get-about.js';
@@ -25,6 +26,7 @@ import { listCommentsTool } from './tools/list-comments.js';
 import { listDrivesTool } from './tools/list-drives.js';
 import { listFilesNonUnifiedTool } from './tools/list-files-non-unified.js';
 import { listPermissionsTool } from './tools/list-permissions.js';
+import { listRevisionsTool } from './tools/list-revisions.js';
 import { moveFileTool } from './tools/move-file.js';
 import { unhideSharedDriveTool } from './tools/unhide-shared-drive.js';
 import { updateCommentTool } from './tools/update-comment.js';
@@ -45,6 +47,7 @@ export function createGoogleDriveTools(options?: ProviderToolsOptions) {
     google_drive_delete_permission: deletePermissionTool(platformProxy),
     google_drive_delete_shared_drive: deleteSharedDriveTool(platformProxy),
     google_drive_empty_trash: emptyTrashTool(platformProxy),
+    google_drive_export_file: exportFileTool(platformProxy),
     google_drive_find_file: findFileTool(platformProxy),
     google_drive_find_folder: findFolderTool(platformProxy),
     google_drive_get_about: getAboutTool(platformProxy),
@@ -59,6 +62,7 @@ export function createGoogleDriveTools(options?: ProviderToolsOptions) {
     google_drive_list_drives: listDrivesTool(platformProxy),
     google_drive_list_files_non_unified: listFilesNonUnifiedTool(platformProxy),
     google_drive_list_permissions: listPermissionsTool(platformProxy),
+    google_drive_list_revisions: listRevisionsTool(platformProxy),
     google_drive_move_file: moveFileTool(platformProxy),
     google_drive_unhide_shared_drive: unhideSharedDriveTool(platformProxy),
     google_drive_update_comment: updateCommentTool(platformProxy),

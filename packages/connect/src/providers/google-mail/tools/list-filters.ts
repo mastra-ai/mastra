@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
+// AUTO-GENERATED from arctic-char/integration-templates @ a1e633120274 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -37,9 +37,11 @@ export const listFiltersOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
-const ProviderListResponseSchema = z.object({
-  filter: z.array(z.unknown()).optional(),
-});
+const ProviderListResponseSchema = z
+  .object({
+    filter: z.array(z.unknown()).nullish(),
+  })
+  .nullish();
 
 export function listFiltersTool(proxy: PlatformProxy) {
   return createTool({
@@ -57,13 +59,22 @@ export function listFiltersTool(proxy: PlatformProxy) {
         retries: 3,
       });
 
-      const parsedData = ProviderListResponseSchema.parse(response.data);
-      const filters = parsedData.filter || [];
+      const parsedData = ProviderListResponseSchema.safeParse(response.data);
+      if (!parsedData.success) {
+        throw new platformProxy.ActionError({
+          type: 'invalid_response',
+          message: 'Invalid response from Gmail filters API',
+        });
+      }
 
-      const parsedFilters = filters.map((item: unknown) => {
-        const parsed = FilterSchema.parse(item);
-        return parsed;
-      });
+      const filters = parsedData.data?.filter ?? [];
+
+      const parsedFilters = filters
+        .map((item: unknown) => {
+          const parsed = FilterSchema.safeParse(item);
+          return parsed.success ? parsed.data : null;
+        })
+        .filter((f): f is NonNullable<typeof f> => f !== null);
 
       return {
         filters: parsedFilters,
