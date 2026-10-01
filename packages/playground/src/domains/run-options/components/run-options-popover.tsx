@@ -37,12 +37,12 @@ export function RunOptionsPopover({
   const handleSave = (value: Record<string, any>) => {
     setTracingOptions(value);
     onSaveExtra?.();
-    toast.success('Run options saved locally');
+    toast.success('Tracing options saved locally');
     handleOpenChange(false);
   };
 
   return (
-    <RunActionPopover label="Run options" icon={<TraceIcon />} open={open} onOpenChange={handleOpenChange}>
+    <RunActionPopover label="Tracing options" icon={<TraceIcon />} open={open} onOpenChange={handleOpenChange}>
       {extraFields}
       <JsonObjectEditor
         label="Tracing Options"
