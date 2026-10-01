@@ -474,8 +474,12 @@ export async function handlePlanApproval(
         resolve();
 
         if (goal && approvalRecorded) {
-          const recorded = await Promise.race([approvalRecorded.promise, resumed.then(() => false)]);
-          approvalRecorded.cancel();
+          let recorded = false;
+          try {
+            recorded = await Promise.race([approvalRecorded.promise, resumed.then(() => false)]);
+          } finally {
+            approvalRecorded.cancel();
+          }
           // Once the approval result is persisted, deliver the goal reminder
           // into the resumed run. If that run already ended, only record the
           // reminder: the goal is set, and a second run would start on

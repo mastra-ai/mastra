@@ -339,6 +339,19 @@ describe('handlePlanApproval goal mode', () => {
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
   });
+
+  it('stops waiting for the approval result when the resume rejects', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+    state.session.respondToToolSuspension = vi.fn().mockRejectedValue(new Error('resume failed'));
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await expect((component as any).onGoal()).rejects.toThrow('resume failed');
+    await promise;
+
+    expect(listeners.size).toBe(0);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+  });
 });
 
 describe('handlePlanApproval regular approval', () => {
