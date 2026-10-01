@@ -1,10 +1,4 @@
-import {
-  SettingsContainer,
-  SettingsDescription,
-  SettingsGroup,
-  SettingsHeader,
-  SettingsTitle,
-} from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsGroup, SettingsHeader, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import type { ToolRun } from '../utils/tool-run';
 import { ToolResponseBody } from './tool-response-body';
 import { ToolRunStatus } from './tool-run-status';
@@ -19,7 +13,6 @@ export function ToolResponse({ isRunning, lastRun }: ToolResponseProps) {
     <SettingsGroup>
       <SettingsHeader action={!isRunning && lastRun && <ToolRunStatus run={lastRun} />}>
         <SettingsTitle>Response</SettingsTitle>
-        <SettingsDescription>The value the tool returned.</SettingsDescription>
       </SettingsHeader>
       <SettingsContainer>
         <ToolResponseBody isRunning={isRunning} lastRun={lastRun} />

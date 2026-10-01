@@ -1,4 +1,5 @@
 import type { McpToolInfo } from '@mastra/client-js';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
 import { useMcpAppHtml } from '../hooks/use-mcp-app-html';
@@ -32,7 +33,7 @@ export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
       {isSuspendedResult(result) && (
         <Notice variant="warning">
           This tool asked for more input, which Studio cannot provide. The suspend payload below shows what it needs.
-          Call it from an MCP client with an <code>inputRequests</code> handler to finish the request.
+          Call it from an MCP client with an <InlineCode>inputRequests</InlineCode> handler to finish the request.
         </Notice>
       )}
       <ToolPlayground
