@@ -1,5 +1,24 @@
 # @mastra/memory
 
+## 1.35.0
+
+### Minor Changes
+
+- **Page through observation groups.** Recall can now read the original observation groups around a search hit, including groups condensed away by reflection and buffered groups that haven't been activated yet. Existing records work without re-indexing. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  ```ts
+  recall({ mode: 'observations', groupId: 'group-id-from-search', direction: 'after', limit: 5 });
+  ```
+
+  **Easier-to-read search results.** Search results are dated, listed oldest first, and mark where groups may be hidden between hits. Hits already in the agent's context come back as short references, so more new hits fit. When a long group is shortened, its excerpt starts at the line that best matches the query.
+
+  **Better recall guidance.** With retrieval enabled, the agent gets recall guidance from the first turn, including in read-only runs. It explains how to search, page, and confirm details against source messages, treats what the user said as authoritative and what the assistant proposed as a suggestion, and labels reflected groups as lossy summaries.
+
+### Patch Changes
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.74.0
+
 ## 1.34.0
 
 ### Minor Changes

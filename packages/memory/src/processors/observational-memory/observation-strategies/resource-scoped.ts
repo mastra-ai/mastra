@@ -482,6 +482,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             threadId,
             resourceId,
             this.getMaxMessageTimestamp(threadMessages),
+            record.id,
           ),
         ),
       );

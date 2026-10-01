@@ -161,7 +161,7 @@ describe('getDynamicMemory', () => {
       temporalMarkers: true,
       retrieval: true,
       scope: 'thread',
-      activateAfterIdle: 'auto',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
       activateOnProviderChange: true,
       observation: {
         bufferTokens: 1 / 5,
