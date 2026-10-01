@@ -267,15 +267,16 @@ export async function generateToolTypes(
   async function convert(raw: unknown, position: string): Promise<string> {
     const name = `ToolSchema${++schemaIndex}`;
     // Both budgets are applied before `prepare()` copies anything, so an over-budget schema costs
-    // at most its budget in visits instead of a full traversal plus conversion.
+    // at most its budget in visits instead of a full traversal plus conversion. The raw count runs
+    // first, so the keyword walk below only ever sees a schema already bounded by value.
+    const values = countJsonValues(raw, MAX_SCHEMA_VALUES);
+    budget.values += values;
     const { error, limit } = jsonSchemaComplexity(raw);
     // Depth is a structural violation, not merely an expensive schema: keep failing it.
     if (limit === 'depth') fail(position);
-    const values = countJsonValues(raw, MAX_SCHEMA_VALUES);
-    budget.values += values;
     const reason =
-      error ??
       (values > MAX_SCHEMA_VALUES ? `Schema exceeds the maximum value count of ${MAX_SCHEMA_VALUES}` : undefined) ??
+      error ??
       (budget.values > MAX_CATALOG_VALUES
         ? `Catalogue exceeds the maximum value count of ${MAX_CATALOG_VALUES}`
         : undefined);
