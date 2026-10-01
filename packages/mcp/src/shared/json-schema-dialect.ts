@@ -117,26 +117,41 @@ export function jsonSchemaComplexity(schema: unknown): {
  * annotation and extension data and boolean subschema entries, so callers that copy or transfer
  * the whole value can bound that work rather than the validation work a schema describes.
  *
- * Values already seen are counted once, matching how the same walk treats cycles.
+ * Children are pulled one at a time, so a container wider than the budget is never expanded.
+ * Values already seen are counted once, matching how this walk treats cycles.
  */
 export function countJsonValues(value: unknown, limit: number): number {
   const seen = new Set<object>();
-  const stack: unknown[] = [value];
+  const frames: Array<Generator<unknown>> = [];
   let nodes = 0;
 
-  while (stack.length > 0) {
-    if (++nodes > limit) return nodes;
-    const current = stack.pop();
-    if (current === null || typeof current !== 'object' || seen.has(current)) continue;
+  function count(current: unknown): boolean {
+    if (++nodes > limit) return false;
+    if (current === null || typeof current !== 'object' || seen.has(current)) return true;
     seen.add(current);
-    if (Array.isArray(current)) {
-      for (const item of current) stack.push(item);
-    } else {
-      for (const key of Object.keys(current)) stack.push(Reflect.get(current, key));
-    }
+    frames.push(containerValues(current));
+    return true;
+  }
+
+  if (!count(value)) return nodes;
+  while (frames.length > 0) {
+    const next = frames[frames.length - 1]!.next();
+    if (next.done) frames.pop();
+    else if (!count(next.value)) return nodes;
   }
 
   return nodes;
+}
+
+/** Yields a JSON container's children without materialising them. */
+function* containerValues(value: object): Generator<unknown> {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) yield value[index];
+    return;
+  }
+  for (const key in value) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) yield Reflect.get(value, key);
+  }
 }
 
 /**
