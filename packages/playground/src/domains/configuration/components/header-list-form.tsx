@@ -59,20 +59,30 @@ interface HeaderListFormItemProps {
 }
 
 const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
-  <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
-    <Field>
-      <FieldLabel required>Name</FieldLabel>
+  <div className="grid grid-cols-[1fr_1fr_auto] gap-x-4">
+    <Field className="row-span-3 grid-rows-subgrid gap-y-0">
+      <FieldLabel required className="mb-2">
+        Name
+      </FieldLabel>
       <Input name={`headers.${index}.name`} placeholder="e.g. Authorization" required defaultValue={header.name} />
-      <FieldError />
+      <FieldError className="mt-1" />
     </Field>
 
-    <Field>
-      <FieldLabel required>Value</FieldLabel>
+    <Field className="row-span-3 grid-rows-subgrid gap-y-0">
+      <FieldLabel required className="mb-2">
+        Value
+      </FieldLabel>
       <Input name={`headers.${index}.value`} placeholder="e.g. Bearer <token>" required defaultValue={header.value} />
-      <FieldError />
+      <FieldError className="mt-1" />
     </Field>
 
-    <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">
+    <Button
+      type="button"
+      onClick={onRemove}
+      aria-label="Remove header"
+      tooltip="Remove header"
+      className="col-start-3 row-start-2"
+    >
       <Trash />
     </Button>
   </div>

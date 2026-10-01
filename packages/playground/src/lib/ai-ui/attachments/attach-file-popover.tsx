@@ -92,15 +92,17 @@ export const AttachFilePopover = () => {
           event.stopPropagation();
         }}
       >
-        <Form onSubmit={handleSubmit} className="flex-row items-end gap-2">
-          <Field className="w-full">
+        <Form onSubmit={handleSubmit}>
+          <Field>
             <FieldLabel>Public URL</FieldLabel>
-            <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
+            <div className="flex gap-2">
+              <Input name="url-attachment" type="url" placeholder="https://placehold.co/600x400/png" />
+              <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
+                Add
+              </Button>
+            </div>
             <FieldError />
           </Field>
-          <Button type="submit" className="h-8!" variant="default" icon={<Link />}>
-            Add
-          </Button>
         </Form>
 
         <hr className="my-3 border-border" />

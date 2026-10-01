@@ -85,7 +85,7 @@ export function SearchWorkspacePanel({
   return (
     <div className="rounded-lg bg-muted">
       <Form onSubmit={handleSearch} className="p-4">
-        <div className="flex items-center gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
           <div className="relative flex-1">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -96,7 +96,7 @@ export function SearchWorkspacePanel({
             />
           </div>
 
-          <Field className="gap-1">
+          <Field className="contents">
             <div className="flex items-center gap-1.5">
               <FieldLabel size="smaller">Top</FieldLabel>
               <Input
@@ -109,7 +109,7 @@ export function SearchWorkspacePanel({
                 title="Number of results"
               />
             </div>
-            <FieldError />
+            <FieldError className="col-span-full row-start-2" />
           </Field>
 
           <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
