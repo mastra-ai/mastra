@@ -39,9 +39,9 @@ type TraceSelection = {
   where?: TrustedTraceQueryPredicate;
 };
 
-const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
+export const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
 }
 
@@ -135,6 +135,17 @@ function fieldSql<TField extends string>(
   return sql;
 }
 
+/**
+ * Value of trace-root `metadata.<key>` (alias `r`) as filtering, discovery, and aggregate grouping
+ * all see it: the normalized search value, falling back to the trimmed raw string.
+ */
+export function traceMetadataValueSql(keyParameter: string): string {
+  return `COALESCE(
+      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
+      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
+    )`;
+}
+
 function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
   return field.startsWith('metadata.');
 }
@@ -169,10 +180,7 @@ function compileScalarPredicate<TField extends string>(
   if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
     const keyParameter = `$${parameterOffset++}`;
-    field = `COALESCE(
-      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
-      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )`;
+    field = traceMetadataValueSql(keyParameter);
     fieldValues = [predicate.field.slice('metadata.'.length)];
   } else {
     field = fieldSql(registry, predicate.field);
@@ -513,13 +521,46 @@ function compilePostgresTraceScope(
   return { ctes, values };
 }
 
+/**
+ * Builds the CTE chain ending in `candidates`: the completed, current trace roots in the
+ * selection's time range and tenant scope that match its `where` predicate. Trace queries and
+ * trace aggregates both select from this CTE so they always see the same population.
+ */
+export function compilePostgresTraceCandidates(
+  schema: string,
+  selection: TraceSelection & { scope?: TraceQueryTenantScope },
+  columns: string,
+  deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+): { ctes: string[]; values: unknown[] } {
+  const relationCollections = collectRelationCollections(selection.where);
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    selection,
+    relationCollections,
+    selection.scope,
+    deltaWindow,
+  );
+
+  let predicateSql = 'TRUE';
+  if (selection.where) {
+    const predicate = compilePredicate(selection.where, values.length + 1);
+    predicateSql = predicate.sql;
+    values.push(...predicate.values);
+  }
+  ctes.push(`candidates AS (
+    SELECT ${columns}
+    FROM root_scope r
+    WHERE ${predicateSql}
+  )`);
+  return { ctes, values };
+}
+
 export function compilePostgresTraceQuery(
   schema: string,
   plan: TrustedTraceQueryPlan,
   mode: 'data' | 'count' = 'data',
   safeHorizon?: string,
 ): CompiledPostgresTraceQuery {
-  const relationCollections = collectRelationCollections(plan.where);
   let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
   if (plan.paginationMode === 'delta') {
     const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
@@ -527,19 +568,12 @@ export function compilePostgresTraceQuery(
       throw new Error('Delta query requires a cursor and safe horizon');
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
-
-  let predicateSql = 'TRUE';
-  if (plan.where) {
-    const predicate = compilePredicate(plan.where, values.length + 1);
-    predicateSql = predicate.sql;
-    values.push(...predicate.values);
-  }
-  ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}
-    FROM root_scope r
-    WHERE ${predicateSql}
-  )`);
+  const { ctes, values } = compilePostgresTraceCandidates(
+    schema,
+    plan,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
+    deltaWindow,
+  );
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.paginationMode === 'page' && mode === 'count') {
@@ -725,10 +759,7 @@ export function compilePostgresTraceQueryValues(
     extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
   } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    extracted = `SELECT COALESCE(
-      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
-      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )::text AS value FROM root_scope r`;
+    extracted = `SELECT ${traceMetadataValueSql(keyParameter)}::text AS value FROM root_scope r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
     const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
