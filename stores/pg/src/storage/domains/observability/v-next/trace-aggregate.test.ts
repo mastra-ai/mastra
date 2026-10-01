@@ -96,7 +96,9 @@ describe('Postgres trace aggregate compiler', () => {
 
     expect(compiled.text).toContain('ranked AS (');
     expect(compiled.text).toContain('row_number() OVER (ORDER BY COUNT(*)::float8 DESC NULLS LAST');
-    expect(compiled.text).toContain('f."d0" IS NOT DISTINCT FROM g."d0"');
+    expect(compiled.text).toContain(
+      `COALESCE(f."d0", '') = COALESCE(g."d0", '') AND (f."d0" IS NULL) = (g."d0" IS NULL)`,
+    );
     expect(compiled.text).toContain('floor(EXTRACT(EPOCH FROM r."startedAt") * 1000 / 3600000) * 3600000');
     expect(compiled.text).toContain('ORDER BY g."rank" ASC, f."bucket" ASC');
     expect(compiled.values.slice(-3)).toEqual([2, 6, 5]);

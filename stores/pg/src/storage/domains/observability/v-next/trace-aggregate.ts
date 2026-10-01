@@ -186,7 +186,12 @@ LIMIT ${limitParameter}`,
   )`);
   const joinSql =
     dimensionColumns.length > 0
-      ? dimensionColumns.map(column => `f.${column} IS NOT DISTINCT FROM g.${column}`).join(' AND ')
+      ? dimensionColumns
+          .map(
+            column =>
+              `COALESCE(f.${column}, '') = COALESCE(g.${column}, '') AND (f.${column} IS NULL) = (g.${column} IS NULL)`,
+          )
+          .join(' AND ')
       : 'TRUE';
   const projected = [
     ...dimensionColumns.map(column => `f.${column}`),
