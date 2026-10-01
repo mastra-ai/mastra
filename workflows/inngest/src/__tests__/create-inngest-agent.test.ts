@@ -1959,6 +1959,74 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     wrappedSpy.mockRestore();
   });
 
+  it.each([
+    {
+      name: 'merges approval into custom data for an approval suspension',
+      approved: true,
+      requiresApproval: true,
+      expectedResumeData: { approved: true, note: 'hello' },
+    },
+    {
+      name: 'merges decline context into custom data for an approval suspension',
+      approved: false,
+      declineContext: { reason: 'not allowed' },
+      requiresApproval: true,
+      expectedResumeData: { approved: false, reason: 'not allowed', note: 'hello' },
+    },
+    {
+      name: 'leaves custom data unchanged for an ordinary suspension',
+      approved: true,
+      requiresApproval: false,
+      expectedResumeData: { note: 'hello' },
+    },
+  ])('$name', async ({ approved, declineContext, requiresApproval, expectedResumeData }) => {
+    const durableAgent = makeDurable('send-tool-approval-custom-data');
+    const { resumeSpy } = spyResume(durableAgent);
+    const listSpy = vi.spyOn(Agent.prototype, 'listSuspendedRuns').mockResolvedValue({
+      runs: [{ runId: 'r1', toolCalls: [{ toolCallId: 't1', requiresApproval }] }],
+      total: 1,
+    } as any);
+
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved,
+      declineContext,
+      resumeData: { note: 'hello' },
+    });
+
+    expect(resumeSpy).toHaveBeenCalledWith(
+      'r1',
+      expectedResumeData,
+      expect.objectContaining({ toolCallId: 't1', memory: { thread: 'th', resource: 'res' } }),
+    );
+    listSpy.mockRestore();
+  });
+
+  it('sendToolApproval rejects custom data that cannot carry an approval decision', async () => {
+    const durableAgent = makeDurable('send-tool-approval-invalid-data');
+    const { resumeSpy } = spyResume(durableAgent);
+    const listSpy = vi.spyOn(Agent.prototype, 'listSuspendedRuns').mockResolvedValue({
+      runs: [{ runId: 'r1', toolCalls: [{ toolCallId: 't1', requiresApproval: true }] }],
+      total: 1,
+    } as any);
+
+    await expect(
+      durableAgent.sendToolApproval({
+        threadId: 'th',
+        resourceId: 'res',
+        runId: 'r1',
+        toolCallId: 't1',
+        approved: true,
+        resumeData: 'hello',
+      }),
+    ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA' });
+    expect(resumeSpy).not.toHaveBeenCalled();
+    listSpy.mockRestore();
+  });
+
   it('sendToolApproval discovers the suspended durable run by toolCallId', async () => {
     const durableAgent = makeDurable('send-tool-approval-discover');
     const { resumeSpy } = spyResume(durableAgent);

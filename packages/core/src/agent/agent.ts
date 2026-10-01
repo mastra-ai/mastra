@@ -10288,12 +10288,27 @@ export class Agent<
       executionOptions as Record<string, unknown>,
     ) as unknown as AgentExecutionOptions<OUTPUT>;
 
+    const customResumeDataCanCarryApproval =
+      typeof customResumeData === 'object' && customResumeData !== null && !Array.isArray(customResumeData);
+    if (approvalGated && customResumeData !== undefined && !customResumeDataCanCarryApproval) {
+      throw new MastraError({
+        id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendToolApproval() requires custom resumeData to be a non-null object for an approval-gated tool call.`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+          ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+        },
+      });
+    }
+
     const resumeData =
       customResumeData !== undefined
-        ? approvalGated &&
-          typeof customResumeData === 'object' &&
-          customResumeData !== null &&
-          !Array.isArray(customResumeData)
+        ? approvalGated && customResumeDataCanCarryApproval
           ? { ...customResumeData, approved, ...(!approved && declineContext ? declineContext : {}) }
           : customResumeData
         : approved

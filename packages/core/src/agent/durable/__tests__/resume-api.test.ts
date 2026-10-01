@@ -430,6 +430,41 @@ describe('Resume API', () => {
       expect(resumeSpy).toHaveBeenCalledWith(runId, expectedResumeData, expect.objectContaining({ memory }));
     });
 
+    it('rejects custom data that cannot carry an approval decision', async () => {
+      const baseAgent = new Agent({
+        id: 'invalid-approval-data-agent',
+        name: 'Invalid Approval Data Agent',
+        instructions: 'Test invalid approval data rejection',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output: undefined } as any);
+      vi.spyOn(durableAgent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [
+          {
+            runId: 'invalid-approval-run',
+            status: 'suspended',
+            threadId: 'invalid-approval-thread',
+            resourceId: 'invalid-approval-resource',
+            suspendedAt: new Date(0),
+            toolCalls: [{ toolCallId: 'invalid-approval-tool-call', requiresApproval: true }],
+          },
+        ],
+        total: 1,
+      });
+
+      await expect(
+        durableAgent.sendToolApproval({
+          threadId: 'invalid-approval-thread',
+          resourceId: 'invalid-approval-resource',
+          toolCallId: 'invalid-approval-tool-call',
+          approved: true,
+          resumeData: 'hello',
+        }),
+      ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA' });
+      expect(resumeSpy).not.toHaveBeenCalled();
+    });
+
     it('should preserve threadId and resourceId from prepare through resume', async () => {
       const mockModel = createTextModel('Done');
 
