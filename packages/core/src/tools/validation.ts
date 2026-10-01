@@ -589,16 +589,17 @@ export function validateToolInput<T = unknown>(
     }
   }
 
-  // All attempts failed - return the original (non-stripped) error since it's
-  // more informative about what the schema actually expects
-  const errorMessages = validation.issues
+  // All attempts failed - report issues from the null-stripped retry. First-pass
+  // issues include nulls on optional fields that stripping already resolved,
+  // which would hide the real failure from the model (GitHub #24539).
+  const errorMessages = retryValidation.issues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: buildFormattedErrors<T>(validation.issues),
+    validationErrors: buildFormattedErrors<T>(retryValidation.issues),
   };
 
   return { error };

@@ -2453,3 +2453,32 @@ describe('Standard Schema path segment format (PathSegment objects)', () => {
     expect(result.error!.message).not.toContain('[object Object]');
   });
 });
+
+describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', () => {
+  it('reports the retry failure instead of already-stripped optional nulls', () => {
+    const schema = z.object({
+      hero: z.object({ name: z.string() }).optional(),
+      events: z.array(z.string()).min(1),
+    });
+
+    const result = validateToolInput(schema, { hero: null, events: [] }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- events:');
+    expect(result.error?.message).not.toContain('- hero:');
+    expect(result.error?.validationErrors).toHaveProperty('fields.events');
+    expect(result.error?.validationErrors).not.toHaveProperty('fields.hero');
+  });
+
+  it('still reports a required field sent as null', () => {
+    const schema = z.object({
+      title: z.string(),
+      note: z.string().optional(),
+    });
+
+    const result = validateToolInput(schema, { title: null, note: 'ok' }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- title:');
+  });
+});
