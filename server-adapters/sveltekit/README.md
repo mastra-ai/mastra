@@ -5,7 +5,13 @@
 ## Installation
 
 ```bash
-npm install @mastra/sveltekit hono
+npm install @mastra/sveltekit
+```
+
+The adapter has a peer dependency on `hono`. Install it if your project doesn't already use it:
+
+```bash
+npm install hono
 ```
 
 ## Usage
