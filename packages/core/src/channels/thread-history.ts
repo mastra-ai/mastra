@@ -1,6 +1,6 @@
 import type { Message, Thread } from 'chat';
 
-import type { ChannelLogFields } from './agent-channels';
+import type { ChannelLogContext } from './agent-channels';
 import { chatModule } from './chat-lazy';
 
 /**
@@ -11,7 +11,7 @@ import { chatModule } from './chat-lazy';
 export const THREAD_HISTORY_OMITTED_CAP = 500;
 
 /** Log sink shaped like `AgentChannels.log`. */
-export type ThreadHistoryLog = (level: 'warn' | 'debug', message: string, fields?: ChannelLogFields) => void;
+export type ThreadHistoryLog = (level: 'warn' | 'debug', message: string, fields?: ChannelLogContext) => void;
 
 /** Identifiers attached to every thread-history log line. */
 export interface ThreadHistoryLogContext {

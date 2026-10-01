@@ -68,7 +68,7 @@ import type { TypingStatusContext, TypingStatusFn } from './typing-status';
 import { resolveWaitUntil } from './wait-until';
 
 /** Structured fields for {@link AgentChannels.log}. */
-export interface ChannelLogFields {
+export interface ChannelLogContext {
   /** Prefixes the message as `[platform]`. */
   platform?: string;
   /** `Error` instances are normalized with `getErrorFromUnknown` so they serialize. */
@@ -2312,7 +2312,7 @@ export class AgentChannels {
    * message as `[platform]`, and `fields.error` is normalized so it serializes
    * with its message, code and cause instead of as `{}`.
    */
-  protected log(level: 'info' | 'warn' | 'error' | 'debug', message: string, fields?: ChannelLogFields): void {
+  protected log(level: 'info' | 'warn' | 'error' | 'debug', message: string, fields?: ChannelLogContext): void {
     if (!this.logger) return;
     const prefixed = fields?.platform ? `[${fields.platform}] ${message}` : message;
     if (!fields) {
