@@ -1,7 +1,4 @@
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
+import { isRecord } from '@/domains/tools/utils/is-record';
 /** The ui:// resource URI from a tool's `_meta`, supporting both the modern and the legacy flat key. */
 export function getAppResourceUri(meta: unknown): string | undefined {
   if (!isRecord(meta)) return undefined;

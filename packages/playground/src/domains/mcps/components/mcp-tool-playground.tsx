@@ -7,10 +7,8 @@ import { useMcpAppHtml } from '../hooks/use-mcp-app-html';
 import { useExecuteMCPTool } from '../hooks/use-mcp-server-tool';
 import { getAppResourceUri, isSuspendedResult } from '../utils/mcp-tool-result';
 import { ToolPlayground } from '@/domains/tools/components/tool-playground';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+import type { ExecuteTool } from '@/domains/tools/hooks/use-tool-run';
+import { isRecord } from '@/domains/tools/utils/is-record';
 
 export interface McpToolPlaygroundProps {
   serverId: string;
@@ -23,6 +21,7 @@ export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
   const { data: appHtml } = useMcpAppHtml(serverId, getAppResourceUri(tool._meta));
   const inputSchema: unknown = tool.inputSchema;
   const zodInputSchema = isRecord(inputSchema) ? jsonSchemaToZodRuntime(inputSchema) : z.object({});
+  const execute: ExecuteTool = (data, requestContext) => mutateAsync({ data, requestContext });
 
   return (
     <div className="grid content-start gap-6">
@@ -41,7 +40,7 @@ export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
       )}
       <ToolPlayground
         zodInputSchema={zodInputSchema}
-        execute={(data, requestContext) => mutateAsync({ data, requestContext })}
+        execute={execute}
         requestContextEntityType="mcp-tool"
         requestContextEntityId={`${serverId}:${tool.name}`}
       />

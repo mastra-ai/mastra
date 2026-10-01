@@ -13,5 +13,7 @@ export function useMcpAppHtml(serverId: string, appResourceUri: string | undefin
       return response.contents[0]?.text ?? null;
     },
     enabled: appResourceUri !== undefined,
+    // React Query can't hold `undefined`, so the query returns `null` for "no app"; callers get `undefined`.
+    select: html => html ?? undefined,
   });
 }

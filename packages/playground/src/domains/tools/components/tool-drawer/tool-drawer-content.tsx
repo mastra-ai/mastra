@@ -7,12 +7,13 @@ type ToolDrawerTab = 'overview' | 'playground';
 export interface ToolDrawerContentProps {
   description?: string;
   overview: ReactNode;
-  /** The runner; leave it out when the viewer can't execute tools. */
-  playground?: ReactNode;
+  playground: ReactNode;
+  /** False when the viewer can't execute tools: the Playground tab is disabled. */
+  canRun: boolean;
 }
 
 /** What the tool is (Overview) apart from running it (Playground). */
-export function ToolDrawerContent({ description, overview, playground }: ToolDrawerContentProps) {
+export function ToolDrawerContent({ description, overview, playground, canRun }: ToolDrawerContentProps) {
   return (
     <>
       {description && <ToolDescription description={description} />}
@@ -32,7 +33,7 @@ export function ToolDrawerContent({ description, overview, playground }: ToolDra
         </TabContent>
         {/* Kept mounted so the form input and last response survive a trip to Overview. */}
         <TabContent value="playground" flush keepMounted>
-          {playground}
+          {canRun && playground}
         </TabContent>
       </Tabs>
     </>

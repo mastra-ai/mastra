@@ -1,13 +1,10 @@
+import { isRecord } from './is-record';
 export interface SchemaField {
   name: string;
   type: string;
   required: boolean;
   description?: string;
   defaultValue?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function describeEnum(values: unknown[]): string {

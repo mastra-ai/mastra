@@ -22,7 +22,8 @@ export function McpToolDrawerBody({ serverId, toolId }: McpToolDrawerBodyProps) 
       description={tool.description}
       // MCP tools report only their input; they aren't attached to agents through this server.
       overview={<ToolOverview inputSchema={tool.inputSchema} />}
-      playground={canExecute('tools') ? <McpToolPlayground serverId={serverId} tool={tool} /> : undefined}
+      canRun={canExecute('tools')}
+      playground={<McpToolPlayground serverId={serverId} tool={tool} />}
     />
   );
 }
