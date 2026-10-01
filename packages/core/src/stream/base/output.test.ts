@@ -988,7 +988,8 @@ describe('MastraModelOutput', () => {
 
       await output.consumeStream();
 
-      await expect(output.usage).resolves.toEqual({
+      const usage = await output.usage;
+      expect(usage).toEqual({
         inputTokens: 2,
         outputTokens: 2,
         totalTokens: 4,
@@ -996,6 +997,9 @@ describe('MastraModelOutput', () => {
         cachedInputTokens: 20,
         raw: rawUsage,
       });
+      expect(Object.keys(usage).sort()).toEqual(
+        ['cachedInputTokens', 'inputTokens', 'outputTokens', 'raw', 'reasoningTokens', 'totalTokens'].sort(),
+      );
     });
 
     it('should call onFinish with the suspended payload shape when the stream suspends', async () => {

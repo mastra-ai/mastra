@@ -1070,11 +1070,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#usageCount.inputTokens = undefined;
                 self.#usageCount.outputTokens = undefined;
                 self.#usageCount.totalTokens = undefined;
-                self.#usageCount.reasoningTokens = undefined;
-                self.#usageCount.cachedInputTokens = undefined;
-                self.#usageCount.cacheCreationInputTokens = undefined;
-                self.#usageCount.cacheCreationInputTokens5m = undefined;
-                self.#usageCount.cacheCreationInputTokens1h = undefined;
+                delete self.#usageCount.reasoningTokens;
+                delete self.#usageCount.cachedInputTokens;
+                delete self.#usageCount.cacheCreationInputTokens;
+                delete self.#usageCount.cacheCreationInputTokens5m;
+                delete self.#usageCount.cacheCreationInputTokens1h;
                 self.#usageCountMissing.clear();
               }
               this.populateUsageCount(chunk.payload.output.usage as Partial<LanguageModelUsage>);
