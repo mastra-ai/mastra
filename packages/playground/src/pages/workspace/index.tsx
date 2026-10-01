@@ -10,7 +10,7 @@ import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { Wand2 } from 'lucide-react';
+import { RefreshCw, Wand2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -20,7 +20,7 @@ import { AddSkillDialog } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
-import { useInstallSkill } from '@/domains/workspace/hooks';
+import { useInstallSkill, useRemoveSkill, useUpdateSkills } from '@/domains/workspace/hooks';
 import {
   useWorkspaceInfo,
   useWorkspaces,
@@ -103,6 +103,52 @@ export default function Workspace() {
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
+  const updateSkills = useUpdateSkills();
+  const removeSkill = useRemoveSkill();
+
+  // Skills installed from skills.sh live in `.agents/skills/<name>`; map a tree folder back to its skill name.
+  const installedSkillName = (path: string) => {
+    const match = /^\.agents\/skills\/([^/]+)$/.exec(path);
+    if (!match) return undefined;
+    const skill = skills.find(s => s.path?.replace(/^\.?\/+|\/+$/g, '') === path);
+    return skill?.name ?? match[1];
+  };
+
+  // Re-fetches every installed skill; the whole tree is refreshed afterwards, so this lives with the header actions.
+  const handleUpdateSkills = async () => {
+    if (!effectiveWorkspaceId) return;
+    try {
+      const result = await updateSkills.mutateAsync({ workspaceId: effectiveWorkspaceId });
+      const failed = result.updated.filter(u => !u.success);
+      if (failed.length > 0) {
+        toast.error(`Failed to update ${failed.map(u => u.skillName).join(', ')}`);
+      } else {
+        toast.success(`${result.updated.length} skill(s) updated`);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['workspace', effectiveWorkspaceId, 'fs'] });
+    } catch (error) {
+      toast.error(`Failed to update skills: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  // Deleting an installed skill folder uninstalls the skill instead of only removing its files.
+  const handleDelete = async ({ path, type }: { path: string; type: 'file' | 'directory' }) => {
+    if (!effectiveWorkspaceId) return;
+    const skillName = type === 'directory' ? installedSkillName(path) : undefined;
+    if (!skillName) {
+      await deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId });
+      return;
+    }
+    try {
+      const result = await removeSkill.mutateAsync({ workspaceId: effectiveWorkspaceId, skillName });
+      if (!result.success) throw new Error(`Failed to remove skill "${skillName}"`);
+      toast.success(`Skill "${skillName}" removed`);
+      void refetchSkills();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove skill');
+      throw error;
+    }
+  };
 
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
@@ -315,20 +361,31 @@ export default function Workspace() {
               }
               asideActions={
                 canManageSkills ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Add skill"
-                    tooltip="Add skill"
-                    onClick={() => setShowAddSkillDialog(true)}
-                  >
-                    <Wand2 />
-                  </Button>
+                  <>
+                    {skills.some(s => s.path?.includes('.agents/skills/')) ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        tooltip="Update skills"
+                        disabled={updateSkills.isPending}
+                        onClick={() => void handleUpdateSkills()}
+                      >
+                        <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Add skill"
+                      tooltip="Add skill"
+                      onClick={() => setShowAddSkillDialog(true)}
+                    >
+                      <Wand2 />
+                    </Button>
+                  </>
                 ) : undefined
               }
-              onDelete={({ path }) =>
-                deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
-              }
+              onDelete={handleDelete}
             />
           </div>
         )}
