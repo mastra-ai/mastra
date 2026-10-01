@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
+import { MastraError } from '../error';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -36,6 +37,7 @@ import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './o
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
+import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
   ChannelAdapterConfig,
@@ -92,6 +94,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
   private resolveResourceId: ResolveResourceId | undefined;
+  /** Memoized bot display name lookups, keyed by platform. */
+  private botDisplayNames = new Map<string, Promise<string | undefined>>();
   /** Optional hook to resolve the internal thread id for newly-created channel threads. */
   private resolveThreadId: ResolveThreadId | undefined;
   /**
@@ -675,7 +679,7 @@ export class AgentChannels {
               // Resolve the tool display mode so the approve/deny edit matches
               // the original card's rendering (cards → Block Kit, text → plain).
               // Streaming is irrelevant here — we're outside the agent loop.
-              const { resolved: toolDisplay } = this.resolveToolDisplay(
+              const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
                 platform,
                 adapterConfig?.toolDisplay,
                 false,
@@ -683,6 +687,37 @@ export class AgentChannels {
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              // Let a function-form `toolDisplay` own the resolved card. Only
+              // non-blank `post` results are honored; anything else (or a
+              // throwing renderer) falls back to the default formatter.
+              const renderResolved = (
+                decision: { kind: 'approved' } | { kind: 'denied'; byUser?: string },
+              ): PostableMessage | undefined => {
+                if (!toolDisplayFn) return undefined;
+                try {
+                  const result = toolDisplayFn(
+                    {
+                      ...decision,
+                      toolCallId,
+                      toolName: toolName ?? displayName,
+                      displayName,
+                      argsSummary,
+                      args: toolArgs,
+                    },
+                    { mode: 'static', platform },
+                  );
+                  if (result?.kind !== 'post' || result.message == null) return undefined;
+                  const message = result.message;
+                  const blank =
+                    typeof message === 'string'
+                      ? message.trim().length === 0
+                      : 'markdown' in message && message.markdown.trim().length === 0;
+                  return blank ? undefined : message;
+                } catch (err) {
+                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, err);
+                  return undefined;
+                }
+              };
 
               if (!approved) {
                 const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
@@ -690,7 +725,8 @@ export class AgentChannels {
                   await adapter.editMessage(
                     chatThread.id,
                     messageId,
-                    formatToolDenied(displayName, argsSummary, byUser, useCards),
+                    renderResolved({ kind: 'denied', byUser }) ??
+                      formatToolDenied(displayName, argsSummary, byUser, useCards),
                   );
                 } catch (err) {
                   this.log('debug', 'Failed to edit denied card', err);
@@ -700,7 +736,7 @@ export class AgentChannels {
                 // follow-up message (e.g. acknowledging the rejection). Stash the
                 // render context so `ChatChannelOutputProcessor` renders the output
                 // inline — same path as processChatMessage and the approve branch.
-                const { channelContext } = this.buildEventContext({
+                const { channelContext } = await this.buildEventContext({
                   chatThread,
                   platform,
                   eventType: 'action',
@@ -743,7 +779,7 @@ export class AgentChannels {
                 await adapter.editMessage(
                   chatThread.id,
                   messageId,
-                  formatToolApproved(displayName, argsSummary, useCards),
+                  renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
                 );
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', err);
@@ -752,7 +788,7 @@ export class AgentChannels {
               // Build request context for the resumed stream. Stash the render
               // context so `ChatChannelOutputProcessor` renders the tool-result
               // and any follow-up output inline — same path as processChatMessage.
-              const { channelContext } = this.buildEventContext({
+              const { channelContext } = await this.buildEventContext({
                 chatThread,
                 platform,
                 eventType: 'action',
@@ -1060,23 +1096,56 @@ export class AgentChannels {
     }
   }
 
-  private buildEventContext(params: {
+  /**
+   * Resolve the bot's current profile display name through the adapter, once per platform and bot user.
+   * Keyed by `botUserId` because one adapter can serve several installations, each with its own bot.
+   * Adapters may report a stale handle as `userName` (e.g. Slack `auth.test` keeps the original
+   * username after an app rename) while inbound mentions render the current display name.
+   */
+  private resolveBotDisplayName(platform: string): Promise<string | undefined> {
+    const adapter = this.adapters[platform]!;
+    const botUserId = adapter.botUserId;
+    if (!botUserId || !adapter.getUser) return Promise.resolve(undefined);
+
+    const key = `${platform}:${botUserId}`;
+    const cached = this.botDisplayNames.get(key);
+    if (cached) return cached;
+
+    const pending = adapter.getUser(botUserId).then(
+      user => {
+        const name = user?.userName || user?.fullName || undefined;
+        if (!name) this.botDisplayNames.delete(key);
+        return name;
+      },
+      err => {
+        this.botDisplayNames.delete(key);
+        this.log('debug', `[${platform}] Failed to resolve bot display name`, err);
+        return undefined;
+      },
+    );
+    this.botDisplayNames.set(key, pending);
+    return pending;
+  }
+
+  private async buildEventContext(params: {
     chatThread: Thread;
     platform: string;
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
-  }): {
+  }): Promise<{
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
-  } {
+  }> {
     const { chatThread, platform, eventType, messageId, actor } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
     const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
     const actorName = actor.fullName || actor.userName;
     const actorMention = actor.userId ? chatThread.mentionUser(actor.userId) : undefined;
+    const displayName = await this.resolveBotDisplayName(platform);
+    const botDisplayName = displayName && displayName !== adapter.userName ? displayName : undefined;
 
     const channelContext: ChannelContext = {
       platform,
@@ -1089,6 +1158,7 @@ export class AgentChannels {
       userName: actorName,
       botUserId,
       botUserName: adapter.userName,
+      ...(botDisplayName ? { botDisplayName } : {}),
       botMention,
     };
 
@@ -1186,11 +1256,30 @@ export class AgentChannels {
       });
       return;
     }
-    this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
+    let loggedError;
+    try {
+      const message = extractErrorMessage(err);
+      const cause =
+        typeof err === 'object' && err !== null && 'cause' in err ? extractErrorMessage(err.cause) : undefined;
+      const { id, domain, category } = err instanceof MastraError ? err : {};
+      loggedError = {
+        message: typeof message === 'string' && message.length > 0 ? message : 'Unknown error',
+        ...(typeof id === 'string' ? { code: id } : {}),
+        ...(typeof domain === 'string' ? { domain } : {}),
+        ...(typeof category === 'string' ? { category } : {}),
+        ...(typeof cause === 'string' && cause.length > 0 ? { cause: { message: cause } } : {}),
+      };
+    } catch {
+      loggedError = { message: 'Error details unavailable' };
+    }
+    const diagnostic = {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
       messageId: message.id,
       authorId: message.author?.userId,
-      error: String(err),
-    });
+      error: loggedError,
+    };
+    this.log('error', `[${chatThread.adapter.name}] Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
@@ -1409,7 +1498,7 @@ export class AgentChannels {
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
 
-    const { channelContext, attributes, providerOptions } = this.buildEventContext({
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
       chatThread,
       platform,
       eventType: chatThread.isDM ? 'message' : 'mention',

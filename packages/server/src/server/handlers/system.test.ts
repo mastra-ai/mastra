@@ -19,6 +19,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   deltaPolling: false,
   traceQuery: false,
   traceQueryRootDuration: false,
+  traceQueryContextIds: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   threadQuery: false,

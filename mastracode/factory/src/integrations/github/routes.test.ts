@@ -514,10 +514,12 @@ vi.mock('../../session/filesystem-capture.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../../session/filesystem-capture.js')>();
   return {
     ...actual,
-    waitForPendingFilesystemCapture: vi.fn(async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
-      if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
-      return actual.waitForPendingFilesystemCapture(...args);
-    }),
+    waitForPendingFilesystemCapture: vi.fn(
+      async (...args: Parameters<typeof actual.waitForPendingFilesystemCapture>) => {
+        if (filesystemCaptureMock.waitError) throw filesystemCaptureMock.waitError;
+        return actual.waitForPendingFilesystemCapture(...args);
+      },
+    ),
   };
 });
 
@@ -650,6 +652,7 @@ function buildApp(
     users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    ingestFactoryEvent?: Parameters<typeof buildGithubRoutes>[0]['ingestFactoryEvent'];
   } = {},
 ) {
   const app = new Hono();
@@ -1590,6 +1593,19 @@ describe('prs route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+
+  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+    seedMaterializedProject();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+      `/web/github/projects/p1/${resource}`,
+    );
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    warn.mockRestore();
   });
 });
 

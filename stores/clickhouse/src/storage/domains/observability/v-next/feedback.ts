@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
@@ -90,6 +88,8 @@ function getAggregationSql(aggregation: AggregationType, measure = 'valueNumber'
       return `toFloat64(count(${measure}))`;
     case 'last':
       return `argMax(${measure}, timestamp)`;
+    case 'count_distinct':
+      return `toFloat64(uniq(${measure}))`;
     default:
       return `sum(${measure})`;
   }
@@ -240,7 +240,7 @@ export async function deleteFeedback(
   if (args.feedbackIds.length === 0) return;
 
   const request = await recordDeletionRequest(client, {
-    requestId: randomUUID(),
+    requestId: globalThis.crypto.randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
     signal: 'feedback',

@@ -672,6 +672,21 @@ describe('DockerSandbox', () => {
       expect(explicit.workingDirectory).toBe('/custom');
     });
 
+    it('reports the reconnected container image instead of the default', async () => {
+      mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'existing-container-id',
+        State: { Status: 'running', Running: true },
+        Config: { Image: 'python:3.12-slim' },
+      });
+
+      const sandbox = new DockerSandbox({ id: 'existing-sandbox' });
+      await sandbox._start();
+
+      expect((await sandbox.getInfo()).metadata?.image).toBe('python:3.12-slim');
+      expect(sandbox.getInstructions()).toContain('image: python:3.12-slim');
+    });
+
     it('should warn when requested hardening options differ on reconnect', async () => {
       mockDocker.listContainers.mockResolvedValue([{ Id: 'existing-container-id', State: 'running' }]);
       mockContainer.inspect.mockResolvedValue({

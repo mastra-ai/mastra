@@ -9,6 +9,7 @@ import type {
   ProviderConfig,
 } from './base';
 import { defaultGateways } from './defaults';
+import { findGatewayForModel } from './gateway-helpers';
 import { GatewayManager } from './gateway-manager';
 
 /**
@@ -520,5 +521,19 @@ describe('GatewayManager', () => {
         modelId: 'claude-sonnet-4-5',
       });
     });
+  });
+});
+
+describe('findGatewayForModel', () => {
+  it('skips disabled gateways, matching the router', () => {
+    const modelsDev = createFakeGateway({ id: 'models.dev' });
+    const disabledPrefix = createFakeGateway({ id: 'mastra', enabled: false });
+    const disabledClaimer = createFakeGateway({ id: 'claimer', enabled: false, handlesModel: () => true });
+
+    const gateways = [disabledPrefix, disabledClaimer, modelsDev];
+
+    expect(findGatewayForModel('mastra/openai/gpt-5', gateways).id).toBe('models.dev');
+    expect(findGatewayForModel('openai/gpt-5', gateways).id).toBe('models.dev');
+    expect(new GatewayManager(gateways).findGatewayForModel('mastra/openai/gpt-5').id).toBe('models.dev');
   });
 });

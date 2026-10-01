@@ -35,10 +35,9 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // unmissable is the point. Disabled is the exception that drops the card fill for
 // the lowest translucent rung, which is how a disabled field reads as recessed.
 //
-// Focus sits at `--surface-rim-focus` rather than the `--border-focus` weight a bare
-// outline needs, because the edge here bounds a surface that already reads as raised.
-// Wrappers whose focus lives on a nested control (InputGroup, a chip) take the
-// `within` flavour.
+// Focus repaints that rim to `--border-focus`, the one focus colour, rather than
+// drawing an outline beside it. Wrappers whose focus lives on a nested control
+// (InputGroup, a chip) take the `within` flavour.
 //
 // Caller appends a radius (`rounded-full` for single-line inputs, `rounded-xl` for
 // textareas).
@@ -47,20 +46,31 @@ export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-h
 // still on the trigger that opened the popup.
 const surfaceTintHover =
   '[&:hover:not(:focus-visible):not(:disabled):not([data-popup-open])]:[--surface-tint:var(--fill-subtle)]';
-const surfaceRimFocus = 'focus-visible:[--surface-rim:var(--surface-rim-focus)]';
+export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--border-focus)]';
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
 const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
-const fieldRimFocus = 'focus-visible:[--surface-rim:var(--field-rim-focus)]';
+const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
 const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
-export const fieldErrorRim = '[--field-rim:var(--destructive)] [--field-rim-focus:var(--destructive)]';
+export const fieldErrorRim =
+  'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =
-  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive)]';
+  'has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)]';
+export function deprecatedErrorAria(error: boolean | undefined): { 'aria-invalid'?: true } {
+  return error ? { 'aria-invalid': true } : {};
+}
+export const fieldTriggerErrorBorder =
+  'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
 export const fieldTriggerStyle =
   'bg-field shadow-input ' +
   fieldRimFocus +
-  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive)] aria-invalid:[--field-rim-focus:var(--destructive)]';
+  ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
+
+// Width of a select/combobox trigger: fills its field unless an ancestor that owns
+// control sizing (SettingsRow) sets `--field-width` / `--field-shrink`. A width class
+// passed by the caller still wins, since `cn` drops the conflicting default.
+export const fieldTriggerWidthStyle = 'w-(--field-width,100%) shrink-(--field-shrink,1)';
 
 export const inputSurfaceAndFocusStyle =
   'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +

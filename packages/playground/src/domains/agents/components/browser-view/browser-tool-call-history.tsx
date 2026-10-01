@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
@@ -37,7 +38,9 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
         <ChevronDown
           className={cn('h-3.5 w-3.5 text-muted-foreground transition-transform', isExpanded ? 'rotate-180' : '')}
         />
-        <span className="text-column text-muted-foreground">Browser Actions ({toolCalls.length})</span>
+        <Txt as="span" variant="column" tone="muted">
+          Browser Actions ({toolCalls.length})
+        </Txt>
       </button>
 
       {isExpanded && (

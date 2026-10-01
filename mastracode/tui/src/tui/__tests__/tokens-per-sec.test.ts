@@ -122,8 +122,10 @@ describe('tokens/sec over streamed generation time', () => {
     expect(state.decodeLastDeltaAt).toBe(0);
   });
 
-  it('allows the captured 170-token / 13ms tool-argument burst without including tool execution', async () => {
-    const state = createMinimalState();
+  it('keeps the last reading when a whole response arrives in one delivery', async () => {
+    // Captured live: 172 output tokens arrived within milliseconds after the provider held
+    // the response, so its generation time is unobservable. Dividing by 13ms read 13k t/s.
+    const state = createMinimalState({ tokensPerSec: 40 });
     const ectx = createEctx();
     vi.setSystemTime(3600);
     await dispatchEvent({ type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{' }, ectx, state);
@@ -132,7 +134,19 @@ describe('tokens/sec over streamed generation time', () => {
     vi.setSystemTime(60_000);
     await dispatchEvent({ type: 'tool_update', toolCallId: 't', partialResult: 'done' }, ectx, state);
     await dispatchEvent(usageEvent(170), ectx, state);
-    expect(state.tokensPerSec).toBe(13077);
+    expect(state.tokensPerSec).toBe(40);
+    expect(state.decodeStartedAt).toBe(0);
+  });
+
+  it('measures a generation window from 50ms up', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+    vi.setSystemTime(3600);
+    await dispatchEvent({ type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{' }, ectx, state);
+    vi.setSystemTime(3650);
+    await dispatchEvent({ type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '}' }, ectx, state);
+    await dispatchEvent(usageEvent(20), ectx, state);
+    expect(state.tokensPerSec).toBe(400);
   });
 
   it.each([2400, undefined])(
@@ -216,6 +230,107 @@ describe('tokens/sec over streamed generation time', () => {
       state,
     );
     expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('times a thinking block from its start when the provider delivers it in one late burst', async () => {
+    // Captured from a live step: the thinking block opened, nothing arrived for 1.23s,
+    // then all thinking and text deltas landed within 43ms (3605 t/s by first delta).
+    const state = createMinimalState({
+      streamingMessage: {
+        id: 'm',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'reasoning', reasoning: '', details: [] },
+            { type: 'text', text: '' },
+          ],
+        },
+      },
+    });
+    const ectx = createEctx();
+    const update = async (at: number, event: Extract<AgentControllerEvent, { type: 'message_update' }>['event']) => {
+      vi.setSystemTime(at);
+      await dispatchEvent({ type: 'message_update', id: 'm', event }, ectx, state);
+    };
+    await update(1000, { type: 'part', index: 0, part: { type: 'reasoning', reasoning: '', details: [] } });
+    expect(state.decodeStartedAt).toBe(1000);
+    expect(state.decodeHasReasoning).toBe(true);
+    for (const at of [2230, 2235, 2240]) await update(at, { type: 'reasoning-delta', index: 0, delta: 'Thinking' });
+    await update(2270, { type: 'part', index: 1, part: { type: 'text', text: '' } });
+    expect(state.decodeStartedAt).toBe(1000);
+    for (const at of [2271, 2272, 2273]) await update(at, { type: 'text-delta', delta: 'Output' });
+    vi.setSystemTime(2287);
+    await dispatchEvent(
+      {
+        type: 'usage_update',
+        usage: { completionTokens: 155, reasoningTokens: 48, promptTokens: 100, totalTokens: 255 },
+      },
+      ectx,
+      state,
+    );
+    expect(state.tokensPerSec).toBe(122);
+  });
+
+  it('times the first block of a message from the message_start that opens it', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+    const message = {
+      id: 'm',
+      role: 'assistant' as const,
+      createdAt: new Date(),
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: '' }] },
+    };
+    vi.setSystemTime(1000);
+    await dispatchEvent({ type: 'message_start', message }, ectx, state);
+    expect(state.decodeStartedAt).toBe(1000);
+    state.streamingMessage = message;
+    for (const at of [1990, 2000]) {
+      vi.setSystemTime(at);
+      await dispatchEvent(
+        { type: 'message_update', id: 'm', event: { type: 'text-delta', delta: 'Output' } },
+        ectx,
+        state,
+      );
+    }
+    await dispatchEvent(usageEvent(40), ectx, state);
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('times tool arguments from the start of the tool input', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+    vi.setSystemTime(1000);
+    await dispatchEvent(
+      { type: 'tool_input_start', toolCallId: 't', toolName: 'write_file', messageId: 's' },
+      ectx,
+      state,
+    );
+    for (const at of [1990, 2000]) {
+      vi.setSystemTime(at);
+      await dispatchEvent(
+        { type: 'tool_input_delta', toolCallId: 't', argsTextDelta: '{}', messageId: 's' },
+        ectx,
+        state,
+      );
+    }
+    await dispatchEvent(usageEvent(40), ectx, state);
+    expect(state.tokensPerSec).toBe(40);
+  });
+
+  it('does not treat a block that already has content as a generation start', async () => {
+    const state = createMinimalState({
+      streamingMessage: { id: 'm', role: 'assistant', createdAt: new Date(), content: { format: 2, parts: [] } },
+    });
+    const ectx = createEctx();
+    vi.setSystemTime(1000);
+    await dispatchEvent(
+      { type: 'message_update', id: 'm', event: { type: 'part', index: 0, part: { type: 'text', text: 'Replayed' } } },
+      ectx,
+      state,
+    );
+    expect(state.decodeStartedAt).toBe(0);
   });
 
   it('counts thinking that starts after text in the same step', async () => {

@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
@@ -25,6 +25,7 @@ import type {
   FactoryAttentionView,
 } from '../domains/factory/services/attention';
 import { SkeletonRows } from '../ui/SkeletonRows';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const VIEWS: Array<{ value: FactoryAttentionView; label: string; icon: typeof Inbox }> = [
   { value: 'open', label: 'Open', icon: Inbox },
@@ -150,11 +151,11 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
               {markAllRead.isPending ? 'Marking…' : 'Mark all open as read'}
             </Button>
           ) : null}
-          <Input
-            aria-label="Search attention items"
+          <SearchInput
+            label="Search attention items"
             placeholder="Search"
             value={search}
-            onChange={event => setSearch(event.target.value)}
+            onValueChange={setSearch}
             className="w-64"
           />
         </div>
@@ -193,13 +194,18 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             return (
               <section key={section.group} aria-labelledby={section.headingId} className="flex flex-col gap-4">
                 <span className="flex items-center gap-2">
-                  <h2 id={section.headingId} className="text-column text-muted-foreground m-0">
+                  <Txt as="h2" variant="column" tone="muted" id={section.headingId} className="m-0">
                     {section.heading}
-                  </h2>
+                  </Txt>
                   {unread > 0 ? (
-                    <span className="bg-fill text-meta text-muted-foreground min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums">
+                    <Txt
+                      as="span"
+                      variant="meta"
+                      tone="muted"
+                      className="bg-fill min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums"
+                    >
                       {unread}
-                    </span>
+                    </Txt>
                   ) : null}
                 </span>
                 <AttentionRail factoryId={factoryId} items={sectionItems} rowProps={rowProps} />

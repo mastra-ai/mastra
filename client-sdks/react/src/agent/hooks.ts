@@ -23,6 +23,7 @@ import {
   extractTasksFromToolResultChunk,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 
@@ -375,18 +376,13 @@ export const useChat = ({
     lastHydration.current = { agentId, resourceId, threadId, initialMessages: hydratedMessages, formattedMessages };
 
     if (sameThread) {
-      // Accumulation replaces changed messages immutably. Keep those local edits
-      // over history snapshots, even if the request returns after the run finishes.
-      const previousById = new Map(previous.formattedMessages.map(message => [message.id, message]));
-      setMessages(current => {
-        const live = current.filter(message => previousById.get(message.id) !== message);
-        const liveById = new Map(live.map(message => [message.id, message]));
-        const historyIds = new Set(formattedMessages.map(message => message.id));
-        return [
-          ...formattedMessages.map(message => liveById.get(message.id) ?? message),
-          ...live.filter(message => !historyIds.has(message.id)),
-        ];
-      });
+      setMessages(current =>
+        mergeHistoryIntoConversation({
+          conversation: current,
+          history: formattedMessages,
+          previousHistory: previous.formattedMessages,
+        }),
+      );
       setTasks(liveTasks.current ?? extractLatestTasksFromMessages(formattedMessages));
       // History may arrive before the live approval event, but must not undo
       // a live approval decision or terminal event, nor switch the active run.
@@ -567,6 +563,16 @@ export const useChat = ({
         setIsRunning(false);
       }
 
+      if (chunk.type === 'tool-call-resumed') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          // Keep it as a live decision so stale hydrated history can't re-mark it pending.
+          liveApprovalIds.current.add(toolCallId);
+          pendingToolApprovalIdsRef.current.delete(toolCallId);
+          setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        }
+      }
+
       if (isTerminal) {
         if (chunk.runId === liveRunId.current) liveRunFinished.current = true;
         for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
@@ -626,18 +632,10 @@ export const useChat = ({
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
-                  const previousById = new Map(
-                    (lastHydration.current?.formattedMessages ?? []).map(message => [message.id, message]),
+                  const previousHistory = lastHydration.current?.formattedMessages ?? [];
+                  setMessages(current =>
+                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
                   );
-                  setMessages(current => {
-                    const live = current.filter(message => previousById.get(message.id) !== message);
-                    const liveById = new Map(live.map(message => [message.id, message]));
-                    const historyIds = new Set(history.map(message => message.id));
-                    return [
-                      ...history.map(message => liveById.get(message.id) ?? message),
-                      ...live.filter(message => !historyIds.has(message.id)),
-                    ];
-                  });
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,

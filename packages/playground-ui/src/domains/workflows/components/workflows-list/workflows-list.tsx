@@ -9,11 +9,10 @@ import { flattenWorkflowTree } from '@/domains/workflows/utils/nested-workflows'
 import type { WorkflowTreeRow } from '@/domains/workflows/utils/nested-workflows';
 import { Badge } from '@/ds/components/Badge';
 import type { DataListSort } from '@/ds/components/DataList';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@/ds/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@/ds/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -107,15 +106,15 @@ function SortHeader({
   onSortChange,
   children,
 }: Pick<WorkflowsListProps, 'sort' | 'onSortChange'> & { sortKey: WorkflowsSortKey; children: string }) {
-  if (!onSortChange) return <EntityList.TopCell>{children}</EntityList.TopCell>;
+  if (!onSortChange) return <DataList.TopCell>{children}</DataList.TopCell>;
   return (
-    <EntityList.SortableTopCell
+    <DataList.SortableTopCell
       sortKey={sortKey}
       sort={sort?.key === sortKey ? sort.direction : undefined}
       onSortChange={direction => onSortChange(direction, sortKey)}
     >
       {children}
-    </EntityList.SortableTopCell>
+    </DataList.SortableTopCell>
   );
 }
 
@@ -148,9 +147,9 @@ function WorkflowRow({
   const hasNested = nestedIds.length > 0;
 
   return (
-    <EntityList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
+    <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
       <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={onToggle} />
-      <EntityList.RowLink
+      <DataList.RowLink
         ref={linkRef}
         colStart={2}
         to={paths.workflowLink(wf.id)}
@@ -158,7 +157,7 @@ function WorkflowRow({
         tabIndex={-1}
         onClick={stopPropagation}
       >
-        <EntityList.NameCell>
+        <DataList.NameCell>
           <span className="flex items-center gap-1.5">
             {row.depth > 0 ? <TreeConnector guides={row.guides} isLastChild={row.isLastChild} /> : null}
             <span className="truncate">{name}</span>
@@ -168,34 +167,37 @@ function WorkflowRow({
               </Badge>
             ) : null}
             {hasNested ? (
-              <span
+              <Txt
+                as="span"
+                variant="body-sm"
+                tone="muted"
                 title={`Nested workflows: ${nestedIds.join(', ')}`}
-                className="inline-flex shrink-0 items-center gap-1 text-body-sm text-muted-foreground"
+                className="inline-flex shrink-0 items-center gap-1"
               >
                 <WorkflowIcon aria-hidden className="size-3.5" />
                 {nestedIds.length}
-              </span>
+              </Txt>
             ) : null}
           </span>
-        </EntityList.NameCell>
-        <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-        <EntityList.TextCell className="text-center">
+        </DataList.NameCell>
+        <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
+        <DataList.TextCell className="text-center">
           {runningCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-positive1"
+              className="inline-flex items-center gap-1.5 text-info-indicator"
               aria-label={`${runningCount} run${runningCount === 1 ? '' : 's'} in progress`}
             >
-              <span aria-hidden className="size-2 rounded-full bg-positive1 motion-safe:animate-pulse" />
+              <span aria-hidden className="size-2 rounded-full bg-info-indicator motion-safe:animate-pulse" />
               {runningCount}
             </span>
           ) : (
             ''
           )}
-        </EntityList.TextCell>
-        <EntityList.TextCell className="text-center">
+        </DataList.TextCell>
+        <DataList.TextCell className="text-center">
           {suspendedCount > 0 ? (
             <span
-              className="inline-flex items-center gap-1.5 text-warning1"
+              className="inline-flex items-center gap-1.5 text-warning-foreground"
               aria-label={`${suspendedCount} run${suspendedCount === 1 ? '' : 's'} awaiting input`}
             >
               <PauseIcon aria-hidden className="size-3.5" />
@@ -204,10 +206,10 @@ function WorkflowRow({
           ) : (
             ''
           )}
-        </EntityList.TextCell>
-        <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
-      </EntityList.RowLink>
-    </EntityList.RowWrapper>
+        </DataList.TextCell>
+        <DataList.TextCell className="text-center">{stepsCount || ''}</DataList.TextCell>
+      </DataList.RowLink>
+    </DataList.RowWrapper>
   );
 }
 
@@ -246,7 +248,7 @@ export function WorkflowsList({
     [sortedData, workflows, expandedPaths],
   );
 
-  // Inline rows are non-interactive; keyboard navigation only visits workflow rows.
+  // Unregistered rows are non-interactive; keyboard navigation only visits workflow rows.
   const interactiveIndexByPathKey = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of rows) {
@@ -270,19 +272,19 @@ export function WorkflowsList({
   };
 
   if (isLoading) {
-    return <EntityListSkeleton columns={GRID_COLUMNS} fit="container" />;
+    return <DataListSkeleton columns={GRID_COLUMNS} fit="container" />;
   }
 
   return (
-    <EntityList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
-      <EntityList.Top>
-        <EntityList.TopCell>
+    <DataList columns={GRID_COLUMNS} fit="container" scrollRef={containerRef}>
+      <DataList.Top>
+        <DataList.TopCell>
           <span className="sr-only">Expand</span>
-        </EntityList.TopCell>
+        </DataList.TopCell>
         <SortHeader sortKey="name" sort={sort} onSortChange={onSortChange}>
           Name
         </SortHeader>
-        <EntityList.TopCell>Description</EntityList.TopCell>
+        <DataList.TopCell>Description</DataList.TopCell>
         <SortHeader sortKey="running" sort={sort} onSortChange={onSortChange}>
           Running
         </SortHeader>
@@ -292,40 +294,46 @@ export function WorkflowsList({
         <SortHeader sortKey="steps" sort={sort} onSortChange={onSortChange}>
           Number of steps
         </SortHeader>
-      </EntityList.Top>
+      </DataList.Top>
 
-      {rows.length === 0 && search ? <EntityList.NoMatch message="No Workflows match your search" /> : null}
+      {rows.length === 0 && search ? <DataList.NoMatch message="No Workflows match your search" /> : null}
 
       {rows.map(row => {
         const isExpanded = expandedPaths.has(row.pathKey);
         const toggle = () => toggleExpanded(row.pathKey);
 
-        if (row.kind === 'inline') {
-          // Same wrapper shape as workflow rows so the shared column tracks
-          // stay identical; the non-link body mirrors the RowLink's subgrid
-          // structure (span, gap, padding) without the interactivity.
+        if (row.kind === 'unregistered') {
+          // Mirrors WorkflowRow's RowWrapper + RowLink layout, minus hover and press states.
           return (
-            <EntityList.RowWrapper key={`workflow-${row.pathKey}`}>
+            <DataList.RowStatic key={`workflow-${row.pathKey}`} className="gap-0 px-0">
               <TreeToggleCell row={row} isExpanded={isExpanded} onToggle={toggle} />
-              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-5 px-5">
-                <EntityList.NameCell>
+              <div className="col-span-5 col-start-2 grid grid-cols-subgrid gap-4 px-3">
+                <DataList.NameCell>
                   <span className="flex items-center gap-1.5">
                     <TreeConnector guides={row.guides} isLastChild={row.isLastChild} />
                     <span className="truncate">{truncateString(row.stepId, 50)}</span>
-                    <span
-                      title="Nested workflow not registered standalone"
-                      className="shrink-0 text-body-sm text-muted-foreground"
-                    >
-                      inline
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<span />}
+                        role="note"
+                        tabIndex={0}
+                        className={cn('shrink-0 rounded-sm text-body-sm text-muted-foreground', focusRing)}
+                      >
+                        not registered
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-72">
+                        Runs as a step of its parent workflow. Add it to the workflows of your Mastra instance to open,
+                        run, and inspect it on its own page.
+                      </TooltipContent>
+                    </Tooltip>
                   </span>
-                </EntityList.NameCell>
-                <EntityList.DescriptionCell>{truncateString(row.description ?? '', 200)}</EntityList.DescriptionCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
-                <EntityList.TextCell className="text-center">{''}</EntityList.TextCell>
+                </DataList.NameCell>
+                <DataList.DescriptionCell>{truncateString(row.description ?? '', 200)}</DataList.DescriptionCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
+                <DataList.TextCell className="text-center">{''}</DataList.TextCell>
               </div>
-            </EntityList.RowWrapper>
+            </DataList.RowStatic>
           );
         }
 
@@ -340,6 +348,6 @@ export function WorkflowsList({
           />
         );
       })}
-    </EntityList>
+    </DataList>
   );
 }

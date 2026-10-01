@@ -384,6 +384,114 @@ LIMIT 1`,
     }
   });
 
+  it('reads root payloads only for traces in the requested time range', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const startedAt = new Date('2026-08-26T10:00:00.000Z');
+    const outsideRoots = 5_000;
+    const payload = 'x'.repeat(2_000);
+
+    try {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'in-range-trace',
+            spanId: 'in-range-root',
+            parentSpanId: null,
+            name: 'in-range root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            startedAt,
+            endedAt: new Date(startedAt.getTime() + 1_000),
+          },
+          ...Array.from({ length: outsideRoots }, (_, index) => ({
+            traceId: `outside-${index}`,
+            spanId: `outside-root-${index}`,
+            parentSpanId: null,
+            name: 'outside root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            input: payload,
+            output: payload,
+            startedAt: new Date(startedAt.getTime() - (index + 1) * 60_000),
+            endedAt: new Date(startedAt.getTime() - (index + 1) * 60_000 + 1_000),
+          })),
+        ],
+      });
+
+      const plan = planTraceQuery(
+        parseTraceQueryRequest({
+          timeRange: {
+            from: new Date(startedAt.getTime() - 1_000).toISOString(),
+            to: new Date(startedAt.getTime() + 2_000).toISOString(),
+          },
+        }),
+      );
+      const queryId = `trace-query-range-${randomUUID()}`;
+      const rows = await runWithClickHouseTraceQueryTimeout(
+        client,
+        { timeoutMs: 15_000 },
+        compileClickHouseTraceQuery(plan),
+        queryId,
+      );
+      expect(rows.map(row => row.traceId)).toEqual(['in-range-trace']);
+
+      await client.command({ query: 'SYSTEM FLUSH LOGS' });
+      const logResult = await client.query({
+        query: `SELECT read_bytes AS readBytes
+FROM system.query_log
+WHERE query_id = {queryId:String} AND type = 'QueryFinish'
+ORDER BY event_time_microseconds DESC
+LIMIT 1`,
+        query_params: { queryId },
+        format: 'JSONEachRow',
+      });
+      const [log] = await logResult.json<{ readBytes: number }>();
+      // Deduping the whole table would read every outside root's input and output.
+      expect(Number(log?.readBytes)).toBeLessThan(outsideRoots * payload.length);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('does not resurrect a trace through a non-current root in the requested time range', async () => {
+    const root = {
+      traceId: 'multi-root-trace',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+    };
+    await storage.batchCreateSpans({
+      records: [
+        {
+          ...root,
+          spanId: 'root-a',
+          startedAt: new Date('2026-08-05T10:00:00.000Z'),
+          endedAt: new Date('2026-08-05T10:00:02.000Z'),
+        },
+        {
+          ...root,
+          spanId: 'root-a-old',
+          startedAt: new Date('2026-08-01T10:00:00.000Z'),
+          endedAt: new Date('2026-08-01T10:00:01.000Z'),
+        },
+      ],
+    });
+
+    const query = async (from: string, to: string) => {
+      const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange: { from, to } })));
+      if (!('traces' in response)) throw new Error('Expected trace results');
+      return response.traces.map(trace => trace.traceId);
+    };
+
+    expect(await query('2026-08-01T00:00:00Z', '2026-08-02T00:00:00Z')).toEqual([]);
+    expect(await query('2026-08-05T00:00:00Z', '2026-08-06T00:00:00Z')).toEqual(['multi-root-trace']);
+  });
+
   it('keeps ordinary current-score reads proportional to logical rows after merges', async () => {
     const client = createClient({
       url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -690,6 +798,7 @@ LIMIT 1`,
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ]);
     });
 
@@ -712,6 +821,7 @@ LIMIT 1`,
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
+          'trace-query-context-ids',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -4742,6 +4852,36 @@ LIMIT 1`,
         }),
       ).rejects.toThrow('Percentile value must be a finite number between 0 and 1');
     });
+
+    it('getScoreAggregate returns null when no scores match', async () => {
+      for (const aggregation of ['sum', 'avg', 'min', 'max', 'last'] as const) {
+        const result = await storage.getScoreAggregate({ scorerId: 'no-such-scorer', aggregation });
+        expect(result.value, aggregation).toBeNull();
+      }
+    });
+
+    it('getScoreAggregate count_distinct counts distinct values instead of summing', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-test-5',
+            timestamp: new Date('2026-01-01T00:00:15Z'),
+            traceId: 'olap-s-5',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          },
+        ],
+      });
+
+      // quality scores: 0.8, 0.6, 0.9, 0.8 → 3 distinct (sum would be 3.1)
+      const result = await storage.getScoreAggregate({ scorerId: 'quality', aggregation: 'count_distinct' });
+      expect(result.value).toBe(3);
+    });
   });
 
   // ==========================================================================
@@ -4828,6 +4968,16 @@ LIMIT 1`,
       });
       // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
       expect(result.value).toBe(0);
+    });
+
+    it('getFeedbackAggregate count_distinct counts distinct values instead of summing', async () => {
+      // Production thumbs values are 1 and 0: sum is 1, distinct count is 2
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        filters: { environment: 'production' },
+        aggregation: 'count_distinct',
+      });
+      expect(result.value).toBe(2);
     });
 
     it('getFeedbackPercentiles rejects out-of-range values', async () => {
@@ -6202,10 +6352,10 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
-          resourceId: null,
+          resourceId: 'user-light',
           runId: null,
           sessionId: null,
-          threadId: null,
+          threadId: 'thread-light',
           requestId: null,
           environment: null,
           source: null,
@@ -6238,6 +6388,8 @@ describe('listTracesLight projection', () => {
     expect(row.inputPreview).toBe('summarize this');
     expect(row.status).toBe('success');
     expect(row.metadata).toEqual({ customer: 'acme' });
+    expect(row.threadId).toBe('thread-light');
+    expect(row.resourceId).toBe('user-light');
   });
 
   it('computes status on light rows matching the full listTraces status', async () => {

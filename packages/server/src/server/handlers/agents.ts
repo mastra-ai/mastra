@@ -11,8 +11,8 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
-import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -88,6 +88,7 @@ import {
   sanitizeBody,
   validateBody,
   getEffectiveResourceId,
+  getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
@@ -177,6 +178,12 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+// Matches the snapshot wait of the durable resume path this check gates
+// (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
+const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
+// Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
+const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
+
 function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
   return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
@@ -188,6 +195,7 @@ async function validateDurableToolCallAccess({
   toolCallId,
   requestContext,
   threadId,
+  abortSignal,
 }: {
   mastra: any;
   agent: Agent;
@@ -195,54 +203,73 @@ async function validateDurableToolCallAccess({
   toolCallId?: string;
   requestContext: RequestContext;
   threadId?: string;
+  abortSignal?: AbortSignal;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-  const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: getDurableLoopWorkflowName(agent),
-    runId,
-  });
-  if (!workflowRun) {
+  if (!workflowsStore) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
   }
+  const workflowName = getDurableLoopWorkflowName(agent);
+  const contextResourceId = getContextResourceId(requestContext);
 
-  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
-  if (typeof snapshot === 'string') {
-    try {
-      snapshot = JSON.parse(snapshot) as Record<string, any>;
-    } catch {
-      snapshot = undefined;
+  // The approval chunk can reach the client before the suspended snapshot is persisted,
+  // so wait (bounded) for storage to catch up before denying.
+  const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
+  while (true) {
+    const workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
+
+    let snapshot = workflowRun?.snapshot as Record<string, any> | string | undefined;
+    if (typeof snapshot === 'string') {
+      try {
+        snapshot = JSON.parse(snapshot) as Record<string, any>;
+      } catch {
+        snapshot = undefined;
+      }
     }
-  }
 
-  const input = snapshot?.context?.input;
-  const persistedResourceIds = new Set(
-    [
-      workflowRun.resourceId,
-      input?.state?.resourceId,
-      input?.messageListState?.memoryInfo?.resourceId,
-      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
-    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
-  );
-  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
-  const [persistedResourceId] = persistedResourceIds;
-  if (persistedResourceIds.size > 1 || (persistedResourceId && persistedResourceId !== effectiveResourceId)) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
-  }
+    const input = snapshot?.context?.input;
+    const persistedResourceIds = new Set(
+      [
+        workflowRun?.resourceId,
+        input?.state?.resourceId,
+        input?.messageListState?.memoryInfo?.resourceId,
+        input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+      ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+    );
+    // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+    const [persistedResourceId] = persistedResourceIds;
+    if (
+      persistedResourceIds.size > 1 ||
+      (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+    ) {
+      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    }
 
-  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
-  if (threadId && persistedThreadId !== threadId) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
-  }
+    const ready =
+      !!workflowRun &&
+      !!snapshot &&
+      snapshot.status === 'suspended' &&
+      (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
 
-  if (
-    !snapshot ||
-    snapshot.status !== 'suspended' ||
-    input?.agentId !== agent.id ||
-    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
+      if (!workflowRun) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      }
+
+      const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+      if (threadId && persistedThreadId !== threadId) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+      }
+
+      if (!ready || input?.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+      }
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, DURABLE_SNAPSHOT_WAIT_INTERVAL_MS));
   }
 }
 
@@ -434,6 +461,22 @@ export interface SerializedAgent {
 
 export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
+}
+
+function getAgentModelRef(agentModel: Agent['model'], llm: Awaited<ReturnType<Agent['getLLM']>> | undefined) {
+  if (typeof agentModel === 'string') {
+    const { provider, modelId } = parseModelString(agentModel);
+    return { provider: provider ?? llm?.getProvider(), modelId };
+  }
+  const model = llm?.getModel();
+  if (
+    model instanceof ModelRouterLanguageModel &&
+    model.gatewayId !== 'models.dev' &&
+    model.gatewayId !== model.provider
+  ) {
+    return { provider: model.gatewayId, modelId: `${model.provider}/${model.modelId}` };
+  }
+  return { provider: llm?.getProvider(), modelId: llm?.getModelId() };
 }
 
 export async function getSerializedAgentTools(
@@ -862,11 +905,7 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     defaultOptions,
@@ -1186,11 +1225,7 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
@@ -1724,39 +1759,34 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
 
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-      allProviders[id] = provider as ProviderConfig;
+      allProviders[id] = provider;
     }
   }
 
-  // Include gateway providers (defaults + user-registered)
-  if (mastra) {
-    const allGateways = mastra.listGateways();
-    if (allGateways) {
-      for (const gateway of Object.values(allGateways)) {
-        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-        if (gateway.id === 'models.dev') continue;
-        // When blocking external providers, skip the built-in default gateways
-        // so only user-registered custom gateways remain.
-        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
-        try {
-          const gatewayProviders = await gateway.fetchProviders();
-          for (const [providerId, config] of Object.entries(gatewayProviders)) {
-            // Apply the same prefixing logic as registry-generator to avoid
-            // creating duplicate entries alongside PROVIDER_REGISTRY data.
-            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-            // Only add if not already present from PROVIDER_REGISTRY to prevent
-            // duplicates when PROVIDER_REGISTRY already has the prefixed key
-            // (e.g. dev mode where GatewayRegistry includes custom gateways).
-            if (!(prefixedId in allProviders)) {
-              allProviders[prefixedId] = config;
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+  const gateways = mastra ? Object.values(mastra.listGateways() ?? {}) : [];
+  for (const gateway of gateways) {
+    // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+    if (gateway.id === 'models.dev') continue;
+    // When blocking external providers, skip the built-in default gateways
+    // so only user-registered custom gateways remain.
+    if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
+    try {
+      const gatewayProviders = await gateway.fetchProviders();
+      for (const [providerId, config] of Object.entries(gatewayProviders)) {
+        // Apply the same prefixing logic as registry-generator to avoid
+        // creating duplicate entries alongside PROVIDER_REGISTRY data.
+        // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+        // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+        const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+        // Only add if not already present from PROVIDER_REGISTRY to prevent
+        // duplicates when PROVIDER_REGISTRY already has the prefixed key
+        // (e.g. dev mode where GatewayRegistry includes custom gateways).
+        if (!(prefixedId in allProviders)) {
+          allProviders[prefixedId] = config;
         }
       }
+    } catch (error) {
+      console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
     }
   }
 
@@ -1764,14 +1794,33 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     return {
       id,
       name: provider.name,
-      label: (provider as any).label || provider.name,
-      description: (provider as any).description || '',
+      label: readStringField(provider, 'label') || provider.name,
+      description: readStringField(provider, 'description') || '',
       envVar: provider.apiKeyEnvVar,
-      connected: isProviderConnected(id, allProviders),
+      connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
     };
   });
+}
+
+function isClaimedByGateway(
+  providerId: string,
+  models: readonly string[],
+  gateways: MastraModelGatewayInterface[],
+): boolean {
+  const [firstModel] = models;
+  if (!firstModel) return false;
+  const routerId = `${providerId}/${firstModel}`;
+  return gateways.some(gateway => gateway.shouldEnable?.() !== false && gateway.handlesModel?.(routerId) === true);
+}
+
+function readStringField<Field extends string>(
+  source: object & Partial<Record<Field, unknown>>,
+  field: Field,
+): string | undefined {
+  const value = source[field];
+  return typeof value === 'string' ? value : undefined;
 }
 
 export const GET_PROVIDERS_ROUTE = createRoute({
@@ -2688,6 +2737,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.approveToolCall({
@@ -2889,6 +2939,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.declineToolCall({
@@ -2991,6 +3042,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3193,6 +3245,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3260,6 +3313,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.approveToolCallGenerate({
@@ -3312,6 +3366,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.declineToolCallGenerate({

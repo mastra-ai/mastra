@@ -590,11 +590,12 @@ async function detectDeltaCursorStrategy(
   }
 
   try {
-    await client.query({
+    const result = await client.query({
       query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
       query_params: { counterName: 'mastra_observability_delta_cursor_probe' },
       format: 'JSONEachRow',
     });
+    await result.json();
     return 'serial';
   } catch {
     return 'fallback';
@@ -810,11 +811,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // that the stream skips the value 0 (which carries no row).
       if (this.#deltaCursorStrategy === 'serial') {
         for (const counterName of DELTA_CURSOR_COUNTER_NAMES) {
-          await this.#client.query({
+          const result = await this.#client.query({
             query: `SELECT generateSerialID({counterName:String}) AS cursorId`,
             query_params: { counterName },
             format: 'JSONEachRow',
           });
+          await result.json();
         }
       }
     } catch (error) {
@@ -950,6 +952,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ] as const;
     }
 
@@ -969,6 +972,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
     ] as const;
   }
 

@@ -12,6 +12,7 @@
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-5.5",
     "bailian/qwen3.5-122b-a10b",
     "bailian/qwen3.5-27b",
     "bailian/qwen3.5-35b-a3b",
@@ -68,6 +69,7 @@
     "openai/gpt-6-astra",
     "openai/gpt-6-luna",
     "openai/gpt-6-sol",
+    "openai/gpt-6.1-sol",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -99,6 +101,7 @@
     "x-ai/grok-4.6",
     "x-ai/grok-4.7",
     "z-ai/glm-5.3-flash",
+    "z-ai/glm-5.3-flashx",
     "z-ai/glm-5v-turbo"
   ],
   "temperature": [
@@ -222,6 +225,7 @@
     "z-ai/glm-5.2",
     "z-ai/glm-5.3",
     "z-ai/glm-5.3-flash",
+    "z-ai/glm-5.3-flashx",
     "z-ai/glm-5v-turbo"
   ],
   "structuredOutput": [
@@ -283,6 +287,7 @@
     "openai/gpt-6-astra",
     "openai/gpt-6-luna",
     "openai/gpt-6-sol",
+    "openai/gpt-6.1-sol",
     "qwen/qwen3-coder-next",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
@@ -315,6 +320,7 @@
     "z-ai/glm-5.1",
     "z-ai/glm-5.2",
     "z-ai/glm-5.3",
-    "z-ai/glm-5.3-flash"
+    "z-ai/glm-5.3-flash",
+    "z-ai/glm-5.3-flashx"
   ]
 }

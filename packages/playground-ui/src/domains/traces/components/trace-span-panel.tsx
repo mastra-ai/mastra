@@ -8,14 +8,19 @@ import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel
 import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { useLinkComponent } from '@/lib/framework';
+import type { LinkComponentPaths } from '@/lib/framework';
 
 type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
 
-function getEntityHref(entityType: string | null | undefined, entityId: string | null | undefined) {
+function getEntityHref(
+  paths: LinkComponentPaths,
+  entityType: string | null | undefined,
+  entityId: string | null | undefined,
+) {
   if (!entityId || !entityType) return undefined;
   const normalizedEntityType = entityType.toLowerCase();
-  if (normalizedEntityType.includes('workflow')) return `/workflows/${entityId}/graph`;
-  if (normalizedEntityType.includes('agent')) return `/agents/${entityId}/chat/new`;
+  if (normalizedEntityType.includes('workflow')) return paths.workflowLink(entityId) || undefined;
+  if (normalizedEntityType.includes('agent')) return paths.agentLink(entityId) || undefined;
   return undefined;
 }
 type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
@@ -125,13 +130,13 @@ export function TraceSpanPanel({
 }: TraceSpanPanelProps) {
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
 
   // The trace summary links the entity to its page; the app's link provider owns the routes.
   const rootSpan = anchorSpanId
     ? spans?.find(s => s.spanId === anchorSpanId)
     : spans?.find(s => s.parentSpanId == null);
-  const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
+  const entityHref = getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
 
   if (traceId && isFullThreadOpen && threadId) {
@@ -139,7 +144,6 @@ export function TraceSpanPanel({
       <TraceThreadPanel
         title={title}
         threadId={threadId}
-        anchorTraceId={traceId}
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}

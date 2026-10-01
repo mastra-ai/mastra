@@ -136,5 +136,18 @@ describe('FileTransport', () => {
       logs = await fileLogger.listLogsByRunId({ runId: 'test-run-id' });
       expect(logs.total).toBe(1);
     });
+
+    it('should skip malformed lines and return valid logs', async () => {
+      fs.writeFileSync(testPath, '{"msg":"before","time":1}\n{"msg":\n{"msg":"after","time":2}\n');
+
+      const all = await fileLogger.listLogs({ returnPaginationResults: false });
+      expect(all.total).toBe(2);
+      expect(all.logs.map(log => log.msg)).toEqual(['before', 'after']);
+
+      const paged = await fileLogger.listLogs({ page: 1, perPage: 1 });
+      expect(paged.total).toBe(2);
+      expect(paged.logs).toHaveLength(1);
+      expect(paged.hasMore).toBe(true);
+    });
   });
 });

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "60.0.0-alpha.5",
+  "version": "60.2.0-alpha.1",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -187,6 +187,7 @@
     "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
     "@mcp-ui/client": "^7.1.0",
+    "@pierre/diffs": "1.5.1",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
     "@uiw/codemirror-theme-dracula": "^4.25.11",

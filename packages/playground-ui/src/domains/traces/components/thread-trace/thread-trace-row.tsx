@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import { useThreadTrace } from './thread-trace-context';
 import { ThreadTraceRowContext } from './thread-trace-row-context';
 import type { ThreadTraceRowContextValue } from './thread-trace-row-context';
+import { MessageScrollerItem } from '@/ds/components/MessageScroller';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -12,11 +13,6 @@ export const THREAD_TRACE_MESSAGES_TAB = 'messages';
 export interface ThreadTraceRowProps extends ComponentProps<'div'> {
   traceId: string;
 }
-
-// Module-level so the callback ref keeps its identity and React only invokes it on mount/unmount.
-const scrollIntoViewOnMount = (row: HTMLDivElement | null) => {
-  row?.scrollIntoView({ block: 'start' });
-};
 
 /**
  * One agent turn: the messages column on the left and the details column on the right. The whole
@@ -32,7 +28,6 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
   const isActive = selectedSpanId !== undefined;
   const isCurrent = root.currentTraceId === traceId;
   const isExpanded = root.expandedTraceIds.has(traceId);
-  const isAnchor = root.anchorTraceId === traceId;
 
   // A long trace is clamped to the real height of its messages column (not a nominal row height),
   // so the timeline never dwarfs the turn it belongs to. The refs live here because the messages
@@ -67,7 +62,6 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
       isActive,
       isCurrent,
       isExpanded,
-      isAnchor,
       selectedSpanId,
       featuredSpanIds,
       revealSpanId,
@@ -87,7 +81,6 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
       isActive,
       isCurrent,
       isExpanded,
-      isAnchor,
       selectedSpanId,
       featuredSpanIds,
       revealSpanId,
@@ -105,21 +98,24 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
 
   return (
     <ThreadTraceRowContext.Provider value={contextValue}>
-      <div
-        data-slot="thread-trace-row"
-        className={cn(
-          // Same fixed messages width as the trace panel; the details column takes the rest.
-          'group grid grid-cols-[24rem_minmax(0,1fr)] border-b border-border pr-4 pl-14 transition-opacity hover:opacity-100',
-          isActive || isCurrent ? 'opacity-100' : 'opacity-50',
-          className,
-        )}
-        data-trace-id={traceId}
-        data-active={isActive || undefined}
-        ref={isAnchor ? scrollIntoViewOnMount : undefined}
-        {...props}
-      >
-        {children}
-      </div>
+      {/* Registers the row with the scroller so prepends of older turns keep the reading position.
+          Rows measure their own columns, so they stay rendered off screen. */}
+      <MessageScrollerItem messageId={traceId} className="[content-visibility:visible]">
+        <div
+          data-slot="thread-trace-row"
+          className={cn(
+            // Same fixed messages width as the trace panel; the details column takes the rest.
+            'group grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] border-b border-border transition-opacity hover:opacity-100',
+            isActive || isCurrent ? 'opacity-100' : 'opacity-50',
+            className,
+          )}
+          data-trace-id={traceId}
+          data-active={isActive || undefined}
+          {...props}
+        >
+          {children}
+        </div>
+      </MessageScrollerItem>
     </ThreadTraceRowContext.Provider>
   );
 }

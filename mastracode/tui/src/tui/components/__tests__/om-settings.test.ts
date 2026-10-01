@@ -3,6 +3,7 @@ import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 import type { ModelItem } from '../model-selector.js';
 import { ModelSelectorComponent } from '../model-selector.js';
+import { ThresholdSubmenu } from '../om-settings.js';
 
 const WIDTH = 100;
 
@@ -118,5 +119,43 @@ describe('OM model picker (ModelSelectorComponent)', () => {
       expect.objectContaining({ id: 'deepseek/deepseek-v4-flash', provider: 'deepseek' }),
     );
     expect(onCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('ThresholdSubmenu', () => {
+  function make() {
+    const onDone = vi.fn();
+    const onBack = vi.fn();
+    const menu = new ThresholdSubmenu('Messages before observation', 30000, [10000, 30000, 50000], onDone, onBack);
+    return { menu, onDone, onBack };
+  }
+
+  it.each([
+    ['legacy', '\x1b'],
+    ['kitty', '\x1b[27u'],
+  ])('goes back on %s Escape from the input box', (_, esc) => {
+    const { menu, onDone, onBack } = make();
+    menu.handleInput(esc);
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['legacy', '\x1b[B'],
+    ['kitty', '\x1b[1;1B'],
+  ])('moves to the preset list on %s Down from the input box', (_, down) => {
+    const { menu, onDone } = make();
+    menu.handleInput(down);
+    // In preset mode, Enter picks the highlighted preset instead of parsing the (empty) input.
+    menu.handleInput('\r');
+    expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  it('submits a typed value on Enter', () => {
+    const { menu, onDone } = make();
+    menu.handleInput('4');
+    menu.handleInput('0');
+    menu.handleInput('\r');
+    expect(onDone).toHaveBeenCalledWith(40000);
   });
 });

@@ -1,6 +1,7 @@
 import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -36,7 +37,7 @@ export function MainSidebarMobileTrigger({
         "[[data-sidebar-mobile-present='true']_&]:invisible",
         quietTextHover,
         'hover:bg-fill-subtle',
-        'focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
+        focusRing,
         className,
       )}
     >

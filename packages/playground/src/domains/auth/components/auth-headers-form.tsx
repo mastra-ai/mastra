@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
@@ -47,14 +48,14 @@ export const AuthHeadersForm = () => {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-6 text-left">
+      <Form onSubmit={handleSubmit} className="w-full max-w-md gap-6 text-left">
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
         <Button type="submit" className="ml-auto">
           <SaveIcon />
           Save Headers
         </Button>
-      </form>
+      </Form>
     </TooltipProvider>
   );
 };
