@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent/types';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import { modelSupportsStructuredOutput, modelSupportsTemperature } from '../../../llm/model/provider-registry';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import {
   createTimeoutAbortSignal,
@@ -66,6 +67,41 @@ function isRetryableModelError(error: unknown): boolean {
   if (APICallError.isInstance(error)) {
     return error.isRetryable;
   }
+  return true;
+}
+
+function readStrictJsonSchemaOption(options: unknown): boolean | undefined {
+  if (!options || typeof options !== 'object') return undefined;
+  const strictJsonSchema = (options as { strictJsonSchema?: unknown }).strictJsonSchema;
+  return typeof strictJsonSchema === 'boolean' ? strictJsonSchema : undefined;
+}
+
+/**
+ * Whether the model sends structured output as an OpenAI strict json_schema, which
+ * requires the schema to be prepared (all properties required, no unsupported keywords).
+ *
+ * OpenAI providers are detected by provider id. Other provider instances (for example
+ * `@ai-sdk/openai-compatible` models created with `supportsStructuredOutputs: true`) are
+ * detected by capability, honoring a `strictJsonSchema` override in their provider options.
+ * Model-router models always advertise structured output support, so they keep deciding by
+ * provider id.
+ */
+export function usesOpenAIStrictJsonSchema(
+  model: Pick<MastraLanguageModel, 'provider'> & { supportsStructuredOutputs?: unknown },
+  providerOptions?: SharedProviderOptions,
+): boolean {
+  if (model.provider.startsWith('openai')) return true;
+  if (model instanceof ModelRouterLanguageModel || model.supportsStructuredOutputs !== true) return false;
+
+  const providerKey = model.provider.split('.')[0]!;
+  const camelCaseProviderKey = providerKey.replace(/[-_]+([a-z0-9])/gi, (_, char: string) => char.toUpperCase());
+  const options = providerOptions as Record<string, unknown> | undefined;
+  for (const key of new Set([providerKey, camelCaseProviderKey, 'openaiCompatible'])) {
+    const strictJsonSchema = readStrictJsonSchemaOption(options?.[key]);
+    if (strictJsonSchema !== undefined) return strictJsonSchema;
+  }
+
+  // @ai-sdk/openai-compatible sends strict json_schema by default.
   return true;
 }
 
@@ -281,10 +317,12 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const isOpenAIStrictMode = model.provider.startsWith('openai') && responseFormat?.type === 'json' && !injectionMode;
+  const usesNativeJsonSchema = responseFormat?.type === 'json' && !injectionMode;
+  const isOpenAIStrictMode = usesNativeJsonSchema && model.provider.startsWith('openai');
 
-  // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
-  if (isOpenAIStrictMode && responseFormat?.schema) {
+  // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
+  // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
+  if (usesNativeJsonSchema && responseFormat?.schema && usesOpenAIStrictJsonSchema(model, providerOptions)) {
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
   }
 
