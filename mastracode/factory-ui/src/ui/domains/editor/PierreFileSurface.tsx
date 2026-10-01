@@ -17,6 +17,7 @@ import type { BlameLine, EditorLspDiagnostic, EditorLspTextEdit } from '../../..
 import type { CodeLensActionHandler, CodeLensEntry } from './editor-code-lens';
 import type { EditorLspQueryFn } from './editor-lsp';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from './editor-settings';
+import { EDITOR_THEME } from './editor-themes';
 import { LspHoverCard } from './LspHoverCard';
 import type { CollabBinding } from './use-editor-collab';
 import { candidatesForPrefix, currentPrefix } from './pierre-autocomplete';
@@ -86,11 +87,6 @@ interface PierreFileSurfaceProps {
   onFormat?: () => void;
   /** Fires with the selected range + snippet, or null when it collapses. */
   onSelectionChange?: (payload: { startLine: number; endLine: number; snippet: string } | null) => void;
-  /**
-   * Shiki theme pair Pierre uses to tokenize + paint the file. Names must be
-   * registered via `registerCustomTheme` (Pierre themes registered above).
-   */
-  theme?: { light: string; dark: string };
 }
 
 const createEditor: EditorFactory<SurfaceAnnotation, undefined> = (type, options, editStateKey) =>
@@ -220,8 +216,7 @@ function renderSurfaceAnnotation(annotation: LineAnnotation<SurfaceAnnotation>):
     const el = document.createElement('div');
     // Hard-capped compact chip so the annotation gutter can't blow out into a
     // 300px+ column. Full metadata sits in the tooltip.
-    el.className =
-      'flex items-center gap-1.5 text-caption text-muted-foreground max-w-[10rem] truncate';
+    el.className = 'flex items-center gap-1.5 text-caption text-muted-foreground max-w-[10rem] truncate';
     el.title = `${line.sha} • ${line.author}${line.email ? ` <${line.email}>` : ''} • ${line.time}\n${line.summary}`;
     const author = document.createElement('span');
     author.className = line.uncommitted
@@ -284,7 +279,6 @@ export function PierreFileSurface({
   lspQuery,
   onEditor,
   onDocumentChange,
-  theme,
   onContextMenu,
   onGotoDefinition,
   onRename,
@@ -344,10 +338,7 @@ export function PierreFileSurface({
   const contentRef = useRef(initialContent);
   contentRef.current = initialContent;
   const lastEmittedRef = useRef(initialContent);
-  const readOnlyFile = useMemo<FileContents>(
-    () => ({ name: path, contents: initialContent }),
-    [path, initialContent],
-  );
+  const readOnlyFile = useMemo<FileContents>(() => ({ name: path, contents: initialContent }), [path, initialContent]);
   const editableFile = useMemo<FileContents>(
     () => ({ name: path, contents: contentRef.current }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- contents snapshot on path change only
@@ -640,11 +631,9 @@ export function PierreFileSurface({
   // is set, which was leaving an empty column beside the line numbers.
   const hasAnnotations = lineAnnotations.length > 0;
 
-  const activeTheme = theme ?? { light: 'pierre-light', dark: 'pierre-dark' };
-
   const options = useMemo<FileOptions<SurfaceAnnotation, undefined>>(
     () => ({
-      theme: { light: activeTheme.light, dark: activeTheme.dark },
+      theme: { light: EDITOR_THEME.light, dark: EDITOR_THEME.dark },
       disableFileHeader: true,
       disableLineNumbers: !settings.lineNumbers,
       overflow: settings.wordWrap ? 'wrap' : 'scroll',
@@ -682,15 +671,7 @@ export function PierreFileSurface({
         cancelHover();
       },
     }),
-    [
-      settings.lineNumbers,
-      settings.wordWrap,
-      path,
-      cancelHover,
-      hasAnnotations,
-      activeTheme.light,
-      activeTheme.dark,
-    ],
+    [settings.lineNumbers, settings.wordWrap, path, cancelHover, hasAnnotations],
   );
 
   // Autocomplete popover state — driven off document edits.
@@ -705,67 +686,61 @@ export function PierreFileSurface({
   useEffect(() => {
     autocompleteRef.current = autocomplete;
   }, [autocomplete]);
-  const handleEditChange = useCallback(
-    (event: EditorChangeEvent<'file', SurfaceAnnotation, undefined>) => {
-      lastEmittedRef.current = event.file.contents;
-      onChangeRef.current?.(event.file.contents);
-      onDocumentChangeRef.current?.(event.changes);
-      const editor = event.editor;
-      const selection = editor.getViewState()?.selections?.[0];
-      if (selection) {
-        const line = selection.end.line + 1;
-        if (cursorLineRef.current !== line) {
-          cursorLineRef.current = line;
-          onCursorLineRef.current?.(line);
-        }
+  const handleEditChange = useCallback((event: EditorChangeEvent<'file', SurfaceAnnotation, undefined>) => {
+    lastEmittedRef.current = event.file.contents;
+    onChangeRef.current?.(event.file.contents);
+    onDocumentChangeRef.current?.(event.changes);
+    const editor = event.editor;
+    const selection = editor.getViewState()?.selections?.[0];
+    if (selection) {
+      const line = selection.end.line + 1;
+      if (cursorLineRef.current !== line) {
+        cursorLineRef.current = line;
+        onCursorLineRef.current?.(line);
       }
+    }
 
-      // Refresh autocomplete candidates around the caret.
-      const document = editor.getEditState()?.document;
-      if (!document || !selection) {
-        setAutocomplete(null);
-        return;
-      }
-      const offset = document.offsetAt(selection.end);
-      const text = document.getText();
-      // Bound the candidate scan to a window around the caret — two full-
-      // document regex passes per keystroke is measurable on large files, and
-      // proximity ranking prefers nearby words anyway.
-      const SCAN_WINDOW = 20_000;
-      const windowStart = Math.max(0, offset - SCAN_WINDOW);
-      const windowEnd = Math.min(text.length, offset + SCAN_WINDOW);
-      const windowText = text.slice(windowStart, windowEnd);
-      const windowOffset = offset - windowStart;
-      const prefix = currentPrefix(windowText, windowOffset);
-      if (prefix.length < 2) {
-        setAutocomplete(null);
-        return;
-      }
-      const items = candidatesForPrefix(windowText, windowOffset);
-      if (!items.length) {
-        setAutocomplete(null);
-        return;
-      }
-      // Anchor to the browser's live caret rect. `getSelection()` works with
-      // Pierre's contenteditable surface just like any other; the range's
-      // bounding rect gives us screen pixel coords for the caret. Fall back
-      // to the container's upper-left when the selection is missing.
-      const rect = readCaretRect(containerRef.current);
-      setAutocomplete({ items, selected: 0, x: rect.x, y: rect.y, prefix });
-    },
-    [],
-  );
+    // Refresh autocomplete candidates around the caret.
+    const document = editor.getEditState()?.document;
+    if (!document || !selection) {
+      setAutocomplete(null);
+      return;
+    }
+    const offset = document.offsetAt(selection.end);
+    const text = document.getText();
+    // Bound the candidate scan to a window around the caret — two full-
+    // document regex passes per keystroke is measurable on large files, and
+    // proximity ranking prefers nearby words anyway.
+    const SCAN_WINDOW = 20_000;
+    const windowStart = Math.max(0, offset - SCAN_WINDOW);
+    const windowEnd = Math.min(text.length, offset + SCAN_WINDOW);
+    const windowText = text.slice(windowStart, windowEnd);
+    const windowOffset = offset - windowStart;
+    const prefix = currentPrefix(windowText, windowOffset);
+    if (prefix.length < 2) {
+      setAutocomplete(null);
+      return;
+    }
+    const items = candidatesForPrefix(windowText, windowOffset);
+    if (!items.length) {
+      setAutocomplete(null);
+      return;
+    }
+    // Anchor to the browser's live caret rect. `getSelection()` works with
+    // Pierre's contenteditable surface just like any other; the range's
+    // bounding rect gives us screen pixel coords for the caret. Fall back
+    // to the container's upper-left when the selection is missing.
+    const rect = readCaretRect(containerRef.current);
+    setAutocomplete({ items, selected: 0, x: rect.x, y: rect.y, prefix });
+  }, []);
 
-  const handleEditComplete = useCallback(
-    (event: FileEditCompleteEvent<SurfaceAnnotation, undefined>) => {
-      editorRef.current = null;
-      onEditorRef.current?.(null);
-      lastEmittedRef.current = event.file.contents;
-      onChangeRef.current?.(event.file.contents);
-      return 'accept' as const;
-    },
-    [],
-  );
+  const handleEditComplete = useCallback((event: FileEditCompleteEvent<SurfaceAnnotation, undefined>) => {
+    editorRef.current = null;
+    onEditorRef.current?.(null);
+    lastEmittedRef.current = event.file.contents;
+    onChangeRef.current?.(event.file.contents);
+    return 'accept' as const;
+  }, []);
 
   // Push LSP diagnostics into the editor as markers whenever they change.
   useEffect(() => {

@@ -1,7 +1,6 @@
 /**
- * User-configurable editor settings, persisted to localStorage alongside the
- * theme preset (which keeps its own key in editor-themes.ts for backwards
- * compatibility). Everything here applies live — no reloads.
+ * User-configurable editor settings, persisted to localStorage. Everything
+ * here applies live — no reloads.
  */
 
 export interface EditorSettings {

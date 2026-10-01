@@ -11,7 +11,7 @@ import {
   useRunnerStopMutation,
   useRunnerStream,
 } from '../../../hooks/use-runner';
-import type { EditorThemePreset } from './editor-themes';
+import { EDITOR_THEME } from './editor-themes';
 import { buildSandboxPreviewUrl, detectLocalhostUrls } from './preview-url';
 import './runner-terminal.css';
 import {
@@ -234,14 +234,12 @@ function PreviewChip({ port, previewBase }: { port: number; previewBase: Preview
 
 interface RunnerPanelProps {
   workspacePath: string;
-  /** Active editor theme preset — the terminal palette follows its swatch. */
-  themePreset: EditorThemePreset;
   onJump(path: string, line: number): void;
   onClose(): void;
 }
 
 /** Bottom command runner: pick a script or type a command, watch it stream. */
-export function RunnerPanel({ workspacePath, themePreset, onJump, onClose }: RunnerPanelProps) {
+export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps) {
   const scripts = useRunnerScripts(workspacePath);
   const previewBaseQuery = useSessionPreviewBase(workspacePath);
   const previewBase = previewBaseQuery.data;
@@ -431,7 +429,8 @@ export function RunnerPanel({ workspacePath, themePreset, onJump, onClose }: Run
   const exitCode = poll.data?.exitCode;
   const scriptChips = (scripts.data?.scripts ?? []).slice(0, 6);
   const echoedCommand = poll.data?.command ?? (runId ? lastCommand : '');
-  const { swatch } = themePreset;
+  // The terminal palette follows the editor's (only) theme swatch.
+  const { swatch } = EDITOR_THEME;
 
   return (
     <div

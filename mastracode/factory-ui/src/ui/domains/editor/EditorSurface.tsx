@@ -48,7 +48,7 @@ import { EditorContextMenu } from './EditorContextMenu';
 import { EditorTabs } from './EditorTabs';
 import { EditorSettingsDialog } from './EditorSettingsDialog';
 import { loadEditorSettings, saveEditorSettings, type EditorSettings } from './editor-settings';
-import { getEditorThemePreset, loadEditorTheme, saveEditorTheme, type EditorThemeId } from './editor-themes';
+
 import { QuickOpenDialog, type QuickOpenCommand } from './QuickOpenDialog';
 import { useAgentActiveFiles } from './use-agent-activity';
 import { useBlame } from '../../../hooks/use-blame';
@@ -115,9 +115,7 @@ function HeaderIconButton({
               'focus-visible:ring-accent3/60 grid size-7 place-items-center rounded-md transition-colors',
               'focus-visible:outline-none focus-visible:ring-1',
               'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
-              pressed
-                ? 'bg-fill text-foreground'
-                : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
+              pressed ? 'bg-fill text-foreground' : 'text-muted-foreground hover:bg-fill-subtle hover:text-foreground',
             )}
           >
             {icon}
@@ -326,14 +324,11 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     actions.setSelection(next);
   }
 
-  // ── Theme + settings ─────────────────────────────────────────────────────
-  const [editorTheme, setEditorTheme] = useState<EditorThemeId>(loadEditorTheme);
+  // ── Settings ─────────────────────────────────────────────────────────────
+  // There's no theme state: the editor always uses Pierre's default pair,
+  // flipped between light and dark by the factory's global color scheme.
   const [settings, setSettings] = useState<EditorSettings>(loadEditorSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  function selectTheme(id: EditorThemeId) {
-    setEditorTheme(id);
-    saveEditorTheme(id);
-  }
   function updateSettings(next: EditorSettings) {
     setSettings(next);
     saveEditorSettings(next);
@@ -354,11 +349,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
   const lspQuery = useEditorLspQuery(workspacePath);
 
   // Debounced server-backed diagnostics rendered as Pierre markers.
-  const diagnostics = usePierreLspDiagnostics(
-    !activeIsExternal ? lspQuery : null,
-    activePath ?? null,
-    editorContent,
-  );
+  const diagnostics = usePierreLspDiagnostics(!activeIsExternal ? lspQuery : null, activePath ?? null, editorContent);
 
   // Pierre editor reference used by the collab binding (remote carets +
   // Y.Text sync).
@@ -437,9 +428,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     currentName: string;
     value: string;
   } | null>(null);
-  const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number; actions: EditorLspCodeAction[] } | null>(
-    null,
-  );
+  const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number; actions: EditorLspCodeAction[] } | null>(null);
 
   function startRename(position: { line: number; character: number }) {
     if (!activePath || activeIsExternal) return;
@@ -560,11 +549,11 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
   const [driftMerge, setDriftMerge] = useState(false);
   const drifted = Boolean(
     activePath &&
-      !activeIsExternal &&
-      activeBuffer?.dirty &&
-      activeBuffer.baseline !== undefined &&
-      diskContent !== undefined &&
-      diskContent !== activeBuffer.baseline,
+    !activeIsExternal &&
+    activeBuffer?.dirty &&
+    activeBuffer.baseline !== undefined &&
+    diskContent !== undefined &&
+    diskContent !== activeBuffer.baseline,
   );
   useEffect(() => {
     if (!drifted) setDriftMerge(false);
@@ -849,11 +838,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   />
                   <HeaderIconButton
                     label={
-                      activeIsExternal
-                        ? 'Read-only library file'
-                        : diffMode
-                          ? 'Hide inline diff'
-                          : 'Show inline diff'
+                      activeIsExternal ? 'Read-only library file' : diffMode ? 'Hide inline diff' : 'Show inline diff'
                     }
                     pressed={diffMode && !activeIsExternal}
                     disabled={!activePath || activeIsExternal}
@@ -1008,7 +993,8 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   </div>
                 ) : activeFile.isError ? (
                   <div className="text-body-sm text-notice-destructive grid h-full place-items-center px-4 text-center">
-                    Couldn’t load {activePath}: {activeFile.error instanceof Error ? activeFile.error.message : 'unknown error'}
+                    Couldn’t load {activePath}:{' '}
+                    {activeFile.error instanceof Error ? activeFile.error.message : 'unknown error'}
                   </div>
                 ) : activeFile.data?.contentType === 'unsupported' ? (
                   <div className="text-body-sm text-muted-foreground grid h-full place-items-center px-4 text-center">
@@ -1018,16 +1004,10 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   <PierreFileDiffSurface
                     path={activePath}
                     newContent={editorContent}
-                    originalContent={
-                      driftMerge && diskContent !== undefined ? diskContent : (diffOriginal ?? '')
-                    }
+                    originalContent={driftMerge && diskContent !== undefined ? diskContent : (diffOriginal ?? '')}
                     readOnly={activeIsExternal}
                     settings={settings}
                     onChange={next => actions.updateDraft(activePath, next, baseline)}
-                    theme={{
-                      light: getEditorThemePreset(editorTheme).light,
-                      dark: getEditorThemePreset(editorTheme).dark,
-                    }}
                   />
                 ) : (
                   <PierreFileSurface
@@ -1062,10 +1042,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     onFindReferences={position => void findReferences(position)}
                     onFormat={() => void formatDocument()}
                     onSelectionChange={handleSelection}
-                    theme={{
-                      light: getEditorThemePreset(editorTheme).light,
-                      dark: getEditorThemePreset(editorTheme).dark,
-                    }}
                   />
                 )
               ) : (
@@ -1084,7 +1060,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
             {runnerEnabled && runnerOpen && (
               <RunnerPanel
                 workspacePath={workspacePath}
-                themePreset={getEditorThemePreset(editorTheme)}
                 onJump={(path, line) => openFile(path, line)}
                 onClose={() => setRunnerOpen(false)}
               />
@@ -1250,10 +1225,8 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
       <EditorSettingsDialog
         open={settingsOpen}
         settings={settings}
-        theme={editorTheme}
         onOpenChange={setSettingsOpen}
         onSettingsChange={updateSettings}
-        onThemeChange={selectTheme}
       />
       {threadId ? null : (
         <div className="border-border bg-card text-meta text-muted-foreground border-t px-3 py-1">

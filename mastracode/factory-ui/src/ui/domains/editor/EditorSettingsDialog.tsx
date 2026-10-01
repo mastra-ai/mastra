@@ -3,10 +3,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Paintbrush, SlidersHorizontal, Sparkles, Users } from 'lucide-react';
+import { Paintbrush, SlidersHorizontal, Sparkles, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { EDITOR_THEMES, type EditorThemePreset, type EditorThemeId } from './editor-themes';
 import { FONT_SIZES, TAB_SIZES, type EditorSettings } from './editor-settings';
 
 type SectionId = 'appearance' | 'editor' | 'intelligence' | 'collaboration';
@@ -21,41 +20,8 @@ const SECTIONS: { id: SectionId; label: string; icon: ReactNode }[] = [
 interface EditorSettingsDialogProps {
   open: boolean;
   settings: EditorSettings;
-  theme: EditorThemeId;
   onOpenChange(open: boolean): void;
   onSettingsChange(next: EditorSettings): void;
-  onThemeChange(id: EditorThemeId): void;
-}
-
-/**
- * Compact side-by-side swatch of a Pierre theme pair. Renders the light + dark
- * chrome background and an accent stripe so the picker previews the palette
- * without mounting the full Pierre highlighter.
- */
-function ThemeSwatch({ preset }: { preset: EditorThemePreset }) {
-  return (
-    <div className="border-border grid grid-cols-2 overflow-hidden rounded-md border">
-      {(['light', 'dark'] as const).map(mode => {
-        const swatch = preset.swatch[mode];
-        return (
-          <div
-            key={mode}
-            className="flex flex-col gap-1.5 px-3 py-2 font-mono"
-            style={{ background: swatch.bg, color: swatch.fg }}
-          >
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider opacity-70">
-              <span className="inline-block size-2 rounded-full" style={{ background: swatch.accent }} aria-hidden />
-              {mode}
-            </div>
-            <div className="text-[11px] leading-none">
-              <span style={{ color: swatch.accent }}>const</span> answer <span style={{ color: swatch.accent }}>=</span>{' '}
-              42
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /** One labeled row: title + description on the left, control on the right. */
@@ -75,14 +41,7 @@ function SettingRow({ label, description, control }: { label: string; descriptio
   );
 }
 
-export function EditorSettingsDialog({
-  open,
-  settings,
-  theme,
-  onOpenChange,
-  onSettingsChange,
-  onThemeChange,
-}: EditorSettingsDialogProps) {
+export function EditorSettingsDialog({ open, settings, onOpenChange, onSettingsChange }: EditorSettingsDialogProps) {
   const [section, setSection] = useState<SectionId>('appearance');
 
   const set = <K extends keyof EditorSettings>(key: K, value: EditorSettings[K]) =>
@@ -120,7 +79,7 @@ export function EditorSettingsDialog({
             </nav>
             <div className="border-border min-h-0 min-w-0 flex-1 overflow-y-auto border-l pl-4">
               {section === 'appearance' && (
-                <div>
+                <div className="divide-border divide-y">
                   <SettingRow
                     label="Font size"
                     description="Editor text size in pixels."
@@ -139,41 +98,6 @@ export function EditorSettingsDialog({
                       </Select>
                     }
                   />
-                  <div className="pt-2">
-                    <Txt variant="label" className="text-foreground block pb-2">
-                      Theme
-                    </Txt>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {EDITOR_THEMES.map(preset => {
-                        const selected = preset.id === theme;
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => onThemeChange(preset.id)}
-                            aria-pressed={selected}
-                            className={cn(
-                              'rounded-lg border p-2 text-left transition-colors',
-                              selected ? 'border-border-strong bg-fill' : 'border-border hover:bg-fill-subtle',
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <Txt variant="label" className="text-foreground">
-                                {preset.name}
-                              </Txt>
-                              {selected ? <Check className="text-foreground size-3.5 shrink-0" /> : null}
-                            </div>
-                            <Txt variant="caption" className="text-muted-foreground mt-0.5 block">
-                              {preset.description}
-                            </Txt>
-                            <div className="mt-2">
-                              <ThemeSwatch preset={preset} />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
               )}
               {section === 'editor' && (
