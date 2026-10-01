@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
     commentId: '42',
     url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42',
   })),
+  createIssueComment: vi.fn(async () => ({
+    id: '43',
+    url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-43',
+  })),
+  addIssueLabels: vi.fn(async () => undefined),
+  removeIssueLabel: vi.fn(async () => undefined),
 }));
 
 vi.mock('./subscriptions', () => ({
@@ -55,17 +61,26 @@ const githubStub = {
   },
   versionControl: {
     getRepositoryAccess: mocks.getRepositoryAccess,
+    getRepositoryTarget: vi.fn(async () => ({
+      connection: { type: 'app-installation' as const, installationId: '7' },
+      sourceId: 'mastra-ai/mastra',
+    })),
   },
+  intake: { createComment: mocks.createIssueComment },
   getInstallationOctokit: () => ({ pulls: { get: mocks.getPullRequest } }),
   upsertFactoryTriageComment: mocks.upsertTriageComment,
+  addIssueLabels: mocks.addIssueLabels,
+  removeIssueLabel: mocks.removeIssueLabel,
 } as unknown as GithubIntegration;
 
 import {
+  commentCurrentSessionIssue,
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
   refreshGithubToken,
   subscribeCurrentSessionToPullRequest,
   unsubscribeCurrentSessionFromPullRequest,
+  updateCurrentSessionIssueLabels,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
 import { registerGithubPatKind, registerGithubRefreshTarget, registerGithubTokenInjector } from './token-refresh.js';
@@ -424,6 +439,38 @@ describe('GitHub subscription entry points', () => {
       ]),
     ).resolves.toMatchObject([{ action: 'created' }, { action: 'updated' }]);
     expect(mocks.upsertTriageComment).toHaveBeenCalledTimes(2);
+  });
+
+  it('comments through the server-owned repository target while retaining the internal actor for audit', async () => {
+    await commentCurrentSessionIssue(
+      authenticatedRequestContext(),
+      { issueNumber: 7, body: 'Factory completed this issue.' },
+      githubStub,
+    );
+
+    expect(mocks.createIssueComment).toHaveBeenCalledWith({
+      connection: { type: 'app-installation', installationId: '7' },
+      sourceId: 'mastra-ai/mastra',
+      issueId: '7',
+      body: 'Factory completed this issue.',
+      actingUserId: 'user-1',
+    });
+  });
+
+  it('deduplicates label mutations and never removes a label added by the same call', async () => {
+    await updateCurrentSessionIssueLabels(
+      authenticatedRequestContext(),
+      {
+        issueNumber: 7,
+        add: ['status: pending-close', 'status: pending-close'],
+        remove: ['status: needs triage', 'status: pending-close'],
+      },
+      githubStub,
+    );
+
+    expect(mocks.addIssueLabels).toHaveBeenCalledWith(7, 'mastra-ai/mastra', 7, ['status: pending-close']);
+    expect(mocks.removeIssueLabel).toHaveBeenCalledWith(7, 'mastra-ai/mastra', 7, 'status: needs triage');
+    expect(mocks.removeIssueLabel).not.toHaveBeenCalledWith(7, 'mastra-ai/mastra', 7, 'status: pending-close');
   });
 
   it('unsubscribes only the current scoped thread target', async () => {

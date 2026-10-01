@@ -15,10 +15,12 @@ Once identities match, read the issue's current state and labels. Remove any of 
 - `status: auto-triaged`
 - `status: needs approval`
 
-Use `gh issue edit --repo <owner/repository>` to remove the listed triage labels. If the issue is open, add `status: pending-close` when it is not already present and post this comment unless the issue already has it. Pass `--repo <owner/repository>` to every `gh issue` read or mutation:
+Make one `github_update_issue_labels` call that removes whichever listed triage labels are present. For an open issue, the same call also adds `status: pending-close` when it is not already present. Then, unless the open issue already has it, call `github_comment_issue` with the issue number and this exact body:
 
 > This issue has now been marked as done.
 
-If the issue is already closed, do not add `status: pending-close` or post the comment. Do not modify any other labels or issue fields.
+If the issue is already closed, still remove the listed triage labels, but do not add `status: pending-close` or post the comment. Do not modify any other labels or issue fields.
+
+Never use `gh issue edit`, `gh issue comment`, raw provider APIs, or credentials from the environment for these mutations. The brokered tools preserve Factory's stable provider identity.
 
 Do not close, reopen, or assign the issue, and do not request another Factory transition.

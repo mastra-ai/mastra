@@ -288,10 +288,18 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
-  it('uses the platform bot co-author identity', async () => {
+  it('uses brokered source-control guidance without a synthetic bot co-author', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+    const hostInstructions = await (
+      config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<string>
+    )({ requestContext: new RequestContext() });
 
-    expect(config.coAuthor).toEqual({ name: 'mastra-platform[bot]' });
+    expect(config.coAuthor).toBeUndefined();
+    expect(hostInstructions).toContain('Do not add a Co-Authored-By trailer');
+    expect(hostInstructions).toContain('source_control_push_branch');
+    expect(hostInstructions).toContain('source_control_create_change_request');
+    expect(hostInstructions).toContain('source_control_update_change_request');
+    expect(hostInstructions).toContain('Never use a provider CLI');
   });
 
   it('warns and falls back to plaintext when auth is enabled without secret encryption', async () => {
