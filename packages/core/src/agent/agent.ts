@@ -375,6 +375,7 @@ type ProcessorLoadedToolsProvider = {
   getLoadedToolsForRequestContext?: (args: {
     requestContext: RequestContext;
     tools?: Record<string, unknown>;
+    getMessages?: () => Promise<MastraDBMessage[]>;
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -4544,9 +4545,11 @@ export class Agent<
     backgroundTaskEnabled,
     tools,
     getModel,
+    memoryConfig,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
+    memoryConfig?: MemoryConfigInternal;
     /**
      * Tools already resolved for this request. A processor that made a
      * request-scoped tool searchable needs them to rebuild its executor here,
@@ -4566,6 +4569,22 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedProcessorTools: Record<string, CoreTool> = {};
 
+    // Resumed runs never re-enter processInputStep, so processors that derive loaded
+    // state from the conversation (e.g. ToolSearchProcessor storage: 'context') read
+    // the persisted thread here. Loaded lazily and at most once.
+    let messagesPromise: Promise<MastraDBMessage[]> | undefined;
+    const getMessages = (): Promise<MastraDBMessage[]> => {
+      if (!threadId) return Promise.resolve([]);
+      messagesPromise ??= this.getMemoryMessages({
+        threadId,
+        resourceId,
+        vectorMessageSearch: '',
+        memoryConfig,
+        requestContext,
+      }).then(result => result.messages);
+      return messagesPromise;
+    };
+
     const collectLoadedTools = async (processor: InputProcessorOrWorkflow | unknown) => {
       if (isProcessorWorkflow(processor)) {
         for (const childProcessor of listProcessorWorkflowChildren(processor)) {
@@ -4579,7 +4598,7 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools, getMessages });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -6902,6 +6921,7 @@ export class Agent<
     const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
       processors: configuredInputProcessors,
       tools: requestResolvedTools,
+      memoryConfig,
       runId,
       resourceId,
       threadId,
