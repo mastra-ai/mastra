@@ -811,6 +811,34 @@ describe('applyClientToolModelOutput', () => {
     expect(toModelOutput).toHaveBeenCalledWith({ ok: true });
   });
 
+  it('preserves an unknown `{ type, value }` domain object before mapping', async () => {
+    const output = { type: 'celsius', value: 20 };
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', output)], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledWith(output);
+  });
+
+  it('does not map an ingested AI SDK v5 error envelope', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add(
+      [toolCallMessage('call-1'), toolResultMessage('call-1', { type: 'error-text', value: 'client failed' })],
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
   it('skips stored results that still carry an AI SDK v5 error envelope', async () => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
