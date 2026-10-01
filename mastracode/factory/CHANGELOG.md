@@ -1,5 +1,37 @@
 # @mastra/factory
 
+## 0.19.0-alpha.1
+
+### Minor Changes
+
+- Added support for replacing the built-in Work and Review boards. Set `includeDefaultBoards: false` and install your own board with id `work` or `review`. A same-id board still errors while the built-ins are installed. Closes #23881. ([#25595](https://github.com/mastra-ai/mastra/pull/25595))
+
+  ```typescript
+  new MastraFactory({
+    storage,
+    includeDefaultBoards: false,
+    boards: [myWorkBoard],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed retrying a failed Factory run after its work item moved to another phase. The retry is now refused (`canRetry: false` and a 409 `decision_not_retryable`), and a stale run already in the queue settles as superseded instead of starting a session for the old role and reporting success. ([#25550](https://github.com/mastra-ai/mastra/pull/25550))
+
+- Fixed the GitHub issues and pull request lists returning a 502 `github_fetch_failed` error when re-ingesting the listed items into Factory rules failed. The lists now load and the ingestion failure is logged. ([#25663](https://github.com/mastra-ai/mastra/pull/25663))
+
+- Fixed the Jira integration returning a generic 404 error, instead of the friendly not-found message, when commenting on a missing issue by key (e.g. `ENG-404`). ([#25623](https://github.com/mastra-ai/mastra/pull/25623))
+
+- Fixed an internal reconciliation timestamp (`externalSourceMissingAt`) leaking into work item metadata returned by the Factory API. ([#25607](https://github.com/mastra-ai/mastra/pull/25607))
+
+- Factory now dismisses its own stale change requests when it approves a pull request. Previously, if an earlier Factory review requested changes and a later Factory review (from a different reviewer identity) approved the repaired PR, GitHub kept the PR blocked at "changes requested". Only change requests left by the Factory GitHub App before the approval are dismissed; human reviews are never touched. ([#25610](https://github.com/mastra-ai/mastra/pull/25610))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`7b3ddfa`](https://github.com/mastra-ai/mastra/commit/7b3ddfad101cb31253761cbb2325e88b3b4b3c0e), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`53a5c68`](https://github.com/mastra-ai/mastra/commit/53a5c68a20b2b38351120abe634b351630c1f41e), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`871cca6`](https://github.com/mastra-ai/mastra/commit/871cca6c9e49139f124be7a5132ff696679c23c1), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0-alpha.1
+  - @mastra/auth-studio@1.3.8-alpha.0
+  - @mastra/slack@1.7.1-alpha.1
+  - @mastra/code-sdk@1.10.0-alpha.1
+
 ## 0.18.1-alpha.0
 
 ### Patch Changes

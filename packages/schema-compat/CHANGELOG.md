@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.13-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI strict-mode schema preparation rejecting `allOf` object schemas with properties named `constructor`, `toString`, or `__proto__`. ([#25655](https://github.com/mastra-ai/mastra/pull/25655))
+
 ## 1.3.12
 
 ### Patch Changes
