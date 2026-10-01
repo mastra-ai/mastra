@@ -702,11 +702,7 @@ export function validateRequestContext<T = any>(
   const standardSchema = toStandardSchema(schema);
 
   // Validate using standard schema interface
-  const validation = standardSchema['~standard'].validate(contextValues);
-
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(standardSchema, contextValues);
 
   if ('value' in validation) {
     return { data: validation.value };
