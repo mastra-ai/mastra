@@ -2,6 +2,7 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 import type { Ajv } from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
+// eslint-disable-next-line import/order -- self-import ordering differs before and after workspace package linking
 import { compileDefault, createAjv } from '@mastra/schema-compat/validation-runtime';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
