@@ -833,14 +833,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // The dispatch lease is file-based, so it works with the socket pubsub off
   // too; on Windows there is none, and each process dispatches unleased.
   const ownsNotificationDispatch = !configuredPubSub;
+  const dispatchLeasePubSub =
+    ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
+      ? createSignalsPubSub(project.resourceId)
+      : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
     getResourceIds: () => [...liveSessions].map(session => session.identity.getResourceId()),
-    leases: !ownsNotificationDispatch
-      ? undefined
-      : (
-          ownSignalsPubSub ?? (process.platform !== 'win32' ? createSignalsPubSub(project.resourceId) : undefined)
-        )?.getLeaseProvider(),
+    leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
   });
@@ -1708,7 +1708,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       if (ownsNotificationDispatch) notificationDispatcher.start();
     },
     /** Stops this process's notification dispatch and releases its leases. Call on shutdown. */
-    stopNotificationDispatch: () => notificationDispatcher.stop(),
+    stopNotificationDispatch: async () => {
+      await notificationDispatcher.stop();
+      await dispatchLeasePubSub?.close();
+    },
     /**
      * Hands Mastra to the statically configured input processors.
      *
