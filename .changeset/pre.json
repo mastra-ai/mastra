@@ -191,5 +191,18 @@
     "@mastra/s3": "0.6.3",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20261001-123352",
+    "fast-birds-read",
+    "field-block-shell",
+    "honest-hoops-obey",
+    "honest-suns-share",
+    "old-results-rescue",
+    "quiet-thread-scores",
+    "renamed-slack-bot-mentions",
+    "slack-fresh-thread-credentials",
+    "spotty-pots-feel",
+    "thread-view-feedback-badge-polling",
+    "vanta-2026-10-01"
+  ]
 }

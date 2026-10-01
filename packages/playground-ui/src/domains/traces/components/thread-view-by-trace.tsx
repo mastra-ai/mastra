@@ -8,7 +8,6 @@ import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skel
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
@@ -118,13 +117,9 @@ function ThreadTraceRowContent({
   const { traceId, highlightSpans } = useThreadTraceRow();
   const { Link, paths } = useLinkComponent();
   const traceHref = paths.traceLink(traceId);
-  // First page only, for the tab badge; the Feedback body owns its own pagination
-  // and shares this query through the React Query cache.
-  const { data: feedbackData } = useTraceFeedback({ traceId, enabled: withFeedback });
   // Same query the span tree observes (passive: the tree drives refetches).
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
-  const feedbackTotal = feedbackData?.pagination?.total;
 
   return (
     <>
@@ -142,7 +137,7 @@ function ThreadTraceRowContent({
                 <Icon size="xs">
                   <MessageSquareReplyIcon />
                 </Icon>
-                Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
+                Feedback
               </ThreadTrace.Tab>
             )}
             <ThreadTrace.Tab value="scores">
