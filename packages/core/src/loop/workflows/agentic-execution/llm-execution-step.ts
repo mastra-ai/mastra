@@ -9,6 +9,7 @@ import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { safeUpstreamErrorForLog } from '../../../error/safe-upstream-error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
@@ -2451,7 +2452,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const providerInfo = provider ? ` from ${provider}` : '';
             const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
             logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-              error,
+              error: safeUpstreamErrorForLog(error),
               runId,
               ...(provider && { provider }),
               ...(modelIdStr && { modelId: modelIdStr }),
