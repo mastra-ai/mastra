@@ -1849,14 +1849,14 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     const durableAgent = makeDurable('resume-stream-route');
     const { output, resumeSpy } = spyResume(durableAgent);
 
-    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', maxSteps: 3 });
+    const result = await durableAgent.resumeStream({ approved: true }, { runId: 'r1', maxSteps: 3, untilIdle: true });
 
     expect(result).toBe(output);
     expect(resumeSpy).toHaveBeenCalledTimes(1);
     const [runId, data, opts] = resumeSpy.mock.calls[0]!;
     expect(runId).toBe('r1');
     expect(data).toEqual({ approved: true });
-    expect(opts).toMatchObject({ maxSteps: 3 });
+    expect(opts).toMatchObject({ maxSteps: 3, untilIdle: true });
     expect(opts).not.toHaveProperty('runId');
     expect(closeOnSuspendSet(opts as object)).toBe(true);
   });
@@ -1876,11 +1876,19 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
 
     expect(durableAgent.streamUntilIdle).not.toBe(durableAgent.agent.streamUntilIdle);
 
-    await expect(durableAgent.streamUntilIdle('hi', { maxSteps: 2 })).resolves.toBe(result);
-    await durableAgent.streamUntilIdle('hi', { maxSteps: 2, maxIdleMs: 1234 });
+    await expect(durableAgent.streamUntilIdle('hi', { runId: 'caller-run-id', maxSteps: 2 })).resolves.toBe(result);
+    await durableAgent.streamUntilIdle('hi', { runId: 'caller-run-id-2', maxSteps: 2, maxIdleMs: 1234 });
 
-    expect(streamSpy).toHaveBeenNthCalledWith(1, 'hi', { maxSteps: 2, untilIdle: true });
-    expect(streamSpy).toHaveBeenNthCalledWith(2, 'hi', { maxSteps: 2, untilIdle: { maxIdleMs: 1234 } });
+    expect(streamSpy).toHaveBeenNthCalledWith(1, 'hi', {
+      runId: 'caller-run-id',
+      maxSteps: 2,
+      untilIdle: true,
+    });
+    expect(streamSpy).toHaveBeenNthCalledWith(2, 'hi', {
+      runId: 'caller-run-id-2',
+      maxSteps: 2,
+      untilIdle: { maxIdleMs: 1234 },
+    });
     expect(wrappedSpy).not.toHaveBeenCalled();
   });
 

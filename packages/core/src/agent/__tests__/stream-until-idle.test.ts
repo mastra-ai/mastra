@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
@@ -133,6 +133,52 @@ describe('Agent.streamUntilIdle', () => {
 
     // Only the initial turn ran — one LLM call, no continuations.
     expect(getCallCount()).toBe(1);
+  });
+
+  it('keeps a caller runId on the initial turn but not autonomous continuations', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('first response'), textResponse('continuation response')]);
+    const agent = new Agent({
+      id: 'run-id-options',
+      name: 'run-id-options',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'run-id-options');
+    const streamSpy = vi.spyOn(agent, 'stream');
+
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: string) =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'task-1',
+        toolName: 'dummy',
+        toolCallId: 'task-1',
+        runId: 'background-run',
+        agentId: 'run-id-options',
+        threadId: 'run-id-thread',
+        resourceId: 'user-1',
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const result = await agent.streamUntilIdle('hi', {
+      runId: 'caller-run-id',
+      memory: { thread: 'run-id-thread', resource: 'user-1' },
+    });
+    await publishEvent('task.running');
+    await new Promise(r => setTimeout(r, 50));
+    await publishEvent('task.completed');
+    await drain(result.fullStream as ReadableStream<any>);
+
+    expect(streamSpy).toHaveBeenCalledTimes(2);
+    expect(streamSpy.mock.calls[0]?.[1]).toMatchObject({ runId: 'caller-run-id' });
+    expect(streamSpy.mock.calls[1]?.[1]).not.toHaveProperty('runId');
   });
 
   it.each([false, true])(

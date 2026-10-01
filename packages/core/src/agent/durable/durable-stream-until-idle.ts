@@ -3,7 +3,7 @@
  * `DurableAgent.resume(..., { untilIdle })`. Mirrors the regular agent's
  * `stream-until-idle.ts` but adapted for durable execution:
  * - `DurableAgent.stream()` returns `DurableAgentStreamResult` (not `MastraModelOutput`)
- * - Each continuation starts a new durable workflow (new runId)
+ * - The initial segment preserves a caller-supplied runId; each autonomous continuation starts a new durable workflow
  * - Cleanup functions from each inner stream are tracked and called on close
  * - Inner `abort()` handles are fanned out so the outer `result.abort()`
  *   cancels every active durable run

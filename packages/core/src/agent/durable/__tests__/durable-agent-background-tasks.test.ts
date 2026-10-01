@@ -646,7 +646,7 @@ describe('DurableAgent.streamUntilIdle', () => {
     result.cleanup();
   });
 
-  it('re-invokes stream when a background task completes', async () => {
+  it('streams each segment once when a caller supplies a runId', async () => {
     const memory = new MockMemory();
     const { model, getCallCount } = makeScriptedModel([
       textResponse('first response'),
@@ -683,17 +683,23 @@ describe('DurableAgent.streamUntilIdle', () => {
         args: {},
       });
 
-    const outer = await durableAgent.streamUntilIdle('hi', {
+    const outer = await durableAgent.stream('hi', {
+      runId: 'caller-run-id',
       memory: { thread: 'thread-2', resource: 'user-1' },
+      untilIdle: true,
     });
 
     await publishEvent('task.running', 'task-1');
     await new Promise(r => setTimeout(r, 50));
     await publishEvent('task.completed', 'task-1');
 
-    await drain(outer.fullStream as ReadableStream<any>);
+    const chunks = await drain(outer.fullStream as ReadableStream<any>);
+    const text = chunks.filter(c => c.type === 'text-delta').map(c => c.payload.text);
 
+    expect(text).toEqual(['first response', 'continuation response']);
+    expect(chunks.filter(c => c.type === 'finish')).toHaveLength(2);
     expect(getCallCount()).toBe(2);
+    expect(outer.runId).toBe('caller-run-id');
 
     outer.cleanup();
   });

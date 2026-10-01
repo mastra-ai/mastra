@@ -302,11 +302,12 @@ export async function runIdleLoop<
   const { threadId, resourceId, scopeKey } = scope;
   const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
 
-  // Continuation calls reuse the memory thread but drop one-shot hooks.
-  // `_skipBgTaskWait` prevents the inner loop from redundantly waiting for
-  // running bg tasks — this outer method already handles that.
+  // Continuation calls reuse the memory thread but drop segment-scoped options.
+  // Omitting runId lets durable agents start a fresh stream segment instead of
+  // replaying cached history from the caller's initial run.
+  const { runId: _runId, ...continuationStreamOptions } = restStreamOptions as Record<string, any>;
   const baseContinuationOpts = {
-    ...(restStreamOptions ?? {}),
+    ...continuationStreamOptions,
     onFinish: undefined,
     _skipBgTaskWait: true,
   } as Record<string, any>;
