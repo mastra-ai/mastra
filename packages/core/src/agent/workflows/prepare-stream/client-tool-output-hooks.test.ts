@@ -169,13 +169,13 @@ describe('fireClientToolOutputHooks', () => {
     expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { ok: true } }));
   });
 
-  it('does not fire onOutput for stored error tool-invocation results', async () => {
+  it.each([
+    ['error-text', 'client failed'],
+    ['error-json', { code: 'E_FAIL' }],
+  ] as const)('does not fire onOutput for stored %s tool-invocation results', async (type, value) => {
     const onOutput = vi.fn();
     const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
-    const messages = [
-      toolCallMessage('call-1'),
-      toolInvocationResultMessage('call-1', { type: 'error-text', value: 'client failed' }),
-    ];
+    const messages = [toolCallMessage('call-1'), toolInvocationResultMessage('call-1', { type, value })];
 
     await fireClientToolOutputHooks({ messages, tools });
 
