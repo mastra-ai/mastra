@@ -400,14 +400,16 @@ describe('StructuredOutputProcessor', () => {
 
       it('does not enqueue into a closed controller', async () => {
         const { p, logger } = createLoggingProcessor();
-        const controller = {
-          desiredSize: null,
-          enqueue: vi.fn(() => {
-            throw new TypeError('Invalid state: Controller is already closed');
-          }),
-        };
-        vi.spyOn(p['structuringAgent'], 'stream').mockResolvedValue({
-          fullStream: convertArrayToReadableStream([objectChunk(0)]),
+        let controller!: TransformStreamDefaultController<any>;
+        const stream = new TransformStream({
+          start(c) {
+            controller = c;
+          },
+        });
+        await stream.readable.cancel();
+        const enqueueSpy = vi.spyOn(controller, 'enqueue');
+        const structuringStream = vi.spyOn(p['structuringAgent'], 'stream').mockResolvedValue({
+          fullStream: convertArrayToReadableStream([objectChunk(0), objectChunk(1)]),
         } as any);
         await p.processOutputStream({
           part: finishChunk,
@@ -416,8 +418,11 @@ describe('StructuredOutputProcessor', () => {
           abort: createMockAbort(),
           retryCount: 0,
         });
-        expect(controller.enqueue).not.toHaveBeenCalled();
+        expect(structuringStream).toHaveBeenCalled();
+        // The first enqueue fails on the cancelled stream; processing stops instead of retrying each chunk.
+        expect(enqueueSpy).toHaveBeenCalledTimes(1);
         expect(logger.error).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
       });
     });
 

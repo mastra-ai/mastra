@@ -169,9 +169,16 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (abortSignal?.aborted) return;
     const requestState = this.getRequestState(state);
     if (requestState.isStructuringAgentStreamStarted) return;
-    // A closed or errored stream reports desiredSize === null; enqueuing into it throws.
-    const safeEnqueue = (chunk: ChunkType<OUTPUT>) => {
-      if (controller && controller.desiredSize !== null) controller.enqueue(chunk);
+    // enqueue() throws once the downstream stream is closed, cancelled, or errored. desiredSize can't
+    // detect this (a closed stream reports 0, same as backpressure), so treat a throw as "stream gone".
+    const safeEnqueue = (chunk: ChunkType<OUTPUT>): boolean => {
+      if (!controller) return true;
+      try {
+        controller.enqueue(chunk);
+        return true;
+      } catch {
+        return false;
+      }
     };
     requestState.isStructuringAgentStreamStarted = true;
     try {
@@ -238,7 +245,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
-        safeEnqueue(newChunk);
+        if (!safeEnqueue(newChunk)) break;
       }
     } catch (error) {
       // The run was cancelled; errors from the torn-down stream are not structuring failures.
