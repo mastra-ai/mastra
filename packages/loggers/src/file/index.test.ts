@@ -87,8 +87,7 @@ describe('FileTransport', () => {
     });
   });
 
-  it('should handle errors in _transform', () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('should propagate synchronous errors in _transform', () => {
     const errorObj = new Error('Test error');
 
     vi.spyOn(fileLogger.fileStream, 'write').mockImplementationOnce(() => {
@@ -96,8 +95,23 @@ describe('FileTransport', () => {
     });
 
     fileLogger._transform('test', 'utf8', error => {
-      expect(consoleSpy).toHaveBeenCalledWith('Error parsing log entry:', errorObj);
-      expect(error).toBeNull(); // Should not propagate error
+      expect(error).toBe(errorObj);
+    });
+  });
+
+  it('should propagate asynchronous file write errors', async () => {
+    const errorObj = new Error('Disk full');
+
+    vi.spyOn(fileLogger.fileStream, 'write').mockImplementationOnce(((_chunk: unknown, callback: Function) => {
+      queueMicrotask(() => callback(errorObj));
+      return true;
+    }) as typeof fileLogger.fileStream.write);
+
+    await new Promise<void>(resolve => {
+      fileLogger._transform('test', 'utf8', error => {
+        expect(error).toBe(errorObj);
+        resolve();
+      });
     });
   });
 

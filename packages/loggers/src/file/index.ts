@@ -18,13 +18,14 @@ export class FileTransport extends LoggerTransport {
     this.fileStream = createWriteStream(this.path, { flags: 'a' });
   }
 
-  _transform(chunk: any, _encoding: string, callback: (error: Error | null, chunk: any) => void) {
+  _transform(chunk: any, _encoding: string, callback: (error?: Error | null, chunk?: any) => void) {
     try {
-      this.fileStream.write(chunk);
+      this.fileStream.write(chunk, error => {
+        callback(error ?? null, error ? undefined : chunk);
+      });
     } catch (error) {
-      console.error('Error parsing log entry:', error);
+      callback(error instanceof Error ? error : new Error(String(error)));
     }
-    callback(null, chunk);
   }
 
   _flush(callback: Function) {
@@ -40,7 +41,7 @@ export class FileTransport extends LoggerTransport {
       return true;
     }
 
-    this._transform(chunk, encoding || 'utf8', (error: Error | null) => {
+    this._transform(chunk, encoding || 'utf8', (error?: Error | null) => {
       if (error) console.error('Transform error in write:', error);
     });
     return true;
