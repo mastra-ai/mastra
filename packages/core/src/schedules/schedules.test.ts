@@ -229,6 +229,42 @@ describe('mastra.schedules canonical service', () => {
     expect(typeof updated.nextFireAt).toBe('number');
   });
 
+  it('rejects cadence edits that leave a completed schedule without a future occurrence', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T09:00:00.000Z'));
+    try {
+      const { mastra } = makeMastra(['a']);
+      const schedule = await mastra.schedules.create({
+        agentId: 'a',
+        cron: '0 0 10 23 9 * 2026',
+        prompt: 'p',
+      });
+      const store = await mastra.getStorage()!.getStore('schedules');
+      await store!.updateSchedule(schedule.id, { status: 'completed' });
+
+      vi.setSystemTime(new Date('2026-09-23T15:00:00.000Z'));
+
+      await expect(mastra.schedules.update(schedule.id, { timezone: 'UTC' })).rejects.toMatchObject({
+        id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
+        details: { status: 400 },
+      });
+      await expect(
+        mastra.schedules.update(schedule.id, { cron: '0 0 11 23 9 * 2026', timezone: 'UTC' }),
+      ).rejects.toMatchObject({
+        id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
+        details: { status: 400 },
+      });
+
+      expect(await mastra.schedules.get(schedule.id)).toMatchObject({
+        status: 'completed',
+        cron: '0 0 10 23 9 * 2026',
+        nextFireAt: schedule.nextFireAt,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('list hides completed schedules unless explicitly filtered by status', async () => {
     const { mastra } = makeMastra(['a']);
     const completed = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });

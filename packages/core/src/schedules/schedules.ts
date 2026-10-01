@@ -3,7 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, ScheduleStatus, SchedulesStorage } from '../storage/domains/schedules/base';
 import { slugify } from '../utils/slugify';
-import { computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
+import { computeNextFire, computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
 import type { ScheduledWorkflowTrigger } from '../workflows/scheduler/types';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
@@ -497,10 +497,23 @@ export class Schedules {
           : 'completed'
         : (patch.status ?? existing.status);
     const resuming = nextStatus === 'active' && existing.status !== 'active';
-    const nextFireAt =
-      timingChanged || resuming
-        ? computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() })
-        : undefined;
+    let nextFireAt: number | undefined;
+    if (timingChanged || resuming) {
+      const nextFire = computeNextFire(
+        { cron: nextCron, timezone: nextTimezone, nextFireAt: existing.nextFireAt },
+        Date.now(),
+      );
+      if (nextFire.completed) {
+        throw new MastraError({
+          id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { status: 400 },
+          text: `schedules.update: cron "${nextCron}" has no future occurrence.`,
+        });
+      }
+      nextFireAt = nextFire.nextFireAt;
+    }
 
     const updated = await store.updateSchedule(existing.id, {
       ...(patch.cron !== undefined ? { cron: patch.cron } : {}),
