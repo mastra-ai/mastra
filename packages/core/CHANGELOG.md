@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.73.1-alpha.1
+
+### Patch Changes
+
+- Raise transitive security dependency floors (dompurify, js-yaml, @ai-sdk/provider-utils) and bump nested/template deps (nodemailer, fastify, hono, ajv) for the 2026-10-01 Vanta remediation pass. ([#25694](https://github.com/mastra-ai/mastra/pull/25694))
+
 ## 1.73.1-alpha.0
 
 ### Patch Changes

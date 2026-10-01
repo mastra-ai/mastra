@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 60.2.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.73.1-alpha.1
+  - @mastra/client-js@1.51.2-alpha.1
+  - @mastra/react@1.7.2-alpha.1
+
 ## 60.2.0-alpha.0
 
 ### Minor Changes
