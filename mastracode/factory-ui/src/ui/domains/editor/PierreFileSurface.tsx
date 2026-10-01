@@ -63,6 +63,22 @@ interface PierreFileSurfaceProps {
   onCodeLensAction?: CodeLensActionHandler;
   blame?: BlameLine[] | null;
   /**
+   * Right-click handler with the document position under the pointer
+   * (1-indexed line). When set, the native context menu is suppressed so the
+   * caller can render go-to-definition style commands.
+   */
+  onContextMenu?: (payload: { x: number; y: number; line: number; character: number }) => void;
+  /** F12 at the cursor — standard go-to-definition shortcut. */
+  onGotoDefinition?: (position: { line: number; character: number }) => void;
+  /** F2 at the cursor — rename symbol. */
+  onRename?: (position: { line: number; character: number }) => void;
+  /** Shift-F12 at the cursor — find all references. */
+  onFindReferences?: (position: { line: number; character: number }) => void;
+  /** Shift-Alt-F — format document. */
+  onFormat?: () => void;
+  /** Fires with the selected range + snippet, or null when it collapses. */
+  onSelectionChange?: (payload: { startLine: number; endLine: number; snippet: string } | null) => void;
+  /**
    * Shiki theme pair Pierre uses to tokenize + paint the file. Names must be
    * registered via `registerCustomTheme` (Pierre themes registered above).
    */
@@ -255,6 +271,12 @@ export function PierreFileSurface({
   onEditor,
   onDocumentChange,
   theme,
+  onContextMenu,
+  onGotoDefinition,
+  onRename,
+  onFindReferences,
+  onFormat,
+  onSelectionChange,
 }: PierreFileSurfaceProps) {
   const lspQueryRef = useRef(lspQuery);
   const onEditorRef = useRef(onEditor);
@@ -269,12 +291,34 @@ export function PierreFileSurface({
   const onSaveRef = useRef(onSaveShortcut);
   const onCursorLineRef = useRef(onCursorLineChange);
   const cursorLineRef = useRef<number | null>(null);
+  const onContextMenuRef = useRef(onContextMenu);
+  const onGotoDefinitionRef = useRef(onGotoDefinition);
+  const onRenameRef = useRef(onRename);
+  const onFindReferencesRef = useRef(onFindReferences);
+  const onFormatRef = useRef(onFormat);
+  const onSelectionChangeRef = useRef(onSelectionChange);
 
   useEffect(() => {
     onChangeRef.current = onChange;
     onSaveRef.current = onSaveShortcut;
     onCursorLineRef.current = onCursorLineChange;
-  }, [onChange, onSaveShortcut, onCursorLineChange]);
+    onContextMenuRef.current = onContextMenu;
+    onGotoDefinitionRef.current = onGotoDefinition;
+    onRenameRef.current = onRename;
+    onFindReferencesRef.current = onFindReferences;
+    onFormatRef.current = onFormat;
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [
+    onChange,
+    onSaveShortcut,
+    onCursorLineChange,
+    onContextMenu,
+    onGotoDefinition,
+    onRename,
+    onFindReferences,
+    onFormat,
+    onSelectionChange,
+  ]);
 
   const file = useMemo<FileContents>(() => ({ name: path, contents: initialContent }), [path, initialContent]);
 
@@ -324,10 +368,122 @@ export function PierreFileSurface({
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         onSaveRef.current?.();
+        return;
+      }
+      // LSP keybindings, mirrored from the old CodeMirror keymap. Positions
+      // are 1-indexed lines, matching what the LSP routes expect.
+      const cursorPosition = () => {
+        const selection = editorRef.current?.getViewState()?.selections?.[0];
+        if (!selection) return { line: 1, character: 0 };
+        return { line: selection.end.line + 1, character: selection.end.character };
+      };
+      if (event.key === 'F12' && !event.shiftKey) {
+        if (!onGotoDefinitionRef.current) return;
+        event.preventDefault();
+        onGotoDefinitionRef.current(cursorPosition());
+        return;
+      }
+      if (event.key === 'F12' && event.shiftKey) {
+        if (!onFindReferencesRef.current) return;
+        event.preventDefault();
+        onFindReferencesRef.current(cursorPosition());
+        return;
+      }
+      if (event.key === 'F2') {
+        if (!onRenameRef.current) return;
+        event.preventDefault();
+        onRenameRef.current(cursorPosition());
+        return;
+      }
+      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'f') {
+        if (!onFormatRef.current) return;
+        event.preventDefault();
+        onFormatRef.current();
       }
     };
     node.addEventListener('keydown', handler);
     return () => node.removeEventListener('keydown', handler);
+  }, []);
+
+  // Right-click → document position. Pierre renders inside a shadow root, so
+  // `event.target` retargets to the host element — `composedPath()` exposes
+  // the real inner span. Lines carry `data-line` (1-indexed) and tokens carry
+  // `data-char` (0-indexed line offset), which is enough to anchor
+  // go-to-definition style commands.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const handler = (event: MouseEvent) => {
+      const handlerFn = onContextMenuRef.current;
+      if (!handlerFn) return;
+      event.preventDefault();
+      let line: number | null = null;
+      let character = 0;
+      for (const element of event.composedPath()) {
+        if (!(element instanceof HTMLElement)) continue;
+        if (character === 0 && element.dataset.char !== undefined) {
+          character = Number(element.dataset.char) || 0;
+        }
+        if (element.dataset.line !== undefined) {
+          line = Number(element.dataset.line) || null;
+          break;
+        }
+      }
+      if (line === null) {
+        const selection = editorRef.current?.getViewState()?.selections?.[0];
+        line = selection ? selection.end.line + 1 : 1;
+        character = selection ? selection.end.character : 0;
+      }
+      handlerFn({ x: event.clientX, y: event.clientY, line, character });
+    };
+    node.addEventListener('contextmenu', handler);
+    return () => node.removeEventListener('contextmenu', handler);
+  }, []);
+
+  // Selection tracking for the send-to-agent bar + cursor-line breadcrumbs.
+  // Pierre has no selection-change callback, so listen to the document's
+  // `selectionchange` (fires for the shadow contenteditable too) and read the
+  // editor's view state. Dedupe so a payload only fires when it changes.
+  const lastSelectionRef = useRef<string>('null');
+  useEffect(() => {
+    const handler = () => {
+      const editor = editorRef.current;
+      const node = containerRef.current;
+      if (!editor || !node) return;
+      // Only track while the selection lives inside this surface — the
+      // shadow host retargets `document.activeElement` to an ancestor of the
+      // container, so containment is checkable from the light DOM.
+      const active = document.activeElement;
+      if (!active || !node.contains(active)) return;
+      const selection = editor.getViewState()?.selections?.[0];
+      if (!selection) return;
+      const line = selection.end.line + 1;
+      if (cursorLineRef.current !== line) {
+        cursorLineRef.current = line;
+        onCursorLineRef.current?.(line);
+      }
+      const selectionFn = onSelectionChangeRef.current;
+      if (!selectionFn) return;
+      const state = editor.getEditState();
+      const doc = state?.document;
+      if (!doc) return;
+      const anchorOffset = doc.offsetAt(selection.start);
+      const headOffset = doc.offsetAt(selection.end);
+      let payload: { startLine: number; endLine: number; snippet: string } | null = null;
+      if (anchorOffset !== headOffset) {
+        const from = Math.min(anchorOffset, headOffset);
+        const to = Math.max(anchorOffset, headOffset);
+        const startLine = Math.min(selection.start.line, selection.end.line) + 1;
+        const endLine = Math.max(selection.start.line, selection.end.line) + 1;
+        payload = { startLine, endLine, snippet: doc.getText().slice(from, to) };
+      }
+      const key = JSON.stringify(payload);
+      if (key === lastSelectionRef.current) return;
+      lastSelectionRef.current = key;
+      selectionFn(payload);
+    };
+    document.addEventListener('selectionchange', handler);
+    return () => document.removeEventListener('selectionchange', handler);
   }, []);
 
   // Accept a completion: replace the current prefix with the picked word and

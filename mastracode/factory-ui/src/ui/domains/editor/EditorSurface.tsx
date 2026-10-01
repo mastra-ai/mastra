@@ -37,8 +37,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../../api/keys';
 import type { EditorLspCodeAction } from '../../../api/types';
 
-import { CodeMirrorSurface, type CodeMirrorApi, type LineRange } from './CodeMirrorSurface';
-import { PierreFileSurface, type SurfaceAnnotation } from './PierreFileSurface';
+import { PierreFileSurface, type PierreEditorApi, type LineRange, type SurfaceAnnotation } from './PierreFileSurface';
+import { PierreFileDiffSurface } from './PierreFileDiffSurface';
 import { usePierreLspDiagnostics } from './use-pierre-lsp-diagnostics';
 import { usePierreCollabBinding } from './use-pierre-collab-binding';
 import type { Editor as PierreEditor } from '@pierre/diffs/edit';
@@ -64,9 +64,6 @@ import { useEditorBufferActions, useEditorBuffers, type PendingSelection } from 
 type LeftTab = 'files' | 'search' | 'outline' | 'scm' | 'refs';
 
 type GotoKind = Extract<EditorLspQueryKind, 'definition' | 'typeDefinition' | 'implementation'>;
-
-/** Symbol kinds worth a code lens — things an agent can meaningfully act on. */
-const LENS_KINDS = new Set(['function', 'method', 'constructor', 'class', 'interface', 'enum', 'struct']);
 
 const LENS_PROMPTS: Record<CodeLensAction, (name: string) => string> = {
   explain: name => `Explain what \`${name}\` does and how it fits into the codebase.`,
@@ -345,29 +342,20 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     settings.displayName,
   );
 
-  // Opt-in Pierre editor surface via `?editor=pierre`. Default stays on the
-  // CodeMirror path until Pierre reaches feature parity (hover, autocomplete,
-  // collab remote-cursor rendering all still to wire).
-  const usePierreEditor = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('editor') === 'pierre';
-  }, []);
-
   // ── LSP: hover + go-to commands ──────────────────────────────────────────
   const lspQuery = useEditorLspQuery(workspacePath);
 
-  // Pierre surface uses its own polled LSP diagnostics fetch (the CodeMirror
-  // path fetches inline via `lspLintExtension`).
+  // Debounced server-backed diagnostics rendered as Pierre markers.
   const diagnostics = usePierreLspDiagnostics(
-    usePierreEditor && !activeIsExternal ? lspQuery : null,
+    !activeIsExternal ? lspQuery : null,
     activePath ?? null,
     editorContent,
   );
 
-  // Pierre editor reference used by the cursor-only collab binding.
+  // Pierre editor reference used by the collab binding (remote carets +
+  // Y.Text sync).
   const [pierreEditor, setPierreEditor] = useState<PierreEditor<'file', SurfaceAnnotation, undefined> | null>(null);
-  const pierreCollab = usePierreCollabBinding(usePierreEditor ? pierreEditor : null, collab.binding);
+  const pierreCollab = usePierreCollabBinding(pierreEditor, collab.binding);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; line: number; character: number } | null>(
     null,
   );
@@ -434,7 +422,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
 
   // ── Refactoring: rename symbol, quick fixes, format document ────────────
   const queryClient = useQueryClient();
-  const editorApiRef = useRef<CodeMirrorApi | null>(null);
+  const editorApiRef = useRef<PierreEditorApi | null>(null);
   const [renamePrompt, setRenamePrompt] = useState<{
     line: number;
     character: number;
@@ -676,26 +664,10 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     return chain;
   }, [symbols, cursorLine]);
 
-  // ── Agent code lenses: Explain / Refactor / Add tests above symbols ─────
-  const codeLenses = useMemo(() => {
-    if (!symbols || activeIsExternal) return [];
-    const out: CodeLensEntry[] = [];
-    const walk = (list: EditorLspSymbol[], depth: number) => {
-      for (const symbol of list) {
-        if (LENS_KINDS.has(symbol.kind)) {
-          out.push({ line: symbol.line, endLine: symbol.endLine, name: symbol.name, kind: symbol.kind });
-        }
-        // Top-level symbols and their direct members (class methods) only —
-        // deeper nesting turns the file into a button farm.
-        if (depth < 1 && symbol.children) walk(symbol.children, depth + 1);
-      }
-    };
-    walk(symbols, 0);
-    return out.slice(0, 100);
-  }, [symbols, activeIsExternal]);
-
   // A lens action pre-fills the send-to-agent composer with the symbol's
-  // source and a task; the user edits or just hits Enter.
+  // source and a task; the user edits or just hits Enter. Lens entries are
+  // currently not derived (see the codeLenses note at the surface mount) but
+  // the action pipeline stays wired for the inline-widget follow-up.
   const [lensPrompt, setLensPrompt] = useState<string | null>(null);
   function handleLensAction(action: CodeLensAction, entry: CodeLensEntry) {
     if (!activePath) return;
@@ -969,10 +941,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                 </div>
               </div>
             )}
-            <div
-              className="bg-background relative min-h-0 flex-1"
-              data-editor-theme={editorTheme}
-            >
+            <div className="bg-background relative min-h-0 flex-1">
               {lspNotice && (
                 <div
                   role="status"
@@ -1032,7 +1001,22 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   <div className="text-body-sm text-muted-foreground grid h-full place-items-center px-4 text-center">
                     Binary or oversized file — can’t edit here.
                   </div>
-                ) : usePierreEditor ? (
+                ) : (driftMerge && diskContent !== undefined) || diffOriginal != null ? (
+                  <PierreFileDiffSurface
+                    path={activePath}
+                    newContent={editorContent}
+                    originalContent={
+                      driftMerge && diskContent !== undefined ? diskContent : (diffOriginal ?? '')
+                    }
+                    readOnly={activeIsExternal}
+                    settings={settings}
+                    onChange={next => actions.updateDraft(activePath, next, baseline)}
+                    theme={{
+                      light: getEditorThemePreset(editorTheme).light,
+                      dark: getEditorThemePreset(editorTheme).dark,
+                    }}
+                  />
+                ) : (
                   <PierreFileSurface
                     path={activePath}
                     initialContent={editorContent}
@@ -1040,10 +1024,10 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     selectLines={jump && jump.path === activePath ? jump.range : null}
                     diagnostics={activeIsExternal ? null : diagnostics}
                     blame={blameLines}
-                    /* Code lens is intentionally undefined for Pierre until the
-                     * annotation gutter inflation is addressed with a compact
-                     * inline-widget renderer. Blame already self-gates (null
-                     * when the user hasn't toggled the blame tab on). */
+                    /* Code lens stays off until it gets a compact inline-widget
+                     * renderer — Pierre sizes its annotation gutter to the
+                     * widest annotation, and three action buttons per symbol
+                     * push the code hundreds of pixels right. */
                     codeLenses={undefined}
                     onCodeLensAction={handleLensAction}
                     onCursorLineChange={setCursorLine}
@@ -1054,34 +1038,16 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     lspQuery={activeIsExternal ? undefined : lspQuery}
                     onEditor={setPierreEditor}
                     onDocumentChange={pierreCollab.forwardLocalChanges}
-                    theme={{
-                      light: getEditorThemePreset(editorTheme).light,
-                      dark: getEditorThemePreset(editorTheme).dark,
-                    }}
-                  />
-                ) : (
-                  <CodeMirrorSurface
-                    path={activePath}
-                    initialContent={editorContent}
-                    readOnly={activeIsExternal}
-                    selectLines={jump && jump.path === activePath ? jump.range : null}
-                    diffOriginal={driftMerge && diskContent !== undefined ? diskContent : diffOriginal}
-                    collab={collab.binding}
-                    lspQuery={activeIsExternal ? undefined : lspQuery}
                     onContextMenu={setContextMenu}
                     onGotoDefinition={position => void goTo('definition', position)}
                     onRename={startRename}
                     onFindReferences={position => void findReferences(position)}
-                    onCursorLineChange={setCursorLine}
-                    codeLenses={activeIsExternal ? undefined : codeLenses}
-                    onCodeLensAction={handleLensAction}
-                    blame={blameLines}
                     onFormat={() => void formatDocument()}
-                    apiRef={editorApiRef}
-                    settings={settings}
-                    onChange={next => actions.updateDraft(activePath, next, baseline)}
                     onSelectionChange={handleSelection}
-                    onSaveShortcut={handleSave}
+                    theme={{
+                      light: getEditorThemePreset(editorTheme).light,
+                      dark: getEditorThemePreset(editorTheme).dark,
+                    }}
                   />
                 )
               ) : (

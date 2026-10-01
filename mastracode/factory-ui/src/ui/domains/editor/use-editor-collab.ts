@@ -13,7 +13,7 @@ export interface CollabPeer {
   color: string;
 }
 
-/** A synced collab room bound to one file, ready for `yCollab` in CodeMirror. */
+/** A synced collab room bound to one file, consumed by the Pierre collab binding. */
 export interface CollabBinding {
   path: string;
   ytext: Y.Text;

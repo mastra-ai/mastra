@@ -1,0 +1,12 @@
+/*
+ * Shiki dual-theme inline snippets. Each token span carries
+ * `--shiki-light`/`--shiki-dark` colors; dark is the app default and
+ * `html.light` flips the palette.
+ */
+.editor-hl span {
+  color: var(--shiki-dark);
+}
+
+html.light .editor-hl span {
+  color: var(--shiki-light);
+}

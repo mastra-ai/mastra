@@ -10,9 +10,9 @@ interface HighlightedCodeProps {
 }
 
 /**
- * A short code snippet highlighted with the shared `.tok-*` palette. Renders
- * plain text immediately and swaps in highlighted spans once the (cached)
- * language parser resolves.
+ * A short code snippet highlighted with the shared Pierre/Shiki highlighter.
+ * Renders plain text immediately and swaps in highlighted spans once the
+ * (cached) highlighter resolves.
  */
 export function HighlightedCode({ code, path, className }: HighlightedCodeProps) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -30,7 +30,7 @@ export function HighlightedCode({ code, path, className }: HighlightedCodeProps)
   }, [code, path]);
 
   return (
-    <span ref={ref} className={className}>
+    <span ref={ref} className={className ? `editor-hl ${className}` : 'editor-hl'}>
       {code}
     </span>
   );

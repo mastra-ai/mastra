@@ -15,18 +15,15 @@
 
 /* Editor accent ramp.
  *
- * The editor domain (`.tok-*` syntax palette in editor-syntax.css, the
- * CodeMirror chrome in editor-theme.ts, and `*-accent3/NN` utilities across
- * the editor UI) was written against the design system's legacy `--accent1..6`
+ * The editor UI (`*-accent3/NN` focus rings and tint utilities across the
+ * editor domain) was written against the design system's legacy `--accent1..6`
  * tokens, which playground-ui has since deleted (theme-export.test.ts asserts
  * they no longer ship). Without a definition every `var(--accentN)` resolves
- * to nothing: syntax tokens inherit plain foreground (monochrome code) and
- * accent-tinted utilities silently drop out.
+ * to nothing and accent-tinted utilities silently drop out.
  *
  * Alias them locally onto the current chromatic ramps. The ramps flip with
- * `html.light`, so these stay mode-aware for free. Mapping follows the
- * palette documented in editor-syntax.css: green · red · blue · light blue ·
- * amber. */
+ * `html.light`, so these stay mode-aware for free: green · red · blue ·
+ * light blue · amber. */
 :root {
   --accent1: var(--green-400);
   --accent2: var(--red-400);

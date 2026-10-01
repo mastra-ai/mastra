@@ -1,7 +1,6 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { loadEditorTheme } from '../../editor/editor-themes';
 import { HighlightedCode } from '../../editor/HighlightedCode';
 
 /** A user message produced by the editor's "send selection" composer. */
@@ -24,12 +23,11 @@ export function parseSelectionMessage(text: string): EditorSelectionMessage | nu
 }
 
 /**
- * Renders an editor-selection message with the same `.tok-*` syntax palette
- * and theme preset the editor uses — the snippet in the transcript looks
- * exactly like it did in the buffer it was sent from.
+ * Renders an editor-selection message with the same Pierre/Shiki highlighter
+ * the editor uses — the snippet in the transcript looks exactly like it did
+ * in the buffer it was sent from.
  */
 export function SelectionMessage({ message }: { message: EditorSelectionMessage }) {
-  const theme = loadEditorTheme();
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <Txt variant="caption" className="text-muted-foreground truncate" title={message.path}>
@@ -38,10 +36,7 @@ export function SelectionMessage({ message }: { message: EditorSelectionMessage 
         </Txt>{' '}
         · {message.lineLabel}
       </Txt>
-      <pre
-        data-editor-theme={theme}
-        className="border-border-strong/40 bg-background text-caption text-foreground max-h-64 overflow-auto rounded-2xl border p-3 font-mono [contain:inline-size]"
-      >
+      <pre className="border-border-strong/40 bg-background text-caption text-foreground max-h-64 overflow-auto rounded-2xl border p-3 font-mono [contain:inline-size]">
         <HighlightedCode code={message.snippet} path={message.path} />
       </pre>
       {message.body.trim() && <MarkdownRenderer>{message.body}</MarkdownRenderer>}

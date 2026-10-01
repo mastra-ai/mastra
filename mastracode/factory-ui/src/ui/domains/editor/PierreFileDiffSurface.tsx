@@ -26,6 +26,8 @@ interface PierreFileDiffSurfaceProps {
    * through their own store; PierreFileDiffSurface doesn't own I/O.
    */
   onChange?: (next: string) => void;
+  /** Shiki theme pair; defaults to pierre-light/pierre-dark. */
+  theme?: { light: string; dark: string };
 }
 
 /**
@@ -40,6 +42,7 @@ export function PierreFileDiffSurface({
   readOnly,
   settings = DEFAULT_EDITOR_SETTINGS,
   onChange,
+  theme,
 }: PierreFileDiffSurfaceProps) {
   const fileDiff = useMemo(() => {
     const oldFile: FileContents = { name: path, contents: originalContent };
@@ -47,15 +50,16 @@ export function PierreFileDiffSurface({
     return parseDiffFromFile(oldFile, newFile);
   }, [path, originalContent, newContent]);
 
+  const activeTheme = theme ?? { light: 'pierre-light', dark: 'pierre-dark' };
   const options = useMemo<FileDiffOptions<undefined, undefined>>(
     () => ({
-      theme: { light: 'pierre-light', dark: 'pierre-dark' },
+      theme: { light: activeTheme.light, dark: activeTheme.dark },
       disableFileHeader: true,
       disableLineNumbers: !settings.lineNumbers,
       overflow: settings.wordWrap ? 'wrap' : 'scroll',
       diffStyle: 'unified',
     }),
-    [settings.lineNumbers, settings.wordWrap],
+    [settings.lineNumbers, settings.wordWrap, activeTheme.light, activeTheme.dark],
   );
 
   return (
