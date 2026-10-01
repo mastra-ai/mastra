@@ -94,9 +94,10 @@ export function AddSkillDialog({
 }: AddSkillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillsShSkill | null>(null);
-  const [selectedMount, setSelectedMount] = useState<string | undefined>(
-    writableMounts && writableMounts.length > 0 ? writableMounts[0]?.path : undefined,
-  );
+  const [selectedMount, setSelectedMount] = useState<string>();
+  const installMount = writableMounts?.some(mount => mount.path === selectedMount)
+    ? selectedMount
+    : writableMounts?.[0]?.path;
 
   const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
 
@@ -165,20 +166,20 @@ export function AddSkillDialog({
     onInstall({
       repository: `${parsedSource.owner}/${parsedSource.repo}`,
       skillName: selectedSkill.name,
-      mount: writableMounts && writableMounts.length > 1 ? selectedMount : undefined,
+      mount: writableMounts && writableMounts.length > 1 ? installMount : undefined,
     });
-  }, [selectedSkill, parsedSource, onInstall, writableMounts, selectedMount]);
+  }, [selectedSkill, parsedSource, onInstall, writableMounts, installMount]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (!newOpen) {
         setSearchQuery('');
         setSelectedSkill(null);
-        setSelectedMount(writableMounts?.[0]?.path);
+        setSelectedMount(undefined);
       }
       onOpenChange(newOpen);
     },
-    [onOpenChange, writableMounts],
+    [onOpenChange],
   );
 
   return (
@@ -354,7 +355,7 @@ export function AddSkillDialog({
             <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
               <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
               <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
-              <Select value={selectedMount ?? ''} onValueChange={setSelectedMount}>
+              <Select value={installMount} onValueChange={setSelectedMount}>
                 <SelectTrigger className="flex-1">
                   <SelectValue />
                 </SelectTrigger>
