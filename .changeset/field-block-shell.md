@@ -46,7 +46,7 @@ Before, there were three ways to build a field: the `*FieldBlock` components, `F
 
 **Deprecated**
 
-These still work as before, so existing code keeps building. They will be removed in a later release:
+These still work as before, so existing code keeps building. Studio and Factory no longer use them. They stay until no consumer does, then a later release removes them:
 
 - `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `SearchInput`, which keeps `SearchFieldBlock`'s immediate updates, or `ListSearch` for a list filter. `ListSearch` calls `onSearch` 300 ms after typing stops, and needs `shortcutDisabled` on a second search box on the same page.
 - `FieldBlock.ErrorMsg` for a message that belongs to no single control, such as a server error under a form: `FieldError` throws outside a `Field`, so wrap it in `<Field invalid>`.
