@@ -26,11 +26,13 @@ async function kickOffForeach({
   items,
   initData,
   currentOutput,
+  currentSuspendPayload,
 }: {
   concurrency: number | ((ctx: { inputData: unknown; getInitData: () => unknown }) => number);
   items: unknown[];
   initData?: unknown;
   currentOutput?: unknown[];
+  currentSuspendPayload?: unknown;
 }) {
   const published: any[] = [];
   const pubsub = {
@@ -49,7 +51,15 @@ async function kickOffForeach({
         ...(initData === undefined ? {} : { input: initData }),
         ...(currentOutput === undefined
           ? {}
-          : { body: { status: 'success', output: currentOutput, startedAt: 1, payload: items } }),
+          : {
+              body: {
+                status: 'success',
+                output: currentOutput,
+                startedAt: 1,
+                payload: items,
+                suspendPayload: currentSuspendPayload,
+              },
+            }),
       } as any,
       activeStepsPath: {},
       resumeSteps: [],
@@ -109,6 +119,33 @@ describe('processWorkflowForEach concurrency resolution', () => {
     expect(events[0]).toMatchObject({
       type: 'workflow.step.end',
       data: { prevResult: { status: 'suspended' } },
+    });
+  });
+
+  it('preserves foreach output metadata when all active iterations are suspended', async () => {
+    const foreachOutput = [
+      { status: 'success', output: 'first' },
+      { status: 'suspended', suspendPayload: { approval: true } },
+    ];
+    const events = await kickOffForeach({
+      concurrency: 1,
+      items: [1, 2, 3],
+      currentOutput: [
+        { status: 'success', output: 'first' },
+        { status: 'suspended', suspendPayload: { approval: true } },
+      ],
+      currentSuspendPayload: { __workflow_meta: { foreachOutput } },
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'workflow.step.end',
+      data: {
+        prevResult: {
+          status: 'suspended',
+          suspendPayload: { __workflow_meta: { foreachIndex: 1, foreachOutput } },
+        },
+      },
     });
   });
 

@@ -200,7 +200,11 @@ export async function processWorkflowForEach(
 
     const aggregatedSuspendPayload = {
       ...firstSuspendedIterationPayload,
-      __workflow_meta: suspendMeta,
+      __workflow_meta: {
+        ...currentResult?.suspendPayload?.__workflow_meta,
+        ...(firstSuspendedIterationPayload?.__workflow_meta as Record<string, unknown> | undefined),
+        ...suspendMeta,
+      },
     };
 
     await pubsub.publish('workflows', {
