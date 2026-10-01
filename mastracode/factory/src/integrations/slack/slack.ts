@@ -13,6 +13,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
+import { primeTenantCredentialsForRequestContext } from '../../routes/tenant-credentials.js';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
@@ -822,6 +823,11 @@ async function gateDispatch(
       await thread.post('This thread belongs to a Factory session in another organization.');
       return null;
     }
+    // Credential resolution reads an in-memory snapshot that only priming
+    // fills, so prime whichever tenant now owns the run (the sender, or the
+    // existing session's owner) — otherwise a cold snapshot after a restart
+    // fails the run until that user happens to hit the web UI.
+    await primeTenantCredentialsForRequestContext(ctx.requestContext);
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;

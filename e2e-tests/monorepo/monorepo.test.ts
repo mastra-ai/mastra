@@ -671,7 +671,7 @@ export const environmentRoute = registerApiRoute('/environment', {
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^9.0.1');
+      expect(packageJson.dependencies?.nodemailer).toBe('^10.0.6');
     });
 
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {

@@ -5,6 +5,7 @@
     "claude-opus-5",
     "claude-opus-5-5",
     "claude-sonnet-5",
+    "claude-sonnet-5-5",
     "deepseek-v4.1-flash",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
@@ -22,6 +23,7 @@
     "gpt-6-astra",
     "gpt-6-luna",
     "gpt-6-sol",
+    "gpt-6.1-sol",
     "kimi-k3",
     "viv-fast"
   ],
@@ -48,6 +50,7 @@
     "claude-opus-5",
     "claude-opus-5-5",
     "claude-sonnet-5",
+    "claude-sonnet-5-5",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
@@ -72,6 +75,7 @@
     "gpt-6-astra",
     "gpt-6-luna",
     "gpt-6-sol",
+    "gpt-6.1-sol",
     "kimi-k3",
     "viv-fast"
   ]

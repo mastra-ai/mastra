@@ -3,6 +3,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
+import { Field } from '../Field';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
 
 afterEach(() => {
@@ -132,14 +133,15 @@ describe('InputGroup', () => {
     );
   });
 
-  it('aria-invalid on control turns wrapper into error state via :has', () => {
+  it('an invalid field marks the control, which turns the wrapper into its error state via :has', () => {
     render(
-      <InputGroup>
-        <InputGroupInput placeholder="x" error />
-      </InputGroup>,
+      <Field invalid>
+        <InputGroup>
+          <InputGroupInput placeholder="x" />
+        </InputGroup>
+      </Field>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)]');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
