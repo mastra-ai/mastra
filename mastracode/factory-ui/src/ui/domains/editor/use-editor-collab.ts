@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useApiConfig } from '../../../api/config';
 import type { CollabSyncResponse } from '../../../api/types';
-import { createCollabSession, localCollabUser } from './editor-collab';
+import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
+import { createCollabSession, localCollabColor } from './editor-collab';
 
 import type { Awareness } from 'y-protocols/awareness';
 import type * as Y from 'yjs';
@@ -33,13 +34,18 @@ export function useEditorCollab(
   displayName?: string,
 ): { binding: CollabBinding | null; peers: CollabPeer[] } {
   const { client } = useApiConfig();
+  const auth = useFactoryAuth();
   const [binding, setBinding] = useState<CollabBinding | null>(null);
   const [peers, setPeers] = useState<CollabPeer[]>([]);
-  const user = useMemo(() => {
-    const base = localCollabUser();
-    const name = displayName?.trim();
-    return name ? { ...base, name } : base;
-  }, [displayName]);
+  // Prefer the user's override; fall back to the signed-in identity. We never
+  // invent fake names — unknown users are 'You' locally, 'Guest' remotely.
+  const localName = useMemo(() => {
+    const override = displayName?.trim();
+    if (override) return override;
+    const identity = auth.data?.user?.name?.trim() || auth.data?.user?.email?.trim();
+    return identity || 'You';
+  }, [displayName, auth.data?.user?.name, auth.data?.user?.email]);
+  const user = useMemo(() => ({ ...localCollabColor(), name: localName }), [localName]);
 
   useEffect(() => {
     setBinding(null);
@@ -63,16 +69,19 @@ export function useEditorCollab(
     );
     const updatePeers = () => {
       if (disposed) return;
-      const states = [...session.awareness.getStates().entries()]
-        .filter(([clientId]) => clientId !== session.doc.clientID)
-        .map(([clientId, state]) => {
-          const peer = (state as { user?: { name?: string; color?: string } } | null)?.user;
-          return {
-            clientId,
-            name: peer?.name ?? 'Guest',
-            color: peer?.color ?? 'var(--accent3)',
-          };
-        });
+      // Drop our own clientId, then collapse ghosts of ourselves (prior tab
+      // mounts whose awareness entries haven't expired yet) by name so the
+      // bar never shows the user editing with themselves.
+      const seen = new Set<string>([localName]);
+      const states: CollabPeer[] = [];
+      for (const [clientId, state] of session.awareness.getStates().entries()) {
+        if (clientId === session.doc.clientID) continue;
+        const peer = (state as { user?: { name?: string; color?: string } } | null)?.user;
+        const name = peer?.name?.trim() || 'Guest';
+        if (seen.has(name)) continue;
+        seen.add(name);
+        states.push({ clientId, name, color: peer?.color ?? 'var(--accent3)' });
+      }
       setPeers(states);
     };
     session.awareness.on('change', updatePeers);

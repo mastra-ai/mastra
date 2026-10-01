@@ -64,28 +64,26 @@ const PEER_COLORS: { color: string; colorLight: string }[] = [
   { color: '#e36bae', colorLight: '#e36bae33' },
 ];
 
-const PEER_NAMES = ['Fox', 'Owl', 'Lynx', 'Wren', 'Orca', 'Ibis', 'Newt', 'Moth'];
-
-/** A stable per-tab identity; good enough until real profiles are wired in. */
-export function localCollabUser(): CollabUser {
-  const key = 'editor-collab-identity';
+/**
+ * A stable per-tab color/palette slot for the local user. The display name is
+ * sourced from the signed-in identity (or the user's override in settings); we
+ * never invent fake names here.
+ */
+export function localCollabColor(): { color: string; colorLight: string } {
+  const key = 'editor-collab-color';
   try {
     const stored = sessionStorage.getItem(key);
-    if (stored) return JSON.parse(stored) as CollabUser;
+    if (stored) return JSON.parse(stored) as { color: string; colorLight: string };
   } catch {
-    // Fall through to a fresh identity.
+    // Fall through to a fresh slot.
   }
-  const slot = Math.floor(Math.random() * PEER_COLORS.length);
-  const user: CollabUser = {
-    name: `${PEER_NAMES[slot]} ${Math.floor(Math.random() * 90) + 10}`,
-    ...PEER_COLORS[slot]!,
-  };
+  const slot = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]!;
   try {
-    sessionStorage.setItem(key, JSON.stringify(user));
+    sessionStorage.setItem(key, JSON.stringify(slot));
   } catch {
-    // Session storage unavailable; identity is per-mount instead.
+    // Session storage unavailable; palette slot is per-mount instead.
   }
-  return user;
+  return slot;
 }
 
 export function createCollabSession(postSync: CollabPostFn, path: string, user: CollabUser): CollabSession {
