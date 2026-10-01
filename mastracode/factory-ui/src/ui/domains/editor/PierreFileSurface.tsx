@@ -17,6 +17,7 @@ import type { BlameLine, EditorLspDiagnostic, EditorLspTextEdit } from '../../..
 import type { CodeLensActionHandler, CodeLensEntry } from './editor-code-lens';
 import type { EditorLspQueryFn } from './editor-lsp';
 import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from './editor-settings';
+import { LspHoverCard } from './LspHoverCard';
 import type { CollabBinding } from './use-editor-collab';
 import { candidatesForPrefix, currentPrefix } from './pierre-autocomplete';
 
@@ -107,6 +108,11 @@ const SEVERITY_MAP: Record<EditorLspDiagnostic['severity'], MarkerSeverity> = {
   hint: 'hint',
 };
 
+// The factory LSP routes speak 1-indexed lines AND characters (see
+// normalizeTextEdit / normalizeDiagnostic in factory/src/routes/editor.ts);
+// Pierre positions are 0-indexed on both axes. Every conversion below must
+// subtract/add 1 on both fields or positional queries land one char off —
+// which is exactly enough to make go-to-definition miss tokens.
 function diagnosticsToMarkers(diagnostics: EditorLspDiagnostic[]): Marker[] {
   return diagnostics.map(diagnostic => ({
     severity: SEVERITY_MAP[diagnostic.severity] ?? 'info',
@@ -114,11 +120,11 @@ function diagnosticsToMarkers(diagnostics: EditorLspDiagnostic[]): Marker[] {
     source: diagnostic.source,
     start: {
       line: Math.max(1, diagnostic.line) - 1,
-      character: Math.max(0, diagnostic.character),
+      character: Math.max(1, diagnostic.character) - 1,
     },
     end: {
       line: Math.max(1, diagnostic.endLine ?? diagnostic.line) - 1,
-      character: Math.max(0, diagnostic.endCharacter ?? diagnostic.character + 1),
+      character: Math.max(1, diagnostic.endCharacter ?? diagnostic.character + 1) - 1,
     },
   }));
 }
@@ -128,11 +134,11 @@ function lspEditsToPierre(edits: EditorLspTextEdit[]): PierreTextEdit[] {
     range: {
       start: {
         line: Math.max(1, edit.startLine) - 1,
-        character: Math.max(0, edit.startCharacter),
+        character: Math.max(1, edit.startCharacter) - 1,
       },
       end: {
         line: Math.max(1, edit.endLine) - 1,
-        character: Math.max(0, edit.endCharacter),
+        character: Math.max(1, edit.endCharacter) - 1,
       },
     },
     newText: edit.newText,
@@ -320,16 +326,60 @@ export function PierreFileSurface({
     onSelectionChange,
   ]);
 
-  const file = useMemo<FileContents>(() => ({ name: path, contents: initialContent }), [path, initialContent]);
+  // The surface is UNCONTROLLED while editing: `initialContent` tracks the
+  // buffer draft and changes on every keystroke (onChange → updateDraft →
+  // re-render), and feeding that back into the `file` prop makes Pierre
+  // re-process the whole document per keystroke. Key the mounted file on the
+  // path only; content changes that didn't originate here (drift "take
+  // theirs", async file loads) are reconciled imperatively below. Read-only
+  // surfaces have no editor, so they stay prop-driven.
+  const contentRef = useRef(initialContent);
+  contentRef.current = initialContent;
+  const lastEmittedRef = useRef(initialContent);
+  const readOnlyFile = useMemo<FileContents>(
+    () => ({ name: path, contents: initialContent }),
+    [path, initialContent],
+  );
+  const editableFile = useMemo<FileContents>(
+    () => ({ name: path, contents: contentRef.current }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- contents snapshot on path change only
+    [path],
+  );
+  const file = readOnly ? readOnlyFile : editableFile;
+
+  /** Replace the whole document when the buffer changed outside the editor. */
+  const reconcileContent = useCallback((editor: Editor<'file', SurfaceAnnotation, undefined>) => {
+    const next = contentRef.current;
+    if (next === lastEmittedRef.current) return;
+    const document = editor.getEditState()?.document;
+    if (!document || document.getText() === next) return;
+    editor.applyEdits(
+      [
+        {
+          range: { start: { line: 0, character: 0 }, end: document.positionAt(document.getText().length) },
+          newText: next,
+        },
+      ],
+      false,
+    );
+  }, []);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || readOnly) return;
+    reconcileContent(editor);
+  }, [initialContent, readOnly, reconcileContent]);
 
   const editorOptions = useMemo<EditorOptions<'file', SurfaceAnnotation, undefined>>(
     () => ({
       onAttach(editor) {
         editorRef.current = editor;
+        // The buffer may have resolved while the surface was mounting.
+        reconcileContent(editor);
         onEditorRef.current?.(editor);
       },
     }),
-    [],
+    [reconcileContent],
   );
 
   // Container-level keydown handler for save + autocomplete navigation.
@@ -371,11 +421,12 @@ export function PierreFileSurface({
         return;
       }
       // LSP keybindings, mirrored from the old CodeMirror keymap. Positions
-      // are 1-indexed lines, matching what the LSP routes expect.
+      // are 1-indexed on BOTH axes, matching what the LSP routes expect
+      // (Pierre's view state is 0-indexed on both).
       const cursorPosition = () => {
         const selection = editorRef.current?.getViewState()?.selections?.[0];
-        if (!selection) return { line: 1, character: 0 };
-        return { line: selection.end.line + 1, character: selection.end.character };
+        if (!selection) return { line: 1, character: 1 };
+        return { line: selection.end.line + 1, character: selection.end.character + 1 };
       };
       if (event.key === 'F12' && !event.shiftKey) {
         if (!onGotoDefinitionRef.current) return;
@@ -418,11 +469,13 @@ export function PierreFileSurface({
       if (!handlerFn) return;
       event.preventDefault();
       let line: number | null = null;
-      let character = 0;
+      // 1-indexed, matching the LSP routes. `data-char` is the token's
+      // 0-indexed line offset, so the +1 lands on the token's first character.
+      let character = 1;
       for (const element of event.composedPath()) {
         if (!(element instanceof HTMLElement)) continue;
-        if (character === 0 && element.dataset.char !== undefined) {
-          character = Number(element.dataset.char) || 0;
+        if (character === 1 && element.dataset.char !== undefined) {
+          character = (Number(element.dataset.char) || 0) + 1;
         }
         if (element.dataset.line !== undefined) {
           line = Number(element.dataset.line) || null;
@@ -432,7 +485,7 @@ export function PierreFileSurface({
       if (line === null) {
         const selection = editorRef.current?.getViewState()?.selections?.[0];
         line = selection ? selection.end.line + 1 : 1;
-        character = selection ? selection.end.character : 0;
+        character = selection ? selection.end.character + 1 : 1;
       }
       handlerFn({ x: event.clientX, y: event.clientY, line, character });
     };
@@ -561,7 +614,7 @@ export function PierreFileSurface({
             line: lineNumber,
             character,
             kind: 'hover',
-            content: editorRef.current?.getText() ?? initialContent,
+            content: editorRef.current?.getText() ?? contentRef.current,
           });
           if (seq !== hoverSeqRef.current) return;
           if (!response?.available || !response.hover) return;
@@ -582,7 +635,6 @@ export function PierreFileSurface({
       settings.lineNumbers,
       settings.wordWrap,
       path,
-      initialContent,
       cancelHover,
       hasAnnotations,
       activeTheme.light,
@@ -604,6 +656,7 @@ export function PierreFileSurface({
   }, [autocomplete]);
   const handleEditChange = useCallback(
     (event: EditorChangeEvent<'file', SurfaceAnnotation, undefined>) => {
+      lastEmittedRef.current = event.file.contents;
       onChangeRef.current?.(event.file.contents);
       onDocumentChangeRef.current?.(event.changes);
       const editor = event.editor;
@@ -624,12 +677,20 @@ export function PierreFileSurface({
       }
       const offset = document.offsetAt(selection.end);
       const text = document.getText();
-      const prefix = currentPrefix(text, offset);
+      // Bound the candidate scan to a window around the caret — two full-
+      // document regex passes per keystroke is measurable on large files, and
+      // proximity ranking prefers nearby words anyway.
+      const SCAN_WINDOW = 20_000;
+      const windowStart = Math.max(0, offset - SCAN_WINDOW);
+      const windowEnd = Math.min(text.length, offset + SCAN_WINDOW);
+      const windowText = text.slice(windowStart, windowEnd);
+      const windowOffset = offset - windowStart;
+      const prefix = currentPrefix(windowText, windowOffset);
       if (prefix.length < 2) {
         setAutocomplete(null);
         return;
       }
-      const items = candidatesForPrefix(text, offset);
+      const items = candidatesForPrefix(windowText, windowOffset);
       if (!items.length) {
         setAutocomplete(null);
         return;
@@ -648,6 +709,7 @@ export function PierreFileSurface({
     (event: FileEditCompleteEvent<SurfaceAnnotation, undefined>) => {
       editorRef.current = null;
       onEditorRef.current?.(null);
+      lastEmittedRef.current = event.file.contents;
       onChangeRef.current?.(event.file.contents);
       return 'accept' as const;
     },
@@ -661,14 +723,19 @@ export function PierreFileSurface({
     editor.setMarkers(diagnostics ? diagnosticsToMarkers(diagnostics) : []);
   }, [diagnostics]);
 
-  // Apply permalink jumps and search-panel line selection.
+  // Permalink jumps and search-panel line selection: the visible range
+  // highlight comes from the `selectedLines` prop on <File>; this effect only
+  // parks the caret at the range start and focuses the surface.
+  const selectedLines = useMemo(
+    () => (selectLines ? { start: Math.max(1, selectLines.start), end: Math.max(1, selectLines.end) } : null),
+    [selectLines],
+  );
   useEffect(() => {
     if (!selectLines) return;
     const editor = editorRef.current;
     if (!editor) return;
-    const start = { line: Math.max(1, selectLines.start) - 1, character: 0 };
-    const end = { line: Math.max(1, selectLines.end) - 1, character: 0 };
-    editor.setSelections([{ start, end, direction: 'forward' }]);
+    const caret = { line: Math.max(1, selectLines.start) - 1, character: 0 };
+    editor.setSelections([{ start: caret, end: caret, direction: 'forward' }]);
     editor.focus();
   }, [selectLines, path]);
 
@@ -685,9 +752,10 @@ export function PierreFileSurface({
         const state = editor.getEditState();
         const document = state?.document;
         if (!document) return null;
+        // Incoming positions are 1-indexed on both axes (LSP route contract).
         const offset = document.offsetAt({
           line: Math.max(1, position.line) - 1,
-          character: Math.max(0, position.character),
+          character: Math.max(1, position.character) - 1,
         });
         const text = document.getText();
         const wordRe = /[A-Za-z_$][\w$]*/g;
@@ -702,11 +770,11 @@ export function PierreFileSurface({
       cursor() {
         const editor = editorRef.current;
         const selection = editor?.getViewState()?.selections?.[0];
-        if (!selection) return { line: 1, character: 0 };
-        return { line: selection.end.line + 1, character: selection.end.character };
+        if (!selection) return { line: 1, character: 1 };
+        return { line: selection.end.line + 1, character: selection.end.character + 1 };
       },
       content() {
-        return editorRef.current?.getText() ?? initialContent;
+        return editorRef.current?.getText() ?? contentRef.current;
       },
       replaceContent(text) {
         const editor = editorRef.current;
@@ -728,7 +796,7 @@ export function PierreFileSurface({
     return () => {
       if (apiRef.current) apiRef.current = null;
     };
-  }, [apiRef, initialContent]);
+  }, [apiRef]);
 
   return (
     <EditProvider createEditor={createEditor}>
@@ -739,6 +807,7 @@ export function PierreFileSurface({
           edit={!readOnly}
           editorOptions={editorOptions}
           editStateKey={`file:${path}`}
+          selectedLines={selectedLines}
           lineAnnotations={hasAnnotations ? lineAnnotations : undefined}
           onEditChange={handleEditChange}
           onEditComplete={handleEditComplete}
@@ -746,12 +815,10 @@ export function PierreFileSurface({
         {hover && (
           <div
             role="tooltip"
-            className="border-border bg-popover/95 fixed z-50 max-w-[36rem] rounded border shadow-lg backdrop-blur-sm"
+            className="border-border bg-popover/95 fixed z-50 rounded-lg border shadow-xl backdrop-blur-sm"
             style={{ left: hover.x, top: hover.y }}
           >
-            <pre className="text-caption text-foreground m-0 max-h-64 overflow-auto whitespace-pre-wrap p-2 font-mono">
-              {hover.value}
-            </pre>
+            <LspHoverCard value={hover.value} path={path} />
           </div>
         )}
         {autocomplete && (

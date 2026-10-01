@@ -12,6 +12,25 @@ import './editor-highlight.css';
  * Wrap the target element in the `editor-hl` class so the dual-theme token
  * variables resolve (see editor-highlight.css).
  */
+/** Map fenced-code language names (from LSP hovers) to a file extension. */
+const FENCE_LANGUAGES: Record<string, string> = {
+  typescript: 'ts',
+  typescriptreact: 'tsx',
+  javascript: 'js',
+  javascriptreact: 'jsx',
+  python: 'py',
+  rust: 'rs',
+  golang: 'go',
+  markdown: 'md',
+};
+
+/** A pseudo file path for a fence language, falling back to the current file. */
+export function fenceLanguagePath(fenceInfo: string, fallbackPath: string): string {
+  const info = fenceInfo.trim().toLowerCase();
+  if (!info) return fallbackPath;
+  return `x.${FENCE_LANGUAGES[info] ?? info}`;
+}
+
 export async function highlightToFragment(code: string, filePath: string): Promise<DocumentFragment | null> {
   const lang = getFiletypeFromFileName(filePath);
   if (lang === 'text' || lang === 'ansi') return null;
