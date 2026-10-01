@@ -38,18 +38,20 @@ export function ToolRequest({
         <SettingsTitle>Request</SettingsTitle>
         <SettingsDescription>Fill in the input and run the tool.</SettingsDescription>
       </SettingsHeader>
-      <SettingsContainer className="p-4" onKeyDown={submitOnEnter}>
-        <DynamicForm
-          isSubmitLoading={isRunning}
-          schema={zodInputSchema}
-          onSubmit={onRun}
-          submitButtonLabel="Run"
-          submitButtonIcon={<PlayIcon />}
-          submitButtonVariant="primary"
-          className="space-y-4"
-        >
-          {!hasInputFields && <SettingsDescription>This tool takes no input. Run it as is.</SettingsDescription>}
-        </DynamicForm>
+      <SettingsContainer onKeyDown={submitOnEnter}>
+        <div className="p-4">
+          <DynamicForm
+            isSubmitLoading={isRunning}
+            schema={zodInputSchema}
+            onSubmit={onRun}
+            submitButtonLabel="Run"
+            submitButtonIcon={<PlayIcon />}
+            submitButtonVariant="primary"
+            className="space-y-4"
+          >
+            {!hasInputFields && <SettingsDescription>This tool takes no input. Run it as is.</SettingsDescription>}
+          </DynamicForm>
+        </div>
       </SettingsContainer>
     </SettingsGroup>
   );

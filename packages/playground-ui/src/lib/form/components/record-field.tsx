@@ -73,9 +73,10 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
     <div className="grid gap-2">
       {pairs.map(pair => (
         // One row per pair: the field already sits in the form's surface, so no card of its own.
-        <div key={pair.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
+        <div key={pair.id} className="flex items-center gap-2">
           <Input
             placeholder="Key"
+            className="flex-1"
             aria-label="Key"
             value={pair.key}
             onChange={e => handleChange(pair.id, 'key', e.target.value)}
@@ -83,6 +84,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field })
           />
           <Input
             placeholder="Value"
+            className="flex-1"
             aria-label="Value"
             value={pair.value}
             onChange={e => handleChange(pair.id, 'value', e.target.value)}
