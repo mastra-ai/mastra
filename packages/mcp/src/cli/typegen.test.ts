@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
 import { MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
-import { generateToolTypes } from './typegen';
+import { generateToolTypes, MAX_CATALOG_VALUES, MAX_SCHEMA_VALUES } from './typegen';
 
 vi.mock('json-schema-to-typescript', async importOriginal => {
   const original = await importOriginal<typeof import('json-schema-to-typescript')>();
@@ -17,6 +17,11 @@ vi.mock('json-schema-to-typescript', async importOriginal => {
 const fixtureDir = fileURLToPath(new URL('../client/__fixtures__/typed-client/', import.meta.url));
 function catalog(inputSchema: unknown, outputSchema?: unknown): SerializableMCPToolCatalog {
   return { test: { tool: { name: 'tool', inputSchema, outputSchema } } };
+}
+
+/** Boolean subschemas carry no keywords, so they are invisible to the schema-node budget. */
+function booleanProperties(count: number): [string, boolean][] {
+  return Array.from({ length: count }, (_, index) => [`p${index}`, true]);
 }
 
 function check(source: string, consumer = '') {
@@ -431,19 +436,36 @@ describe('concrete MCP schema generation', () => {
     check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
   });
 
-  it('widens the rest of a catalogue that exceeds the total node budget', async () => {
-    // `dependencies` is counted by the budget but never converted, so the ceiling is reached
-    // without asking the converter to process 100k schema nodes.
-    const dependencies = Object.fromEntries(Array.from({ length: 9_000 }, (_, index) => [`p${index}`, {}]));
+  it('widens boolean and annotation subtrees that the node budget ignores', async () => {
+    vi.mocked(compile).mockClear();
+    // Boolean subschemas carry no validation rules, and annotations are dropped before
+    // conversion, but both still have to be copied and walked.
+    const booleans = await generateToolTypes(
+      catalog({ type: 'object', properties: Object.fromEntries(booleanProperties(MAX_SCHEMA_VALUES)) }),
+    );
+    const annotations = await generateToolTypes(
+      catalog({ type: 'object', examples: Array(MAX_SCHEMA_VALUES + 1).fill('x') }),
+    );
+    for (const result of [booleans, annotations]) {
+      expect(result.warnings.some(warning => /maximum value count/.test(warning))).toBe(true);
+      check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
+    }
+    expect(compile).not.toHaveBeenCalled();
+  });
+
+  it('widens the rest of a catalogue that exceeds the total value budget', async () => {
+    // Each schema stays under the per-schema budget while the catalogue as a whole does not.
+    const perSchema = Math.ceil(MAX_CATALOG_VALUES / 11);
+    const examples = Array(perSchema).fill('x');
     const tools: SerializableMCPToolCatalog[string] = {};
     for (let index = 0; index < 12; index += 1) {
       tools[`tool${String(index).padStart(2, '0')}`] = {
         name: `tool${index}`,
-        inputSchema: { type: 'object', dependencies },
+        inputSchema: { type: 'object', examples },
       };
     }
     const result = await generateToolTypes({ big: tools });
-    expect(result.warnings.some(warning => /Catalogue exceeds the maximum node count/.test(warning))).toBe(true);
+    expect(result.warnings.some(warning => /Catalogue exceeds the maximum value count/.test(warning))).toBe(true);
     check(
       result.source,
       `type Last = MCPServers['big']['tools']['tool11']['input'];
