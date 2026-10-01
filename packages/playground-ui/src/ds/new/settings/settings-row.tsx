@@ -68,7 +68,7 @@ export function SettingsRowLayout({
     >
       <div className={isSectionLayout ? 'min-w-0' : factoryRowHeadingClassName}>
         <FieldLabel
-          htmlFor={htmlFor}
+          {...(htmlFor ? { htmlFor } : {})}
           required={required}
           className={cn(tone === 'destructive' && 'text-destructive-foreground')}
         >
