@@ -3262,6 +3262,16 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // Every signal sent to the finished run belongs in one follow-up turn, so
+        // fold the rest of the queue into this run's first model request instead
+        // of starting one run per signal. Read the map, not `queue`: cancellation
+        // during the lease await replaces the array.
+        const batched = state.pendingSignalsByThread.get(key) ?? [];
+        if (batched.length > 0) {
+          state.pendingSignalsByThread.delete(key);
+          state.preRunSignalsByThread.set(key, [...batched, ...(state.preRunSignalsByThread.get(key) ?? [])]);
+        }
+
         state.startingQueuedRunIds.add(nextRunId);
         const output = await previousRun.agent.stream(signal, {
           ...(previousRun.streamOptions as any),
@@ -3275,7 +3285,9 @@ export class AgentThreadStreamRuntime {
           ),
         });
 
-        if (queue.length > 0) {
+        // If the follow-up stops before its first model request, its completion
+        // must drain the batched signals left in the pre-run queue.
+        if (batched.length > 0) {
           const nextRecord = state.threadRunsById.get(output.runId);
           if (nextRecord) {
             this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
@@ -3300,12 +3312,18 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
       }
-      if (signal && !draining?.cancelled) {
-        // Restore through the map, not the local `queue` array: the shift above
-        // deletes the map entry when it empties the queue, so the local array
-        // may be detached from the map by the time we get here.
-        state.pendingSignalsByThread.set(key, [signal, ...(state.pendingSignalsByThread.get(key) ?? [])]);
-      }
+      // Restore through the map, not the local `queue` array: the shift above
+      // deletes the map entry when it empties the queue, so the local array
+      // may be detached from the map by the time we get here. Signals batched
+      // into the failed run's pre-run queue go back behind the drained signal.
+      const batchedLeftover = state.preRunSignalsByThread.get(key) ?? [];
+      state.preRunSignalsByThread.delete(key);
+      const restored = [
+        ...(signal && !draining?.cancelled ? [signal] : []),
+        ...batchedLeftover,
+        ...(state.pendingSignalsByThread.get(key) ?? []),
+      ];
+      if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
