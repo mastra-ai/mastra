@@ -25,15 +25,7 @@ function layoutRow(element: HTMLElement, index: number) {
     offsetWidth: { value: 200, configurable: true },
     offsetHeight: { value: ROW_HEIGHT, configurable: true },
   });
-  element.getBoundingClientRect = () =>
-    ({
-      left: 0,
-      top: index * ROW_HEIGHT,
-      width: 200,
-      height: ROW_HEIGHT,
-      right: 200,
-      bottom: (index + 1) * ROW_HEIGHT,
-    }) as DOMRect;
+  element.getBoundingClientRect = () => new DOMRect(0, index * ROW_HEIGHT, 200, ROW_HEIGHT);
 }
 
 function Row({

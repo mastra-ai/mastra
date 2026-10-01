@@ -19,6 +19,7 @@ import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../Dialog';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt';
 import {
   Command,
   CommandDialog,
@@ -362,9 +363,9 @@ export const InDialogWithDisabledRows: Story = {
               </CommandGroup>
             </CommandList>
           </Command>
-          <p className="px-4 pb-4 text-caption text-muted-foreground" data-testid="picked">
+          <Txt as="p" variant="caption" tone="muted" className="px-4 pb-4">
             Picked: {picked}
-          </p>
+          </Txt>
         </DialogContent>
       </Dialog>
     );
