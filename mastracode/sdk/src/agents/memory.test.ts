@@ -186,6 +186,7 @@ describe('getDynamicMemory', () => {
     expect(resolveModelMock).toHaveBeenLastCalledWith('google/gemini-3.5-flash', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
   });
 
@@ -440,10 +441,12 @@ describe('getDynamicMemory', () => {
     expect(resolveModelMock).toHaveBeenNthCalledWith(1, 'openai/gpt-5.4-mini', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
     expect(resolveModelMock).toHaveBeenNthCalledWith(2, 'anthropic/claude-sonnet-4-5', {
       remapForCodexOAuth: true,
       requestContext,
+      anthropicPromptCacheScope: 'system',
     });
   });
 });
@@ -507,7 +510,7 @@ describe('pack-driven OM models (A11)', () => {
     expect(resolvePackMemoryModelChainMock).toHaveBeenCalledWith(
       { models: { activeModelPackId: 'anthropic' } },
       'custom:Work',
-      { remapForCodexOAuth: true, requestContext },
+      { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' },
     );
     expect(resolveModelMock).not.toHaveBeenCalled();
   });
