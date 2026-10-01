@@ -1603,6 +1603,23 @@ describe('prs route', () => {
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
   });
 
+  it('preserves the pull request author in the synthetic intake event', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'pull_request',
+        payload: expect.objectContaining({
+          sender: { login: 'grace' },
+          pull_request: expect.objectContaining({ user: { login: 'grace' } }),
+        }),
+      }),
+    );
+  });
+
   it('forwards the requested page and echoes the next page', async () => {
     seedMaterializedProject();
     listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });

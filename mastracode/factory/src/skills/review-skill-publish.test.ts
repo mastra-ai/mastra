@@ -25,3 +25,14 @@ describe.each(['factory-review', 'factory-rereview'])('%s verdict ordering', ski
     expect(content).not.toContain('Prepend this line to the published body');
   });
 });
+
+describe.each(['factory-review', 'factory-rereview'])('%s GitHub App author binding', skill => {
+  const content = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
+
+  it('accepts only GitHub documented App-login aliases before the fail-closed comparison', () => {
+    expect(content).toContain('REST/intake uses `<slug>[bot]`, while `gh pr view` may use `app/<slug>`');
+    expect(content).toContain('replace a leading `app/` with a trailing `[bot]`');
+    expect(content).toContain('make no other transformation');
+    expect(content).toContain('Preserve both raw values in the session handoff');
+  });
+});
