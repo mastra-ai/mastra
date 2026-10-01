@@ -1559,18 +1559,29 @@ export class AgentBrowser extends MastraBrowser {
     if (!this.webMcpSettings) return false;
     const allowed = this.webMcpSettings.allowedOrigins;
     if (!allowed || allowed.length === 0) return true;
-    let origin: string;
-    try {
-      const parsed = new URL(url);
-      // Node's URL reports `origin: 'null'` for file: URLs, but pages see
-      // `file://` — normalize so allowlist entries documented as `file://` work.
-      origin = parsed.protocol === 'file:' ? 'file://' : parsed.origin;
-    } catch {
-      return false;
-    }
+    const origin = normalizedOrigin(url);
+    if (origin === null) return false;
     // `about:blank` and `data:` URLs have no origin an allowlist entry could match.
     if (origin === 'null' || origin === 'about:blank') return false;
     return allowed.includes(origin);
+  }
+
+  /**
+   * Origin the in-page bridge must still be on when the evaluate callback runs.
+   *
+   * The host-side `originIsAllowed(page.url())` check races with navigation
+   * (TOCTOU): the page can navigate itself — or another caller can run
+   * `browser_goto` — between reading the URL and the `evaluate` executing in
+   * the (new) document. When an allowlist is configured, we pass the origin we
+   * validated into the page and re-check it against `location.origin` before
+   * touching the bridge, so the race fails closed. Returns `null` when no
+   * allowlist is configured (every origin is permitted, so there is nothing to
+   * enforce).
+   */
+  private expectedWebMcpOrigin(url: string): string | null {
+    const allowed = this.webMcpSettings?.allowedOrigins;
+    if (!allowed || allowed.length === 0) return null;
+    return normalizedOrigin(url);
   }
 
   async listWebMcpTools(threadId?: string): Promise<
@@ -1604,10 +1615,25 @@ export class AgentBrowser extends MastraBrowser {
           'Navigate to an allowed origin, or add this origin to webmcp.allowedOrigins.',
         );
       }
-      const tools = await page.evaluate(async () => {
-        const bridge = (globalThis as unknown as { __mastraWebMcp?: { list: () => Promise<unknown> } }).__mastraWebMcp;
-        return bridge ? await bridge.list() : [];
-      });
+      const tools = await page.evaluate(
+        async ({ expectedOrigin }) => {
+          // Re-check the origin in-page: the host-side allowlist check raced
+          // with any navigation that happened after `page.url()` was read.
+          if (expectedOrigin !== null) {
+            const loc = (globalThis as unknown as { location: { protocol: string; origin: string } }).location;
+            const pageOrigin = loc.protocol === 'file:' ? 'file://' : loc.origin;
+            if (pageOrigin !== expectedOrigin) {
+              throw new Error(
+                `WebMCP blocked: the page navigated to "${pageOrigin}" after the origin allowlist check for "${expectedOrigin}"`,
+              );
+            }
+          }
+          const bridge = (globalThis as unknown as { __mastraWebMcp?: { list: () => Promise<unknown> } })
+            .__mastraWebMcp;
+          return bridge ? await bridge.list() : [];
+        },
+        { expectedOrigin: this.expectedWebMcpOrigin(url) },
+      );
       const list = Array.isArray(tools)
         ? (tools as Array<{ name: string; source: 'w3c' | 'mcpb'; description: string | null; inputSchema: unknown }>)
         : [];
@@ -1647,14 +1673,25 @@ export class AgentBrowser extends MastraBrowser {
         );
       }
       const result = await page.evaluate(
-        async ({ name, args }) => {
+        async ({ name, args, expectedOrigin }) => {
+          // Re-check the origin in-page: the host-side allowlist check raced
+          // with any navigation that happened after `page.url()` was read.
+          if (expectedOrigin !== null) {
+            const loc = (globalThis as unknown as { location: { protocol: string; origin: string } }).location;
+            const pageOrigin = loc.protocol === 'file:' ? 'file://' : loc.origin;
+            if (pageOrigin !== expectedOrigin) {
+              throw new Error(
+                `WebMCP blocked: the page navigated to "${pageOrigin}" after the origin allowlist check for "${expectedOrigin}"`,
+              );
+            }
+          }
           const bridge = (
             globalThis as unknown as { __mastraWebMcp?: { call: (name: string, args: unknown) => Promise<unknown> } }
           ).__mastraWebMcp;
           if (!bridge) throw new Error('WebMCP bridge is not installed on this page');
           return await bridge.call(name, args);
         },
-        { name: input.toolName, args: input.args },
+        { name: input.toolName, args: input.args, expectedOrigin: this.expectedWebMcpOrigin(url) },
       );
       return {
         success: true,
@@ -1875,6 +1912,21 @@ function safeOrigin(url: string): string {
     return new URL(url).origin;
   } catch {
     return url;
+  }
+}
+
+/**
+ * Normalize a URL to the origin string used for WebMCP allowlist matching,
+ * or `null` when the URL cannot be parsed. Node's URL reports
+ * `origin: 'null'` for file: URLs, but pages see `file://` — normalize so
+ * allowlist entries documented as `file://` work.
+ */
+function normalizedOrigin(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'file:' ? 'file://' : parsed.origin;
+  } catch {
+    return null;
   }
 }
 

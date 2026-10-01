@@ -192,7 +192,7 @@ describe('WebMCP: call', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toEqual({ ok: true });
     const callArgs = mockPage.evaluate.mock.calls[0];
-    expect(callArgs?.[1]).toEqual({ name: 'checkout', args: { items: 2 } });
+    expect(callArgs?.[1]).toEqual({ name: 'checkout', args: { items: 2 }, expectedOrigin: null });
   });
 
   it('surfaces bridge errors from page.evaluate rejections', async () => {
@@ -278,6 +278,62 @@ describe('WebMCP: origin allowlist', () => {
     const result = await browser.callWebMcpTool({ toolName: 'foo' });
     expect(result.success).toBe(false);
     expect(mockPage.evaluate).not.toHaveBeenCalled();
+    await browser.close();
+  });
+});
+
+describe('WebMCP: delayed-navigation (TOCTOU) regression', () => {
+  // The host checks `originIsAllowed(page.url())` before `page.evaluate`, but
+  // the page can navigate in between. These tests execute the real evaluate
+  // callback against a `location` that no longer matches the checked URL and
+  // assert the in-page re-check fails closed.
+  const runEvaluateCallback = async (fn: (arg: unknown) => unknown, arg: unknown) => fn(arg);
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete (globalThis as { location?: unknown }).location;
+  });
+
+  it('fails closed when the page navigates between the allowlist check and list', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    (globalThis as { location?: unknown }).location = { protocol: 'https:', origin: 'https://attacker.example' };
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    await browser.close();
+  });
+
+  it('fails closed when the page navigates between the allowlist check and call', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    (globalThis as { location?: unknown }).location = { protocol: 'https:', origin: 'https://attacker.example' };
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
+    });
+    await browser.launch();
+    const result = await browser.callWebMcpTool({ toolName: 'checkout', args: {} });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    await browser.close();
+  });
+
+  it('skips the in-page origin check when no allowlist is configured', async () => {
+    mockPage.url.mockReturnValue('https://example.com/');
+    // No `location` stub: with no allowlist, expectedOrigin is null and the
+    // callback must not touch `location` at all.
+    mockPage.evaluate.mockImplementation(runEvaluateCallback);
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    await browser.launch();
+    const result = await browser.listWebMcpTools();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.tools).toEqual([]);
     await browser.close();
   });
 });

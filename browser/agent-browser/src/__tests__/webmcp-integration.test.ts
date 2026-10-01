@@ -270,6 +270,32 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
         await browser.close();
       }
     }, 30_000);
+
+    it('fails closed when the page navigates after the allowlist check (TOCTOU)', async () => {
+      const browser = new AgentBrowser({
+        headless: true,
+        scope: 'shared',
+        webmcp: { enabled: true, allowedOrigins: ['https://allowed.example'] },
+      });
+      try {
+        await browser.ensureReady();
+        await browser.goto({ url });
+        // Simulate the delayed-navigation race deterministically: the host
+        // reads `page.url()` (allowed origin) but by the time the evaluate
+        // runs, the document really sits on a different origin. The in-page
+        // re-check against `location.origin` must reject it.
+        const page = await getPage(browser);
+        (page as unknown as { url: () => string }).url = () => 'https://allowed.example/';
+        const list = await browser.listWebMcpTools();
+        expect(list.success).toBe(false);
+        if (!list.success) expect(list.message).toMatch(/navigated/);
+        const call = await browser.callWebMcpTool({ toolName: 'get_cart' });
+        expect(call.success).toBe(false);
+        if (!call.success) expect(call.message).toMatch(/navigated/);
+      } finally {
+        await browser.close();
+      }
+    }, 30_000);
   });
 
   describe('full agent loop with the real toolset', () => {
