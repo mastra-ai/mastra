@@ -6,6 +6,7 @@ import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { MastraError } from '../error';
+import { getErrorFromUnknown } from '../error/utils';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -48,7 +49,7 @@ import {
   formatOmittedMarker,
   messageText,
 } from './thread-history';
-import type { ThreadHistoryWindow } from './thread-history';
+import type { ThreadHistoryLogContext, ThreadHistoryWindow } from './thread-history';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -1363,11 +1364,19 @@ export class AgentChannels {
     if (maxMessages > 0 && !chatThread.isDM) {
       const alreadySubscribed = await chatThread.isSubscribed();
       if (!alreadySubscribed) {
-        this.logger?.debug?.(`Fetching thread history (max ${maxMessages}) for first mention in ${chatThread.id}`);
+        const logContext = {
+          platform,
+          threadId: chatThread.id,
+          mastraThreadId: mastraThread.id,
+          messageId: message.id,
+        };
+        this.log('debug', `[${platform}] Fetching thread history for first mention`, { ...logContext, maxMessages });
         const history = await collectThreadHistory(chatThread, historyExcludeIds, maxMessages, this.logger);
-        this.logger?.debug?.(
-          `Fetched ${history.recent.length + (history.root ? 1 : 0)} messages from thread history (${history.omitted}${history.capped ? '+' : ''} omitted)`,
-        );
+        this.log('debug', `[${platform}] Fetched thread history`, {
+          ...logContext,
+          fetched: history.recent.length + (history.root ? 1 : 0),
+          omitted: formatOmittedCount(history),
+        });
         const hasHistory = history.root !== undefined || history.recent.length > 0;
         if (hasHistory) {
           const persisted = await this.persistThreadHistorySignals({
@@ -1375,11 +1384,17 @@ export class AgentChannels {
             requestContext,
             thread: mastraThread,
             memory: { thread: mastraThread.id, resource: threadResourceId },
+            logContext,
           });
           if (!persisted) legacyHistoryBlock = formatLegacyHistoryBlock(history, chatThread, platform);
         }
       } else {
-        this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${chatThread.id}`);
+        this.log('debug', `[${platform}] Skipping thread history fetch, thread already subscribed`, {
+          platform,
+          threadId: chatThread.id,
+          mastraThreadId: mastraThread.id,
+          messageId: message.id,
+        });
       }
     }
 
@@ -1670,6 +1685,8 @@ export class AgentChannels {
     requestContext: RequestContext;
     thread: StorageThreadType;
     memory: { thread: string; resource: string };
+    /** Platform and message identifiers for log lines. */
+    logContext: ThreadHistoryLogContext;
   }): Promise<boolean> {
     const memory = await this.agent.getMemory({ requestContext: args.requestContext });
     if (!memory) return false;
@@ -1687,12 +1704,17 @@ export class AgentChannels {
     buildSignals: () => Promise<AgentSignalInput[]>;
     memory: MastraMemory;
     target: { thread: string; resource: string };
+    logContext: ThreadHistoryLogContext;
   }): Promise<boolean> {
+    const { platform } = args.logContext;
     let signals: AgentSignalInput[];
     try {
       signals = await args.buildSignals();
     } catch (err) {
-      this.log('warn', `Failed to build thread history messages: ${err}`);
+      this.log('warn', `[${platform}] Failed to build thread history messages`, {
+        ...args.logContext,
+        error: getErrorFromUnknown(err).message,
+      });
       return true;
     }
     if (signals.length === 0) return true;
@@ -1702,9 +1724,14 @@ export class AgentChannels {
           createSignal(signal).toDBMessage({ resourceId: args.target.resource, threadId: args.target.thread }),
         ),
       });
+      this.log('debug', `[${platform}] Persisted thread history`, { ...args.logContext, rows: signals.length });
       return true;
     } catch (err) {
-      this.log('warn', `Failed to persist ${signals.length} thread history messages: ${err}`);
+      this.log('warn', `[${platform}] Failed to persist thread history messages`, {
+        ...args.logContext,
+        rows: signals.length,
+        error: getErrorFromUnknown(err).message,
+      });
       return false;
     }
   }

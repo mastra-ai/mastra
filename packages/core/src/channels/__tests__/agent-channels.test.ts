@@ -3183,7 +3183,10 @@ describe('thread history', () => {
     const contents = t.signals().map(s => s.contents);
     expect(contents).toHaveLength(9);
     expect(contents[0]).toBe('message 591');
-    expect(t.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch thread root message'));
+    expect(t.logger.warn).toHaveBeenCalledWith(
+      '[slack] Failed to fetch thread root message',
+      expect.objectContaining({ platform: 'slack', threadId: 'channel-1:thread-1', error: 'forward boom' }),
+    );
   });
 
   it('persists nothing but still dispatches the trigger when the history walk fails', async () => {
@@ -3198,7 +3201,10 @@ describe('thread history', () => {
     await t.run(chatThread);
     expect(t.hook).not.toHaveBeenCalled();
     expect(t.dispatches).toHaveLength(1);
-    expect(t.logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch thread history'));
+    expect(t.logger.warn).toHaveBeenCalledWith(
+      '[slack] Failed to fetch thread history',
+      expect.objectContaining({ platform: 'slack', threadId: 'channel-1:thread-1', error: 'backward boom' }),
+    );
   });
 
   it('routes history attachments like live attachments', async () => {
@@ -3316,10 +3322,17 @@ describe('thread history', () => {
       // History is only collected on the first mention, so a lost write must
       // not lose the context: the legacy block carries it on the trigger.
       await expect(t.hook.mock.results[0]!.value).resolves.toBe(false);
-      expect(t.logger.warn).toHaveBeenCalledWith(
-        'Failed to persist 11 thread history messages: Error: write boom',
-        expect.anything(),
-      );
+      expect(t.logger.warn).toHaveBeenCalledWith('[slack] Failed to persist thread history messages', {
+        args: [
+          expect.objectContaining({
+            platform: 'slack',
+            threadId: 'channel-1:thread-1',
+            messageId: 'trigger',
+            rows: 11,
+            error: 'write boom',
+          }),
+        ],
+      });
       expect(t.dispatches).toHaveLength(1);
       const text = t.dispatches[0].signalContents as string;
       expect(text).toContain('[Thread context — messages in this thread before you joined]');
@@ -3335,8 +3348,8 @@ describe('thread history', () => {
       await expect(t.hook.mock.results[0]!.value).resolves.toBe(true);
       expect(agent.memory.saveMessages).not.toHaveBeenCalled();
       expect(t.logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to build thread history messages'),
-        expect.anything(),
+        '[slack] Failed to build thread history messages',
+        expect.objectContaining({ args: [expect.objectContaining({ platform: 'slack', error: 'build boom' })] }),
       );
       expect(t.dispatches).toHaveLength(1);
       expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');

@@ -1,5 +1,6 @@
 import type { Message, Thread } from 'chat';
 
+import { getErrorFromUnknown } from '../error/utils';
 import type { IMastraLogger } from '../logger/logger';
 import { chatModule } from './chat-lazy';
 
@@ -9,6 +10,16 @@ import { chatModule } from './chat-lazy';
  * at least 200 per call, so this costs at most a few calls.
  */
 export const THREAD_HISTORY_OMITTED_CAP = 500;
+
+/** Identifiers attached to every thread-history log line. */
+export interface ThreadHistoryLogContext {
+  platform: string;
+  /** Platform thread id. */
+  threadId: string;
+  mastraThreadId: string;
+  /** The mention that triggered the history fetch. */
+  messageId: string;
+}
 
 /** Prior platform messages gathered for a first mention. */
 export interface ThreadHistoryWindow {
@@ -71,7 +82,11 @@ export async function collectThreadHistory(
       if (older.length >= THREAD_HISTORY_OMITTED_CAP) break;
     }
   } catch (err) {
-    logger?.warn?.(`Failed to fetch thread history: ${err}`);
+    logger?.warn(`[${chatThread.adapter.name}] Failed to fetch thread history`, {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
+      error: getErrorFromUnknown(err).message,
+    });
     return { root: undefined, omitted: 0, capped: false, recent: [] };
   }
   recent.reverse();
@@ -90,7 +105,11 @@ export async function collectThreadHistory(
       break;
     }
   } catch (err) {
-    logger?.warn?.(`Failed to fetch thread root message: ${err}`);
+    logger?.warn(`[${chatThread.adapter.name}] Failed to fetch thread root message`, {
+      platform: chatThread.adapter.name,
+      threadId: chatThread.id,
+      error: getErrorFromUnknown(err).message,
+    });
     return { root: undefined, omitted: 0, capped: false, recent };
   }
   if (!root) return { root: undefined, omitted: 0, capped: false, recent };

@@ -12,6 +12,7 @@ import type { RequestContext } from '../request-context';
 
 import { AgentChannels } from './agent-channels';
 import { ChannelSessionRejectedError } from './errors';
+import type { ThreadHistoryLogContext } from './thread-history';
 import type { ChannelConfig } from './types';
 
 /** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
@@ -336,6 +337,7 @@ export class AgentControllerChannels extends AgentChannels {
     requestContext: RequestContext;
     thread: StorageThreadType;
     memory: { thread: string; resource: string };
+    logContext: ThreadHistoryLogContext;
   }): Promise<boolean> {
     const session = await this.getSessionForThread(args.thread, args.requestContext);
     const memory = await session.machinery.getAgent().getMemory({ requestContext: args.requestContext });
@@ -344,6 +346,7 @@ export class AgentControllerChannels extends AgentChannels {
       buildSignals: args.buildSignals,
       memory,
       target: { thread: session.thread.getId() ?? args.memory.thread, resource: session.identity.getResourceId() },
+      logContext: args.logContext,
     });
   }
 
