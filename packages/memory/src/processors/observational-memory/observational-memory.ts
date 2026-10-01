@@ -3677,6 +3677,13 @@ ${formattedMessages}
       this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
     );
 
+    // Storage adapters decrement the persisted pending count during the swap. Keep
+    // that base aligned with the live count used to select chunks so the returned
+    // record reflects the unactivated tail rather than the previous step's count.
+    if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
+      await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
+    }
+
     // Perform the swap
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,

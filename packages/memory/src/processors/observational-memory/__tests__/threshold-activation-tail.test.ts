@@ -14,6 +14,7 @@ import { MessageList } from '@mastra/core/agent';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 
+import { OmModelExecutionError } from '../error';
 import { ObservationalMemory } from '../observational-memory';
 
 const resourceId = 'resource-19767';
@@ -30,7 +31,7 @@ function msg(id: string, role: 'user' | 'assistant', text: string, createdAt: Da
   } as MastraDBMessage;
 }
 
-async function setup(threadId: string) {
+async function setup(threadId: string, failurePolicy?: 'abort' | 'continue') {
   const storage = new InMemoryMemory({ db: new InMemoryDB() });
   await storage.saveThread({
     thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
@@ -45,6 +46,7 @@ async function setup(threadId: string) {
       bufferTokens: 2_000,
       bufferActivation: 0.8,
       blockAfter: 1.2,
+      ...(failurePolicy ? { failurePolicy, maxRetries: 0 } : {}),
     },
     reflection: { model: 'openai/gpt-4o-mini' as any, observationTokens: 50_000 },
   });
@@ -124,6 +126,49 @@ describe('threshold observation after partial buffered activation', () => {
     expect(finalRecord?.activeObservations).toContain('cycle-a observation');
     expect(finalRecord?.activeObservations).toContain('* observed tail');
     expect(finalRecord?.bufferedObservationChunks ?? []).toHaveLength(0);
+  });
+
+  it('keeps the unobserved tail pending when continue policy absorbs its observer failure', async () => {
+    const threadId = 'thread-tail-failure-continue';
+    const { storage, om, observerCall, swapSpy } = await setup(threadId, 'continue');
+    observerCall.mockRejectedValue(
+      new OmModelExecutionError('observer-model', new Error('observer unavailable after activation')),
+    );
+
+    const t0 = Date.now() - 60_000;
+    const oldUser = msg('old-user', 'user', 'hello '.repeat(300), new Date(t0), threadId);
+    const oldAssistant = msg('old-assistant', 'assistant', 'answer '.repeat(300), new Date(t0 + 1000), threadId);
+    const newUser = msg('new-user', 'user', 'please run the tool', new Date(Date.now() - 1000), threadId);
+    const bigToolResult = msg('big-tool-result', 'assistant', 'data '.repeat(30_000), new Date(), threadId);
+    await storage.saveMessages({ messages: [oldUser, oldAssistant] });
+
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await addChunk(storage, record.id, 'cycle-a', ['old-user', 'old-assistant'], 600, new Date(t0 + 1000));
+    await storage.setPendingMessageTokens(record.id, 600);
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([oldUser, oldAssistant], 'memory');
+    messageList.add(newUser, 'input');
+    messageList.add(bigToolResult, 'response');
+
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+    const ctx = await turn.step(1).prepare();
+
+    expect(swapSpy).toHaveBeenCalledTimes(1);
+    expect(swapSpy.mock.calls[0]![0].currentPendingTokens).toBeGreaterThan(30_000);
+    expect(observerCall).toHaveBeenCalledTimes(1);
+    expect(ctx.observed).toBe(true);
+    expect(ctx.status.shouldObserve).toBe(true);
+    expect(messageList.get.all.db().map(message => message.id)).toEqual(['new-user', 'big-tool-result']);
+
+    const finalRecord = await storage.getObservationalMemory(threadId, resourceId);
+    expect(finalRecord?.activeObservations).toContain('cycle-a observation');
+    expect(finalRecord?.activeObservations).not.toContain('* observed tail');
+    expect(finalRecord?.bufferedObservationChunks ?? []).toHaveLength(0);
+    expect(finalRecord?.observedMessageIds ?? []).not.toContain('new-user');
+    expect(finalRecord?.observedMessageIds ?? []).not.toContain('big-tool-result');
+    expect(finalRecord?.pendingMessageTokens).toBeGreaterThan(10_000);
   });
 
   it('activates every remaining chunk before observing so no message is observed twice', async () => {
