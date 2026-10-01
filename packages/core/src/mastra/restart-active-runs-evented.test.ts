@@ -105,6 +105,30 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
+  it('assumes a single instance: re-drives a step another live host is still executing', async () => {
+    // Host A stays alive with step2 in flight. Without a lease/lock the sweep on host B
+    // cannot tell that apart from an orphaned run, so it runs step2 again. This is why
+    // autoRestartActiveRuns is documented as single-instance only.
+    const storage = new MockStore();
+    const id = 'evented-live-original-host';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    const step2B = vi.fn(async ({ inputData }: { inputData: any }) => ({ got: inputData.seed }));
+    const hostB = newHost(
+      makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true }),
+      storage,
+    );
+    await hostB.startWorkers();
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(1);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
   it('defers evented restarts requested before workers start', async () => {
     const storage = new MockStore();
     const id = 'evented-before-workers';
