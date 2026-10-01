@@ -2804,7 +2804,12 @@ describe('MongoDBVector autoEmbed', () => {
       expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $eq: 'astronaut' } });
     });
 
-    it('pre-filters a documentFilter that uses operators $vectorSearch.filter rejects', async () => {
+    it.each([
+      ['a $regex operator', { $regex: /astronaut/ }],
+      ['a bare RegExp', /astronaut/],
+      ['a RegExp inside $in', { $in: [/astronaut/] }],
+      ['a RegExp inside $ne', { $ne: /astronaut/ }],
+    ])('pre-filters a documentFilter with %s, which $vectorSearch.filter rejects', async (_, documentFilter) => {
       const v = makeVector();
       const aggregate = vi
         .fn()
@@ -2820,9 +2825,9 @@ describe('MongoDBVector autoEmbed', () => {
         isByo: false,
       });
 
-      await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: { $regex: /astronaut/ } });
+      await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: documentFilter as any });
 
-      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $regex: /astronaut/ } });
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: documentFilter });
       expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
     });
 

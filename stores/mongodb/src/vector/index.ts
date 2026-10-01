@@ -2318,6 +2318,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   private canPushDownFilter(filter: any, declaredPaths: Set<string>): boolean {
     if (filter === null || typeof filter !== 'object') return true;
+    // $vectorSearch.filter has no regex semantics
+    if (filter instanceof RegExp) return false;
     if (Array.isArray(filter)) return filter.every(item => this.canPushDownFilter(item, declaredPaths));
 
     for (const [key, value] of Object.entries(filter)) {
