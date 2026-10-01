@@ -189,26 +189,38 @@ export function createSignalSubscriptionsConformanceTests({
     describe('row references', () => {
       it('matches a row id only within its agent and provider', async () => {
         const row = await store.upsertSubscription(createSampleSignalIdentity());
-        const otherProvider = { agentId: row.agentId, providerId: 'other-provider', id: row.id };
-        expect(await replica.getSubscriptionById(otherProvider)).toBeNull();
-        expect(await replica.updateSubscription({ ...otherProvider, patch: { metadata: { x: 1 } } })).toBeNull();
-        expect(await replica.setSubscriptionEnabled({ ...otherProvider, enabled: false })).toBeNull();
+        const op = await store.insertSubscribingSubscription({
+          ...createSampleSignalIdentity({ externalResourceId: 'ext-op' }),
+          owner: 'op',
+          ttlMs: LONG,
+        });
+        await store.claimSubscription({ ...ref(row.id), owner: 'poller', ttlMs: LONG, cadenceMs: CADENCE });
+        const wrong = (id: string) => ({ agentId: SIGNAL_AGENT, providerId: 'other-provider', id });
+        const other = wrong(row.id);
+        const otherOp = wrong(op!.id);
+
+        expect(await replica.getSubscriptionById(other)).toBeNull();
+        expect(await replica.updateSubscription({ ...other, patch: { metadata: { x: 1 } } })).toBeNull();
+        expect(await replica.setSubscriptionEnabled({ ...other, enabled: false })).toBeNull();
         expect(
-          await replica.claimSubscription({
-            ...otherProvider,
-            owner: 'o',
-            ttlMs: LONG,
-            cadenceMs: CADENCE,
-            force: true,
-          }),
+          await replica.claimSubscription({ ...other, owner: 'o', ttlMs: LONG, cadenceMs: CADENCE, force: true }),
         ).toBeNull();
+        expect(await replica.renewSubscriptionClaimIfEnabled({ ...other, owner: 'poller', ttlMs: LONG })).toBe(false);
+        expect(await replica.validateSubscriptionClaimIfEnabled({ ...other, owner: 'poller' })).toBe(false);
+        expect(await replica.releaseSubscriptionClaim({ ...other, owner: 'poller' })).toBe(false);
         expect(
-          await replica.beginSubscriptionOperation({ ...otherProvider, kind: 'unsubscribe', owner: 'op', ttlMs: LONG }),
+          await replica.beginSubscriptionOperation({ ...other, kind: 'unsubscribe', owner: 'x', ttlMs: LONG }),
         ).toBeNull();
-        expect(await replica.deleteSubscription(otherProvider)).toBe(false);
-        expect(await replica.getSubscriptionById(ref(row.id))).toMatchObject({ enabled: true, metadata: {} });
-        expect((await replica.getSubscriptionById(ref(row.id)))?.claimOwner).toBeUndefined();
-        expect((await replica.getSubscriptionById(ref(row.id)))?.operationOwner).toBeUndefined();
+        expect(await replica.renewSubscriptionOperation({ ...otherOp, owner: 'op', ttlMs: LONG })).toBe(false);
+        expect(await replica.commitSubscribe({ ...otherOp, owner: 'op' })).toBeNull();
+        expect(await replica.abortSubscriptionOperation({ ...otherOp, owner: 'op' })).toBe(false);
+        expect(await replica.commitUnsubscribe({ ...otherOp, owner: 'op' })).toBe(false);
+        expect(await replica.deleteSubscription(other)).toBe(false);
+
+        const kept = await replica.getSubscriptionById(ref(row.id));
+        expect(kept).toMatchObject({ enabled: true, metadata: {}, claimOwner: 'poller' });
+        expect(kept?.operationOwner).toBeUndefined();
+        expect(await replica.getSubscriptionById(ref(op!.id))).toMatchObject({ operationOwner: 'op', enabled: false });
       });
 
       it('rejects a caller-supplied id already used by another subscription', async () => {
@@ -817,6 +829,20 @@ export function createSignalSubscriptionsConformanceTests({
         expect(await replica.renewDeliveryClaim({ ...delivery, owner: taker, ttlMs: TTL })).toBe(false);
         expect(await replica.releaseDelivery({ ...delivery, owner: taker })).toBe(false);
         expect(await store.claimDelivery({ ...delivery, owner: 'late', ttlMs: TTL })).toBe('delivered');
+      });
+
+      it('never reports a live subscription as missing while a claim is released concurrently', async () => {
+        const { id } = await store.upsertSubscription(createSampleSignalIdentity());
+        for (let attempt = 0; attempt < 25; attempt++) {
+          const delivery = { subscriptionId: id, deliveryId: `race-${attempt}` };
+          expect(await store.claimDelivery({ ...delivery, owner: 'a', ttlMs: LONG })).toBe('claimed');
+          const [released, result] = await Promise.all([
+            store.releaseDelivery({ ...delivery, owner: 'a' }),
+            replica.claimDelivery({ ...delivery, owner: 'b', ttlMs: LONG }),
+          ]);
+          expect(released).toBe(true);
+          expect(['claimed', 'in-progress']).toContain(result);
+        }
       });
 
       it('releases a pending claim for retry and keeps delivered ids for the subscription lifetime', async () => {

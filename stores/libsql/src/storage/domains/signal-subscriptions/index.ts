@@ -818,29 +818,33 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     threadId: string;
   }): Promise<SignalSubscriptionDocumentOwner | null> {
     return this.#run('CLAIM_DOCUMENT_OWNER', async () => {
-      await this.#write(
-        `INSERT INTO ${C} ("kind", "key", "agentId", "providerId", "resourceId", "threadId", "fencingToken", "createdAt")
+      const [, claimed] = await this.#batch(
+        [
+          {
+            sql: `INSERT INTO ${C} ("kind", "key", "agentId", "providerId", "resourceId", "threadId", "fencingToken", "createdAt")
          SELECT 'owner', ?, ?, ?, ?, ?, ?, ${NOW}
          WHERE NOT EXISTS (
            SELECT 1 FROM ${C} o
            WHERE o."kind" = 'owner' AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?
          )
          ON CONFLICT ("kind", "key") DO NOTHING`,
-        [
-          args.key,
-          args.agentId,
-          args.providerId,
-          args.resourceId,
-          args.threadId,
-          crypto.randomUUID(),
-          args.providerId,
-          args.resourceId,
-          args.threadId,
+            args: [
+              args.key,
+              args.agentId,
+              args.providerId,
+              args.resourceId,
+              args.threadId,
+              crypto.randomUUID(),
+              args.providerId,
+              args.resourceId,
+              args.threadId,
+            ],
+          },
+          { sql: `SELECT * FROM ${C} WHERE "kind" = 'owner' AND "key" = ?`, args: [args.key] },
         ],
         'claim signal subscription document owner',
       );
-      const result = await this.#read(`SELECT * FROM ${C} WHERE "kind" = 'owner' AND "key" = ?`, [args.key]);
-      const row = result.rows[0];
+      const row = claimed?.rows[0];
       if (!row) return null;
       const owner = toOwner(row);
       const same =
@@ -953,24 +957,31 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     args: SignalSubscriptionDeliveryRef & { owner: string; ttlMs: number },
   ): Promise<ClaimSignalSubscriptionDeliveryResult> {
     return this.#run('CLAIM_DELIVERY', async () => {
-      const result = await this.#write(
-        `INSERT INTO ${D} ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
-         SELECT ?, ?, 'pending', ?, ${NOW} + ?, ${NOW}
-         WHERE EXISTS (SELECT 1 FROM ${S} WHERE "id" = ?)
-         ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = excluded."owner", "expiresAt" = excluded."expiresAt"
-         WHERE ${D}."status" = 'pending' AND ${D}."expiresAt" <= ${NOW}
-         RETURNING "owner"`,
-        [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs, args.subscriptionId],
+      // One atomic batch, so the status read and the existence check see the
+      // same state as the claim attempt.
+      const [claimed, state] = await this.#batch(
+        [
+          {
+            sql: `INSERT INTO ${D} ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
+                  SELECT ?, ?, 'pending', ?, ${NOW} + ?, ${NOW}
+                  WHERE EXISTS (SELECT 1 FROM ${S} WHERE "id" = ?)
+                  ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = excluded."owner", "expiresAt" = excluded."expiresAt"
+                  WHERE ${D}."status" = 'pending' AND ${D}."expiresAt" <= ${NOW}
+                  RETURNING "owner"`,
+            args: [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs, args.subscriptionId],
+          },
+          {
+            sql: `SELECT EXISTS (SELECT 1 FROM ${S} WHERE "id" = ?) AS "subscriptionExists",
+                         (SELECT "status" FROM ${D} WHERE "subscriptionId" = ? AND "deliveryId" = ?) AS "status"`,
+            args: [args.subscriptionId, args.subscriptionId, args.deliveryId],
+          },
+        ],
         'claim signal subscription delivery',
       );
-      if (result.rows.length === 1) return 'claimed';
-      const existing = await this.#read(`SELECT "status" FROM ${D} WHERE "subscriptionId" = ? AND "deliveryId" = ?`, [
-        args.subscriptionId,
-        args.deliveryId,
-      ]);
-      const status = existing.rows[0]?.status;
-      if (status === undefined) return 'missing';
-      return status === 'delivered' ? 'delivered' : 'in-progress';
+      if (claimed?.rows.length === 1) return 'claimed';
+      const row = state?.rows[0];
+      if (Number(row?.subscriptionExists) !== 1) return 'missing';
+      return row?.status === 'delivered' ? 'delivered' : 'in-progress';
     });
   }
 

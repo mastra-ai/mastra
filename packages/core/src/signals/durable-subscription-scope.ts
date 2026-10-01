@@ -20,6 +20,8 @@ import type {
 } from '../storage/domains/signal-subscriptions';
 
 type Scoped<T> = Omit<T, 'agentId' | 'providerId'>;
+/** New rows always get a generated id, so subscription ids are never caller-chosen. */
+type NewRow<T> = Omit<T, 'agentId' | 'providerId' | 'id'>;
 type RowRef = { id: string };
 type Lease = { owner: string; ttlMs: number };
 
@@ -42,7 +44,7 @@ export interface DurableSubscriptionScope {
 
   // Subscriptions
   upsertSubscription(
-    input: Scoped<UpsertSignalSubscriptionInput>,
+    input: NewRow<UpsertSignalSubscriptionInput>,
     fence?: SignalSubscriptionDocumentFence,
   ): Promise<SignalSubscriptionRecord>;
   getSubscriptionById(args: RowRef): Promise<SignalSubscriptionRecord | null>;
@@ -66,7 +68,7 @@ export interface DurableSubscriptionScope {
 
   // Membership operations
   insertSubscribingSubscription(
-    input: Scoped<Omit<UpsertSignalSubscriptionInput, 'enabled'>> & Lease,
+    input: NewRow<Omit<UpsertSignalSubscriptionInput, 'enabled'>> & Lease,
     fence?: SignalSubscriptionDocumentFence,
   ): Promise<SignalSubscriptionRecord | null>;
   beginSubscriptionOperation(
@@ -151,7 +153,7 @@ export function createDurableSubscriptionScope(
   const scope: DurableSubscriptionScope = {
     durability: store.durability,
 
-    upsertSubscription: async (input, fence) => use().upsertSubscription({ ...input, ...ids() }, fence),
+    upsertSubscription: async (input, fence) => use().upsertSubscription({ ...input, id: undefined, ...ids() }, fence),
     getSubscriptionById: async args => use().getSubscriptionById(row(args)),
     getSubscriptionByIdentity: async identity => use().getSubscriptionByIdentity({ ...identity, ...ids() }),
     listSubscriptions: async (args = {}) => use().listSubscriptions({ ...args, ...ids() }),
@@ -163,7 +165,7 @@ export function createDurableSubscriptionScope(
     deleteSubscriptions: async (filters = {}, fences) => use().deleteSubscriptions({ ...filters, ...ids() }, fences),
 
     insertSubscribingSubscription: async (input, fence) =>
-      use().insertSubscribingSubscription({ ...input, ...ids() }, fence),
+      use().insertSubscribingSubscription({ ...input, id: undefined, ...ids() }, fence),
     beginSubscriptionOperation: async (args, fence) => use().beginSubscriptionOperation(row(args), fence),
     renewSubscriptionOperation: async args => use().renewSubscriptionOperation(row(args)),
     commitSubscribe: async (args, fence) => use().commitSubscribe(row(args), fence),

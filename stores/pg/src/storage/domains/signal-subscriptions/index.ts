@@ -1008,23 +1008,28 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     args: SignalSubscriptionDeliveryRef & { owner: string; ttlMs: number },
   ): Promise<ClaimSignalSubscriptionDeliveryResult> {
     return this.#run('CLAIM_DELIVERY', async () => {
-      const claimed = await this.#rows(
-        `INSERT INTO ${this.#D} AS d ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
-         SELECT s."id", ?::text, 'pending', ?::text, ${NOW} + ?::bigint, ${NOW}
-         FROM ${this.#S} s WHERE s."id" = ?
-         FOR KEY SHARE OF s
-         ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = EXCLUDED."owner", "expiresAt" = EXCLUDED."expiresAt"
-         WHERE d."status" = 'pending' AND d."expiresAt" <= ${NOW}
-         RETURNING "owner"`,
-        [args.deliveryId, args.owner, args.ttlMs, args.subscriptionId],
+      // One statement: the subscription row is key-share locked (deletes lock
+      // it FOR UPDATE first), so existence and the claim attempt agree. A
+      // ledger row that is not visible while the claim lost belongs to a
+      // concurrent claimant, so it reports 'in-progress'.
+      const [result] = await this.#rows(
+        `WITH sub AS (
+           SELECT "id" FROM ${this.#S} WHERE "id" = ? FOR KEY SHARE
+         ), claimed AS (
+           INSERT INTO ${this.#D} AS d ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
+           SELECT sub."id", ?::text, 'pending', ?::text, ${NOW} + ?::bigint, ${NOW} FROM sub
+           ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = EXCLUDED."owner", "expiresAt" = EXCLUDED."expiresAt"
+           WHERE d."status" = 'pending' AND d."expiresAt" <= ${NOW}
+           RETURNING d."owner"
+         )
+         SELECT EXISTS (SELECT 1 FROM sub) AS "subscriptionExists",
+                EXISTS (SELECT 1 FROM claimed) AS "claimed",
+                (SELECT "status" FROM ${this.#D} WHERE "subscriptionId" = ? AND "deliveryId" = ?) AS "status"`,
+        [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs, args.subscriptionId, args.deliveryId],
       );
-      if (claimed.length === 1) return 'claimed';
-      const [existing] = await this.#rows(
-        `SELECT "status" FROM ${this.#D} WHERE "subscriptionId" = ? AND "deliveryId" = ?`,
-        [args.subscriptionId, args.deliveryId],
-      );
-      if (!existing) return 'missing';
-      return existing.status === 'delivered' ? 'delivered' : 'in-progress';
+      if (result?.claimed === true) return 'claimed';
+      if (result?.subscriptionExists !== true) return 'missing';
+      return result.status === 'delivered' ? 'delivered' : 'in-progress';
     });
   }
 
