@@ -1842,6 +1842,36 @@ describe('createMastraCode', () => {
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
   });
 
+  async function decideForThreadNoSessionOwns(options: Record<string, unknown>) {
+    const { createMastraCode } = await import('../index.js');
+    const mastraCode = await createMastraCode(options);
+    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+    const decision = await decide({
+      record: { priority: 'high', source: 'sentinel', resourceId: 'other-project', threadId: 'other-thread' },
+      threadState: 'idle',
+      now: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    await (mastraCode as { signalsPubSub?: { close?: () => Promise<void> } }).signalsPubSub?.close?.();
+    return decision;
+  }
+
+  it("leaves another local project's notifications for that project's process instead of running them here", async () => {
+    const decision = await decideForThreadNoSessionOwns({ unixSocketPubSub: true });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
+  });
+
+  it('does not hold notifications when no other local process can own the thread', async () => {
+    expect(await decideForThreadNoSessionOwns({ unixSocketPubSub: false })).not.toHaveProperty('hold');
+    expect(await decideForThreadNoSessionOwns({ pubsub: {} as any, crossProcessPubSub: true })).not.toHaveProperty(
+      'hold',
+    );
+  });
+
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),

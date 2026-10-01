@@ -602,7 +602,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
   const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
-  const crossProcessPubSub = config?.crossProcessPubSub ?? (!configuredPubSub && useUnixSocketPubSub);
+  // Other local Mastra Code processes, one per project, coordinate with this
+  // one through the built-in socket pubsub.
+  const sharesLocalProcesses = !configuredPubSub && useUnixSocketPubSub;
+  const crossProcessPubSub = config?.crossProcessPubSub ?? sharesLocalProcesses;
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
@@ -832,19 +835,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // build their options here so `prepareWakeRequestContext` runs for them.
   const getWakeStreamOptions = async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
     // Run the woken notification as the session that owns the target
-    // resource so it uses that session's model/mode/state. Fall back to
-    // the current session only when no session owns the resource yet.
-    const owningSession = await controller.getSessionByResource(resourceId);
-    const session = owningSession ?? activeSession;
-    // No session owns the resource and none is active yet (e.g. a deferred
-    // notification comes due before any session boots). Nothing to resolve a
-    // model from; return undefined so the dispatcher sends a bare wake
-    // instead of throwing mid-delivery.
+    // resource so it uses that session's model/mode/state/workspace. Never
+    // borrow another session: every Mastra Code process shares one database,
+    // so the target thread may belong to another project, and running it with
+    // this session's workspace would act on the wrong project.
+    const session = await controller.getSessionByResource(resourceId);
+    // No session here owns the resource. Return undefined so the dispatcher
+    // sends a bare wake instead of throwing mid-delivery.
     if (!session) return undefined;
     // A long-running system must be able to drive work unattended, so a
-    // target session without an explicit model selection falls back to a
-    // real model rather than failing the run: the current session's live
-    // selection (what the user actually picked), then the mode's default.
+    // target thread without an explicit model selection falls back to a
+    // real model rather than failing the run: the mode's default, then the
+    // session's live selection.
     const targetThread = await session.thread.getById({ threadId });
     const metadata =
       targetThread?.resourceId === resourceId
@@ -935,11 +937,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       },
     };
     requestContext.set('controller', agentControllerContext);
-    // Tenant identity/credentials must come from the session that owns the
-    // resource; the active-session fallback is only safe for model selection.
-    if (owningSession) {
-      await config?.prepareWakeRequestContext?.({ requestContext, resourceId, threadId });
-    }
+    await config?.prepareWakeRequestContext?.({ requestContext, resourceId, threadId });
 
     return {
       memory: { thread: threadId, resource: resourceId },
@@ -1148,7 +1146,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
           });
-          return streamOptions ? { ...decision, streamOptions } : decision;
+          if (streamOptions) return { ...decision, streamOptions };
+          // On the local socket pubsub, a thread no session here owns belongs
+          // to another Mastra Code process (another project) sharing this
+          // database. Leave its notifications for that process's dispatcher.
+          return sharesLocalProcesses ? { ...decision, hold: true } : decision;
         },
       },
     },

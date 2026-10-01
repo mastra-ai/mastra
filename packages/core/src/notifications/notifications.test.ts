@@ -772,6 +772,47 @@ describe('notification inbox', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('resolver exploded'));
   });
 
+  it('leaves notifications the delivery policy holds pending for another dispatcher, without counting an attempt', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn();
+    const resolveNotificationDeliveryDecision = vi.fn(async () => ({ action: 'deliver' as const, hold: true }));
+    const mastra = {
+      getAgentById: vi.fn(async () => ({ sendSignal, resolveNotificationDeliveryDecision })),
+    } as any;
+    const base = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', source: 'github' } as const;
+    await storage.createNotification({
+      ...base,
+      id: 'full',
+      kind: 'ci',
+      priority: 'high',
+      summary: 'CI',
+      deliverAt: now,
+    });
+    await storage.createNotification({
+      ...base,
+      id: 'sum',
+      kind: 'pr',
+      priority: 'medium',
+      summary: 'PR',
+      summaryAt: now,
+    });
+
+    for (let tick = 0; tick < 6; tick++) {
+      const result = await dispatchDueNotifications({ mastra, storage, now });
+      expect(result).toEqual({ delivered: [], failed: [], signals: [] });
+    }
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    for (const id of ['full', 'sum']) {
+      const record = await storage.getNotification({ threadId: 'thread-1', id });
+      expect(record).toMatchObject({ status: 'pending' });
+      expect(record?.deliveryAttempts ?? 0).toBe(0);
+      expect(record?.lastDeliveryError).toBeUndefined();
+    }
+    expect((await storage.listDueNotifications({ now })).map(record => record.id).sort()).toEqual(['full', 'sum']);
+  });
+
   it('records delivery failure when a notification signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
