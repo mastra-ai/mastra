@@ -1,5 +1,5 @@
 import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import { PubSub, UnixSocketPubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
@@ -11,6 +11,7 @@ const THREAD_KEY_SEPARATOR = '\0';
 const THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
+const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const MAX_PATH_SEGMENT_LENGTH = 128;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
@@ -25,9 +26,23 @@ function isEphemeralTopic(topic: string): boolean {
 }
 
 export type SignalsPubSubOptions = {
-  /** Directory that holds every resource's socket directory. Defaults to `/tmp/mc`. */
+  /**
+   * Also list this process's threads to, and find threads in, other projects on
+   * this machine: peer discovery runs in `<root>/_shared/` as well as in this
+   * resource's directory.
+   */
+  sharedAgentDiscovery?: boolean;
+  /**
+   * Directory that holds every resource's socket directory. Defaults to the
+   * absolute path in `MASTRACODE_SIGNALS_SOCKET_ROOT`, else `/tmp/mc`.
+   */
   rootDir?: string;
 };
+
+function socketRootFromEnv(): string {
+  const root = process.env.MASTRACODE_SIGNALS_SOCKET_ROOT;
+  return root && isAbsolute(root) ? root : DEFAULT_SOCKET_ROOT;
+}
 
 /**
  * Whether an id can name a single directory: no path separators or control
@@ -87,6 +102,20 @@ function isOwnerDiscoveryTopic(topic: string): boolean {
   return topic === OWNER_DISCOVERY_TOPIC || topic.startsWith(`${OWNER_DISCOVERY_TOPIC}.`);
 }
 
+function isPeerDiscoveryTopic(topic: string): boolean {
+  return topic === PEER_DISCOVERY_TOPIC || topic.startsWith(`${PEER_DISCOVERY_TOPIC}.`);
+}
+
+/** Whether a name can be a file in a directory: no separators or control characters, not `.`/`..`. */
+function isSafeFileName(value: string): boolean {
+  if (!value || value === '.' || value === '..') return false;
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (char === '/' || char === '\\' || code < 0x20 || code === 0x7f) return false;
+  }
+  return true;
+}
+
 /**
  * Derive a filesystem-safe key for the topic. Thread-stream topics embed
  * a threadId; all other topics use a sanitized version of the topic name.
@@ -98,6 +127,10 @@ function topicKey(topic: string): string {
     if (separatorIdx !== -1) return decoded.slice(separatorIdx + 1);
   }
   return topic.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function socketKey(dir: string, topic: string): string {
+  return `${dir}/${topicKey(topic)}`;
 }
 
 /**
@@ -120,7 +153,12 @@ function topicKey(topic: string): string {
  *   a thread claimed can reach the owner and hand it the signal. It only
  *   answers for a thread the asker names, so it discloses nothing new.
  * - Everything else, including peer discovery (which lists threads), stays in
- *   this process's own resource directory.
+ *   this process's own resource directory — unless `sharedAgentDiscovery` is
+ *   set, in which case peer discovery also runs in `<root>/_shared/` so other
+ *   projects' processes can list this one's threads and it can list theirs.
+ *   This resource's directory stays required (same-project processes without
+ *   the option still meet there); the shared scope is best effort and its
+ *   first failure is reported once.
  *
  * Stale sockets from crashed processes are handled by
  * {@link UnixSocketPubSub}'s built-in election logic: it detects
@@ -133,6 +171,8 @@ function topicKey(topic: string): string {
  * subscription holds a reference, and the topic's socket is closed as soon as
  * the count drops to zero. Without this each request would keep a socket, a
  * file descriptor and (for the broker) a socket file for the process lifetime.
+ * Another resource's thread topics are counted the same way, so a process that
+ * signals many threads elsewhere does not keep a socket open for each.
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
@@ -145,12 +185,15 @@ class SignalsPubSub extends PubSub {
   readonly #clearGenerations = new Map<string, number>();
   readonly #closing = new Map<string, Promise<void>>();
   readonly #leaseProvider: LeaseProvider;
+  readonly #sharedPeerDiscovery: boolean;
+  #sharedFailureReported = false;
   #closed = false;
 
   constructor(resourceId: string, options: SignalsPubSubOptions = {}) {
     super();
     this.#resourceId = resourceId;
-    this.#rootDir = options.rootDir ?? DEFAULT_SOCKET_ROOT;
+    this.#rootDir = options.rootDir ?? socketRootFromEnv();
+    this.#sharedPeerDiscovery = Boolean(options.sharedAgentDiscovery) && this.#canShareDiscovery();
     // Created eagerly, as before, so this resource's lease socket exists from the start.
     this.#leasesFor(resourceId);
     const route = (key: string) => this.#leasesFor(resourceOfLeaseKey(key) ?? this.#resourceId);
@@ -181,69 +224,30 @@ class SignalsPubSub extends PubSub {
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
-    if (!isEphemeralTopic(topic)) {
-      const socket = await this.#getOrCreate(topic);
-      await socket.publish(topic, event, options);
+    const [primary, shared] = this.#routes(topic);
+    if (shared === undefined) {
+      await this.#publishTo(topic, primary!, event, options);
       return;
     }
-    const key = this.#socketKey(topic);
-    // Retain synchronously so a concurrent release cannot close the socket
-    // this publish is about to use.
-    this.#retain(key);
-    try {
-      const socket = await this.#getOrCreate(topic);
-      await socket.publish(topic, event, options);
-    } finally {
-      this.#release(key);
-    }
+    const [own, other] = await Promise.allSettled([
+      this.#publishTo(topic, primary!, event, options),
+      this.#publishTo(topic, shared, event, options),
+    ]);
+    if (own.status === 'rejected') throw own.reason;
+    if (other.status === 'rejected') this.#reportSharedFailure(other.reason);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
-    if (!isEphemeralTopic(topic)) {
-      const socket = await this.#getOrCreate(topic);
-      await socket.subscribe(topic, cb, options);
-      return;
-    }
-    const key = this.#socketKey(topic);
-    this.#retain(key);
-    const generation = this.#clearGenerations.get(key) ?? 0;
-    try {
-      const socket = await this.#getOrCreate(topic);
-      await socket.subscribe(topic, cb, options);
-      if ((this.#clearGenerations.get(key) ?? 0) !== generation) {
-        // The topic was cleared while this subscribe was in flight.
-        await socket.unsubscribe(topic, cb);
-        return;
-      }
-      let subscriptions = this.#liveSubscriptions.get(key);
-      if (!subscriptions) {
-        subscriptions = new Set();
-        this.#liveSubscriptions.set(key, subscriptions);
-      }
-      if (!subscriptions.has(cb)) {
-        subscriptions.add(cb);
-        this.#retain(key);
-      }
-    } finally {
-      this.#release(key);
-    }
+    const [primary, shared] = this.#routes(topic);
+    await this.#subscribeTo(topic, primary!, cb, options);
+    if (shared === undefined) return;
+    await this.#subscribeTo(topic, shared, cb, options).catch(error => this.#reportSharedFailure(error));
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    const key = this.#socketKey(topic);
-    const socket = this.#sockets.get(key);
-    const subscriptions = isEphemeralTopic(topic) ? this.#liveSubscriptions.get(key) : undefined;
-    if (!subscriptions?.delete(cb)) {
-      if (!socket) return;
-      await socket.unsubscribe(topic, cb);
-      return;
-    }
-    if (subscriptions.size === 0) this.#liveSubscriptions.delete(key);
-    try {
-      await socket?.unsubscribe(topic, cb);
-    } finally {
-      this.#release(key);
-    }
+    const [primary, shared] = this.#routes(topic);
+    if (shared !== undefined) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
+    await this.#unsubscribeFrom(topic, primary!, cb);
   }
 
   /**
@@ -254,13 +258,15 @@ class SignalsPubSub extends PubSub {
    */
   override async clearTopic(topic: string): Promise<void> {
     if (!isEphemeralTopic(topic)) return;
-    const key = this.#socketKey(topic);
-    if (!this.#refs.has(key)) return;
-    this.#clearGenerations.set(key, (this.#clearGenerations.get(key) ?? 0) + 1);
-    const subscriptions = this.#liveSubscriptions.get(key);
-    if (!subscriptions) return;
-    this.#liveSubscriptions.delete(key);
-    for (let i = 0; i < subscriptions.size; i++) this.#release(key);
+    for (const dir of this.#routes(topic)) {
+      const key = socketKey(dir, topic);
+      if (!this.#refs.has(key)) continue;
+      this.#clearGenerations.set(key, (this.#clearGenerations.get(key) ?? 0) + 1);
+      const subscriptions = this.#liveSubscriptions.get(key);
+      if (!subscriptions) continue;
+      this.#liveSubscriptions.delete(key);
+      for (let i = 0; i < subscriptions.size; i++) this.#release(key);
+    }
   }
 
   async flush(): Promise<void> {
@@ -283,7 +289,110 @@ class SignalsPubSub extends PubSub {
 
   /** Get the underlying socket for a topic (for testing/inspection). */
   getSocket(topic: string): UnixSocketPubSub | undefined {
-    return this.#sockets.get(this.#socketKey(topic));
+    return this.#sockets.get(socketKey(this.#routes(topic)[0]!, topic));
+  }
+
+  #canShareDiscovery(): boolean {
+    if (isSafePathSegment(this.#resourceId) && this.#resourceId !== SHARED_SCOPE_DIR) return true;
+    console.warn(
+      `Cross-project agent discovery is disabled: resource id ${JSON.stringify(this.#resourceId)} cannot be used as a directory name, so other projects could not reach this instance.`,
+    );
+    return false;
+  }
+
+  #reportSharedFailure(error: unknown): void {
+    if (this.#sharedFailureReported) return;
+    this.#sharedFailureReported = true;
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Cross-project agent discovery hit an error; other projects may not see this instance while it lasts: ${message}`,
+    );
+  }
+
+  /** The directories, under the root, a topic lives in; the first is required. */
+  #routes(topic: string): string[] {
+    if (this.#sharedPeerDiscovery && isPeerDiscoveryTopic(topic)) return [this.#resourceId, SHARED_SCOPE_DIR];
+    return [this.#dirFor(topic)];
+  }
+
+  /** One-shot reply topics, and thread topics routed to another resource, close once unused. */
+  #isRefCounted(topic: string): boolean {
+    if (isEphemeralTopic(topic)) return true;
+    const decoded = decodeThreadTopic(topic);
+    if (decoded === undefined) return false;
+    const resourceId = resourceOfThreadKey(decoded);
+    return resourceId !== undefined && resourceId !== this.#resourceId;
+  }
+
+  async #publishTo(
+    topic: string,
+    dir: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
+    if (!this.#isRefCounted(topic)) {
+      const socket = await this.#getOrCreate(topic, dir);
+      await socket.publish(topic, event, options);
+      return;
+    }
+    const key = socketKey(dir, topic);
+    // Retain synchronously so a concurrent release cannot close the socket
+    // this publish is about to use.
+    this.#retain(key);
+    try {
+      const socket = await this.#getOrCreate(topic, dir);
+      await socket.publish(topic, event, options);
+    } finally {
+      this.#release(key);
+    }
+  }
+
+  async #subscribeTo(topic: string, dir: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (!this.#isRefCounted(topic)) {
+      const socket = await this.#getOrCreate(topic, dir);
+      await socket.subscribe(topic, cb, options);
+      return;
+    }
+    const key = socketKey(dir, topic);
+    this.#retain(key);
+    const generation = this.#clearGenerations.get(key) ?? 0;
+    try {
+      const socket = await this.#getOrCreate(topic, dir);
+      await socket.subscribe(topic, cb, options);
+      if ((this.#clearGenerations.get(key) ?? 0) !== generation) {
+        // The topic was cleared while this subscribe was in flight.
+        await socket.unsubscribe(topic, cb);
+        return;
+      }
+      let subscriptions = this.#liveSubscriptions.get(key);
+      if (!subscriptions) {
+        subscriptions = new Set();
+        this.#liveSubscriptions.set(key, subscriptions);
+      }
+      if (!subscriptions.has(cb)) {
+        subscriptions.add(cb);
+        this.#retain(key);
+      }
+    } finally {
+      this.#release(key);
+    }
+  }
+
+  async #unsubscribeFrom(topic: string, dir: string, cb: EventCallback): Promise<void> {
+    const key = socketKey(dir, topic);
+    const socket = this.#sockets.get(key);
+    const subscriptions = this.#isRefCounted(topic) ? this.#liveSubscriptions.get(key) : undefined;
+    if (!subscriptions?.delete(cb)) {
+      if (!socket) return;
+      await socket.unsubscribe(topic, cb);
+      return;
+    }
+    if (subscriptions.size === 0) this.#liveSubscriptions.delete(key);
+    try {
+      await socket?.unsubscribe(topic, cb);
+    } finally {
+      this.#release(key);
+    }
   }
 
   #leasesFor(resourceId: string): UnixSocketPubSub {
@@ -301,10 +410,6 @@ class SignalsPubSub extends PubSub {
     const decoded = decodeThreadTopic(topic);
     if (decoded !== undefined) return resourceOfThreadKey(decoded) ?? this.#resourceId;
     return this.#resourceId;
-  }
-
-  #socketKey(topic: string): string {
-    return `${this.#dirFor(topic)}/${topicKey(topic)}`;
   }
 
   #retain(key: string): void {
@@ -332,9 +437,9 @@ class SignalsPubSub extends PubSub {
     this.#closing.set(key, closing);
   }
 
-  async #getOrCreate(topic: string): Promise<UnixSocketPubSub> {
+  async #getOrCreate(topic: string, dir: string): Promise<UnixSocketPubSub> {
     if (this.#closed) throw new Error('SignalsPubSub is closed');
-    const key = this.#socketKey(topic);
+    const key = socketKey(dir, topic);
     // A socket for this key may still be closing after its last reference
     // was released; never hand out the closing instance.
     const closing = this.#closing.get(key);
@@ -347,7 +452,7 @@ class SignalsPubSub extends PubSub {
     // Deduplicate concurrent callers so only one socket is created per topic.
     let inflight = this.#pending.get(key);
     if (!inflight) {
-      inflight = this.#initSocket(topic, key);
+      inflight = this.#initSocket(topic, dir, key);
       this.#pending.set(key, inflight);
     }
     const socket = await inflight;
@@ -355,9 +460,9 @@ class SignalsPubSub extends PubSub {
     return socket;
   }
 
-  async #initSocket(topic: string, key: string): Promise<UnixSocketPubSub> {
+  async #initSocket(topic: string, dir: string, key: string): Promise<UnixSocketPubSub> {
     try {
-      const socketPath = await this.#socketPath(topic);
+      const socketPath = await this.#socketPath(topic, dir);
       if (this.#closed) throw new Error('SignalsPubSub is closed');
       const socket = new UnixSocketPubSub(socketPath);
       this.#sockets.set(key, socket);
@@ -367,9 +472,14 @@ class SignalsPubSub extends PubSub {
     }
   }
 
-  async #socketPath(topic: string): Promise<string> {
+  async #socketPath(topic: string, scope: string): Promise<string> {
     let key = topicKey(topic);
-    const dir = join(this.#rootDir, this.#dirFor(topic));
+    // Another resource's threadId names a file in that resource's directory;
+    // never let it reach outside it.
+    if (scope !== this.#resourceId && decodeThreadTopic(topic) !== undefined && !isSafeFileName(key)) {
+      throw new Error('Cannot route an agent thread topic whose threadId is not a safe file name');
+    }
+    const dir = join(this.#rootDir, scope);
     await mkdir(dir, { recursive: true });
     const candidate = join(dir, `${key}.sock`);
     // macOS sun_path limit is 104 bytes; Linux is 108. Use 104 as the
@@ -391,7 +501,8 @@ class SignalsPubSub extends PubSub {
  *
  * Topics live under `/tmp/mc/<resourceId>/`, except that a thread's stream and
  * leases live under its own resource's directory and thread-owner discovery
- * under `/tmp/mc/_shared/` (see {@link SignalsPubSub}). Stale sockets from
+ * under `/tmp/mc/_shared/` (see {@link SignalsPubSub}). With
+ * `sharedAgentDiscovery`, peer discovery also runs in `/tmp/mc/_shared/`. Stale sockets from
  * crashed processes are handled by the underlying {@link UnixSocketPubSub}'s
  * broker election logic.
  */

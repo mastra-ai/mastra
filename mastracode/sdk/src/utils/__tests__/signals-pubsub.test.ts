@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const instances: MockUnixSocketPubSub[] = [];
-  let mkdirImpl: () => Promise<void> = async () => {};
+  let mkdirImpl: (dir: string) => Promise<void> = async () => {};
   let publishImpl: () => Promise<void> = async () => {};
   let closeImpl: () => Promise<void> = async () => {};
 
@@ -18,6 +20,7 @@ const mocks = vi.hoisted(() => {
     readonly subscriptions: string[] = [];
     readonly leaseKeys: string[] = [];
     readonly unsubscriptions: string[] = [];
+    readonly callbacks = new Set<(event: unknown) => void>();
     closed = false;
 
     async acquireLease(key: string): Promise<boolean> {
@@ -54,12 +57,19 @@ const mocks = vi.hoisted(() => {
       this.published.push({ topic, event });
     }
 
-    async subscribe(topic: string): Promise<void> {
+    async subscribe(topic: string, cb?: (event: unknown) => void): Promise<void> {
       this.subscriptions.push(topic);
+      if (cb) this.callbacks.add(cb);
     }
 
-    async unsubscribe(topic: string): Promise<void> {
+    async unsubscribe(topic: string, cb?: (event: unknown) => void): Promise<void> {
       this.unsubscriptions.push(topic);
+      if (cb) this.callbacks.delete(cb);
+    }
+
+    /** Simulates the broker delivering an event to this socket's subscribers. */
+    deliver(event: unknown): void {
+      for (const cb of this.callbacks) cb(event);
     }
 
     async flush(): Promise<void> {}
@@ -74,8 +84,8 @@ const mocks = vi.hoisted(() => {
     instances,
     MockPubSub,
     MockUnixSocketPubSub,
-    mkdir: vi.fn(() => mkdirImpl()),
-    setMkdirImpl: (impl: () => Promise<void>) => {
+    mkdir: vi.fn((dir: string) => mkdirImpl(dir)),
+    setMkdirImpl: (impl: (dir: string) => Promise<void>) => {
       mkdirImpl = impl;
     },
     setPublishImpl: (impl: () => Promise<void>) => {
@@ -118,7 +128,13 @@ describe('SignalsPubSub', () => {
     mocks.setMkdirImpl(async () => {});
     mocks.setPublishImpl(async () => {});
     mocks.setCloseImpl(async () => {});
+    // Tests assume the default socket root.
+    vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', '');
     vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('routes thread-stream topics to /tmp/mc/<resourceId>/<threadId>.sock', async () => {
@@ -454,6 +470,303 @@ describe('SignalsPubSub', () => {
       expect(pubsub.getSocket(peerReplyTopic)).toBeUndefined();
       const socket = findSocket(`/tmp/mc/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`);
       expect(socket?.closed).toBe(true);
+    });
+  });
+
+  describe('shared agent discovery', () => {
+    const resourceId = 'res-a';
+    const foreignResourceId = 'res-b';
+    const requestId = '44444444-4444-4444-8444-444444444444';
+    const peerRequestTopic = 'agent.thread-peer-discovery';
+    const ownerRequestTopic = 'agent.thread-owner-discovery';
+    const peerReplyTopic = `${peerRequestTopic}.${requestId}`;
+    let root: string;
+
+    beforeEach(() => {
+      // Short root: macOS limits socket paths to 104 bytes.
+      root = mkdtempSync('/tmp/mcs-');
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      rmSync(root, { recursive: true, force: true });
+    });
+
+    const socketPaths = () => mocks.instances.map(instance => instance.socketPath);
+
+    it('keeps peer discovery in the resource directory when shared discovery is off', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: false, rootDir: root });
+
+      await pubsub.subscribe(peerRequestTopic, vi.fn());
+      await pubsub.publish(peerReplyTopic, event);
+
+      expect(socketPaths()).toEqual([
+        `${root}/${resourceId}/.leases.sock`,
+        `${root}/${resourceId}/agent_thread-peer-discovery.sock`,
+        `${root}/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`,
+      ]);
+    });
+
+    it('leaves thread-owner discovery in the shared directory only', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+
+      await pubsub.subscribe(ownerRequestTopic, vi.fn());
+      await pubsub.publish(ownerRequestTopic, event);
+
+      expect(socketPaths().filter(path => path.includes('owner-discovery'))).toEqual([
+        `${root}/_shared/agent_thread-owner-discovery.sock`,
+      ]);
+    });
+
+    it('subscribes and publishes discovery requests in both scopes and unsubscribes from both', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const cb = vi.fn();
+
+      await pubsub.subscribe(peerRequestTopic, cb);
+      await pubsub.publish(peerRequestTopic, event);
+      const project = findSocket(`${root}/${resourceId}/agent_thread-peer-discovery.sock`)!;
+      const shared = findSocket(`${root}/_shared/agent_thread-peer-discovery.sock`)!;
+
+      expect(project.subscriptions).toEqual([peerRequestTopic]);
+      expect(shared.subscriptions).toEqual([peerRequestTopic]);
+      expect(project.published).toHaveLength(1);
+      expect(shared.published).toHaveLength(1);
+
+      await pubsub.unsubscribe(peerRequestTopic, cb);
+      expect(project.callbacks.size).toBe(0);
+      expect(shared.callbacks.size).toBe(0);
+    });
+
+    it('hands every subscriber each discovery event, whichever scope delivers it', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const firstThread = vi.fn();
+      const secondThread = vi.fn();
+
+      await pubsub.subscribe(peerRequestTopic, firstThread);
+      await pubsub.subscribe(peerRequestTopic, secondThread);
+      findSocket(`${root}/_shared/agent_thread-peer-discovery.sock`)!.deliver(event);
+
+      expect(firstThread).toHaveBeenCalledTimes(1);
+      expect(secondThread).toHaveBeenCalledTimes(1);
+
+      findSocket(`${root}/${resourceId}/agent_thread-peer-discovery.sock`)!.deliver(event);
+      expect(firstThread).toHaveBeenCalledTimes(2);
+      expect(secondThread).toHaveBeenCalledTimes(2);
+    });
+
+    it('listens for discovery replies in both scopes and closes both once cleared', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const cb = vi.fn();
+
+      await pubsub.subscribe(peerReplyTopic, cb);
+      const project = findSocket(`${root}/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`)!;
+      const shared = findSocket(`${root}/_shared/agent_thread-peer-discovery_${requestId}.sock`)!;
+      shared.deliver(event);
+      project.deliver(event);
+      expect(cb).toHaveBeenCalledTimes(2);
+
+      await pubsub.unsubscribe(peerReplyTopic, cb);
+      await pubsub.clearTopic(peerReplyTopic);
+      expect(project.closed).toBe(true);
+      expect(shared.closed).toBe(true);
+    });
+
+    it('publishes discovery replies to both scopes and closes both afterwards', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+
+      await pubsub.publish(peerReplyTopic, event);
+
+      const replies = mocks.instances.filter(instance => instance.socketPath.includes(requestId));
+      expect(new Set(replies.map(instance => instance.socketPath))).toEqual(
+        new Set([
+          `${root}/${resourceId}/agent_thread-peer-discovery_${requestId}.sock`,
+          `${root}/_shared/agent_thread-peer-discovery_${requestId}.sock`,
+        ]),
+      );
+      expect(replies.every(instance => instance.published.length === 1 && instance.closed)).toBe(true);
+    });
+
+    it("routes another resource's thread topic to that resource's directory and closes it after use", async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const topic = threadTopic(foreignResourceId, 'thread-b');
+
+      await pubsub.publish(topic, event);
+
+      const socket = findSocket(`${root}/${foreignResourceId}/thread-b.sock`);
+      expect(socket?.published).toHaveLength(1);
+      expect(socket?.closed).toBe(true);
+      expect(pubsub.getSocket(topic)).toBeUndefined();
+    });
+
+    it("routes another resource's idle-acceptance replies to that resource's directory", async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const topic = `${threadTopic(foreignResourceId, 'b')}.idle-acceptance.${requestId}`;
+      const cb = vi.fn();
+
+      await pubsub.subscribe(topic, cb);
+      const socket = findSocket(`${root}/${foreignResourceId}/b.idle-acceptance.${requestId}.sock`)!;
+      expect(socket.subscriptions).toEqual([topic]);
+
+      await pubsub.unsubscribe(topic, cb);
+      await pubsub.clearTopic(topic);
+      expect(socket.closed).toBe(true);
+    });
+
+    it('keeps own-resource thread topics on their usual long-lived path', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const ownResource = 'resource:a';
+      const pubsub = createSignalsPubSub(ownResource, { sharedAgentDiscovery: true, rootDir: root });
+
+      await pubsub.publish(threadTopic(ownResource, 'thread-1'), event);
+      await pubsub.publish(threadTopic('', 'thread-2'), event);
+
+      expect(findSocket(`${root}/${ownResource}/thread-1.sock`)?.closed).toBe(false);
+      expect(findSocket(`${root}/${ownResource}/thread-2.sock`)?.closed).toBe(false);
+    });
+
+    it('rejects a foreign threadId that is not a safe file name and creates nothing', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { rootDir: root });
+
+      for (const threadId of ['../evil', 'a/b', 'a\\b', '..', 'x\u0001']) {
+        await expect(pubsub.publish(threadTopic(foreignResourceId, threadId), event)).rejects.toThrow(
+          /threadId is not a safe file name/,
+        );
+        await expect(pubsub.subscribe(threadTopic(foreignResourceId, threadId), vi.fn())).rejects.toThrow(
+          /threadId is not a safe file name/,
+        );
+      }
+
+      expect(socketPaths().filter(path => !path.endsWith('.leases.sock'))).toEqual([]);
+      expect(mocks.mkdir).not.toHaveBeenCalled();
+    });
+
+    it('keeps a thread whose resourceId is not a safe directory name on the resource-local path', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+
+      for (const hostile of ['../evil', 'a/b', 'a\\b', '..', 'x\u0001', 'r'.repeat(129)]) {
+        await pubsub.publish(threadTopic(hostile, 'thread-x'), event);
+      }
+
+      expect(new Set(socketPaths().filter(path => !path.endsWith('.leases.sock')))).toEqual(
+        new Set([`${root}/${resourceId}/thread-x.sock`]),
+      );
+      expect(mocks.mkdir.mock.calls.every(([dir]) => dir === `${root}/${resourceId}`)).toBe(true);
+    });
+
+    it('ignores a relative MASTRACODE_SIGNALS_SOCKET_ROOT', async () => {
+      vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', 'relative/root');
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+
+      await pubsub.publish('workflows', event);
+
+      expect(socketPaths()).toEqual([`/tmp/mc/${resourceId}/.leases.sock`, `/tmp/mc/${resourceId}/workflows.sock`]);
+    });
+
+    it("routes another resource's thread when its resourceId is an ordinary override such as resource:b", async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+
+      await pubsub.publish(threadTopic('resource:b', 'thread-b'), event);
+
+      expect(findSocket(`${root}/resource:b/thread-b.sock`)?.published).toHaveLength(1);
+    });
+
+    it("keeps another resource's thread socket open while subscribed, even across clearTopic", async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const topic = threadTopic(foreignResourceId, 'thread-b');
+      const cb = vi.fn();
+
+      await pubsub.subscribe(topic, cb);
+      for (let i = 0; i < 3; i++) await pubsub.publish(topic, event);
+      await pubsub.clearTopic(topic);
+      const socket = findSocket(`${root}/${foreignResourceId}/thread-b.sock`)!;
+      expect(mocks.instances.filter(instance => instance === socket)).toHaveLength(1);
+      expect(socket.published).toHaveLength(3);
+      expect(socket.closed).toBe(false);
+
+      await pubsub.unsubscribe(topic, cb);
+      expect(socket.closed).toBe(true);
+    });
+
+    it('does not join the shared scope when its own resourceId cannot be a directory name', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub('team/a', { sharedAgentDiscovery: true, rootDir: root });
+
+      await pubsub.subscribe(peerRequestTopic, vi.fn());
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toMatch(/resource id "team\/a" cannot be used/);
+      expect(socketPaths().some(path => path.includes('_shared'))).toBe(false);
+    });
+
+    it('warns once and keeps project-scope discovery when the shared scope fails', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mocks.setMkdirImpl(async dir => {
+        if (dir.endsWith('/_shared')) throw new Error('shared scope unavailable');
+      });
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+      const cb = vi.fn();
+
+      await pubsub.subscribe(peerRequestTopic, cb);
+      await pubsub.publish(peerRequestTopic, event);
+      await pubsub.publish(peerReplyTopic, event);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toMatch(/shared scope unavailable/);
+      const project = findSocket(`${root}/${resourceId}/agent_thread-peer-discovery.sock`);
+      expect(project?.subscriptions).toEqual([peerRequestTopic]);
+      expect(project?.published).toHaveLength(1);
+    });
+
+    it('rejects a project-scope failure without blaming the shared scope', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mocks.setMkdirImpl(async dir => {
+        if (dir === `${root}/${resourceId}`) throw new Error('project scope unavailable');
+      });
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+
+      await expect(pubsub.publish(peerRequestTopic, event)).rejects.toThrow(/project scope unavailable/);
+      await expect(pubsub.subscribe(peerRequestTopic, vi.fn())).rejects.toThrow(/project scope unavailable/);
+
+      expect(warn).not.toHaveBeenCalled();
+      const shared = findSocket(`${root}/_shared/agent_thread-peer-discovery.sock`);
+      expect(shared?.callbacks.size ?? 0).toBe(0);
+    });
+
+    it('uses MASTRACODE_SIGNALS_SOCKET_ROOT when no rootDir is passed', async () => {
+      vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', root);
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId);
+
+      await pubsub.publish('workflows', event);
+
+      expect(socketPaths()).toEqual([`${root}/${resourceId}/.leases.sock`, `${root}/${resourceId}/workflows.sock`]);
+    });
+
+    it('keeps lease and thread socket paths within the 104-byte limit for a short root', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const longResourceId = 'r'.repeat(64);
+      const pubsub = createSignalsPubSub(longResourceId, { rootDir: root });
+
+      await pubsub.publish(threadTopic(longResourceId, '22222222-2222-4222-8222-222222222222'), event);
+
+      expect(socketPaths()).toHaveLength(2);
+      for (const path of socketPaths()) expect(Buffer.byteLength(path)).toBeLessThanOrEqual(104);
     });
   });
 });
