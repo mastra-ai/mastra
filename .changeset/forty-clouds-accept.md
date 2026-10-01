@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': patch
 ---
 
 `ChatShell` now docks the composer under the transcript instead of inside it. The transcript and its scrollbar end at the top of the composer, the transcript fades out above it, and the composer no longer bounces when you scroll past either end in Chrome.
