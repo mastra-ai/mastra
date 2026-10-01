@@ -27,7 +27,7 @@ const toneClassName: Record<CapabilityTone, { icon: string }> = {
     icon: 'text-badge-purple-indicator',
   },
   amber: {
-    icon: 'text-badge-yellow-indicator',
+    icon: 'text-badge-amber-indicator',
   },
   emerald: {
     icon: 'text-badge-green-indicator',

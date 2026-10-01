@@ -1,6 +1,6 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
 
 // Minimal mock TUI — only requestRender() is called by SubagentExecutionComponent
@@ -34,6 +34,32 @@ describe('SubagentExecutionComponent', () => {
       writable: true,
       configurable: true,
     });
+  });
+
+  it('uses elapsed time when finish has no reported duration', () => {
+    vi.useFakeTimers();
+    try {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      vi.advanceTimersByTime(12_300);
+      comp.finish(false, undefined, 'done');
+      expect(comp['durationMs']).toBe(12_300);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the reported duration when finish is called again without one', () => {
+    vi.useFakeTimers();
+    try {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      comp.finish(false, 4_000);
+      vi.advanceTimersByTime(9_000);
+      comp.finish(false, undefined, 'final');
+      expect(comp['durationMs']).toBe(4_000);
+      expect(comp['finalResult']).toBe('final');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders task and borders while running', () => {

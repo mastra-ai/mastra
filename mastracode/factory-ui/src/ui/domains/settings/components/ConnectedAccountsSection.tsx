@@ -59,7 +59,7 @@ export function ConnectedAccountsSection() {
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-indicator">
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
         {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
       </Txt>
     );

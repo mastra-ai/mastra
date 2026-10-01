@@ -127,7 +127,7 @@ export const EveryKind: Story = {
         aria-label="Signal: factory-phase"
       />
       <ActivityItem
-        icon={<Bell className="text-warning-indicator" aria-hidden />}
+        icon={<Bell className="text-warning-foreground" aria-hidden />}
         label="github / issue-opened"
         badges={
           <Badge size="xs" variant="orange">

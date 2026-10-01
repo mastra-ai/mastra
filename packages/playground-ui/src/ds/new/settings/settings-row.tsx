@@ -64,7 +64,7 @@ export function SettingsRowLayout({
           className={cn(
             'text-label text-foreground',
             viewOnly && 'text-muted-foreground',
-            tone === 'destructive' && 'text-destructive-indicator',
+            tone === 'destructive' && 'text-destructive-foreground',
           )}
         >
           {label}
@@ -72,7 +72,7 @@ export function SettingsRowLayout({
             <>
               <span
                 aria-hidden
-                className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive-indicator')}
+                className={cn('ml-0.5', viewOnly ? 'text-muted-foreground' : 'text-destructive-foreground')}
               >
                 *
               </span>
