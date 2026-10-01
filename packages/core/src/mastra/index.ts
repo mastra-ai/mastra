@@ -1853,9 +1853,11 @@ export class Mastra<
         this.#avatarStore = new WorkspaceAvatarStore(this.#workspace as any);
       } catch {
         this.#avatarStore = new LocalAvatarStore();
+        this.#warnLocalAvatarStoreDefault();
       }
     } else {
       this.#avatarStore = new LocalAvatarStore();
+      this.#warnLocalAvatarStoreDefault();
     }
 
     if (config?.scorers) {
@@ -3570,6 +3572,19 @@ export class Mastra<
    */
   public getAvatarStore(): AvatarStore | undefined {
     return this.#avatarStore;
+  }
+
+  #localAvatarStoreDefaultWarned = false;
+  #warnLocalAvatarStoreDefault(): void {
+    if (this.#localAvatarStoreDefaultWarned) return;
+    this.#localAvatarStoreDefaultWarned = true;
+    try {
+      this.#logger?.warn?.(
+        'Mastra selected a temporary-directory `LocalAvatarStore` for agent avatars because no `avatarStore` was configured and no workspace filesystem is attached. This store is NOT durable across process restarts or replicas — agent avatars may disappear. Configure `avatarStore` (or attach a workspace with a filesystem) for production deployments.',
+      );
+    } catch {
+      // logger not available yet — silently swallow
+    }
   }
 
   /**

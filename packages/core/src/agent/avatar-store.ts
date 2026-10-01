@@ -117,10 +117,12 @@ export class WorkspaceAvatarStore implements AvatarStore {
   async put(agentId: string, bytes: Buffer, mime: string): Promise<PutAvatarResult> {
     assertSafeAgentId(agentId);
     const ext = extForMime(mime);
-    // Best-effort cleanup of any previous avatar with a different extension.
-    await this.deleteExisting(agentId);
     const target = this.pathFor(agentId, ext);
+    // Write the new avatar FIRST — a failed write must not delete the existing one.
     await this.fs.writeFile(target, bytes, { recursive: true, overwrite: true, mimeType: mime });
+    // Then clean up any previous avatar with a different extension (best-effort,
+    // skipping the extension we just wrote).
+    await this.deleteExisting(agentId, ext);
     return { url: `mastra-avatar:${agentId}` };
   }
 
@@ -148,8 +150,9 @@ export class WorkspaceAvatarStore implements AvatarStore {
     return `${this.dir}/${agentId}.${ext}`;
   }
 
-  private async deleteExisting(agentId: string): Promise<void> {
+  private async deleteExisting(agentId: string, skipExt?: string): Promise<void> {
     for (const ext of Object.values(MIME_TO_EXT)) {
+      if (skipExt && ext === skipExt) continue;
       const p = this.pathFor(agentId, ext);
       try {
         if (await this.fs.exists(p).catch(() => false)) {
@@ -179,9 +182,22 @@ export class LocalAvatarStore implements AvatarStore {
     assertSafeAgentId(agentId);
     const ext = extForMime(mime);
     await fs.mkdir(this.basePath, { recursive: true });
-    await this.deleteExisting(agentId);
     const target = this.pathFor(agentId, ext);
-    await fs.writeFile(target, bytes);
+    // Write to a temp file, then atomically rename onto the target. If the
+    // write or rename fails, the previous avatar (if any) is preserved.
+    const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      await fs.writeFile(tmp, bytes);
+      await fs.rename(tmp, target);
+    } catch (err) {
+      await fs.rm(tmp, { force: true }).catch(() => {
+        /* best-effort */
+      });
+      throw err;
+    }
+    // Only after the new avatar is durably in place, clean up previous ones
+    // with a different extension.
+    await this.deleteExisting(agentId, ext);
     return { url: `mastra-avatar:${agentId}` };
   }
 
@@ -211,8 +227,9 @@ export class LocalAvatarStore implements AvatarStore {
     return path.join(this.basePath, `${agentId}.${ext}`);
   }
 
-  private async deleteExisting(agentId: string): Promise<void> {
+  private async deleteExisting(agentId: string, skipExt?: string): Promise<void> {
     for (const ext of Object.values(MIME_TO_EXT)) {
+      if (skipExt && ext === skipExt) continue;
       const p = this.pathFor(agentId, ext);
       await fs.rm(p, { force: true }).catch(() => {
         /* best-effort */

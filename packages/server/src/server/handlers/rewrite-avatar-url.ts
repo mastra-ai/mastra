@@ -47,3 +47,57 @@ export function rewriteStoredAgentAvatar<T extends { id: string; metadata?: Reco
     },
   };
 }
+
+/**
+ * Inverse of {@link rewriteMastraAvatarUrl}: if a caller submits a server-
+ * relative or absolute avatar route URL (e.g. the one returned by GET), map
+ * it back to the canonical `mastra-avatar:<agentId>` reference before
+ * validation and persistence. This keeps GET → PATCH round-trips working
+ * without clients needing to know about the scheme.
+ *
+ * Any other URL shape (data:, http(s): to a different host, mastra-avatar:
+ * already) is returned unchanged.
+ */
+export function normalizeIncomingAvatarUrl(value: unknown, agentId: string, routePrefix?: string): unknown {
+  if (typeof value !== 'string') return value;
+  if (value.startsWith(MASTRA_AVATAR_SCHEME)) return value;
+
+  const canonical = `${MASTRA_AVATAR_SCHEME}${agentId}`;
+  const encodedId = encodeURIComponent(agentId);
+
+  // Shape of the server avatar route — accept it whether the configured
+  // routePrefix matches, the default `/api`, no prefix at all, or an
+  // absolute URL whose pathname matches any of the above.
+  const candidatePaths = new Set<string>([
+    computeAvatarRouteUrl(agentId, routePrefix),
+    computeAvatarRouteUrl(agentId, '/api'),
+    `/agents/${encodedId}/avatar`,
+  ]);
+
+  if (candidatePaths.has(value)) return canonical;
+
+  try {
+    const u = new URL(value, 'http://_local');
+    if (candidatePaths.has(u.pathname)) return canonical;
+  } catch {
+    // not a URL — fall through
+  }
+
+  return value;
+}
+
+/**
+ * Companion to {@link normalizeIncomingAvatarUrl} for a full metadata object.
+ * Returns the same reference when nothing changes, so callers can cheaply pass
+ * the result through to persistence without creating garbage.
+ */
+export function normalizeIncomingAvatarMetadata<T extends Record<string, unknown> | undefined | null>(
+  metadata: T,
+  agentId: string,
+  routePrefix?: string,
+): T {
+  if (!metadata || !('avatarUrl' in metadata)) return metadata;
+  const normalized = normalizeIncomingAvatarUrl(metadata.avatarUrl, agentId, routePrefix);
+  if (normalized === metadata.avatarUrl) return metadata;
+  return { ...metadata, avatarUrl: normalized } as T;
+}

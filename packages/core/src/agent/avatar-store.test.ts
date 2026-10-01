@@ -99,6 +99,17 @@ describe('LocalAvatarStore', () => {
   it('rejects unsupported mime types', async () => {
     await expect(store.put('agent-5', PNG_HEADER, 'image/bmp')).rejects.toThrow(/Unsupported avatar mime/);
   });
+
+  it('preserves the existing avatar when the mime is invalid (no filesystem side effect)', async () => {
+    await store.put('agent-6', PNG_HEADER, 'image/png');
+    const target = path.join(dir, 'agent-6.png');
+    // Invalid mime rejects before any filesystem write, so the existing
+    // avatar must remain intact — the temp+rename ordering guarantees no
+    // partial state.
+    await expect(store.put('agent-6', PNG_HEADER, 'image/bmp' as any)).rejects.toThrow();
+    const still = await fs.readFile(target);
+    expect(still.equals(PNG_HEADER)).toBe(true);
+  });
 });
 
 describe('WorkspaceAvatarStore', () => {
