@@ -11,7 +11,7 @@ import {
   SaveIcon,
   WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
@@ -28,8 +28,8 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -252,7 +252,6 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const searchFieldName = useId();
   const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
   const hierarchicalSpans = useMemo(
@@ -327,7 +326,6 @@ export function TraceDataPanelView({
   const sideColumn =
     traceId && sideView ? (
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-        {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
           <DataPanel.Header className="border-b border-border">
             <TabList variant="pill-ghost" size="sm">
@@ -339,7 +337,6 @@ export function TraceDataPanelView({
             </TabList>
           </DataPanel.Header>
         </Tabs>
-        {/* The turn view brings its own padding; feedback and scores use the panel's. */}
         {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
         {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
         {sideView === 'scores' && (
@@ -414,15 +411,12 @@ export function TraceDataPanelView({
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
                   <DataPanel.Header className="gap-2 border-b border-border">
-                    <SearchFieldBlock
-                      name={searchFieldName}
+                    <SearchInput
                       label="Search spans"
-                      labelIsHidden
                       placeholder="Search spans..."
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      onReset={() => setQuery('')}
                       size="sm"
+                      value={query}
+                      onValueChange={setQuery}
                       className="w-full"
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
@@ -545,7 +539,6 @@ function TracePanelColumns({
         {sideColumnSlot}
       </div>
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
-      {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
         ref={scrollToMatchRef}
         data-highlight
