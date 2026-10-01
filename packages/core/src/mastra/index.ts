@@ -898,6 +898,8 @@ export class Mastra<
   #allWorkersStarted = false;
   /** Evented run restarts requested before a full worker start (runId -> workflow id). */
   #pendingEventedRestarts = new Map<string, string>();
+  /** Run ids whose restart is in flight, so overlapping sweeps don't drive a run twice. */
+  #inFlightRestarts = new Set<string>();
   /**
    * Set when something has signalled that the scheduler is needed at runtime
    * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
@@ -4102,17 +4104,37 @@ export class Mastra<
         });
         continue;
       }
-      // Evented restarts are processed by the workflow event workers. Defer
-      // them until `startWorkers()` has subscribed so the event isn't lost.
-      if (workflow?.engineType === 'evented' && !this.#allWorkersStarted) {
-        this.#pendingEventedRestarts.set(runSnapshot.runId, runSnapshot.workflowName);
+      if (this.#inFlightRestarts.has(runSnapshot.runId)) continue;
+      // Evented restarts are processed by the workflow event consumer. Defer
+      // them until it is wired so the event isn't lost.
+      if (workflow?.engineType === 'evented') {
+        if (!this.#allWorkersStarted && !this.#executionWorkersStarted) {
+          this.#logger.debug('Deferring evented workflow run restart until workers start', {
+            workflow: runSnapshot.workflowName,
+            runId: runSnapshot.runId,
+          });
+          this.#pendingEventedRestarts.set(runSnapshot.runId, runSnapshot.workflowName);
+          continue;
+        }
+        // An evented restart resolves only when the run finishes; don't block the sweep on it.
+        void this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId);
         continue;
       }
       await this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId);
     }
   }
 
+  #drainPendingEventedRestarts(): void {
+    const pending = [...this.#pendingEventedRestarts];
+    this.#pendingEventedRestarts.clear();
+    for (const [runId, workflowName] of pending) {
+      if (this.#inFlightRestarts.has(runId)) continue;
+      void this.#restartWorkflowRun(workflowName, runId);
+    }
+  }
+
   async #restartWorkflowRun(workflowName: string, runId: string): Promise<void> {
+    this.#inFlightRestarts.add(runId);
     try {
       const workflow = this.getWorkflowById(workflowName);
       const run = await workflow.createRun({ runId });
@@ -4120,6 +4142,8 @@ export class Mastra<
       this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
     } catch (error) {
       this.#logger.error('Failed to restart workflow run', { workflow: workflowName, runId, error });
+    } finally {
+      this.#inFlightRestarts.delete(runId);
     }
   }
 
@@ -6825,12 +6849,8 @@ export class Mastra<
       this.#allWorkersStarted = true;
     }
 
-    if (!name && this.#pendingEventedRestarts.size > 0) {
-      const pending = [...this.#pendingEventedRestarts];
-      this.#pendingEventedRestarts.clear();
-      for (const [runId, workflowName] of pending) {
-        await this.#restartWorkflowRun(workflowName, runId);
-      }
+    if (!name) {
+      this.#drainPendingEventedRestarts();
     }
 
     // A wake event (or a local `schedules.create()`) that landed while this
@@ -6987,6 +7007,7 @@ export class Mastra<
 
     await this.#wirePushWorkflowSubscription();
     this.#executionWorkersStarted = true;
+    this.#drainPendingEventedRestarts();
   }
 
   /**

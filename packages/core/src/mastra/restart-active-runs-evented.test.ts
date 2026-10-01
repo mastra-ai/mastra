@@ -152,6 +152,59 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
+  it('drains deferred evented restarts when execution workers start lazily', async () => {
+    const storage = new MockStore();
+    const id = 'evented-lazy-start';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    const step2B = vi.fn(async ({ inputData }: { inputData: any }) => ({ got: inputData.seed }));
+    const hostB = newHost(
+      makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true }),
+      storage,
+    );
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await hostB.__ensureExecutionWorkersStarted();
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(1);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
+  it('does not block startWorkers on recovered runs and drives each run once', async () => {
+    const storage = new MockStore();
+    const id = 'evented-nonblocking';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const step2B = vi.fn(async () => {
+      await gate;
+      return {};
+    });
+    const hostB = newHost(
+      makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true }),
+      storage,
+    );
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await hostB.startWorkers();
+      await vi.waitFor(() => expect(step2B).toHaveBeenCalledTimes(1));
+
+      // A second sweep while the recovered run is still in flight must not drive it again.
+      await hostB.restartAllActiveWorkflowRuns();
+      release();
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
   it('leaves evented runs untouched when the workflow does not opt in', async () => {
     const storage = new MockStore();
     const id = 'evented-no-opt-in';
