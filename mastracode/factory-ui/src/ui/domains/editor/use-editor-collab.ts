@@ -31,20 +31,18 @@ export function useEditorCollab(
   workspacePath: string | undefined,
   path: string | undefined,
   enabled: boolean,
-  displayName?: string,
 ): { binding: CollabBinding | null; peers: CollabPeer[] } {
   const { client } = useApiConfig();
   const auth = useFactoryAuth();
   const [binding, setBinding] = useState<CollabBinding | null>(null);
   const [peers, setPeers] = useState<CollabPeer[]>([]);
-  // Prefer the user's override; fall back to the signed-in identity. We never
-  // invent fake names — unknown users are 'You' locally, 'Guest' remotely.
+  // Name comes from the signed-in identity — we never invent fake names.
+  // Local label is 'You' until auth resolves; remote peers without identity
+  // fall through to 'Guest' so the UI never advertises invented people.
   const localName = useMemo(() => {
-    const override = displayName?.trim();
-    if (override) return override;
     const identity = auth.data?.user?.name?.trim() || auth.data?.user?.email?.trim();
     return identity || 'You';
-  }, [displayName, auth.data?.user?.name, auth.data?.user?.email]);
+  }, [auth.data?.user?.name, auth.data?.user?.email]);
   const user = useMemo(() => ({ ...localCollabColor(), name: localName }), [localName]);
 
   useEffect(() => {

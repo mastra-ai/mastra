@@ -17,10 +17,8 @@ export interface EditorSettings {
   diagnostics: boolean;
   /** Run the language server's formatter before every save. */
   formatOnSave: boolean;
-  /** Real-time shared editing + presence. */
+  /** Real-time shared editing + presence. The display name comes from the signed-in identity. */
   multiplayer: boolean;
-  /** Name shown to collaborators; empty string falls back to a fun alias. */
-  displayName: string;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -33,7 +31,6 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   diagnostics: true,
   formatOnSave: false,
   multiplayer: true,
-  displayName: '',
 };
 
 export const FONT_SIZES = [11, 12, 13, 14, 15, 16, 18] as const;

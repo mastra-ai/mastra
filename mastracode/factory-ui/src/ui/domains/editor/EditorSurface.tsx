@@ -343,12 +343,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
   const agentActivity = useAgentActiveFiles();
 
   // ── Multiplayer: join the active file's collab room (HTTP-polled Yjs) ────
-  const collab = useEditorCollab(
-    workspacePath,
-    activePath ?? undefined,
-    !activeIsExternal && settings.multiplayer,
-    settings.displayName,
-  );
+  const collab = useEditorCollab(workspacePath, activePath ?? undefined, !activeIsExternal && settings.multiplayer);
 
   // ── LSP: hover + go-to commands ──────────────────────────────────────────
   const lspQuery = useEditorLspQuery(workspacePath);

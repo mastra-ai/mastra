@@ -171,22 +171,9 @@ export function EditorSettingsDialog({ open, settings, onOpenChange, onSettingsC
                 <div className="divide-border divide-y">
                   <SettingRow
                     label="Multiplayer editing"
-                    description="Share live edits and cursors with others in this file."
+                    description="Share live edits and cursors with others in this file. Your name on their cursor comes from your signed-in identity."
                     control={
                       <Switch checked={settings.multiplayer} onCheckedChange={next => set('multiplayer', next)} />
-                    }
-                  />
-                  <SettingRow
-                    label="Display name"
-                    description="Shown on your cursor to collaborators."
-                    control={
-                      <input
-                        value={settings.displayName}
-                        onChange={event => set('displayName', event.target.value.slice(0, 32))}
-                        placeholder="Anonymous animal"
-                        spellCheck={false}
-                        className="text-body-sm bg-field border-border focus:border-border-focus placeholder:text-placeholder w-40 rounded-md border px-2 py-1 outline-none"
-                      />
                     }
                   />
                 </div>
