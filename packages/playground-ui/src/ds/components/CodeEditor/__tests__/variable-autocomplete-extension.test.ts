@@ -32,5 +32,15 @@ describe('variable autocomplete', () => {
     it('replaces the whole identifier and keeps a single closing pair', () => {
       expect(accept('Hi {{user.nam}}!', 7, 'user.name')).toBe('Hi {{user.name}}!');
     });
+
+    it('replaces identifiers longer than 100 characters', () => {
+      expect(accept(`{{us${'x'.repeat(101)}}}`, 4, 'user')).toBe('{{user}}');
+    });
+  });
+
+  describe('when the cursor sits before plain text', () => {
+    it('keeps the text after the cursor', () => {
+      expect(accept('Hello {{usname', 10, 'user.name')).toBe('Hello {{user.name}}name');
+    });
   });
 });

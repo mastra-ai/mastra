@@ -70,10 +70,11 @@ export function createVariableCompletionSource(
       detail: variable.type,
       info: variable.description,
       apply: (view, completion, from, to) => {
-        // Replace the rest of the identifier after the cursor, then reuse any closing }}
-        const rest = view.state.sliceDoc(to, to + 100);
-        const end = to + (rest.match(/^[a-zA-Z0-9_.\[\]]*/)?.[0].length ?? 0);
-        const hasClosingBraces = view.state.sliceDoc(end, end + 2) === '}}';
+        // Inside an existing placeholder, replace the rest of the identifier and reuse its closing }}
+        const rest = view.state.sliceDoc(to);
+        const identifierEnd = to + (rest.match(/^[a-zA-Z0-9_.\[\]]*/)?.[0].length ?? 0);
+        const hasClosingBraces = view.state.sliceDoc(identifierEnd, identifierEnd + 2) === '}}';
+        const end = hasClosingBraces ? identifierEnd : to;
 
         const insertText = hasClosingBraces ? completion.label : `${completion.label}}}`;
 
