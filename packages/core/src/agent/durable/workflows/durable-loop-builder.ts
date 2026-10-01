@@ -11,6 +11,7 @@ import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
@@ -831,6 +832,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 outputTokens: 0,
                 totalTokens: 0,
               },
+              usageAggregationVersion: 1,
               lastStepResult: undefined,
             };
             return iterationState;
@@ -923,10 +925,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       args: tc.args,
                     })),
                   );
+                  const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
-                    attributes: { finishReason: finalOutput.stepResult?.reason },
-                    usage: state.accumulatedUsage,
+                    attributes: {
+                      finishReason: finalOutput.stepResult?.reason,
+                      ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                    },
+                    usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {
