@@ -2,7 +2,6 @@ import * as React from 'react';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Field, FieldLabel } from '@/ds/components/Field';
-import { cn } from '@/lib/utils';
 
 type CheckboxProps = React.ComponentPropsWithoutRef<typeof Checkbox>;
 
