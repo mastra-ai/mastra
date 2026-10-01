@@ -75,4 +75,12 @@ describe('AIV5 model tool output containing a value key', () => {
   it.each([0, false, '', null])('unwraps a legacy sole-key envelope containing %#', value => {
     expectStoredOutput(fromModelMessage({ value }), value);
   });
+
+  it.each([
+    ['error-text', 'failed'],
+    ['error-json', { code: 'E_FAIL' }],
+  ] as const)('preserves a documented %s error wrapper', (type, value) => {
+    const errorOutput = { type, value };
+    expectStoredOutput(fromModelMessage(errorOutput), errorOutput);
+  });
 });
