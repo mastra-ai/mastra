@@ -10278,6 +10278,18 @@ export type PostObservabilityTracesAggregate_Body = {
         | 'duration.p99'
         | 'errorCount'
         | 'errorRate'
+        | 'tokens.input.sum'
+        | 'tokens.input.avg'
+        | 'tokens.output.sum'
+        | 'tokens.output.avg'
+        | 'tokens.total.sum'
+        | 'tokens.total.avg'
+        | 'tokens.reasoning.sum'
+        | 'tokens.reasoning.avg'
+        | 'tokens.cached.sum'
+        | 'tokens.cached.avg'
+        | 'cost.sum'
+        | 'cost.avg'
       )
     | `countDistinct.${string}`
   )[];
@@ -10300,18 +10312,33 @@ export type PostObservabilityTracesAggregate_Response = {
     measures: {
       [K in
         | (
-            | 'count'
-            | 'duration.avg'
-            | 'duration.min'
-            | 'duration.max'
-            | 'duration.p50'
-            | 'duration.p90'
-            | 'duration.p95'
-            | 'duration.p99'
-            | 'errorCount'
-            | 'errorRate'
+            | (
+                | 'count'
+                | 'duration.avg'
+                | 'duration.min'
+                | 'duration.max'
+                | 'duration.p50'
+                | 'duration.p90'
+                | 'duration.p95'
+                | 'duration.p99'
+                | 'errorCount'
+                | 'errorRate'
+                | 'tokens.input.sum'
+                | 'tokens.input.avg'
+                | 'tokens.output.sum'
+                | 'tokens.output.avg'
+                | 'tokens.total.sum'
+                | 'tokens.total.avg'
+                | 'tokens.reasoning.sum'
+                | 'tokens.reasoning.avg'
+                | 'tokens.cached.sum'
+                | 'tokens.cached.avg'
+                | 'cost.sum'
+                | 'cost.avg'
+              )
+            | `countDistinct.${string}`
           )
-        | `countDistinct.${string}`]?: number;
+        | ('cost.coverage' | 'costUnit')]?: number | string | null;
     };
   }[];
   truncated: boolean;
