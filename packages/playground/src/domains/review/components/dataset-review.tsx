@@ -15,9 +15,9 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -440,25 +440,37 @@ export function DatasetReview({
         ) : (
           <>
             {toolbarStart}
-            <SelectFieldBlock
-              label="Status"
-              labelIsHidden
-              name="filter-status"
-              options={STATUS_OPTIONS}
+            <Select
               value={status}
               onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
-              className="whitespace-nowrap"
-            />
+            >
+              <SelectTrigger aria-label="Status" size="md" className="whitespace-nowrap">
+                <SelectValue placeholder="Select an option" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {tagOptions.length > 1 && (
-              <SelectFieldBlock
-                label="Tags"
-                labelIsHidden
-                name="filter-tags"
-                options={tagOptions}
+              <Select
                 value={activeTagFilter ?? ALL_TAGS}
                 onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
-                className="whitespace-nowrap"
-              />
+              >
+                <SelectTrigger aria-label="Tags" size="md" className="whitespace-nowrap">
+                  <SelectValue placeholder="Select an option" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tagOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {hasActiveFilters && (
               <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
@@ -577,28 +589,28 @@ export function DatasetReview({
           </DialogHeader>
           <DialogBody>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="mb-1 block">Provider</Label>
+              <Field className="gap-1">
+                <FieldLabel>Provider</FieldLabel>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
-              </div>
-              <div>
-                <Label className="mb-1 block">Model</Label>
+              </Field>
+              <Field className="gap-1">
+                <FieldLabel>Model</FieldLabel>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
-              </div>
+              </Field>
             </div>
             <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
-            <div>
-              <Label>Instructions (optional)</Label>
+            <Field className="gap-1">
+              <FieldLabel>Instructions (optional)</FieldLabel>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="mt-1 text-caption"
+                className="text-caption"
               />
-            </div>
+            </Field>
           </DialogBody>
           <DialogFooter>
             <DialogCancel>Cancel</DialogCancel>

@@ -6,13 +6,14 @@ export type TimePickerProps = {
   defaultValue?: string;
   onValueChange: (value: string) => void;
   className?: string;
+  label?: string;
 };
 
 const hourOptions = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
 const minuteOptions = ['00', '15', '30', '45', '59'];
 const timePeriodOptions = ['AM', 'PM'];
 
-export function TimePicker({ defaultValue, onValueChange, className }: TimePickerProps) {
+export function TimePicker({ defaultValue, onValueChange, className, label = 'Time' }: TimePickerProps) {
   const [hour, setHour] = useState<string>('12');
   const [minute, setMinute] = useState<string>('00');
   const [timePeriod, setTimePeriod] = useState('AM');
@@ -62,48 +63,40 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   };
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
-        <SelectTrigger size="sm">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {hourOptions.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div role="group" aria-label={label} className={cn('flex items-center gap-2', className)}>
+      <TimePartSelect label="Hour" options={hourOptions} value={hour} onValueChange={handleHourChange} />
       :
-      <Select name="minute" value={minuteOptions.indexOf(minute).toString()} onValueChange={handleMinuteChange}>
-        <SelectTrigger size="sm">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {minuteOptions.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        name="period"
-        value={timePeriodOptions.indexOf(timePeriod).toString()}
+      <TimePartSelect label="Minute" options={minuteOptions} value={minute} onValueChange={handleMinuteChange} />
+      <TimePartSelect
+        label="AM or PM"
+        options={timePeriodOptions}
+        value={timePeriod}
         onValueChange={handleTimePeriodChange}
-      >
-        <SelectTrigger size="sm">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {timePeriodOptions.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
     </div>
+  );
+}
+
+type TimePartSelectProps = {
+  label: string;
+  options: readonly string[];
+  value: string;
+  onValueChange: (index: string) => void;
+};
+
+function TimePartSelect({ label, options, value, onValueChange }: TimePartSelectProps) {
+  return (
+    <Select value={options.indexOf(value).toString()} onValueChange={onValueChange}>
+      <SelectTrigger size="sm" aria-label={label}>
+        <SelectValue placeholder="Select..." />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option, idx) => (
+          <SelectItem key={option} value={`${idx}`}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

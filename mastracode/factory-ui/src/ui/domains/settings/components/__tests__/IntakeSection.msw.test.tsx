@@ -510,7 +510,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const search = await screen.findByRole('textbox', { name: 'Search Linear projects and teams' });
+      const search = await screen.findByRole('searchbox', { name: 'Search Linear projects and teams' });
       expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
 
       await userEvent.type(search, 'road');

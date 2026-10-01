@@ -54,9 +54,14 @@ const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))
 const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
 const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
 export const fieldErrorRim =
-  '[--field-rim:var(--destructive-indicator)] [--field-rim-focus:var(--destructive-indicator)]';
+  'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =
   'has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)]';
+export function deprecatedErrorAria(error: boolean | undefined): { 'aria-invalid'?: true } {
+  return error ? { 'aria-invalid': true } : {};
+}
+export const fieldTriggerErrorBorder =
+  'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
 export const fieldTriggerStyle =
   'bg-field shadow-input ' +
   fieldRimFocus +
