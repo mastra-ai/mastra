@@ -453,6 +453,19 @@ describe('concrete MCP schema generation', () => {
     expect(compile).not.toHaveBeenCalled();
   });
 
+  it('checks the value budget before walking schema keywords', async () => {
+    // Wider than the value budget and deeper than the protocol allows, so the two budgets
+    // disagree. The value budget has to win without the schema being walked, which is what keeps
+    // an over-budget schema from being expanded by the keyword walk at all.
+    let deep: Record<string, unknown> = { type: 'object' };
+    for (let index = 0; index < 130; index += 1) {
+      deep = { type: 'object', properties: { ...Object.fromEntries(booleanProperties(800)), nested: deep } };
+    }
+    const result = await generateToolTypes(catalog(deep));
+    expect(result.warnings.some(warning => /maximum value count/.test(warning))).toBe(true);
+    check(result.source, assertions + 'type A = Assert<Equal<Input,unknown>>;');
+  });
+
   it('widens the rest of a catalogue that exceeds the total value budget', async () => {
     // Each schema stays under the per-schema budget while the catalogue as a whole does not.
     const perSchema = Math.ceil(MAX_CATALOG_VALUES / 11);

@@ -264,27 +264,29 @@ export async function generateToolTypes(
   let schemaIndex = 0;
   const budget = { values: 0 };
 
+  function widen(name: string, position: string, reason: string): string {
+    warnings.push(`${reason} at ${position}; widened to unknown`);
+    declarations.push(`export type ${name} = unknown;\n`);
+    return name;
+  }
+
   async function convert(raw: unknown, position: string): Promise<string> {
     const name = `ToolSchema${++schemaIndex}`;
-    // Both budgets are applied before `prepare()` copies anything, so an over-budget schema costs
-    // at most its budget in visits instead of a full traversal plus conversion. The raw count runs
-    // first, so the keyword walk below only ever sees a schema already bounded by value.
+    // The value count comes first and gates the walk below: `jsonSchemaComplexity` expands the
+    // schema-bearing containers it visits, so it must only ever see a schema already bounded by
+    // value. An over-budget schema is then widened without being copied, walked, or converted.
     const values = countJsonValues(raw, MAX_SCHEMA_VALUES);
     budget.values += values;
+    if (values > MAX_SCHEMA_VALUES) {
+      return widen(name, position, `Schema exceeds the maximum value count of ${MAX_SCHEMA_VALUES}`);
+    }
+    if (budget.values > MAX_CATALOG_VALUES) {
+      return widen(name, position, `Catalogue exceeds the maximum value count of ${MAX_CATALOG_VALUES}`);
+    }
     const { error, limit } = jsonSchemaComplexity(raw);
     // Depth is a structural violation, not merely an expensive schema: keep failing it.
     if (limit === 'depth') fail(position);
-    const reason =
-      (values > MAX_SCHEMA_VALUES ? `Schema exceeds the maximum value count of ${MAX_SCHEMA_VALUES}` : undefined) ??
-      error ??
-      (budget.values > MAX_CATALOG_VALUES
-        ? `Catalogue exceeds the maximum value count of ${MAX_CATALOG_VALUES}`
-        : undefined);
-    if (reason) {
-      warnings.push(`${reason} at ${position}; widened to unknown`);
-      declarations.push(`export type ${name} = unknown;\n`);
-      return name;
-    }
+    if (error) return widen(name, position, error);
     const schema = prepare(raw, position, warnings);
     if (typeof schema === 'boolean') {
       declarations.push(`export type ${name} = ${schema ? 'unknown' : 'never'};\n`);
