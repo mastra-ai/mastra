@@ -28,6 +28,90 @@ export const MAX_JSON_SCHEMA_NODES = 10_000;
 class Unconvertible extends Error {}
 
 /**
+ * Bounds the work a validator or type generator can be asked to do for an untrusted schema.
+ * Only schema-bearing keywords are walked, so deeply nested annotation data such as `default`
+ * or `examples` does not count. The counted nodes are returned so callers can also budget
+ * across a whole catalogue rather than one schema at a time.
+ *
+ * The keyword lists are intentionally wider than the conversion sets above: this walk has to
+ * reach every position that can carry validation rules, including `dependencies`,
+ * `prefixItems`, and `contentSchema`.
+ */
+export function jsonSchemaComplexity(schema: unknown): {
+  error?: string;
+  limit?: 'depth' | 'nodes';
+  nodes: number;
+} {
+  const seen = new Set<object>();
+  let nodes = 0;
+  const stack = [{ value: schema, depth: 0 }];
+  const schemaMapKeywords = [
+    '$defs',
+    'definitions',
+    'properties',
+    'patternProperties',
+    'dependentSchemas',
+    'dependencies',
+  ];
+  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
+  const schemaKeywords = [
+    'additionalProperties',
+    'unevaluatedProperties',
+    'additionalItems',
+    'unevaluatedItems',
+    'items',
+    'contains',
+    'propertyNames',
+    'not',
+    'if',
+    'then',
+    'else',
+    'contentSchema',
+  ];
+
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop()!;
+    if (value === null || typeof value !== 'object' || Array.isArray(value) || seen.has(value)) continue;
+    seen.add(value);
+
+    nodes += 1;
+    if (depth > MAX_JSON_SCHEMA_DEPTH) {
+      return {
+        error: `JSON Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`,
+        limit: 'depth',
+        nodes,
+      };
+    }
+    if (nodes > MAX_JSON_SCHEMA_NODES) {
+      return {
+        error: `JSON Schema exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}`,
+        limit: 'nodes',
+        nodes,
+      };
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const keyword of schemaMapKeywords) {
+      const schemas = record[keyword];
+      if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
+        for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaArrayKeywords) {
+      const schemas = record[keyword];
+      if (Array.isArray(schemas)) {
+        for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
+      }
+    }
+    for (const keyword of schemaKeywords) {
+      if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
+    }
+  }
+
+  return { nodes };
+}
+
+/**
  * Converts a 2019-09 schema (e.g. from zod v3) into 2020-12 form. Tuples are the
  * only structural difference handled: array-form `items` becomes `prefixItems`,
  * and `additionalItems` becomes `items`.

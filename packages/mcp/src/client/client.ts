@@ -31,7 +31,7 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
+import { JSON_SCHEMA_2020_12, jsonSchemaComplexity, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { traceContextToMeta } from '../shared/trace-context';
@@ -76,73 +76,6 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-
-/**
- * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
- * Only schema-bearing keywords are walked, so deeply nested annotation data such as
- * `default` or `examples` does not count.
- */
-function getJsonSchemaComplexityError(schema: unknown): string | undefined {
-  const seen = new Set<object>();
-  let nodes = 0;
-  const stack = [{ value: schema, depth: 0 }];
-  const schemaMapKeywords = [
-    '$defs',
-    'definitions',
-    'properties',
-    'patternProperties',
-    'dependentSchemas',
-    'dependencies',
-  ];
-  const schemaArrayKeywords = ['prefixItems', 'allOf', 'anyOf', 'oneOf', 'items'];
-  const schemaKeywords = [
-    'additionalProperties',
-    'unevaluatedProperties',
-    'additionalItems',
-    'unevaluatedItems',
-    'items',
-    'contains',
-    'propertyNames',
-    'not',
-    'if',
-    'then',
-    'else',
-    'contentSchema',
-  ];
-
-  while (stack.length > 0) {
-    const { value, depth } = stack.pop()!;
-    if (value === null || typeof value !== 'object' || Array.isArray(value) || seen.has(value)) continue;
-    seen.add(value);
-
-    nodes += 1;
-    if (depth > MAX_JSON_SCHEMA_DEPTH) {
-      return `JSON Schema exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
-    }
-    if (nodes > MAX_JSON_SCHEMA_NODES) {
-      return `JSON Schema exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}`;
-    }
-
-    const record = value as Record<string, unknown>;
-    for (const keyword of schemaMapKeywords) {
-      const schemas = record[keyword];
-      if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
-        for (const child of Object.values(schemas)) stack.push({ value: child, depth: depth + 1 });
-      }
-    }
-    for (const keyword of schemaArrayKeywords) {
-      const schemas = record[keyword];
-      if (Array.isArray(schemas)) {
-        for (const child of schemas) stack.push({ value: child, depth: depth + 1 });
-      }
-    }
-    for (const keyword of schemaKeywords) {
-      if (record[keyword] !== undefined) stack.push({ value: record[keyword], depth: depth + 1 });
-    }
-  }
-
-  return undefined;
-}
 
 const SUPPORTED_DIALECTS = new Set([
   JSON_SCHEMA_2020_12,
@@ -1270,7 +1203,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
     const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
+    const { error: complexityError } = jsonSchemaComplexity(schema);
     if (!complexityError) return standardSchema;
 
     return {
@@ -1438,7 +1371,7 @@ export class InternalMastraMCPClient extends MastraBase {
       const outputSchema = tool.outputSchema
         ? withDefaultDialect(('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
         : undefined;
-      const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
+      const outputSchemaComplexityError = outputSchema ? jsonSchemaComplexity(outputSchema).error : undefined;
       let outputValidationSchema: StandardSchemaWithJSON | undefined;
       const getOutputValidationSchema = async () => {
         if (!outputSchema) return undefined;

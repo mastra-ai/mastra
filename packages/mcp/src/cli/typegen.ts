@@ -1,8 +1,16 @@
 import { compile } from 'json-schema-to-typescript';
 import type { SerializableMCPToolCatalog } from '../client/types';
-import { MAX_JSON_SCHEMA_DEPTH } from '../shared/json-schema-dialect';
+import { jsonSchemaComplexity, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
 
 type Schema = boolean | Record<string, unknown>;
+
+/**
+ * Total schema nodes one generation run will convert. The per-schema budget is the one the
+ * runtime enforces before validating a tool, so a schema the runtime cannot use is never
+ * converted. This ceiling adds a bound on the work a catalogue made of many large schemas can
+ * demand from the converter.
+ */
+const MAX_CATALOG_NODES = MAX_JSON_SCHEMA_NODES * 10;
 
 const maps = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas']);
 const singles = new Set([
@@ -242,9 +250,22 @@ export async function generateToolTypes(
   const serverNames = new Set<string>();
   const flatNames = new Set<string>();
   let schemaIndex = 0;
+  const budget = { nodes: 0 };
 
   async function convert(raw: unknown, position: string): Promise<string> {
     const name = `ToolSchema${++schemaIndex}`;
+    // Bounded before `prepare` copies anything, so an over-budget schema costs at most
+    // MAX_JSON_SCHEMA_NODES visits instead of a full traversal plus conversion.
+    const { error, limit, nodes } = jsonSchemaComplexity(raw);
+    // Depth is a structural violation, not merely an expensive schema: keep failing it.
+    if (limit === 'depth') fail(position);
+    budget.nodes += nodes;
+    if (error || budget.nodes > MAX_CATALOG_NODES) {
+      const reason = error ?? `Catalogue exceeds the maximum node count of ${MAX_CATALOG_NODES}`;
+      warnings.push(`${reason} at ${position}; widened to unknown`);
+      declarations.push(`export type ${name} = unknown;\n`);
+      return name;
+    }
     const schema = prepare(raw, position, warnings);
     if (typeof schema === 'boolean') {
       declarations.push(`export type ${name} = ${schema ? 'unknown' : 'never'};\n`);
