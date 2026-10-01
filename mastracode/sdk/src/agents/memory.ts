@@ -31,7 +31,8 @@ function resolveOmRoleModelForRequest(
 ): GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
-  const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
+  // OM calls send different content every time, so only their shared instructions are worth caching.
+  const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
@@ -237,7 +238,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
               })
             : undefined,
           scope: omScope,
-          // promptCacheMiddleware writes Anthropic cache entries with this TTL; 'auto' can't see it.
+          // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
           activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },
           activateOnProviderChange: true,
           observation: {
