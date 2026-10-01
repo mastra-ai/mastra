@@ -30,6 +30,10 @@ describe('FileTransport', () => {
     expect(fileLogger.path).toBe(testPath);
   });
 
+  it('should reject a directory path', () => {
+    expect(() => new FileTransport({ path: testDir })).toThrow('File path must point to a file');
+  });
+
   it('should work with PinoLogger', async () => {
     const logger = new PinoLogger({
       name: 'test-logger',
