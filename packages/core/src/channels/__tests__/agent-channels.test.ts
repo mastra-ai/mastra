@@ -1,7 +1,11 @@
 import { format } from 'node:util';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import type { MastraDBMessage } from '../../agent/message-list';
+import type { AgentSignalInput } from '../../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { ConsoleLogger } from '../../logger';
 import type { IMastraLogger, LogFilter } from '../../logger';
@@ -2913,30 +2917,41 @@ describe('extractUrls', () => {
   });
 });
 
+/** Builds a Chat SDK `Message` from the fields a test cares about; the rest get inert defaults. */
+function makeMessage(partial: Partial<Message> & Pick<Message, 'id' | 'author'>): Message {
+  return {
+    threadId: 'channel-1:thread-1',
+    text: '',
+    formatted: { type: 'root', children: [] },
+    raw: {},
+    attachments: [],
+    metadata: { dateSent: new Date(0), edited: false },
+    ...partial,
+  };
+}
+
 describe('thread history', () => {
   const BASE_TIME = Date.UTC(2026, 8, 29, 10, 0, 0);
-  const alice = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false };
-  const bob = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false };
-  const bot = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true };
+  const alice: Author = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+  const bob: Author = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
+  const bot: Author = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true, isMe: false };
 
-  function historyMessage(i: number, overrides: Record<string, unknown> = {}) {
-    return {
+  function historyMessage(i: number, overrides: Partial<Message> = {}) {
+    return makeMessage({
       id: `h${i}`,
       text: `message ${i}`,
-      formatted: undefined,
-      attachments: [],
       author: i % 2 === 0 ? alice : bob,
       metadata: { dateSent: new Date(BASE_TIME + i * 1000), edited: false },
       ...overrides,
-    } as any;
+    });
   }
 
   /** `history` is oldest first; the fake thread yields it newest first like the SDK. */
   function makeChatThread(
-    history: any[],
+    history: Message[],
     overrides: Record<string, unknown> = {},
     options: { forwardFetch?: ReturnType<typeof vi.fn> } = {},
-  ) {
+  ): Thread {
     const forwardFetch = options.forwardFetch ?? vi.fn();
     return {
       id: 'channel-1:thread-1',
@@ -2957,7 +2972,8 @@ describe('thread history', () => {
         },
       },
       ...overrides,
-    } as any;
+      // Intentionally partial: only the members the history path touches.
+    } as unknown as Thread;
   }
 
   function makeMastra() {
@@ -2966,14 +2982,12 @@ describe('thread history', () => {
     return { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
   }
 
-  const trigger = {
+  const trigger = makeMessage({
     id: 'trigger',
     text: '@TestBot hi there',
-    formatted: undefined,
-    attachments: [],
     author: alice,
     metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
-  } as any;
+  });
 
   async function setup(options: { agent?: any; threadContext?: Record<string, unknown>; spyHook?: boolean } = {}) {
     const chatMod = await getChatModule();
@@ -2995,7 +3009,7 @@ describe('thread history', () => {
     vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
       dispatches.push(args);
     });
-    let signals: any[] = [];
+    let signals: AgentSignalInput[] = [];
     const hook = vi.spyOn(channels as any, 'persistThreadHistorySignals');
     if (options.spyHook !== false) {
       hook.mockImplementation(async (args: any) => {
@@ -3010,8 +3024,8 @@ describe('thread history', () => {
       hook,
       dispatches,
       signals: () => signals,
-      run: (chatThread: any, message = trigger) => {
-        chatThread.adapter ??= channels.adapters.slack;
+      run: (chatThread: Thread, message: Message = trigger) => {
+        (chatThread as { adapter?: unknown }).adapter ??= channels.adapters.slack;
         return wrapper!(chatThread, message, { skipped: [], totalSinceLastHandler: 1 });
       },
     };
@@ -3303,7 +3317,7 @@ describe('thread history', () => {
       const memory = t.dispatches[0].memory;
       const { messages } = agent.memory.saveMessages.mock.calls[0][0];
       expect(messages).toHaveLength(11);
-      expect(messages.map((m: any) => m.id)).toEqual([
+      expect(messages.map(m => m.id)).toEqual([
         `thread-history:${memory.thread}:h0`,
         `thread-history:${memory.thread}:gap`,
         ...Array.from({ length: 9 }, (_, i) => `thread-history:${memory.thread}:h${i + 6}`),
@@ -3391,30 +3405,27 @@ describe('thread history', () => {
 
 describe('thread history end to end', () => {
   const BASE_TIME = Date.UTC(2026, 8, 29, 11, 0, 0);
-  const alice = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
-  const bob = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
-  const bot = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true, isMe: false };
+  const alice: Author = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+  const bob: Author = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
+  const bot: Author = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true, isMe: false };
   const THREAD_ID = 'C1:1700000000.000100';
 
-  function fixtureMessage(i: number, overrides: Record<string, unknown> = {}) {
-    return {
+  function fixtureMessage(i: number, overrides: Partial<Message> = {}) {
+    return makeMessage({
       id: `h${i}`,
       threadId: THREAD_ID,
       text: `message ${i}`,
-      formatted: undefined,
-      raw: {},
-      attachments: [],
       author: i % 2 === 0 ? alice : bob,
       metadata: { dateSent: new Date(BASE_TIME + i * 1000), edited: false },
       ...overrides,
-    } as any;
+    });
   }
 
   /** Adapter whose fetchMessages pages over `prior` honoring direction/cursor/limit. */
-  function createFixtureAdapter(prior: any[]) {
+  function createFixtureAdapter(prior: Message[]) {
     const adapter = createMockAdapter('slack');
     adapter.isDM = () => false;
-    adapter.fetchMessages = vi.fn(async (_threadId: string, options: any = {}) => {
+    adapter.fetchMessages = vi.fn(async (_threadId: string, options: FetchOptions = {}) => {
       const pageSize = options.limit ?? 5;
       if (options.direction === 'forward') {
         const start = options.cursor ? Number(options.cursor) : 0;
@@ -3430,15 +3441,15 @@ describe('thread history end to end', () => {
     return adapter;
   }
 
-  async function createHarness(options: { prior: any[]; state?: any } = { prior: [] }) {
+  async function createHarness(options: { prior: Message[]; state?: unknown } = { prior: [] }) {
     const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
     const { Mastra } = await import('../../mastra');
     const { InMemoryStore } = await import('../../storage/mock');
     const { MockMemory } = await import('../../memory/mock');
 
-    const prompts: any[] = [];
+    const prompts: LanguageModelV2Prompt[] = [];
     const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }: any) => {
+      doStream: async ({ prompt }) => {
         prompts.push(prompt);
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -3494,7 +3505,7 @@ describe('thread history end to end', () => {
       prompts,
       mention,
       storedRows,
-      deliver: (m: any) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m),
+      deliver: (m: Message) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m),
     };
   }
 
@@ -3518,7 +3529,7 @@ describe('thread history end to end', () => {
     // root + gap + 9 recent + trigger.
     expect(JSON.stringify(userRows.map(m => m.content))).not.toContain('[Thread context');
     expect(userRows).toHaveLength(12);
-    const attrs = (m: any) => m.content.metadata?.signal?.attributes ?? {};
+    const attrs = (m: MastraDBMessage) => m.content.metadata?.signal?.attributes ?? {};
     expect(userRows.slice(0, 11).map(m => m.id)).toEqual([
       `thread-history:${thread.id}:h0`,
       `thread-history:${thread.id}:gap`,
@@ -3535,15 +3546,14 @@ describe('thread history end to end', () => {
     expect(JSON.stringify(trigger.content)).not.toContain('[Thread context');
 
     // Adapter paging: backward walk for the window and count; no forward fetch needed (root reached).
-    const directions = h.adapter.fetchMessages.mock.calls.map((c: any[]) => c[1]?.direction);
+    const directions = h.adapter.fetchMessages.mock.calls.map((c: [string, FetchOptions?]) => c[1]?.direction);
     expect(directions).toContain('backward');
     expect(directions).not.toContain('forward');
 
     // The model saw the history turns, in order, before the trigger.
     expect(h.prompts).toHaveLength(1);
-    const userTurns = h.prompts[0].filter((m: any) => m.role === 'user');
-    const turnText = (m: any) =>
-      typeof m.content === 'string' ? m.content : m.content.map((p: any) => p.text ?? '').join('');
+    const userTurns = h.prompts[0]!.filter(m => m.role === 'user');
+    const turnText = (m: (typeof userTurns)[number]) => m.content.map(p => (p.type === 'text' ? p.text : '')).join('');
     const texts = userTurns.map(turnText);
     expect(texts[0]).toContain('source="thread-history"');
     expect(texts[0]).toContain('message 0');
@@ -3551,9 +3561,7 @@ describe('thread history end to end', () => {
     expect(texts[texts.length - 1]).toContain('what was the first message?');
     expect(texts[texts.length - 1]).not.toContain('[Thread context');
     expect(texts.join('\n').indexOf('message 0')).toBeLessThan(texts.join('\n').indexOf('what was the first message?'));
-    const fileParts = userTurns.flatMap((m: any) =>
-      typeof m.content === 'string' ? [] : m.content.filter((p: any) => p.type === 'file'),
-    );
+    const fileParts = userTurns.flatMap(m => m.content.filter(p => p.type === 'file'));
     expect(fileParts).toHaveLength(1);
     expect(fileParts[0].mediaType).toBe('image/png');
   });
