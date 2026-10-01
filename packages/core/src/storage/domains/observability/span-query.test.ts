@@ -4,7 +4,6 @@ import {
   encodeSpanQueryCursor,
   parseSpanQueryRequest,
   planSpanQuery,
-  SPAN_QUERY_MAX_PREVIEW_BYTES,
   spanQueryCostSchema,
   spanQueryRequestSchema,
   spanQueryResponseSchema,
@@ -25,6 +24,7 @@ const scope = { organizationId: 'org-a', resourceId: 'project-a' };
 const where = { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } as const;
 const identity = { ...scope, traceId: 'trace-a', spanId: 'span-a' };
 const values = { ...identity, sortValue: '2026-10-01T12:00:00Z' };
+const fourByteCharacter = '\u{10400}'; // One Unicode code point, four UTF-8 bytes.
 const row: SpanQueryRow = {
   ...identity,
   parentSpanId: 'parent-a',
@@ -207,7 +207,7 @@ describe('bounded result contract', () => {
     { endedAt: '2026-10-01T11:59:59Z' },
     { durationMs: 999 },
     { inputPreview: null, inputTruncated: true },
-    { outputPreview: '🙂'.repeat(SPAN_QUERY_MAX_PREVIEW_BYTES) },
+    { outputPreview: fourByteCharacter.repeat(257) },
     { input: 'full-payload-is-not-a-list-field' },
   ])('rejects invalid result states: %j', overrides => {
     expect(spanQueryRowSchema.safeParse({ ...row, ...overrides }).success).toBe(false);
@@ -217,16 +217,11 @@ describe('bounded result contract', () => {
     [null, null, false],
     ['', '', false],
     ['{malformed', '{malformed', false],
-    ['🙂'.repeat(257), '🙂'.repeat(256), true],
+    [fourByteCharacter.repeat(256), fourByteCharacter.repeat(256), false],
+    [fourByteCharacter.repeat(257), fourByteCharacter.repeat(256), true],
     ['x'.repeat(257), 'x'.repeat(256), true],
   ])('preserves the expected preview and truncation state for input %#', (input, value, truncated) => {
     expect(createSpanQueryPreview(input)).toEqual({ value, truncated });
-  });
-
-  it('does not truncate an exactly full preview and keeps absent distinct from empty', () => {
-    expect(createSpanQueryPreview('🙂'.repeat(256))).toEqual({ value: '🙂'.repeat(256), truncated: false });
-    expect(createSpanQueryPreview(null)).toEqual({ value: null, truncated: false });
-    expect(createSpanQueryPreview('')).toEqual({ value: '', truncated: false });
   });
 
   it('rejects duplicate logical rows but permits matching IDs in different trusted resources', () => {
