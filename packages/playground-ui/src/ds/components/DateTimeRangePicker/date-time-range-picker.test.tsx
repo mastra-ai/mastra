@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DateTimeRangePicker } from './date-time-range-picker';
@@ -42,5 +42,20 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     const error = screen.getByRole('alert');
     expect(error.textContent).toContain('Start date/time must be before end date/time');
     expect(error.querySelector('[data-slot="icon"] svg')).not.toBeNull();
+
+    const range = screen.getByRole('group', { name: 'Custom date range' });
+    expect(range.getAttribute('aria-invalid')).toBe('true');
+    expect(range.getAttribute('aria-describedby')).toBe(error.id);
+  });
+
+  it('names each time select on its own, with its own id', () => {
+    renderCustom();
+
+    const selects = ['Start time', 'End time'].flatMap(time => {
+      const group = screen.getByRole('group', { name: time });
+      return ['Hour', 'Minute', 'AM or PM'].map(part => within(group).getByRole('combobox', { name: part }));
+    });
+
+    expect(new Set(selects.map(select => select.id)).size).toBe(6);
   });
 });

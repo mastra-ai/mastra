@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FieldItem } from '@/ds/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { cn } from '@/lib/utils';
 
@@ -64,47 +65,41 @@ export function TimePicker({ defaultValue, onValueChange, className, label = 'Ti
 
   return (
     <div role="group" aria-label={label} className={cn('flex items-center gap-2', className)}>
-      <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
-        <SelectTrigger size="sm" aria-label="Hour">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {hourOptions.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <TimePartSelect label="Hour" options={hourOptions} value={hour} onValueChange={handleHourChange} />
       :
-      <Select name="minute" value={minuteOptions.indexOf(minute).toString()} onValueChange={handleMinuteChange}>
-        <SelectTrigger size="sm" aria-label="Minute">
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {minuteOptions.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        name="period"
-        value={timePeriodOptions.indexOf(timePeriod).toString()}
+      <TimePartSelect label="Minute" options={minuteOptions} value={minute} onValueChange={handleMinuteChange} />
+      <TimePartSelect
+        label="AM or PM"
+        options={timePeriodOptions}
+        value={timePeriod}
         onValueChange={handleTimePeriodChange}
-      >
-        <SelectTrigger size="sm" aria-label="AM or PM">
+      />
+    </div>
+  );
+}
+
+type TimePartSelectProps = {
+  label: string;
+  options: readonly string[];
+  value: string;
+  onValueChange: (index: string) => void;
+};
+
+function TimePartSelect({ label, options, value, onValueChange }: TimePartSelectProps) {
+  return (
+    <FieldItem className="contents">
+      <Select value={options.indexOf(value).toString()} onValueChange={onValueChange}>
+        <SelectTrigger size="sm" aria-label={label}>
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
         <SelectContent>
-          {timePeriodOptions.map((option, idx) => (
+          {options.map((option, idx) => (
             <SelectItem key={option} value={`${idx}`}>
               {option}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </FieldItem>
   );
 }
