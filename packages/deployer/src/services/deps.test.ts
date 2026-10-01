@@ -403,6 +403,37 @@ describe('DepsService lockfile installation', () => {
     },
   );
 
+  it('does not reuse a Bun workspace lockfile when output installs packed workspace tarballs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-bun-workspace-'));
+    tempDirs.push(root);
+    const appDir = join(root, 'apps', 'api');
+    const outputDir = join(appDir, '.mastra', 'output');
+    await mkdir(outputDir, { recursive: true });
+    const sourceLock = JSON.stringify({
+      workspaces: {
+        '': { name: 'source' },
+        'apps/api': { dependencies: { foo: 'workspace:*' } },
+        'packages/foo': { name: 'foo', version: '1.0.0' },
+      },
+      packages: { foo: ['foo@workspace:packages/foo'] },
+    });
+    await writeFile(join(root, 'bun.lock'), sourceLock);
+    await writeFile(join(outputDir, 'bun.lock'), 'stale lockfile');
+    await writeFile(
+      join(outputDir, 'package.json'),
+      JSON.stringify({
+        dependencies: { foo: 'file:./workspace-module/foo-1.0.0.tgz' },
+        resolutions: { foo: 'file:./workspace-module/foo-1.0.0.tgz' },
+      }),
+    );
+
+    await new DepsService(appDir).install({ dir: outputDir });
+
+    expect(fs.existsSync(join(outputDir, 'bun.lock'))).toBe(false);
+    expect(await readFile(join(root, 'bun.lock'), 'utf-8')).toBe(sourceLock);
+    expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
+  });
+
   it('updates Yarn Classic lockfiles while installing without a Berry-only flag', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-yarn-classic-'));
     tempDirs.push(root);

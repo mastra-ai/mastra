@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -240,7 +238,7 @@ export class MemoryOracle extends MemoryStorage {
     }
 
     const sourceMessages = await this.messagesForClone(args);
-    const newThreadId = args.newThreadId ?? randomUUID();
+    const newThreadId = args.newThreadId ?? globalThis.crypto.randomUUID();
     const existingDestination = await this.getThreadById({ threadId: newThreadId });
     if (existingDestination) {
       throw storageError(
@@ -270,7 +268,7 @@ export class MemoryOracle extends MemoryStorage {
     // Preserve a source-to-clone id map so callers can reconnect tool calls,
     // UI selections, or traces to the cloned message ids.
     const clonedMessages = sourceMessages.map(message => {
-      const newMessageId = randomUUID();
+      const newMessageId = globalThis.crypto.randomUUID();
       messageIdMap[message.id] = newMessageId;
       return {
         ...message,

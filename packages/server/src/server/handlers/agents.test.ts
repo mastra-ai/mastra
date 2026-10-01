@@ -1699,6 +1699,19 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
+    // Runs a handler call that ends by exhausting the durable snapshot wait, without sleeping through it.
+    async function pastSnapshotWait<T>(call: () => Promise<T>): Promise<T> {
+      vi.useFakeTimers();
+      try {
+        const result = call();
+        result.catch(() => {});
+        await vi.advanceTimersByTimeAsync(10_000);
+        return await result;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
     it.each(approvalRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
       await persistSuspendedDurableRun({ resourceId: 'user-b' });
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
@@ -1727,19 +1740,107 @@ describe('Agent Routes Authorization', () => {
       });
 
       await expect(
-        (route.handler as any)({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          runId: 'durable-run-1',
-          toolCallId: 'different-tool-call',
-        }),
+        pastSnapshotWait(() =>
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'different-tool-call',
+          }),
+        ),
       ).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
+
+    it('waits for the suspended snapshot to be persisted before authorizing', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for the snapshot to move to the next suspended tool call', async () => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-2' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-2',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for a snapshot persisted several seconds after the approval event', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'resumeStream').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+
+      await pastSnapshotWait(() => {
+        setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 5_000);
+        return callResume(RESUME_STREAM_ROUTE, { resourceId: 'user-a' });
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('rejects a missing durable run after the wait times out', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall');
+      await expect(
+        pastSnapshotWait(() =>
+          (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+          }),
+        ),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a missing durable run once the request is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const started = Date.now();
+      await expect(
+        (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: controller.signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
     const resumeRoutes = [
       { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
       { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
@@ -1771,7 +1872,7 @@ describe('Agent Routes Authorization', () => {
     it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
-      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+      await expect(pastSnapshotWait(() => callResume(route, { resourceId: 'user-a' }))).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
       );
       expect(execution).not.toHaveBeenCalled();
@@ -1804,6 +1905,70 @@ describe('Agent Routes Authorization', () => {
       await callResume(route, { resourceId: 'user-a' });
       expect(execution).toHaveBeenCalled();
     });
+
+    it.each(resumeRoutes)(
+      '$name resumes a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await route.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+          resumeData: {},
+          memory: { thread: 'thread-a', resource: 'user-a' },
+        } as any);
+        expect(execution).toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)(
+      '$name still rejects a different thread when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({}),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+            resumeData: {},
+            memory: { thread: 'thread-b', resource: 'user-a' },
+          } as any),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(approvalRoutes)(
+      '$name allows a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+        expect(execution).toHaveBeenCalled();
+      },
+    );
   });
 
   describe('RECOVER_ROUTE', () => {

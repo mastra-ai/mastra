@@ -1,11 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Search } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
@@ -209,7 +208,7 @@ export function ProviderAccessSection({
       >
         <div className="flex flex-col gap-3">
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-indicator">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
             </Txt>
           )}
@@ -269,20 +268,12 @@ export function ProviderAccessSection({
           </TabContent>
 
           <TabContent value="api-key" className="flex flex-col gap-3">
-            <div className="relative">
-              <Search
-                size={14}
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-              />
-              <Input
-                type="text"
-                placeholder="Search providers to add an API key…"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                aria-label="Search providers"
-                className="pl-8"
-              />
-            </div>
+            <SearchInput
+              label="Search providers"
+              placeholder="Search providers to add an API key…"
+              value={search}
+              onValueChange={setSearch}
+            />
 
             <ScopeSwap control={scopeControl}>
               <SettingsContainer className="max-h-[280px] overflow-y-auto">

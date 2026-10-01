@@ -13,5 +13,5 @@ export const CHART_COLORS = {
   blue: 'var(--chart-blue)',
   blueDark: 'var(--chart-blue-deep)',
   red: 'var(--chart-red)',
-  yellow: 'var(--chart-yellow)',
+  amber: 'var(--chart-amber)',
 } as const;

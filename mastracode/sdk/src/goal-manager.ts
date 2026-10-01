@@ -11,7 +11,6 @@
  * the core goal step drives continuation and surfaces progress via `goal` stream
  * chunks.
  */
-import { randomUUID } from 'node:crypto';
 import { getGoalActivityDurationMs } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
@@ -137,7 +136,7 @@ export class GoalManager {
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     const now = Date.now();
-    const id = randomUUID();
+    const id = globalThis.crypto.randomUUID();
     this.pendingDelete = null;
     this.threadId = threadId ?? undefined;
     this.agentId = agent?.id;
@@ -368,7 +367,7 @@ export class GoalManager {
           storedId = record.id;
           nextRecord = {
             ...record,
-            id: record.id ?? randomUUID(),
+            id: record.id ?? globalThis.crypto.randomUUID(),
             activeDurationMs: normalizeActiveDurationMs(record.activeDurationMs),
           };
         }
@@ -414,7 +413,7 @@ export class GoalManager {
         ...(saved.pausedReason ? { pausedReason: saved.pausedReason } : {}),
         startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
         updatedAt: Date.now(),
-        id: saved.id ?? randomUUID(),
+        id: saved.id ?? globalThis.crypto.randomUUID(),
       };
     } else {
       this.record = null;

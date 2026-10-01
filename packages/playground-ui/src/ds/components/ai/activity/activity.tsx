@@ -143,7 +143,7 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
     <span
       className={cn(
         'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:[stroke-width:1.75]',
-        status === 'error' ? 'text-destructive-indicator' : 'text-placeholder',
+        status === 'error' ? 'text-destructive-foreground' : 'text-placeholder',
         className,
       )}
       {...props}
@@ -256,7 +256,7 @@ export const ActivityHeadline = ({
       <ActivitySpacer className={cn(hasBadges && 'flex-none')} />
       {status === 'error' && (
         <ActivityTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-indicator" />
+          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
         </ActivityTrailing>
       )}
       <ActivityDisclosure />

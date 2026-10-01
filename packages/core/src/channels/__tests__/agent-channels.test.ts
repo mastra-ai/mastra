@@ -993,6 +993,144 @@ describe('AgentChannels', () => {
       );
     });
 
+    describe('bot display name (#25603)', () => {
+      async function sendAndGetChannel(channels: AgentChannels, mockMastra: any, messageId: string) {
+        const chatThread = {
+          id: 'channel-1:thread-1',
+          channelId: 'channel-1',
+          isDM: false,
+          adapter: channels.adapters.slack,
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id: messageId,
+          text: '@helper say hi',
+          author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+          attachments: [],
+        } as any;
+        mockAgent.sendMessage.mockClear();
+        await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+        const options = mockAgent.sendMessage.mock.calls[0]![1];
+        return options.ifIdle.streamOptions.requestContext.get('channel');
+      }
+
+      async function setup(adapterOverrides: Record<string, unknown>) {
+        const adapter = Object.assign(createMockAdapter('slack'), {
+          userName: 'acme-bot',
+          botUserId: 'UBOT',
+          ...adapterOverrides,
+        });
+        const channels = new AgentChannels({ adapters: { slack: adapter } });
+        channels.__setAgent(mockAgent);
+        channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+        const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
+        const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+        await channels.initialize(mockMastra);
+        return { channels, mockMastra };
+      }
+
+      it('adds the current display name from adapter.getUser and resolves it once', async () => {
+        const getUser = vi
+          .fn()
+          .mockResolvedValue({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).toMatchObject({
+          botUserId: 'UBOT',
+          botUserName: 'acme-bot',
+          botDisplayName: 'helper',
+          botMention: '<@UBOT>',
+        });
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(1);
+        expect(getUser).toHaveBeenCalledWith('UBOT');
+      });
+
+      it('omits the display name when it matches the adapter userName', async () => {
+        const getUser = vi.fn().mockResolvedValue({ userId: 'UBOT', userName: 'acme-bot', fullName: '', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const channel = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(channel.botUserName).toBe('acme-bot');
+        expect(channel).not.toHaveProperty('botDisplayName');
+      });
+
+      it('omits the display name when the adapter has no getUser', async () => {
+        const { channels, mockMastra } = await setup({});
+
+        const channel = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(channel.botUserName).toBe('acme-bot');
+        expect(channel).not.toHaveProperty('botDisplayName');
+      });
+
+      it('still processes the message when getUser fails and retries on the next event', async () => {
+        const getUser = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('users.info failed'))
+          .mockResolvedValueOnce({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).not.toHaveProperty('botDisplayName');
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(2);
+      });
+
+      it('retries on the next event when getUser resolves to null', async () => {
+        const getUser = vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).not.toHaveProperty('botDisplayName');
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(2);
+      });
+
+      it('resolves each bot identity separately when one adapter serves several installations', async () => {
+        const names: Record<string, string> = { UBOT_A: 'helper-a', UBOT_B: 'helper-b' };
+        const getUser = vi.fn(async (userId: string) => ({
+          userId,
+          userName: names[userId]!,
+          fullName: names[userId]!,
+          isBot: true,
+        }));
+        const { channels, mockMastra } = await setup({ getUser, botUserId: 'UBOT_A' });
+        const adapter = channels.adapters.slack as any;
+
+        const a1 = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        adapter.botUserId = 'UBOT_B';
+        const b1 = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        adapter.botUserId = 'UBOT_A';
+        const a2 = await sendAndGetChannel(channels, mockMastra, 'message-3');
+        adapter.botUserId = 'UBOT_B';
+        const b2 = await sendAndGetChannel(channels, mockMastra, 'message-4');
+
+        expect([a1, a2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_A', 'helper-a'],
+          ['UBOT_A', 'helper-a'],
+        ]);
+        expect([b1, b2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_B', 'helper-b'],
+          ['UBOT_B', 'helper-b'],
+        ]);
+        expect(getUser.mock.calls).toEqual([['UBOT_A'], ['UBOT_B']]);
+      });
+    });
+
     describe('suspended tool auto-resume', () => {
       async function dispatch(channels: AgentChannels, platform: string) {
         const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });

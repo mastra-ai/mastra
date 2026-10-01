@@ -16,10 +16,10 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Txt } from '@/ds/components/Txt';
 
-const METADATA_KEY_FIELD_NAME = 'trace-metadata-key';
 const EMPTY_KEYS: readonly string[] = [];
 
 const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
@@ -183,7 +183,7 @@ export function TraceColumnsMenu({
       {withQueryTrace && (
         <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent>
-            <form onSubmit={handleAddMetadata}>
+            <Form onSubmit={handleAddMetadata} className="gap-0">
               <DialogHeader>
                 <DialogTitle>Add metadata column</DialogTitle>
                 <DialogDescription>
@@ -192,11 +192,9 @@ export function TraceColumnsMenu({
                 </DialogDescription>
               </DialogHeader>
               <DialogBody>
-                <FieldBlock.Column>
-                  <FieldBlock.Label name={METADATA_KEY_FIELD_NAME}>Metadata key</FieldBlock.Label>
+                <Field invalid={Boolean(metadataError)}>
+                  <FieldLabel>Metadata key</FieldLabel>
                   <Combobox
-                    id={`input-${METADATA_KEY_FIELD_NAME}`}
-                    name={METADATA_KEY_FIELD_NAME}
                     options={metadataKeyOptions}
                     value={metadataKey}
                     onValueChange={key => {
@@ -207,15 +205,15 @@ export function TraceColumnsMenu({
                     placeholder="Select a metadata key…"
                     searchPlaceholder="Search metadata keys…"
                     emptyText="No metadata keys observed. Type one to add it."
-                    error={metadataError}
                   />
-                </FieldBlock.Column>
+                  <FieldError>{metadataError}</FieldError>
+                </Field>
               </DialogBody>
               <DialogFooter>
                 <DialogCancel>Cancel</DialogCancel>
                 <DialogAction type="submit">Add column</DialogAction>
               </DialogFooter>
-            </form>
+            </Form>
           </DialogContent>
         </Dialog>
       )}

@@ -307,7 +307,7 @@ export class MastraLLMVNext extends MastraBase {
                 type: SpanType.GENERIC,
                 metadata: { remainingTokens, delayMs: 10_000 },
               });
-              await delay(10 * 1000);
+              await delay(10 * 1000, options?.abortSignal);
               rateLimitSpan?.end();
             }
           },

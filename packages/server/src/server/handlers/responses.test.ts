@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { createResponseBodySchema } from '../schemas/responses';
 import { CREATE_RESPONSE_ROUTE, DELETE_RESPONSE_ROUTE, GET_RESPONSE_ROUTE } from './responses';
-import { mapMastraMessagesToResponseOutputItems } from './responses.adapter';
+import { createMessageId, mapMastraMessagesToResponseOutputItems } from './responses.adapter';
 import { resolveResponseTurnMessagesForStorage } from './responses.storage';
 import { createTestServerContext } from './test-utils';
 
@@ -415,6 +415,10 @@ function createMastraWithAgentMemoryUsingRootStorage() {
 }
 
 describe('Responses Handlers', () => {
+  it('creates synchronous message IDs with UUIDs', () => {
+    expect(createMessageId()).toMatch(/^msg_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   let storage: InMemoryStore;
   let memory: MockMemory;
   let agent: Agent;

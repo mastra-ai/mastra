@@ -7,8 +7,6 @@ export interface TraceThreadPanelProps {
   threadId: string;
   withQueryTrace: boolean;
   withFeedback: boolean;
-  /** Trace to expand and scroll to when the thread opens. */
-  anchorTraceId?: string;
   onOpenScore: (traceId: string, scoreId: string) => void;
   /** Return to the trace panel this thread view replaced. */
   onBack: () => void;
@@ -18,12 +16,11 @@ export interface TraceThreadPanelProps {
   title?: string;
 }
 
-/** The trace drawer swapped for the full thread: every turn as traces, anchored on `anchorTraceId`. */
+/** The trace drawer swapped for the full thread: every turn as traces, opened on the latest one. */
 export function TraceThreadPanel({
   threadId,
   withQueryTrace,
   withFeedback,
-  anchorTraceId,
   onOpenScore,
   onBack,
   onClose,
@@ -48,7 +45,6 @@ export function TraceThreadPanel({
           threadId={threadId}
           withQueryTrace={withQueryTrace}
           withFeedback={withFeedback}
-          anchorTraceId={anchorTraceId}
           onOpenScore={onOpenScore}
           onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}
         />

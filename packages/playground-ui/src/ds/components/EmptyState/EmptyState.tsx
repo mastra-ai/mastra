@@ -12,7 +12,7 @@ const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
 
 const iconColorByTone: Record<EmptyStateTone, string> = {
   default: 'text-muted-foreground',
-  error: 'text-destructive-indicator',
+  error: 'text-destructive-foreground',
 };
 
 export type EmptyStateProps = {

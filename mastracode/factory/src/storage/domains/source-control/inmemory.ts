@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { UniqueViolationError } from '@mastra/core/storage';
 
 import type {
@@ -58,7 +57,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         return existing;
       }
       const created: SourceControlInstallation = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         integrationId: this.integrationId,
         orgId: input.orgId,
         connectedByUserId: input.connectedByUserId,
@@ -129,7 +128,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         return existing;
       }
       const created: SourceControlRepository = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         installationId: input.installationId,
         externalId: input.externalId,
         slug: input.slug,
@@ -198,7 +197,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       );
       if (existing) return existing;
       const created: ProjectSourceControlConnection = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         factoryProjectId: input.factoryProjectId,
         integrationId: this.integrationId,
         installationId: input.installationId,
@@ -285,7 +284,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (existing) return existing;
       const now = new Date();
       const created: ProjectRepository = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         connectionId: input.connectionId,
         repositoryId: input.repositoryId,
         createdByUserId: input.createdByUserId,
@@ -367,7 +366,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       }
       const now = new Date();
       const session: SourceControlSession = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         ...input,
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',

@@ -67,8 +67,9 @@ function endsOnModelTurn(message: MastraDBMessage, pendingCallsDropped: boolean)
  * Guards against requests that would end on an assistant message for providers
  * that reject that shape.
  *
- * - Claude 4.6 and later reject assistant response prefill, so the guard always
- *   intervenes for those models.
+ * - Anthropic reads a trailing assistant message as response prefill. That is a
+ *   legitimate feature outside structured output, so the guard only intervenes when
+ *   native structured output (`responseFormat`) is in play, where Anthropic rejects it.
  * - Gemini 3 and later return 400 "Requests ending with a model turn are not
  *   supported" for any request, structured output or not, so the guard always
  *   intervenes for those models.
@@ -97,7 +98,9 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
     const willUseResponseFormat = Boolean(
       structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection,
     );
-    if (!this.appliesTo(model)) return;
+    const rejectsTrailingModelTurn = isMaybeGoogleWithoutTrailingModelTurn(model);
+
+    if (!rejectsTrailingModelTurn && !(willUseResponseFormat && this.appliesTo(model))) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || !endsOnModelTurn(lastMessage, messageList?.dropsIncompleteToolCalls ?? true)) return;

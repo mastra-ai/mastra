@@ -53,7 +53,7 @@ const openDialog = async () => {
   return screen.findByRole('dialog', { name: /rename experiment/i });
 };
 
-const nameInput = () => screen.getByLabelText('Name *') as HTMLInputElement;
+const nameInput = () => screen.getByLabelText(/^Name/) as HTMLInputElement;
 const descriptionInput = () => screen.getByLabelText('Description') as HTMLInputElement;
 const saveButton = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
 

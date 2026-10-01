@@ -82,18 +82,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 75
   },
   {
-    "model": "digitalocean/anthropic-claude-4.5-haiku",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 5
-  },
-  {
     "model": "digitalocean/anthropic-claude-4.5-sonnet",
     "imageInput": true,
     "audioInput": false,
@@ -968,6 +956,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 12
+  },
+  {
+    "model": "digitalocean/openai-gpt-6-1-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "digitalocean/openai-gpt-6-astra",

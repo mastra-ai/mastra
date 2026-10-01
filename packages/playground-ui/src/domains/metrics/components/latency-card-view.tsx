@@ -26,7 +26,7 @@ const latencySeries = [
   {
     dataKey: 'p95',
     label: 'p95',
-    color: CHART_COLORS.yellow,
+    color: CHART_COLORS.amber,
     aggregate: (data: Record<string, unknown>[]) => ({
       value: averageLatency(data, 'p95'),
       suffix: 'avg ms',

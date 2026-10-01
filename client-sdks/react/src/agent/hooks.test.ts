@@ -670,6 +670,56 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  describe('tool-call-resumed (#24280)', () => {
+    const suspendedThenResumed = (suspended: string[], resumed: string[]) => [
+      ...suspended.flatMap(id => [
+        {
+          type: 'tool-call',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {} },
+        },
+        {
+          type: 'tool-call-suspended',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {}, suspendPayload: {}, resumeSchema: '' },
+        },
+      ]),
+      ...resumed.map(id => ({
+        type: 'tool-call-resumed',
+        runId: 'run-resumed',
+        from: 'AGENT',
+        payload: { toolName: 'askUser', toolCallId: id, kind: 'suspension' },
+      })),
+    ];
+
+    const render = () =>
+      renderHook(
+        () =>
+          useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+        { wrapper },
+      );
+
+    it('keeps awaiting while another suspension is still pending', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      unmount();
+    });
+
+    it('clears the live awaiting flag once every suspension is resumed', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a', 'tc-b']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+      await new Promise(r => setTimeout(r, 50));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      unmount();
+    });
+  });
+
   it('keeps subscription approval pending when the server ACK fails', async () => {
     nextSubscribeChunks = [
       {

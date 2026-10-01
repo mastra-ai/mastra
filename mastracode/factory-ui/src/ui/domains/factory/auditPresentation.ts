@@ -18,7 +18,7 @@ const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
   work_item: { tone: 'purple', label: 'Work items', dotClass: 'bg-chart-blue', strokeClass: 'stroke-chart-blue' },
   run: { tone: 'green', label: 'Runs', dotClass: 'bg-chart-green', strokeClass: 'stroke-chart-green' },
   git: { tone: 'orange', label: 'Git', dotClass: 'bg-chart-orange', strokeClass: 'stroke-chart-orange' },
-  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-chart-yellow', strokeClass: 'stroke-chart-yellow' },
+  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-chart-amber', strokeClass: 'stroke-chart-amber' },
   intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder', strokeClass: 'stroke-placeholder' },
 };
 

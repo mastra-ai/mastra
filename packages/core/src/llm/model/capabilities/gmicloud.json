@@ -1,6 +1,8 @@
 {
   "attachment": [
     "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen3.8-Flash",
+    "Qwen/Qwen3.8-Max",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
     "anthropic/claude-opus-4.8",
@@ -13,6 +15,7 @@
     "MiniMaxAI/MiniMax-M2.7",
     "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen3.8-Max",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-sonnet-4.6",
     "deepseek-ai/DeepSeek-V4-Flash",
@@ -23,6 +26,7 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "structuredOutput": [
+    "Qwen/Qwen3.8-Flash",
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Pro",
     "moonshotai/Kimi-K2.6",
