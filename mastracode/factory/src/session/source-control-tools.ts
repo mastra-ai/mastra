@@ -23,6 +23,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
+import { agentToolCallIdForWrite, factoryGithubIdempotencyKey } from './agent-write-idempotency.js';
 
 type RepositorySessionState = {
   factoryProjectId?: string;
@@ -41,6 +42,7 @@ interface SessionTarget {
   session: SourceControlSession;
   projectRepository: ProjectRepository;
   repository: SourceControlRepository;
+  factoryProjectId: string;
   orgId: string;
   userId: string;
 }
@@ -136,7 +138,31 @@ async function resolveSessionTarget(
   }
   const repository = await provider.storage.repositories.get({ orgId, id: projectRepository.repositoryId });
   if (!repository) throw new Error('The active source-control repository was not found.');
-  return { context, provider, session, projectRepository, repository, orgId, userId };
+  return {
+    context,
+    provider,
+    session,
+    projectRepository,
+    repository,
+    factoryProjectId: connection.factoryProjectId,
+    orgId,
+    userId,
+  };
+}
+
+function agentWriteIdempotencyKey(target: SessionTarget, operation: string, toolCallId?: string): string | undefined {
+  const threadId = target.context.threadId;
+  if (!toolCallId) return undefined;
+  if (!threadId) throw new Error('Agent GitHub writes require the active session thread for idempotency.');
+  return factoryGithubIdempotencyKey({
+    orgId: target.orgId,
+    factoryProjectId: target.factoryProjectId,
+    projectRepositoryId: target.projectRepository.id,
+    repositoryId: target.repository.externalId,
+    threadId,
+    operation,
+    operationId: toolCallId,
+  });
 }
 
 function changeRequestId(value: string | number): string {
@@ -286,14 +312,20 @@ export function createSourceControlTools({
         body: z.string().optional(),
         draft: z.boolean().optional(),
       }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await withTarget();
+        const idempotencyKey = agentWriteIdempotencyKey(
+          target,
+          'create-pull-request',
+          agentToolCallIdForWrite(execution),
+        );
         const created = await target.provider.versionControl.createPullRequest({
           ...(await reference(target)),
           title: input.title,
           ...(input.body !== undefined ? { body: input.body } : {}),
           baseBranch: target.session.baseBranch,
           headBranch: target.session.branch,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
           ...(input.draft !== undefined ? { draft: input.draft } : {}),
         });
         await emitAgentAudit(audit, requestContext, {
@@ -332,12 +364,18 @@ export function createSourceControlTools({
       id: 'source_control_comment_change_request',
       description: 'Add a top-level comment to a pull request or merge request in the active repository.',
       inputSchema: changeRequestSchema.extend({ body: z.string().trim().min(1) }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await withTarget();
+        const idempotencyKey = agentWriteIdempotencyKey(
+          target,
+          'comment-pull-request',
+          agentToolCallIdForWrite(execution),
+        );
         return target.provider.versionControl.createComment({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
           body: input.body,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         });
       },
     }),
@@ -426,12 +464,18 @@ export function createSourceControlTools({
               'Provide replyToId alone to reply to a diff thread, or commitId, path, line, and side to start one. startLine and startSide must be provided together.',
           },
         ),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await withTarget();
+        const idempotencyKey = agentWriteIdempotencyKey(
+          target,
+          'comment-pull-request-diff',
+          agentToolCallIdForWrite(execution),
+        );
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
           body: input.body,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         };
         if (input.replyToId !== undefined) {
           return target.provider.versionControl.createReviewComment({ ...base, replyToId: input.replyToId });
@@ -536,7 +580,7 @@ export function createSourceControlTools({
             });
           }
         }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await withTarget();
         const reviewedHead = reviewedHeadFromBody(input.body);
         if (reviewedHead) {
@@ -553,6 +597,11 @@ export function createSourceControlTools({
             );
           }
         }
+        const idempotencyKey = agentWriteIdempotencyKey(
+          target,
+          'review-pull-request',
+          agentToolCallIdForWrite(execution),
+        );
         const base = {
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
@@ -561,6 +610,7 @@ export function createSourceControlTools({
             : reviewedHead
               ? { commitId: reviewedHead }
               : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         };
         if (input.event === 'approve') {
           return target.provider.versionControl.createReview({
@@ -598,11 +648,17 @@ export function createSourceControlTools({
         commitTitle: z.string().optional(),
         commitMessage: z.string().optional(),
       }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await withTarget();
+        const idempotencyKey = agentWriteIdempotencyKey(
+          target,
+          'merge-pull-request',
+          agentToolCallIdForWrite(execution),
+        );
         return target.provider.versionControl.mergePullRequest({
           ...(await reference(target)),
           pullRequestId: changeRequestId(input.changeRequestId),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
           ...(input.method !== undefined ? { method: input.method } : {}),
           ...(input.commitTitle !== undefined ? { commitTitle: input.commitTitle } : {}),
           ...(input.commitMessage !== undefined ? { commitMessage: input.commitMessage } : {}),

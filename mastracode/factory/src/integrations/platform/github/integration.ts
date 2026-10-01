@@ -996,6 +996,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'PATCH',
         repositoryPath(input.repository, `issues/comments/${existing.id}`),
         { body: input.body },
+        { idempotencyKey: input.idempotencyKey },
       );
       this.#observeSelfAuthor(comment, undefined);
       return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1004,6 +1005,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
       { body: input.body },
+      { idempotencyKey: input.idempotencyKey },
     );
     this.#observeSelfAuthor(comment, undefined);
     return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
@@ -1260,7 +1262,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
         { body: input.body },
-        { actingUserId: input.actingUserId },
+        { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
       );
       this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
@@ -1313,7 +1315,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         body: input.body,
         draft: input.draft,
       },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
     const created = parsePullRequest(result);
     if (input.actingUserId && input.connection.type === 'app-installation') {
@@ -1370,7 +1372,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
       { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
   }
 
@@ -1391,7 +1393,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
       { body: input.body },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
     this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
@@ -1449,7 +1451,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
       { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
     return parseReview(review);
   }
@@ -1469,7 +1471,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
       { body: input.body, event: reviewEvent(input.event) },
-      { actingUserId: input.actingUserId },
+      { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
     );
     return parseReview(review);
   }
@@ -1528,7 +1530,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
         body,
-        { actingUserId: input.actingUserId },
+        { actingUserId: input.actingUserId, idempotencyKey: input.idempotencyKey },
       ),
     );
   }

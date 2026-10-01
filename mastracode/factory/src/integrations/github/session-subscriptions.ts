@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { agentToolCallIdForWrite, factoryGithubIdempotencyKey } from '../../session/agent-write-idempotency.js';
 import { runsPullRequestCreate } from '../../session/shell-commands.js';
 import type {
   ProjectRepository,
@@ -129,6 +130,21 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
   return { context, projectRepository, connection, installation, repository, orgId, userId };
 }
 
+function agentWriteIdempotencyKey(target: SessionTarget, operation: string, toolCallId?: string): string | undefined {
+  if (!toolCallId) return undefined;
+  const threadId = target.context.threadId;
+  if (!threadId) throw new Error('Agent GitHub writes require the active session thread for idempotency.');
+  return factoryGithubIdempotencyKey({
+    orgId: target.orgId,
+    factoryProjectId: target.connection.factoryProjectId,
+    projectRepositoryId: target.projectRepository.id,
+    repositoryId: target.repository.externalId,
+    threadId,
+    operation,
+    operationId: toolCallId,
+  });
+}
+
 async function verifyPullRequest(target: SessionTarget, pullRequest: number, github: GithubIntegration) {
   const [owner, repo] = target.repository.slug.split('/');
   if (!owner || !repo) throw new Error('GitHub repository is invalid.');
@@ -189,16 +205,19 @@ export async function upsertFactoryTriageComment(
   requestContext: RequestContext,
   input: { issueNumber: number; body: string },
   github: GithubIntegration,
+  toolCallId?: string,
 ) {
   const target = await resolveSessionTarget(requestContext, github);
   const installationId = Number(target.installation.externalId);
   if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  const idempotencyKey = agentWriteIdempotencyKey(target, 'upsert-issue-triage-comment', toolCallId);
   return serializeTriageComment(`${installationId}:${target.repository.externalId}:${input.issueNumber}`, () =>
     github.upsertFactoryTriageComment({
       installationId,
       repository: target.repository.slug,
       issueNumber: input.issueNumber,
       body: input.body,
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     }),
   );
 }
@@ -207,17 +226,20 @@ export async function commentCurrentSessionIssue(
   requestContext: RequestContext,
   input: { issueNumber: number; body: string },
   github: GithubIntegration,
+  toolCallId?: string,
 ) {
   const target = await resolveSessionTarget(requestContext, github);
   const repositoryTarget = await github.versionControl.getRepositoryTarget({
     orgId: target.orgId,
     repositoryId: target.repository.id,
   });
+  const idempotencyKey = agentWriteIdempotencyKey(target, 'comment-issue', toolCallId);
   const created = await github.intake.createComment({
     ...repositoryTarget,
     issueId: String(input.issueNumber),
     body: input.body,
     actingUserId: target.userId,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   });
   if (!created) throw new Error(`GitHub issue ${input.issueNumber} was not found in the active project repository.`);
   return created;
@@ -287,14 +309,16 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
       description:
         'Create or update this Factory App’s canonical triage handoff comment on an issue in the active repository. Use this for every marked pending or final Factory triage handoff; never use gh to create or edit that handoff.',
       inputSchema: triageCommentInputSchema,
-      execute: async input => upsertFactoryTriageComment(requestContext, input, github),
+      execute: async (input, execution) =>
+        upsertFactoryTriageComment(requestContext, input, github, agentToolCallIdForWrite(execution)),
     }),
     github_comment_issue: createTool({
       id: 'github_comment_issue',
       description:
         'Add a comment to a GitHub issue in the active repository through Factory’s stable provider identity. Never use gh issue comment for Factory-authored issue comments.',
       inputSchema: issueCommentInputSchema,
-      execute: async input => commentCurrentSessionIssue(requestContext, input, github),
+      execute: async (input, execution) =>
+        commentCurrentSessionIssue(requestContext, input, github, agentToolCallIdForWrite(execution)),
     }),
     github_update_issue_labels: createTool({
       id: 'github_update_issue_labels',

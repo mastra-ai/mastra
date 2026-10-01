@@ -85,7 +85,7 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
+    options?: { signal?: AbortSignal; actingUserId?: string; idempotencyKey?: string },
   ): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
@@ -130,7 +130,7 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal; actingUserId?: string },
+    options?: { signal?: AbortSignal; actingUserId?: string; idempotencyKey?: string },
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
@@ -147,6 +147,9 @@ export class PlatformApiClient {
     // OAuth credential.
     if (options?.actingUserId) {
       headers['x-acting-user-id'] = options.actingUserId;
+    }
+    if (options?.idempotencyKey) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
     }
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {

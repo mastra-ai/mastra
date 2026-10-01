@@ -2538,6 +2538,7 @@ describe('pr route', () => {
       title: 'My PR',
       body: 'Adds a thing',
       actingUserId: 'u1',
+      idempotencyKey: expect.stringMatching(/^factory-github:v1:[a-f0-9]{64}$/),
     });
   });
 

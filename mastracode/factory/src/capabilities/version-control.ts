@@ -79,6 +79,8 @@ export interface CreatePullRequestInput {
   baseBranch: string;
   headBranch: string;
   draft?: boolean;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
   /** End user the write should be attributed to, when the provider supports acting on a user's behalf. */
   actingUserId?: string;
 }
@@ -94,6 +96,8 @@ export interface MergePullRequestInput extends PullRequestRef {
   commitTitle?: string;
   commitMessage?: string;
   method?: 'merge' | 'squash' | 'rebase';
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
 }
 
 export interface MergePullRequestResult {
@@ -122,6 +126,8 @@ export interface ListPullRequestCommentsInput extends PullRequestRef {
 
 export interface CreatePullRequestCommentInput extends PullRequestRef {
   body: string;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
 }
 
 export interface UpdatePullRequestCommentInput {
@@ -160,7 +166,11 @@ export interface ListReviewsInput extends PullRequestRef {
   cursor?: string;
 }
 
-type CreateReviewBase = PullRequestRef & { commitId?: string };
+type CreateReviewBase = PullRequestRef & {
+  commitId?: string;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
+};
 
 type ReviewSubmission = { event: 'approve'; body?: string } | { event: 'request-changes' | 'comment'; body: string };
 
@@ -174,7 +184,7 @@ export interface UpdateReviewInput extends ReviewRef {
   body: string;
 }
 
-export type SubmitReviewInput = ReviewRef & ReviewSubmission;
+export type SubmitReviewInput = ReviewRef & ReviewSubmission & { idempotencyKey?: string };
 
 export interface DismissReviewInput extends ReviewRef {
   message: string;
@@ -199,6 +209,8 @@ export interface ListReviewCommentsInput extends PullRequestRef {
 
 interface CreateReviewCommentBase extends PullRequestRef {
   body: string;
+  /** Internal retry identity; never included in model-visible tool schemas. */
+  idempotencyKey?: string;
 }
 
 export type CreateReviewCommentInput = CreateReviewCommentBase &

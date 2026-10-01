@@ -142,6 +142,26 @@ describe('PlatformApiClient', () => {
       'x-mastra-factory-identity': 'installation',
     });
   });
+
+  it('sends an optional idempotency key while preserving Factory identity headers', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    await client(fetchImpl, 'installation').request('POST', '/v1/server/github/repos/acme/app/pulls', {}, {
+      actingUserId: 'user-42',
+      idempotencyKey: 'factory-github:v1:abc123',
+    });
+
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'Idempotency-Key': 'factory-github:v1:abc123',
+      'x-acting-user-id': 'user-42',
+      'x-mastra-factory-identity': 'installation',
+    });
+  });
+
   it('returns manual redirect locations without following them', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
