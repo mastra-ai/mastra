@@ -1364,6 +1364,16 @@ export function planTraceQuerySelectionPredicate(
   return planPredicate(where, 'trace', path, 1, state);
 }
 
+/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+export function planSpanQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  // Scalar grammar cannot produce a related-record predicate.
+  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+}
+
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
   context: PredicateContext,
