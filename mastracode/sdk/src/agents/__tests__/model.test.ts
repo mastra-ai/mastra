@@ -211,7 +211,11 @@ import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
-import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
+import {
+  opencodeClaudeMaxProvider,
+  buildAnthropicOAuthFetch,
+  createPromptCacheMiddleware,
+} from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
@@ -451,6 +455,70 @@ describe('resolveModel', () => {
         headers: undefined,
         authStorage: scopedAuthStorage(),
         promptCacheScope: 'conversation',
+      });
+    });
+
+    describe('anthropicPromptCacheScope: system (observational memory calls)', () => {
+      const oauthCred = () => ({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      it('reaches the Claude Max provider on the direct OAuth route', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the Claude Max provider when no credential is stored', () => {
+        mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the prompt-cache middleware on the stored API-key route', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the env API-key route', () => {
+        process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the OAuth route through the Mastra gateway', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+        process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+        resolveModel('mastra/anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('defaults to the conversation scope when the option is omitted', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-sonnet-4-5');
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('conversation');
       });
     });
 

@@ -67,17 +67,32 @@ describe('createPromptCacheMiddleware', () => {
   });
 });
 
-// What actually reaches Anthropic on the API-key route, per gateway scope.
-describe('cache_control sent by the API-key route', () => {
+const routes = {
+  'API-key route': {
+    routeThroughMastraGateway: false,
+    credential: { type: 'api_key', key: 'test' },
+    url: 'https://api.anthropic.com/v1/messages',
+  },
+  'OAuth route through the Mastra gateway': {
+    routeThroughMastraGateway: true,
+    credential: { type: 'oauth', access: 'access', refresh: 'refresh', expires: Date.now() + 60 * 60_000 },
+    url: 'https://gateway.example.com/v1/messages',
+  },
+} satisfies Record<string, { routeThroughMastraGateway: boolean; credential: AuthCredential; url: string }>;
+
+// What actually reaches the wire, per route and gateway scope.
+describe.each(Object.entries(routes))('cache_control sent by the %s', (_name, route) => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
   async function sentCacheControls(anthropicPromptCacheScope?: 'conversation' | 'system') {
     const bodies: any[] = [];
+    const urls: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_url: string, init: RequestInit) => {
+      vi.fn(async (url: string | URL, init: RequestInit) => {
+        urls.push(String(url));
         bodies.push(JSON.parse(String(init.body)));
         return new Response(
           JSON.stringify({
@@ -97,9 +112,9 @@ describe('cache_control sent by the API-key route', () => {
 
     const gateway = new MastraCodeGateway({
       mastraGatewayBaseUrl: 'https://gateway.example.com',
-      routeThroughMastraGateway: false,
+      routeThroughMastraGateway: route.routeThroughMastraGateway,
       anthropicPromptCacheScope,
-      credentialStore: fakeStore({ anthropic: { type: 'api_key', key: 'test' } }),
+      credentialStore: fakeStore({ anthropic: route.credential }),
     });
     const model = gateway.resolveLanguageModel({
       providerId: 'anthropic',
@@ -114,6 +129,7 @@ describe('cache_control sent by the API-key route', () => {
       ],
     });
 
+    expect(urls).toEqual([route.url]);
     expect(bodies).toHaveLength(1);
     return JSON.stringify(bodies[0]).match(/"cache_control":\{[^}]*\}/g);
   }
