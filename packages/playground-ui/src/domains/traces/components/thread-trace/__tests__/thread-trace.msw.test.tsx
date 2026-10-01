@@ -119,7 +119,6 @@ const renderView = ({ traceIds = TRACE_IDS, className }: { traceIds?: string[]; 
               <ThreadTrace.Details data-testid={`details-${traceId}`}>
                 <ThreadTrace.DetailsHeader>
                   <ThreadTrace.DetailsActions>
-                    <ThreadTrace.SpansToggle />
                     <button type="button">Action {traceId}</button>
                   </ThreadTrace.DetailsActions>
                 </ThreadTrace.DetailsHeader>

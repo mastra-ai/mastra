@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
@@ -15,11 +15,11 @@ import { cn } from '@/lib/utils';
 
 /**
  * The span tree is clamped to the messages column while the row is collapsed. The budget is the
- * messages height minus the details header, otherwise the right cell overshoots the left.
+ * messages height minus the details header (when there is one), otherwise the right cell overshoots the left.
  */
 function useSpansClamp() {
   const { isExpanded, setExpanded, messagesHeight, timelineHeight, detailsHeaderHeight } = useThreadTraceRow();
-  const budget = messagesHeight !== null && detailsHeaderHeight !== null ? messagesHeight - detailsHeaderHeight : null;
+  const budget = messagesHeight !== null ? messagesHeight - (detailsHeaderHeight ?? 0) : null;
   const overflows = budget !== null && timelineHeight !== null && timelineHeight > budget;
   return { budget, overflows, isExpanded, setExpanded };
 }
@@ -30,13 +30,13 @@ export interface ThreadTraceSpansProps extends Omit<ComponentProps<'div'>, 'chil
 }
 
 /**
- * The span tree of a row, clamped (and faded) to the messages column while the row is collapsed;
- * `ThreadTrace.SpansToggle` expands it. Clamping needs the measured heights from
- * `ThreadTrace.Messages` and `ThreadTrace.DetailsHeader`; without them the timeline is shown in full.
+ * The span tree of a row, clamped (and faded) to the messages column while the row is collapsed.
+ * Clicking the fade or its Expand button expands it; a Collapse button sits under the expanded tree
+ * (hidden while a span of the row is open). Clamping needs the measured height of `ThreadTrace.Messages`.
  */
 export function ThreadTraceSpans({ className, timelineClassName, ...props }: ThreadTraceSpansProps) {
   const { selectSpan } = useThreadTrace();
-  const { traceId, selectedSpanId, featuredSpanIds, revealSpanId, timelineRef } = useThreadTraceRow();
+  const { traceId, selectedSpanId, featuredSpanIds, revealSpanId, timelineRef, isActive } = useThreadTraceRow();
   const { budget, overflows, isExpanded, setExpanded } = useSpansClamp();
 
   // Passive: deduped with the (non-passive) fetch inside the consumer's messages slot and the side panel.
@@ -59,6 +59,7 @@ export function ThreadTraceSpans({ className, timelineClassName, ...props }: Thr
   return (
     <CollapsibleBox
       state={box}
+      expandLabel="Expand"
       data-slot="thread-trace-spans"
       data-testid="trace-row-timeline"
       className={className}
@@ -76,31 +77,13 @@ export function ThreadTraceSpans({ className, timelineClassName, ...props }: Thr
           isLoading={isLoading}
         />
       </div>
+      {isExpanded && overflows && !isActive && (
+        <div className="flex justify-center pb-2">
+          <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => setExpanded(false)}>
+            Collapse
+          </Button>
+        </div>
+      )}
     </CollapsibleBox>
-  );
-}
-
-export type ThreadTraceSpansToggleProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'children'>;
-
-/**
- * Expand / Collapse control for `ThreadTrace.Spans`, meant for the details header (e.g. inside
- * `ThreadTrace.DetailsActions`). Only shown when the span tree overflows; collapsing would hide the
- * selected span, so Collapse waits until the span panel closes.
- */
-export function ThreadTraceSpansToggle(props: ThreadTraceSpansToggleProps) {
-  const { isActive } = useThreadTraceRow();
-  const { overflows, isExpanded, setExpanded } = useSpansClamp();
-  if (!overflows || (isExpanded && isActive)) return null;
-
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      icon={isExpanded ? <Minimize2 /> : <Maximize2 />}
-      onClick={() => setExpanded(!isExpanded)}
-      {...props}
-    >
-      {isExpanded ? 'Collapse' : 'Expand'}
-    </Button>
   );
 }

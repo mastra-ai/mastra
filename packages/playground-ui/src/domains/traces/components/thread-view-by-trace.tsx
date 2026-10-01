@@ -1,5 +1,7 @@
+import { useMastraClient } from '@mastra/react';
+import { useQueries } from '@tanstack/react-query';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
@@ -8,7 +10,7 @@ import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skel
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
+import { traceSpansQueryOptions, useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
@@ -49,22 +51,40 @@ export function ThreadViewByTrace({
   pageSize = 10,
 }: ThreadViewByTraceProps) {
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
-  const { rows, isLoading, error, hasNextPage, isFetchingNextPage, fetchNextPage } = useTracesListSource({
-    initialAutoRefetch: false,
-    withQueryTrace,
-    legacyFilters,
-    limit: pageSize,
-    query: now => ({
-      timeRange: {
-        from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
-        to: now.toISOString(),
-      },
-      where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
-      orderBy: [{ field: 'startedAt', direction: 'desc' }],
-    }),
-  });
+  const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useTracesListSource({
+      initialAutoRefetch: false,
+      withQueryTrace,
+      legacyFilters,
+      limit: pageSize,
+      query: now => ({
+        timeRange: {
+          from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
+          to: now.toISOString(),
+        },
+        where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
+        orderBy: [{ field: 'startedAt', direction: 'desc' }],
+      }),
+    });
   // Pages come newest first; the conversation reads oldest first.
   const traceIds = rows.map(trace => trace.traceId).reverse();
+  const listSettled = !isLoading && !isPlaceholderData;
+
+  // The first page is shown only once its turns' spans have settled too, so the rows mount complete
+  // instead of each one loading on its own. Older pages keep their per-row loading.
+  const client = useMastraClient();
+  const [readyThreadId, setReadyThreadId] = useState<string | null>(null);
+  const isReady = readyThreadId === threadId;
+  const firstPageSpansSettled = useQueries({
+    queries: (isReady || !listSettled ? [] : traceIds).map(traceId => ({
+      ...traceSpansQueryOptions(client, traceId),
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    })),
+    combine: results => results.every(result => !result.isPending),
+  });
+  if (!isReady && listSettled && firstPageSpansSettled) setReadyThreadId(threadId);
 
   if (error) {
     return (
@@ -74,7 +94,7 @@ export function ThreadViewByTrace({
     );
   }
 
-  if (isLoading) return <ThreadViewSkeleton />;
+  if (!isReady) return <ThreadViewSkeleton />;
 
   if (traceIds.length === 0) {
     return (
@@ -127,6 +147,16 @@ function ThreadTraceRowContent({
   return (
     <>
       <ThreadTrace.Divider label={`Turn ${turn}`}>
+        {traceHref && (
+          <>
+            <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+              Go to trace
+            </Button>
+            <Txt as="span" variant="meta" tone="muted" aria-hidden>
+              ·
+            </Txt>
+          </>
+        )}
         <ThreadTrace.TabList>
           <ThreadTrace.Tab value="messages">
             <Icon size="xs">
@@ -172,16 +202,6 @@ function ThreadTraceRowContent({
           </ThreadTrace.TabContent>
         </ThreadTrace.Messages>
         <ThreadTrace.Details>
-          <ThreadTrace.DetailsHeader>
-            <ThreadTrace.DetailsActions>
-              <ThreadTrace.SpansToggle />
-              {traceHref && (
-                <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
-                  Go to trace
-                </Button>
-              )}
-            </ThreadTrace.DetailsActions>
-          </ThreadTrace.DetailsHeader>
           <ThreadTrace.Spans />
         </ThreadTrace.Details>
       </ThreadTrace.RowBody>

@@ -141,21 +141,23 @@ export function ThreadTraceRowBody({ className, ...props }: ThreadTraceRowBodyPr
 }
 
 export interface ThreadTraceDividerProps {
-  /** Announces the turn, e.g. `Turn 1`. */
+  /** Names the turn, e.g. `Turn 1`. Used as the accessible name; not shown. */
   label: string;
   /** Typically the row's `ThreadTrace.TabList`. */
   children?: ReactNode;
 }
 
 /**
- * The rule above a row: a full-width line, with the turn and its tabs centered over the messages
+ * The rule above a row: a full-width line, with its content (e.g. a trace link and tabs) centered over the messages
  * column only, so the line runs on uninterrupted above the details card.
  */
 export function ThreadTraceDivider({ label, children }: ThreadTraceDividerProps) {
   return (
     <div data-slot="thread-trace-divider" className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 pl-4">
-        <TranscriptDivider label={label}>{children}</TranscriptDivider>
+        <TranscriptDivider label={label} hideLabel>
+          {children}
+        </TranscriptDivider>
       </div>
       <div aria-hidden className="flex items-center pr-4">
         <span className="h-px flex-1 bg-border" />

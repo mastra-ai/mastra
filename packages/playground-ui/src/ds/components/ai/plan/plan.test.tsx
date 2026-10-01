@@ -198,15 +198,13 @@ describe('Plan', () => {
     expect(clipped).toBeTruthy();
     // A bare marker attribute, so `[data-clipped]` styling matches on it.
     expect(clipped?.getAttribute('data-clipped')).toBe('');
-    expect(clipped?.classList.contains('mask-b-from-60%')).toBe(true);
-    expect(clipped?.classList.contains('mask-b-to-100%')).toBe(true);
+    expect(clipped?.querySelector('.mask-b-from-60\\%.mask-b-to-100\\%')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /expand plan/i }));
 
     const expanded = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
     expect(expanded?.getAttribute('data-clipped')).toBeNull();
-    expect(expanded?.classList.contains('mask-b-from-60%')).toBe(false);
-    expect(expanded?.classList.contains('mask-b-to-100%')).toBe(false);
+    expect(expanded?.querySelector('.mask-b-from-60\\%')).toBeNull();
   });
 
   it('shows no clip hint or expand control when the plan fits the collapsed card', () => {

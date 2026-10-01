@@ -55,6 +55,42 @@ describe('CollapsibleBox', () => {
     });
   });
 
+  describe('the fade', () => {
+    const fade = () => document.querySelector<HTMLElement>('[data-slot="collapsible-box-fade"]');
+
+    function Bare({ expandLabel }: { expandLabel?: string }) {
+      const state = useCollapsibleBox();
+      return (
+        <CollapsibleBox state={state} expandLabel={expandLabel}>
+          content
+        </CollapsibleBox>
+      );
+    }
+
+    it('expands the box when clicked', () => {
+      mockScrollHeight(1000);
+      render(<Bare />);
+      fireEvent.click(fade() as HTMLElement);
+      expect(box()?.style.maxHeight).toBe('');
+      expect(fade()).toBeNull();
+    });
+
+    it('shows an expand button when a label is given', () => {
+      mockScrollHeight(1000);
+      render(<Bare expandLabel="Expand" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+      expect(box()?.style.maxHeight).toBe('');
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('is not rendered when the content fits', () => {
+      mockScrollHeight(100);
+      render(<Bare expandLabel="Expand" />);
+      expect(fade()).toBeNull();
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+  });
+
   describe('when a custom collapsed height is given', () => {
     it('clips at that height', () => {
       mockScrollHeight(300);

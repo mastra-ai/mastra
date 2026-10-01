@@ -6,9 +6,11 @@ export interface TranscriptDividerProps {
   title?: string;
   /** Trailing content (e.g. tabs or actions), shown after the label behind a `·` separator. */
   children?: ReactNode;
+  /** Hides the visible label (and its separator); it stays the accessible name. */
+  hideLabel?: boolean;
 }
 
-export function TranscriptDivider({ label, title, children }: TranscriptDividerProps) {
+export function TranscriptDivider({ label, title, children, hideLabel = false }: TranscriptDividerProps) {
   if (!label) return null;
 
   // A `separator`'s children are presentational, which would hide interactive children from
@@ -21,14 +23,18 @@ export function TranscriptDivider({ label, title, children }: TranscriptDividerP
     >
       <span aria-hidden className="h-px flex-1 bg-border" />
       <div className="flex shrink-0 items-center gap-2">
-        <Txt as="span" variant="meta" tone="muted" title={title} className="shrink-0">
-          {label}
-        </Txt>
+        {!hideLabel && (
+          <Txt as="span" variant="meta" tone="muted" title={title} className="shrink-0">
+            {label}
+          </Txt>
+        )}
         {children != null && (
           <>
-            <Txt as="span" variant="meta" tone="muted" aria-hidden>
-              ·
-            </Txt>
+            {!hideLabel && (
+              <Txt as="span" variant="meta" tone="muted" aria-hidden>
+                ·
+              </Txt>
+            )}
             {children}
           </>
         )}

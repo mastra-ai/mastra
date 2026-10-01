@@ -9,7 +9,7 @@ import {
 import { ThreadTraceRoot } from './thread-trace-root';
 import { ThreadTraceDivider, ThreadTraceRow, ThreadTraceRowBody } from './thread-trace-row';
 import { ThreadTraceSpanPanel } from './thread-trace-span-panel';
-import { ThreadTraceSpans, ThreadTraceSpansToggle } from './thread-trace-spans';
+import { ThreadTraceSpans } from './thread-trace-spans';
 
 /**
  * A memory thread rendered as its traces: one row per agent turn (oldest first), with the
@@ -57,7 +57,6 @@ export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   DetailsHeader: ThreadTraceDetailsHeader,
   DetailsActions: ThreadTraceDetailsActions,
   Spans: ThreadTraceSpans,
-  SpansToggle: ThreadTraceSpansToggle,
   SpanPanel: ThreadTraceSpanPanel,
 });
 
@@ -80,5 +79,5 @@ export type {
   ThreadTraceDetailsHeaderProps,
   ThreadTraceDetailsActionsProps,
 } from './thread-trace-details';
-export type { ThreadTraceSpansProps, ThreadTraceSpansToggleProps } from './thread-trace-spans';
+export type { ThreadTraceSpansProps } from './thread-trace-spans';
 export type { ThreadTraceSpanPanelProps } from './thread-trace-span-panel';

@@ -334,6 +334,78 @@ describe('ThreadViewByTrace', () => {
     expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
   });
 
+  describe('loading the first page', () => {
+    it('shows only the loading status until every turn has its spans, then renders them complete', async () => {
+      installHandlers();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, async ({ params }) => {
+          await gate;
+          return HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans);
+        }),
+      );
+      const { queryClient } = renderView();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      expect(document.querySelector('[data-trace-id]')).toBeNull();
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+
+      release();
+      await screen.findByText('Chef agent run');
+      expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading thread' })).toBeNull();
+    });
+
+    it('never shows the empty state before the list resolves', async () => {
+      installHandlers({ list: emptyThreadTracesList });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      renderView();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
+
+    it("never shows the previous thread's turns after switching threads", async () => {
+      installHandlers();
+      const view = (threadId: string) => (
+        <TestLinkProvider>
+          <BrowserToolCallsProvider>
+            <ActivatedSkillsProvider>
+              <ThreadViewByTrace threadId={threadId} withQueryTrace />
+            </ActivatedSkillsProvider>
+          </BrowserToolCallsProvider>
+        </TestLinkProvider>
+      );
+      const { rerender } = renderWithProviders(view(THREAD_ID));
+      await screen.findByText('Chef agent follow-up');
+
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      rerender(view('other-thread'));
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
+  });
+
   it('opens the span details beside the conversation when a span is clicked, and closes it', async () => {
     installHandlers();
     const { queryClient } = renderView();
