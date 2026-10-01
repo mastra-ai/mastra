@@ -571,7 +571,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        throw error;
       }
     }
   }

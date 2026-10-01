@@ -62,4 +62,26 @@ describe('DurableAgent input processor agent context (#20161)', () => {
     expect(sawAgent).toBe(true);
     expect(capturedAgentId).toBe('durable-ctx-agent');
   });
+
+  it('fails preparation when an input processor throws a non-tripwire error', async () => {
+    const failingProcessor: Processor = {
+      id: 'redact',
+      name: 'redact',
+      processInput: async () => {
+        throw new Error('redaction service unavailable');
+      },
+    };
+
+    const baseAgent = new Agent({
+      id: 'durable-throw-agent',
+      name: 'Durable Throw Agent',
+      instructions: 'You are a helpful assistant.',
+      model: createTextModel('ok') as LanguageModelV2,
+      inputProcessors: [failingProcessor as any],
+    });
+
+    await expect(prepareForDurableExecution({ agent: baseAgent, messages: 'Hello' })).rejects.toThrow(
+      'redaction service unavailable',
+    );
+  });
 });
