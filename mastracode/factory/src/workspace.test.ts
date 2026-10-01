@@ -1622,6 +1622,24 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(1);
   });
 
+  it('records a setup command failure before a fatal identity restoration failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 127): pnpm not installed', 'setup-failed'),
+    );
+    const identityError = new MaterializeError('Failed to restore git identity', 'commit-failed');
+    mocks.configureGitIdentity.mockResolvedValueOnce(undefined).mockRejectedValueOnce(identityError);
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
+      identityError,
+    );
+
+    expect(hasFailedSetupCommand('session-a', 'pnpm install')).toBe(true);
+    expect(mocks.configureGitIdentity).toHaveBeenCalledTimes(2);
+  });
+
   it('the recorded setup failure is keyed by the exact command and cleared on evict', () => {
     // The setup hook closes over its resolution's setup command, so an
     // edited command only reaches a new sandbox instance — and instance
