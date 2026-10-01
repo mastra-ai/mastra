@@ -10,7 +10,7 @@
  *   - GET  /web/workspace/tree?workspacePath=&depth=            → paged tree
  *   - PUT  /web/workspace/file/write                            → save file
  *   - GET  /web/workspace/search?workspacePath=&q=              → grep contents
- *   - GET  /web/workspace/file/original?workspacePath=&path=    → git HEAD blob
+ *   - GET  /web/workspace/file/original?workspacePath=&path=&against= → original blob (HEAD or PR base)
  *   - POST /web/workspace/lsp                                   → hover / definitions
  *
  * The save endpoint writes through the sandbox filesystem so subsequent
@@ -67,12 +67,17 @@ export interface EditorSearchResponse {
   truncated: boolean;
 }
 
+/** Which revision the inline diff compares the buffer against. */
+export type EditorOriginalAgainst = 'head' | 'base';
+
 export interface EditorFileOriginal {
   workspacePath: string;
   path: string;
-  /** False when the file is untracked/new at HEAD — diff against empty. */
+  /** False when the file does not exist at the compared revision — diff against empty. */
   exists: boolean;
   content: string;
+  /** The revision compared against ('head' default; 'base' = merge-base with the session's base branch). */
+  against: EditorOriginalAgainst;
 }
 
 export type EditorLspQueryKind =
@@ -610,25 +615,52 @@ git grep -InF --untracked -- '${escaped}' 2>/dev/null | head -n ${cap}`;
 }
 
 /**
- * The git HEAD blob for a workspace file, backing the editor's inline diff
- * view (`@codemirror/merge` diffs the buffer against this original). Untracked
- * files return `exists: false` so the client diffs against an empty document.
+ * The original blob for a workspace file, backing the editor's inline diff
+ * view (the buffer is diffed against this content). `against: 'head'` reads
+ * the git HEAD blob; `against: 'base'` reads the blob at the merge-base with
+ * the session's base branch — for a review session that is the PR's base
+ * branch, so the diff shows exactly what the PR changes. Files missing at the
+ * compared revision return `exists: false` so the client diffs against an
+ * empty document.
  */
-export async function readEditorFileOriginal(session: SourceControlSession, path: string): Promise<EditorFileOriginal> {
+export async function readEditorFileOriginal(
+  session: SourceControlSession,
+  path: string,
+  against: EditorOriginalAgainst = 'head',
+): Promise<EditorFileOriginal> {
   const safePath = assertRelativePath(path, 'path');
   if (!safePath) throw new Error('path is required');
 
   const handle = await sessionSandbox(session);
-  const missing: EditorFileOriginal = { workspacePath: session.sessionId, path: safePath, exists: false, content: '' };
+  const missing: EditorFileOriginal = {
+    workspacePath: session.sessionId,
+    path: safePath,
+    exists: false,
+    content: '',
+    against,
+  };
   if (!handle) return missing;
 
   const workdir = handle.workdir.replace(/'/g, `'\\''`);
-  const spec = `HEAD:${safePath}`.replace(/'/g, `'\\''`);
+  let ref = 'HEAD';
+  if (against === 'base') {
+    // Mirrors resolveSessionComparisonBase in fs.ts: the merge-base of HEAD
+    // and the session's base branch, falling back to HEAD when the remote
+    // ref is missing (shallow clone, deleted branch).
+    const mergeBase = await handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'merge-base', 'HEAD', `origin/${session.baseBranch}`],
+      { timeout: 30_000 },
+    );
+    const sha = mergeBase.stdout.trim();
+    if (mergeBase.exitCode === 0 && /^[0-9a-f]{40,64}$/i.test(sha)) ref = sha;
+  }
+  const spec = `${ref}:${safePath}`.replace(/'/g, `'\\''`);
   const script = `cd '${workdir}' && git show '${spec}' 2>/dev/null | head -c ${MAX_ORIGINAL_BYTES}`;
   const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 30_000 });
   // `git show` fails (via the pipe, exit code of head stays 0 but output is
-  // empty) for untracked paths; distinguish "empty file at HEAD" from
-  // "missing at HEAD" with an explicit existence probe.
+  // empty) for missing paths; distinguish "empty file at the revision" from
+  // "missing at the revision" with an explicit existence probe.
   const probe = await handle.sandbox.executeCommand(
     'sh',
     ['-c', `cd '${workdir}' && git cat-file -e '${spec}' 2>/dev/null && echo yes || echo no`],
@@ -636,7 +668,7 @@ export async function readEditorFileOriginal(session: SourceControlSession, path
   );
   const exists = probe.stdout.trim() === 'yes';
   if (!exists) return missing;
-  return { workspacePath: session.sessionId, path: safePath, exists: true, content: result.stdout };
+  return { workspacePath: session.sessionId, path: safePath, exists: true, content: result.stdout, against };
 }
 
 /**
@@ -1223,11 +1255,15 @@ export function buildEditorRoutes(deps: EditorSessionDeps): ApiRoute[] {
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
         const path = c.req.query('path');
+        const againstRaw = c.req.query('against') ?? 'head';
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        if (againstRaw !== 'head' && againstRaw !== 'base') {
+          return c.json({ error: "against must be 'head' or 'base'" }, 400);
+        }
         try {
           const session = await resolveAuthorizedSession(loose(c), deps, workspacePath);
-          return c.json(await readEditorFileOriginal(session, path));
+          return c.json(await readEditorFileOriginal(session, path, againstRaw));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const status =

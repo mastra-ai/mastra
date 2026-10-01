@@ -108,21 +108,24 @@ export function useSaveEditorFile() {
 }
 
 /**
- * The git HEAD blob for a file — the "original" side of the inline diff view.
- * Untracked files come back `exists: false` and diff against empty.
+ * The original blob for a file — the "original" side of the inline diff view.
+ * `against: 'head'` (default) reads the git HEAD blob; `against: 'base'` reads
+ * the blob at the merge-base with the session's base branch, so review
+ * sessions diff exactly what the PR changes. Files missing at the compared
+ * revision come back `exists: false` and diff against empty.
  */
 export function useEditorFileOriginal(
   workspacePath: string | undefined,
   filePath: string | undefined,
-  { enabled = true }: { enabled?: boolean } = {},
+  { enabled = true, against = 'head' }: { enabled?: boolean; against?: 'head' | 'base' } = {},
 ) {
   const { client } = useApiConfig();
   const url =
     workspacePath && filePath
-      ? `/web/workspace/file/original?${new URLSearchParams({ workspacePath, path: filePath })}`
+      ? `/web/workspace/file/original?${new URLSearchParams({ workspacePath, path: filePath, against })}`
       : undefined;
   return useQuery<EditorFileOriginal>({
-    queryKey: queryKeys.editorFileOriginal(workspacePath, filePath),
+    queryKey: queryKeys.editorFileOriginal(workspacePath, filePath, against),
     enabled,
     queryFn: url ? () => client.get<EditorFileOriginal>(url) : skipToken,
   });

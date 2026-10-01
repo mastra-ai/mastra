@@ -145,8 +145,8 @@ export const queryKeys = {
     ['editor-tree', workspacePath ?? null, path ?? null] as const,
   editorFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['editor-file', workspacePath ?? null, filePath ?? null] as const,
-  editorFileOriginal: (workspacePath: string | undefined, filePath: string | undefined) =>
-    ['editor-file-original', workspacePath ?? null, filePath ?? null] as const,
+  editorFileOriginal: (workspacePath: string | undefined, filePath: string | undefined, against: 'head' | 'base') =>
+    ['editor-file-original', workspacePath ?? null, filePath ?? null, against] as const,
   editorSearch: (workspacePath: string | undefined, query: string | undefined) =>
     ['editor-search', workspacePath ?? null, query ?? null] as const,
   scmStatus: (workspacePath: string | undefined) => ['scm-status', workspacePath ?? null] as const,

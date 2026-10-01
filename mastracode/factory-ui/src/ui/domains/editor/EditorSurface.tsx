@@ -183,11 +183,6 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     enabled: blameEnabled && !activeIsExternal,
   });
   const blameLines = blameEnabled && blameQuery.data?.available ? blameQuery.data.lines : null;
-  const original = useEditorFileOriginal(workspacePath, activePath ?? undefined, {
-    enabled: diffMode && !activeIsExternal,
-  });
-  const diffOriginal =
-    diffMode && !activeIsExternal && original.data ? (original.data.exists ? original.data.content : '') : null;
 
   // ── Session-aware auto-open ──────────────────────────────────────────────
   // Review sessions (the thread's work item sits on the review board) open
@@ -196,6 +191,16 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const workItem = useThreadWorkItem(factoryId, threadId, sessionId);
   const isReview = workItem.data?.board === 'review';
+
+  // In review sessions the PR's work is already committed, so diffing against
+  // HEAD shows nothing — diff against the merge-base with the PR's base branch
+  // instead, which is exactly what the PR changes.
+  const original = useEditorFileOriginal(workspacePath, activePath ?? undefined, {
+    enabled: diffMode && !activeIsExternal,
+    against: isReview ? 'base' : 'head',
+  });
+  const diffOriginal =
+    diffMode && !activeIsExternal && original.data ? (original.data.exists ? original.data.content : '') : null;
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (autoOpenedRef.current) return;
