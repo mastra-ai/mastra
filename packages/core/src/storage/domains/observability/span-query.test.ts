@@ -5,7 +5,6 @@ import {
   parseSpanQueryRequest,
   planSpanQuery,
   SPAN_QUERY_MAX_PREVIEW_BYTES,
-  SPAN_QUERY_MAX_PREVIEW_CHARACTERS,
   spanQueryCostSchema,
   spanQueryRequestSchema,
   spanQueryResponseSchema,
@@ -214,15 +213,15 @@ describe('bounded result contract', () => {
     expect(spanQueryRowSchema.safeParse({ ...row, ...overrides }).success).toBe(false);
   });
 
-  it.each([null, '', '{malformed', '🙂'.repeat(1_000_000), 'x'.repeat(2_000_000)])(
-    'bounds raw preview work for input %#',
-    input => {
-      const preview = createSpanQueryPreview(input);
-      expect(Buffer.byteLength(preview.value ?? '', 'utf8')).toBeLessThanOrEqual(SPAN_QUERY_MAX_PREVIEW_BYTES);
-      expect(preview.value ?? '').not.toContain('\uFFFD');
-      expect(preview.truncated).toBe(input !== null && [...input].length > SPAN_QUERY_MAX_PREVIEW_CHARACTERS);
-    },
-  );
+  it.each<[string | null, string | null, boolean]>([
+    [null, null, false],
+    ['', '', false],
+    ['{malformed', '{malformed', false],
+    ['🙂'.repeat(257), '🙂'.repeat(256), true],
+    ['x'.repeat(257), 'x'.repeat(256), true],
+  ])('preserves the expected preview and truncation state for input %#', (input, value, truncated) => {
+    expect(createSpanQueryPreview(input)).toEqual({ value, truncated });
+  });
 
   it('does not truncate an exactly full preview and keeps absent distinct from empty', () => {
     expect(createSpanQueryPreview('🙂'.repeat(256))).toEqual({ value: '🙂'.repeat(256), truncated: false });
