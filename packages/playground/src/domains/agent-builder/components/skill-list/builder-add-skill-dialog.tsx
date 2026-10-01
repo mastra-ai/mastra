@@ -10,17 +10,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package, Search } from 'lucide-react';
+import { Check, Download, ExternalLink, Loader2, Package } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -181,16 +181,13 @@ export function BuilderAddSkillDialog({
         </DialogHeader>
 
         <DialogBody layout="fill">
-          <div className="relative">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder={`Search ${registryLabel}...`}
-              value={searchQuery}
-              onChange={e => handleSearch(e.target.value)}
-              className="pl-9"
-              data-testid="builder-add-skill-search"
-            />
-          </div>
+          <SearchInput
+            label={`Search ${registryLabel}`}
+            placeholder={`Search ${registryLabel}...`}
+            value={searchQuery}
+            onValueChange={handleSearch}
+            data-testid="builder-add-skill-search"
+          />
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">

@@ -104,6 +104,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout repo
@@ -128,19 +129,22 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
+      - name: Download affected tests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: affected-tests-outputs
+          path: /tmp/affected-outputs
+
       - name: Run affected tests
-        env:
-          TEST_FILES: ${{ inputs.unit_test_files }}
         run: |
-          printf '%s\n' "$TEST_FILES" > /tmp/affected.txt
-          pnpm vitest run \
-            $(cat /tmp/affected.txt | tr '\n' ' ') \
-            --project 'unit:*' --project 'typecheck:*' \
-            --reporter=blob \
-            --reporter=verbose \
-            --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
-            --passWithNoTests
+          tr '\n' '\0' < /tmp/affected-outputs/unit_test_files.txt \
+            | xargs -0 pnpm vitest run \
+                --project 'unit:*' --project 'typecheck:*' \
+                --reporter=blob \
+                --reporter=verbose \
+                --reporter=github-actions \
+                --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+                --passWithNoTests
 
       - name: Upload test results
         if: always()

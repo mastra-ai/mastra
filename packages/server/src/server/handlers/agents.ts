@@ -11,7 +11,7 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -463,6 +463,22 @@ export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
 }
 
+function getAgentModelRef(agentModel: Agent['model'], llm: Awaited<ReturnType<Agent['getLLM']>> | undefined) {
+  if (typeof agentModel === 'string') {
+    const { provider, modelId } = parseModelString(agentModel);
+    return { provider: provider ?? llm?.getProvider(), modelId };
+  }
+  const model = llm?.getModel();
+  if (
+    model instanceof ModelRouterLanguageModel &&
+    model.gatewayId !== 'models.dev' &&
+    model.gatewayId !== model.provider
+  ) {
+    return { provider: model.gatewayId, modelId: `${model.provider}/${model.modelId}` };
+  }
+  return { provider: llm?.getProvider(), modelId: llm?.getModelId() };
+}
+
 export async function getSerializedAgentTools(
   tools: Record<string, SerializedToolInput | object>,
   partial: boolean = false,
@@ -889,11 +905,7 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     defaultOptions,
@@ -1213,11 +1225,7 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,

@@ -184,7 +184,13 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
 
-    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+    await this.indexObservationGroups(
+      processed.observations,
+      threadId,
+      resourceId,
+      processed.lastObservedAt,
+      record.id,
+    );
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
     const candidateTitle = processed.threadTitle?.trim();

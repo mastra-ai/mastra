@@ -4433,7 +4433,10 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
+    // An aborted run stays active until it terminalizes, but its lifecycle already
+    // ended for earlier subscribers. Seeding it here would replay that run.
+    const currentRecord =
+      currentRunId && !state.abortedRunIds.has(currentRunId) ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);

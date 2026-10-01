@@ -1,6 +1,5 @@
 import { ThreadTraceDetails, ThreadTraceDetailsActions, ThreadTraceDetailsHeader } from './thread-trace-details';
 import { ThreadTraceList } from './thread-trace-list';
-import { ThreadTraceLoadMoreSentinel } from './thread-trace-load-more-sentinel';
 import {
   ThreadTraceMessages,
   ThreadTraceMessagesHeader,
@@ -20,9 +19,8 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  * of its props, so the layout can be restyled from the call site.
  *
  * @example
- * <ThreadTrace traceIds={ids} anchorTraceId={anchor}>
+ * <ThreadTrace traceIds={ids} onLoadOlder={fetchOlderPage}>
  *   <ThreadTrace.List>
- *     <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
  *     {ids.map((traceId, i) => (
  *       <ThreadTrace.Row key={traceId} traceId={traceId}>
  *         <ThreadTrace.Messages>
@@ -47,7 +45,6 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  */
 export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   List: ThreadTraceList,
-  LoadMoreSentinel: ThreadTraceLoadMoreSentinel,
   Row: ThreadTraceRow,
   Messages: ThreadTraceMessages,
   MessagesHeader: ThreadTraceMessagesHeader,
@@ -68,7 +65,6 @@ export type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 export { THREAD_TRACE_MESSAGES_TAB } from './thread-trace-row';
 export type { ThreadTraceRootProps } from './thread-trace-root';
 export type { ThreadTraceListProps } from './thread-trace-list';
-export type { ThreadTraceLoadMoreSentinelProps } from './thread-trace-load-more-sentinel';
 export type { ThreadTraceRowProps } from './thread-trace-row';
 export type {
   ThreadTraceMessagesProps,

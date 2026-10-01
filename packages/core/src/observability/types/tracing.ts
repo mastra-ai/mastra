@@ -301,6 +301,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Whether one or more model steps omitted a primary token count */
+  usageIncomplete?: boolean;
   /** Estimated cost context, when provided directly by an SDK or provider */
   costContext?: CostContext;
   /** Model parameters */

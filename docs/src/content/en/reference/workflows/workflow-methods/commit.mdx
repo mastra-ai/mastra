@@ -7,7 +7,7 @@ packages:
 
 # Workflow\.commit()
 
-The `.commit()` method finalizes the workflow and returns the final result.
+The `.commit()` method finalizes the workflow definition and prepares it for execution. Call it after adding steps and before creating a run. Creating a run on a workflow with uncommitted step changes throws an error.
 
 ## Usage example
 

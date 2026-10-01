@@ -43,6 +43,51 @@ function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) 
 }
 
 describe('durable agent API-error retry', () => {
+  it('reports the API-error retry to the other processor hooks like Agent does', async () => {
+    const run = async (durable: boolean) => {
+      const seen: Record<string, number[]> = { inputStep: [], llmRequest: [], outputStep: [] };
+      const observer: Processor = {
+        id: 'retry-count-observer',
+        processInputStep: async ({ retryCount }) => {
+          seen.inputStep!.push(retryCount);
+        },
+        processLLMRequest: async ({ retryCount }) => {
+          seen.llmRequest!.push(retryCount);
+        },
+        processOutputStep: async ({ retryCount, messageList }) => {
+          seen.outputStep!.push(retryCount);
+          return messageList;
+        },
+      };
+      const agent = new Agent({
+        id: 'api-error-retry-count',
+        name: 'api-error-retry-count',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        inputProcessors: [observer],
+        outputProcessors: [observer],
+        maxProcessorRetries: 1,
+        errorProcessors: [{ id: 'retry-on-api-error', processAPIError: async () => ({ retry: true }) }],
+      });
+      if (durable) {
+        const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+        const { fullStream, cleanup } = await durableAgent.stream('hello', { maxProcessorRetries: 1 });
+        for await (const _ of fullStream) {
+          // drain
+        }
+        await cleanup?.();
+      } else {
+        const result = await agent.stream('hello', { maxProcessorRetries: 1 });
+        await result.consumeStream();
+      }
+      return seen;
+    };
+
+    const expected = await run(false);
+    expect(expected.outputStep).toEqual([1]);
+    expect(await run(true)).toEqual(expected);
+  });
+
   it('lets an error processor rotate the response id before the retry', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const memory = new MockMemory();

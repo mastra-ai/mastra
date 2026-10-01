@@ -526,6 +526,26 @@ describe('Responses Handlers', () => {
     expect(retrieved).toEqual(created);
   });
 
+  it('returns null usage when a non-streaming response has incomplete token counts', async () => {
+    const result = createGenerateResult({ text: 'Hello from Mastra' });
+    const incompleteUsage = { inputTokens: undefined, outputTokens: 25, totalTokens: undefined };
+    result.usage = incompleteUsage;
+    result.totalUsage = incompleteUsage;
+    vi.spyOn(agent, 'generate').mockResolvedValue(result);
+
+    const response = (await CREATE_RESPONSE_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      model: 'openai/gpt-5',
+      agent_id: 'test-agent',
+      input: 'Hello',
+      store: false,
+      stream: false,
+    })) as Response;
+
+    const created = await readJson(response);
+    expect(created.usage).toBeNull();
+  });
+
   it('accepts omitted model in the create response request schema', () => {
     const result = createResponseBodySchema.safeParse({
       agent_id: 'test-agent',
