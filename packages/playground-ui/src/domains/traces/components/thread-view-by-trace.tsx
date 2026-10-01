@@ -97,9 +97,9 @@ export function ThreadViewByTrace({
       }}
     >
       <ThreadTrace.List data-testid="thread-view-by-trace">
-        {traceIds.map(traceId => (
+        {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent withFeedback={withFeedback} onOpenScore={onOpenScore} />
+            <ThreadTraceRowContent turn={index + 1} withFeedback={withFeedback} onOpenScore={onOpenScore} />
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
@@ -109,9 +109,12 @@ export function ThreadViewByTrace({
 }
 
 function ThreadTraceRowContent({
+  turn,
   withFeedback,
   onOpenScore,
 }: {
+  /** 1-based position among the loaded turns. */
+  turn: number;
   withFeedback: boolean;
   onOpenScore: (traceId: string, scoreId: string) => void;
 }) {
@@ -128,62 +131,65 @@ function ThreadTraceRowContent({
 
   return (
     <>
-      <ThreadTrace.Messages>
-        <ThreadTrace.MessagesHeader>
-          <ThreadTrace.TabList>
-            <ThreadTrace.Tab value="messages">
+      <ThreadTrace.Divider label={`Turn ${turn}`}>
+        <ThreadTrace.TabList>
+          <ThreadTrace.Tab value="messages">
+            <Icon size="xs">
+              <MessageSquareTextIcon />
+            </Icon>
+            Messages
+          </ThreadTrace.Tab>
+          {withFeedback && (
+            <ThreadTrace.Tab value="feedback">
               <Icon size="xs">
-                <MessageSquareTextIcon />
+                <MessageSquareReplyIcon />
               </Icon>
-              Messages
+              Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
             </ThreadTrace.Tab>
-            {withFeedback && (
-              <ThreadTrace.Tab value="feedback">
-                <Icon size="xs">
-                  <MessageSquareReplyIcon />
-                </Icon>
-                Feedback{feedbackTotal != null && <> ({feedbackTotal})</>}
-              </ThreadTrace.Tab>
-            )}
-            <ThreadTrace.Tab value="scores">
-              <Icon size="xs">
-                <ScorersIcon />
-              </Icon>
-              Scores
-            </ThreadTrace.Tab>
-          </ThreadTrace.TabList>
-        </ThreadTrace.MessagesHeader>
-        <ThreadTrace.TabContent value="messages" flush>
-          <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
-        </ThreadTrace.TabContent>
-        {withFeedback && (
-          <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
-            <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
-          </ThreadTrace.TabContent>
-        )}
-        <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
-          {rootSpanId ? (
-            <TraceScoresTab
-              key={traceId}
-              traceId={traceId}
-              spanId={rootSpanId}
-              onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
-            />
-          ) : null}
-        </ThreadTrace.TabContent>
-      </ThreadTrace.Messages>
-      <ThreadTrace.Details>
-        <ThreadTrace.DetailsHeader>
-          {traceHref && (
-            <ThreadTrace.DetailsActions>
-              <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
-                Go to trace
-              </Button>
-            </ThreadTrace.DetailsActions>
           )}
-        </ThreadTrace.DetailsHeader>
-        <ThreadTrace.Spans />
-      </ThreadTrace.Details>
+          <ThreadTrace.Tab value="scores">
+            <Icon size="xs">
+              <ScorersIcon />
+            </Icon>
+            Scores
+          </ThreadTrace.Tab>
+        </ThreadTrace.TabList>
+      </ThreadTrace.Divider>
+      <ThreadTrace.RowBody>
+        <ThreadTrace.Messages>
+          <ThreadTrace.TabContent value="messages" flush>
+            <TraceThreadItemView traceId={traceId} onHighlightSpans={highlightSpans} />
+          </ThreadTrace.TabContent>
+          {withFeedback && (
+            <ThreadTrace.TabContent value="feedback" className="min-h-0 py-3">
+              <TraceFeedbackTab key={traceId} traceId={traceId} variant="thread" />
+            </ThreadTrace.TabContent>
+          )}
+          <ThreadTrace.TabContent value="scores" className="min-h-0 py-3">
+            {rootSpanId ? (
+              <TraceScoresTab
+                key={traceId}
+                traceId={traceId}
+                spanId={rootSpanId}
+                onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
+              />
+            ) : null}
+          </ThreadTrace.TabContent>
+        </ThreadTrace.Messages>
+        <ThreadTrace.Details>
+          <ThreadTrace.DetailsHeader>
+            <ThreadTrace.DetailsActions>
+              <ThreadTrace.SpansToggle />
+              {traceHref && (
+                <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
+                  Go to trace
+                </Button>
+              )}
+            </ThreadTrace.DetailsActions>
+          </ThreadTrace.DetailsHeader>
+          <ThreadTrace.Spans />
+        </ThreadTrace.Details>
+      </ThreadTrace.RowBody>
     </>
   );
 }

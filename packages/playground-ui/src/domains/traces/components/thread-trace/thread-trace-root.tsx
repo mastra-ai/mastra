@@ -35,7 +35,7 @@ export function ThreadTraceRoot({
 
   const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
-  // Selecting a span expands its row and it stays expanded until the reader collapses it with "Show less".
+  // Selecting a span expands its row and it stays expanded until the reader collapses it with "Collapse".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const setTraceExpanded = useCallback((traceId: string, expanded: boolean) => {

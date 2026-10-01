@@ -308,7 +308,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('underlines each turn and separates the messages column from the trace with a right border', async () => {
+  it('announces each turn with a divider holding its tabs and shows the trace in a card', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -319,10 +319,11 @@ describe('ThreadViewByTrace', () => {
       .getAllByTestId('trace-row-timeline')
       .map(el => el.closest<HTMLElement>('[data-trace-id]') as HTMLElement);
     expect(rows).toHaveLength(2);
-    for (const row of rows) {
-      expect(row.className).toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
-      expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
+    for (const [index, row] of rows.entries()) {
+      const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
+      expect(within(divider).getByRole('tab', { name: /Scores/ })).not.toBeNull();
+      expect(row.className).not.toContain('border-b');
+      expect(row.querySelector('[data-slot=thread-trace-details]')?.className).toContain('rounded-xl');
     }
   });
 
@@ -497,32 +498,32 @@ describe('ThreadViewByTrace', () => {
         .getByTestId('thread-view-by-trace')
         .querySelector<HTMLElement>(`[data-trace-id="${traceId}"] [data-testid="trace-row-timeline"]`);
 
-    it('clamps the timeline to the messages height and reveals it with Show more / Show less', async () => {
+    it('clamps the timeline to the messages height and reveals it with Expand / Collapse', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
       const { queryClient } = renderView();
 
-      const [showMore] = await screen.findAllByRole('button', { name: 'Show more' });
-      if (!showMore) throw new Error('expected a Show more button');
+      const [showMore] = await screen.findAllByRole('button', { name: 'Expand' });
+      if (!showMore) throw new Error('expected an Expand button');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
 
       fireEvent.click(showMore);
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      const showLess = screen.getByRole('button', { name: 'Show less' });
+      const showLess = screen.getByRole('button', { name: 'Collapse' });
 
       fireEvent.click(showLess);
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
     });
 
-    it('does not offer Show more when the timeline already fits', async () => {
+    it('does not offer Expand when the timeline already fits', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 200 });
       installHandlers();
       const { queryClient } = renderView();
 
       await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull();
       // The clamp stays on so the cell never grows past the messages column while the
       // timeline remeasures after a tab switch; a shorter timeline is unaffected by it.
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
@@ -533,19 +534,19 @@ describe('ThreadViewByTrace', () => {
       installHandlers();
       const { queryClient } = renderView();
 
-      await screen.findAllByRole('button', { name: 'Show more' });
+      await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
       await screen.findByRole('heading', { name: /^Span/ });
 
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
-      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
       expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
     });
   });
 
