@@ -241,7 +241,7 @@ export const MemorySearch = ({
         <div className={cn(raisedSurfaceStyle, 'mt-2 flex-1 overflow-y-auto rounded-lg')}>
           {error ? (
             <div className="p-4 text-center">
-              <Txt variant="caption" className="text-destructive-indicator">
+              <Txt variant="caption" className="text-destructive-foreground">
                 {error}
               </Txt>
             </div>
@@ -285,16 +285,18 @@ export const MemorySearch = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2">
-                          <span
+                          <Txt
+                            as="span"
+                            variant="column"
                             className={cn(
-                              'rounded px-2 py-0.5 text-column',
+                              'rounded px-2 py-0.5',
                               result.role === 'user'
                                 ? 'bg-badge-blue-strong text-badge-blue-foreground'
                                 : 'bg-badge-green-strong text-badge-green-foreground',
                             )}
                           >
                             {result.role}
-                          </span>
+                          </Txt>
                           <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
                             {formatRelativeTime(result.createdAt)}
                           </Txt>

@@ -83,7 +83,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete }: ProviderOAu
             }}
           />
           {completeMutation.error instanceof Error && (
-            <Txt as="p" variant="caption" className="text-destructive-indicator">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {completeMutation.error.message}
             </Txt>
           )}
@@ -152,9 +152,14 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         <DialogBody className="items-center text-center">
           {session.userCode && (
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
-              <span className="text-title min-w-0 flex-1 font-mono tracking-widest break-all select-all">
+              <Txt
+                as="span"
+                variant="title"
+                font="mono"
+                className="min-w-0 flex-1 tracking-widest break-all select-all"
+              >
                 {session.userCode}
-              </span>
+              </Txt>
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
@@ -165,7 +170,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
         </DialogBody>
         <DialogFooter>
           {flowError ? (
-            <Txt as="p" variant="caption" className="text-destructive-indicator mr-auto min-w-0 break-words">
+            <Txt as="p" variant="caption" className="text-destructive-foreground mr-auto min-w-0 break-words">
               {flowError}
             </Txt>
           ) : (

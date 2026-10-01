@@ -1,6 +1,7 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
 import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
@@ -72,7 +73,9 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
     <Container className="mb-5 content-center space-y-6 text-muted-foreground">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-heading text-foreground">{getPhaseMessage()}</h3>
+        <Txt as="h3" variant="heading" tone="ink">
+          {getPhaseMessage()}
+        </Txt>
         {(streamResult?.runId || runId) && (
           <div className="mt-2 text-caption text-muted-foreground">Run ID: {streamResult?.runId ?? runId}</div>
         )}
@@ -90,7 +93,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
         <div
           className={cn(
             'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4 text-body text-foreground',
-            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-indicator [&>svg]:opacity-70',
+            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-foreground [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />

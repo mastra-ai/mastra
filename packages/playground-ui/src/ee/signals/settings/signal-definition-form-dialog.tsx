@@ -19,6 +19,7 @@ import {
 import { FieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
 import { Textarea } from '@/ds/components/Textarea';
+import { Txt } from '@/ds/components/Txt';
 
 const reservedNames = new Set([
   'goal',
@@ -174,9 +175,9 @@ export function SignalDefinitionFormDialog({
               </FieldBlock.Column>
             </FieldBlock.Layout>
             {editing ? (
-              <p className="text-meta text-muted-foreground">
+              <Txt variant="meta" tone="muted">
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
-              </p>
+              </Txt>
             ) : null}
             {error ? (
               <div role="alert">

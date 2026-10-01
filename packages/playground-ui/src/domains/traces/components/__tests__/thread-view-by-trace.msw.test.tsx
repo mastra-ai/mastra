@@ -125,11 +125,13 @@ const installScore = () => {
 const renderView = ({
   search = '',
   withFeedback = true,
+  withQueryTrace = true,
   onOpenScore = () => {},
   paths,
 }: {
   search?: string;
   withFeedback?: boolean;
+  withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
 } = {}) =>
@@ -139,7 +141,7 @@ const renderView = ({
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
             threadId={THREAD_ID}
-            withQueryTrace
+            withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
             anchorTraceId={new URLSearchParams(search).get('traceId') ?? undefined}
             onOpenScore={onOpenScore}
@@ -640,6 +642,29 @@ describe('ThreadViewByTrace', () => {
       expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
+    it('fetches scores only once a Scores tab is opened', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const scoreRequests: string[] = [];
+      server.events.on('request:start', ({ request }) => {
+        if (new URL(request.url).pathname.endsWith('/scores')) scoreRequests.push(request.url);
+      });
+      renderView();
+
+      const row = (await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement;
+      // Give the per-row span queries time to resolve (the old badge query fired right after).
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(scoreRequests).toHaveLength(0);
+
+      fireEvent.click(within(row).getByRole('tab', { name: /Scores/ }));
+      expect(await within(row).findByText('No scores yet')).not.toBeNull();
+      expect(scoreRequests.every(url => url.includes(`/traces/${row.getAttribute('data-trace-id')}/`))).toBe(true);
+      expect(scoreRequests.length).toBeGreaterThan(0);
+      expect(within(row).getByRole('tab', { name: /Scores/ }).textContent).toBe('Scores');
+
+      server.events.removeAllListeners('request:start');
+    });
+
     it('hands the trace and score ids to onOpenScore when a score is selected', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -721,6 +746,46 @@ describe('ThreadViewByTrace', () => {
       expect(firstRow.getByRole('tab', { name: /Scores/ })).not.toBeNull();
       expect(screen.queryByRole('tab', { name: /Feedback/ })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("when listing the thread's traces", () => {
+    it('scopes the trace query to the thread', async () => {
+      installHandlers();
+      const onQuery = vi.fn();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(queryPageFromList(newestFirstList));
+        }),
+      );
+      renderView();
+
+      await screen.findByText('Chef agent run');
+
+      expect(onQuery).toHaveBeenCalled();
+      expect(onQuery.mock.calls[0][0]).toMatchObject({
+        where: { op: 'eq', left: { path: 'threadId' }, right: { literal: THREAD_ID } },
+      });
+    });
+
+    it('scopes the legacy trace list to the thread when trace query is disabled', async () => {
+      installHandlers();
+      const onList = vi.fn();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) => {
+          onList(new URL(request.url).searchParams);
+          return HttpResponse.json(newestFirstList);
+        }),
+      );
+      renderView({ withQueryTrace: false });
+
+      await screen.findByText('Chef agent run');
+
+      expect(onList).toHaveBeenCalled();
+      const params: URLSearchParams = onList.mock.calls[0][0];
+      expect(params.get('threadId')).toBe(THREAD_ID);
+      expect(params.get('startedAt')).not.toBeNull();
     });
   });
 });

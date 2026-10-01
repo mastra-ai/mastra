@@ -38,6 +38,7 @@ import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
 
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type {
@@ -48,19 +49,6 @@ export type {
   MessageScrollerScrollable,
   MessageScrollerVisibility,
 } from './message-scroller-context';
-
-const mergeRefs =
-  <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
-  (element: TElement | null) => {
-    refs.forEach(ref => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(element);
-        return;
-      }
-      ref.current = element;
-    });
-  };
 
 const scrollableMatches = (left: MessageScrollerScrollable, right: MessageScrollerScrollable) =>
   left.start === right.start && left.end === right.end;

@@ -85,7 +85,19 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 }
 ```
 
-Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To install only custom boards, set `includeDefaultBoards: false`. The IDs `work` and `review` remain reserved; they cannot be used to replace the built-ins.
+Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work or Review, disable both default boards and install a board with the same ID. You can reinstall the exported `workBoard` and `reviewBoard` definitions unchanged, or use their phases as the starting point for a customized definition:
+
+```typescript
+import { MastraFactory, workBoard } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  includeDefaultBoards: false,
+  boards: [workBoard],
+});
+```
+
+Board IDs must be unique among the installed boards, so a same-ID board still throws while the defaults are enabled. Cards stored before board tracking resolve to `work` or `review`, and some runtime and UI behavior is keyed to those IDs, including Work issue intake and triage, the review-requested filter, and funnel metrics. Keep the built-in phase names and roles in a replacement unless you intend to change that behavior.
 
 **Preferred intake behavior:** By default, every integration arrival lands in its routed board's initial phase—Intake for Work and Review—and does not start or suggest a run. This includes GitHub, GitLab, Linear, Jira, and incident.io; Linear, Jira, and incident.io no longer land directly in Triage. Only custom routes or explicit placement rules choose a different phase. Trusted maintainer requests to review a GitHub pull request with no existing card file it directly in Reviewing.
 

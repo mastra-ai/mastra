@@ -9,6 +9,7 @@ import {
   useResumeAgentControllerGoalMutation,
 } from '../../../../hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2 text-xs';
 
@@ -35,10 +36,12 @@ export function GoalPanel() {
       <span className="text-badge-pink-indicator inline-flex">
         <Target size={15} />
       </span>
-      <span className="text-column flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{goal.objective}</span>
-      <span className="bg-fill text-caption text-muted-foreground rounded-full px-2 py-px tabular-nums">
+      <Txt as="span" variant="column" className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+        {goal.objective}
+      </Txt>
+      <Txt as="span" variant="caption" tone="muted" className="bg-fill rounded-full px-2 py-px tabular-nums">
         {progress}
-      </span>
+      </Txt>
       {goal.reason && (
         <span className="text-muted-foreground max-w-52 overflow-hidden text-ellipsis whitespace-nowrap">
           {goal.reason}

@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
@@ -118,9 +119,9 @@ export function AddItemsToDatasetDialog({
               </Select>
             </div>
 
-            <p className="text-body text-muted-foreground">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
-            </p>
+            </Txt>
 
             {isAdding && (
               <div className="space-y-2">
@@ -130,9 +131,9 @@ export function AddItemsToDatasetDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-body text-muted-foreground">
+                <Txt tone="muted">
                   Adding items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
           </DialogBody>

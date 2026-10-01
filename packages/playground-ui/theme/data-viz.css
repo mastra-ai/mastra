@@ -4,7 +4,7 @@
 :root {
   --chart-blue: var(--blue-300);
   --chart-blue-deep: var(--blue-600);
-  --chart-yellow: var(--yellow-300);
+  --chart-amber: var(--amber-300);
   --chart-green: var(--green-400);
   --chart-purple: var(--purple-400);
   --chart-orange: var(--orange-400);
@@ -16,6 +16,7 @@
   --chart-sequential-3: var(--purple-400);
   --chart-sequential-4: var(--purple-500);
   --chart-sequential-5: var(--purple-600);
+  --chart-sequential-pale: var(--purple-200);
 
   --span-agent: oklch(0.75 0.133 250);
   --span-workflow: oklch(0.75 0.127 200);
@@ -33,7 +34,7 @@
 html.light {
   --chart-blue: var(--blue-500);
   --chart-blue-deep: var(--blue-800);
-  --chart-yellow: var(--yellow-500);
+  --chart-amber: var(--amber-500);
   --chart-green: var(--green-500);
   --chart-purple: var(--purple-600);
   --chart-orange: var(--orange-600);
@@ -50,17 +51,17 @@ html.light {
   --span-workspace: oklch(0.55 0.15 20);
   --span-skill: oklch(0.55 0.148 130);
   --span-scorer: oklch(0.55 0.15 350);
-  --chart-sequential-1: var(--purple-800);
-  --chart-sequential-2: var(--purple-700);
-  --chart-sequential-3: var(--purple-600);
-  --chart-sequential-4: var(--purple-500);
-  --chart-sequential-5: var(--purple-400);
+  --chart-sequential-1: var(--purple-900);
+  --chart-sequential-2: var(--purple-800);
+  --chart-sequential-3: var(--purple-700);
+  --chart-sequential-4: var(--purple-600);
+  --chart-sequential-5: var(--purple-500);
 }
 
 @theme inline {
   --color-chart-blue: var(--chart-blue);
   --color-chart-blue-deep: var(--chart-blue-deep);
-  --color-chart-yellow: var(--chart-yellow);
+  --color-chart-amber: var(--chart-amber);
   --color-chart-green: var(--chart-green);
   --color-chart-purple: var(--chart-purple);
   --color-chart-orange: var(--chart-orange);
@@ -71,6 +72,7 @@ html.light {
   --color-chart-sequential-3: var(--chart-sequential-3);
   --color-chart-sequential-4: var(--chart-sequential-4);
   --color-chart-sequential-5: var(--chart-sequential-5);
+  --color-chart-sequential-pale: var(--chart-sequential-pale);
   --color-span-agent: var(--span-agent);
   --color-span-workflow: var(--span-workflow);
   --color-span-model: var(--span-model);

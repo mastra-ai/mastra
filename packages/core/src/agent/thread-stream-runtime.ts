@@ -9,6 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
+import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
@@ -50,8 +51,25 @@ import type {
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
-/** Safety margin when trimming up to a retained run, covering clock skew between us and the pubsub backend. */
-const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = 100;
+/**
+ * Per-attempt window for a claimed thread owner to answer a discovery request.
+ * Kept short because the claim path waits out the full window whenever no owner
+ * exists. Overridable via `MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS`.
+ */
+const AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS = readPositiveIntEnv(
+  'MASTRA_AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS',
+  100,
+);
+/**
+ * Total budget a `requireClaimedOwner` wake spends retrying owner discovery
+ * before rejecting. A live owner on a loaded host can miss a single short
+ * window; retrying with growing per-attempt timeouts keeps that from reading as
+ * "no owner". Overridable via `MASTRA_AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS`.
+ */
+const AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS = readPositiveIntEnv(
+  'MASTRA_AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS',
+  1_000,
+);
 const AGENT_THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
 const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 // Long enough for live subscribers (including cross-process readers polling the
@@ -159,35 +177,7 @@ function sanitizeBroadcastPart(part: unknown): unknown {
     return part;
   }
 
-  if (typed.type === 'step-start') {
-    if (!('request' in payload) && !('inputMessages' in payload)) return part;
-    const { request: _request, inputMessages: _inputMessages, ...rest } = payload;
-    return { ...typed, payload: rest };
-  }
-
-  if (typed.type === 'step-finish' || typed.type === 'finish') {
-    let changed = false;
-    const next: Record<string, unknown> = { ...payload };
-    const metadata = payload.metadata;
-    if (metadata && typeof metadata === 'object' && 'request' in metadata) {
-      const { request: _request, ...restMetadata } = metadata as Record<string, unknown>;
-      next.metadata = restMetadata;
-      changed = true;
-    }
-    const output = payload.output;
-    if (output && typeof output === 'object' && 'steps' in output) {
-      const { steps: _steps, ...restOutput } = output as Record<string, unknown>;
-      next.output = restOutput;
-      changed = true;
-    }
-    if ('messages' in payload) {
-      delete next.messages;
-      changed = true;
-    }
-    return changed ? { ...typed, payload: next } : part;
-  }
-
-  return part;
+  return stripModelSnapshots(part);
 }
 
 /**
@@ -1856,16 +1846,39 @@ export class AgentThreadStreamRuntime {
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
-      throw new Error(`No claimed thread owner responded for ${key}`);
+      throw new Error(
+        `No claimed thread owner responded for ${key} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
+      );
     }
     const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
     return { action: 'deliver', runId: acceptedRunId };
   }
 
+  async #findClaimedThreadOwnerWithRetry(pubsub: PubSub, key: string): Promise<string | undefined> {
+    const deadline = Date.now() + AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS;
+    let attemptTimeoutMs = AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
+    while (true) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return undefined;
+      const attemptMs = Math.min(attemptTimeoutMs, remainingMs);
+      const attemptStartedAt = Date.now();
+      const sourceId = await this.#findClaimedThreadOwner(pubsub, key, {
+        includeLocal: false,
+        timeoutMs: attemptMs,
+      });
+      if (sourceId) return sourceId;
+      // A PubSub subscribe/publish failure settles the attempt immediately;
+      // wait out the rest of its window so retries stay paced.
+      const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
+      if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
+      attemptTimeoutMs *= 2;
+    }
+  }
+
   async #findClaimedThreadOwner(
     pubsub: PubSub,
     key: string,
-    options?: { includeLocal?: boolean; intent?: 'claim'; targetSourceId?: string },
+    options?: { includeLocal?: boolean; intent?: 'claim'; targetSourceId?: string; timeoutMs?: number },
   ): Promise<string | undefined> {
     const hasLocalOwner = this.#getState(pubsub).claimedThreadOwners.has(key);
     if (options?.includeLocal !== false && hasLocalOwner) {
@@ -1891,7 +1904,7 @@ export class AgentThreadStreamRuntime {
         }
       });
       // Absolute deadline carried on the request; see discoverThreadPeers.
-      const timeoutMs = AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
+      const timeoutMs = options?.timeoutMs ?? AGENT_THREAD_OWNER_DISCOVERY_TIMEOUT_MS;
       const expiresAt = Date.now() + timeoutMs;
       const timeout = setTimeout(() => finish(), timeoutMs);
 
@@ -4420,7 +4433,10 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
+    // An aborted run stays active until it terminalizes, but its lifecycle already
+    // ended for earlier subscribers. Seeding it here would replay that run.
+    const currentRecord =
+      currentRunId && !state.abortedRunIds.has(currentRunId) ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);
@@ -5103,7 +5119,7 @@ export class AgentThreadStreamRuntime {
       }
 
       if (target.ifIdle?.requireClaimedOwner) {
-        const discovery = this.#findClaimedThreadOwner(resolvedPubSub, reservedKey, { includeLocal: false });
+        const discovery = this.#findClaimedThreadOwnerWithRetry(resolvedPubSub, reservedKey);
         state.claimedThreadOwnerDiscoveries.set(reservedKey, discovery);
         try {
           return await this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(

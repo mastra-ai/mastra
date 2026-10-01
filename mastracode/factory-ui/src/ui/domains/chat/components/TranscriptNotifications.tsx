@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from './SkillMessage';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
 
@@ -49,7 +49,7 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
   if (action === 'opened' || action === 'reopened') {
     return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-indicator' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {

@@ -58,6 +58,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -634,6 +635,12 @@ export interface InngestAgent<TOutput = undefined> {
   declineToolCall(
     options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<TOutput>>;
+  /**
+   * Approve or decline a pending tool call on a thread (used by Studio and the
+   * `send-tool-approval` route). Resolves the suspended run like the base Agent,
+   * then resumes it through the durable {@link InngestAgent.resumeStream}.
+   */
+  sendToolApproval: Agent<any, any, TOutput>['sendToolApproval'];
   /** Approve a pending tool call and drain the resumed run (via {@link InngestAgent.resumeGenerate}). */
   approveToolCallGenerate(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
@@ -905,6 +912,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'resumeStreamUntilIdle'
     | 'approveToolCall'
     | 'declineToolCall'
+    | 'sendToolApproval'
     | 'approveToolCallGenerate'
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
@@ -1609,6 +1617,109 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async declineToolCall(options) {
       const { reason, ...resumeOptions } = options;
       return proxyRef!.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
+    },
+
+    // The base Agent's sendToolApproval resumes through its in-process path,
+    // which looks up the snapshot under the non-durable workflow name.
+    async sendToolApproval(options) {
+      const {
+        threadId,
+        resourceId,
+        approved,
+        resumeData: customResumeData,
+        declineContext,
+        messages,
+        streamOptions,
+        ...executionOptions
+      } = options;
+
+      // Message continuations start a new turn; pass the durable wrapper so
+      // the runtime calls its stream() and tracks the turn under proxyRef.
+      if (messages && approved) {
+        const continuation = agentThreadStreamRuntime.continueWithMessages(
+          proxyRef as unknown as Agent<any, any, any, any>,
+          messages,
+          {
+            resourceId,
+            threadId,
+            runId: executionOptions.runId,
+            streamOptions: deepMerge(
+              (streamOptions ?? {}) as Record<string, any>,
+              executionOptions as Record<string, any>,
+            ) as AgentExecutionOptions<any>,
+          },
+          agent.getPubSub(),
+        );
+        return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
+      }
+
+      let runId = executionOptions.runId ?? agent.getActiveThreadRunId({ threadId, resourceId });
+      if (!runId) {
+        // listSuspendedRuns also queries this agent's durableLoopWorkflowName.
+        let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'] = [];
+        try {
+          ({ runs } = await agent.listSuspendedRuns({ threadId, resourceId }));
+        } catch (error) {
+          if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+            throw error;
+          }
+        }
+        const matchingRuns = options.toolCallId
+          ? runs.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId))
+          : runs;
+        if (matchingRuns.length > 1) {
+          throw new MastraError({
+            id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text:
+              `Agent "${agent.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
+              `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
+            details: {
+              threadId,
+              resourceId,
+              agentName: agent.name,
+              runIds: matchingRuns.map(run => run.runId).join(', '),
+            },
+          });
+        }
+        runId = matchingRuns[0]?.runId;
+      }
+
+      if (!runId) {
+        throw new MastraError({
+          id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            `Agent "${agent.name}" sendToolApproval() could not find an active or suspended run for thread "${threadId}". ` +
+            `The run may have already completed or been resumed.`,
+          details: { threadId, resourceId, agentName: agent.name },
+        });
+      }
+
+      const resumeData =
+        customResumeData !== undefined
+          ? customResumeData
+          : approved
+            ? { approved }
+            : { approved, ...(declineContext ?? {}) };
+      const resumeOptions = deepMerge(
+        (streamOptions ?? {}) as Record<string, any>,
+        executionOptions as Record<string, any>,
+      );
+
+      await proxyRef!.resumeStream(resumeData, {
+        ...resumeOptions,
+        runId,
+        ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+        memory: {
+          ...(resumeOptions.memory ?? {}),
+          thread: resumeOptions.memory?.thread ?? threadId,
+          resource: resumeOptions.memory?.resource ?? resourceId,
+        },
+      });
+      return { accepted: true, runId, toolCallId: options.toolCallId };
     },
 
     async approveToolCallGenerate(options) {

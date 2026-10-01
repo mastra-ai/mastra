@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.84",
+  "version": "0.0.86",
   "description": "",
   "type": "module",
   "private": true,

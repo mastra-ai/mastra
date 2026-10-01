@@ -1,6 +1,6 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -93,49 +93,51 @@ export const FilterableList = ({
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
-        {filteredItems.length === 0 ? (
-          <Txt variant="meta" tone="muted" className="px-1 py-2">
-            No matches
-          </Txt>
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {filteredItems.map(item => {
-              const checked = isChecked(item.id);
-              const checkboxStyle: CSSProperties | undefined = checked
-                ? {
-                    backgroundColor: agentColor.tint,
-                    borderColor: agentColor.tint,
-                    color: 'var(--background)',
-                  }
-                : undefined;
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="pr-2">
+          {filteredItems.length === 0 ? (
+            <Txt variant="meta" tone="muted" className="px-1 py-2">
+              No matches
+            </Txt>
+          ) : (
+            <ul className="flex flex-col gap-0.5">
+              {filteredItems.map(item => {
+                const checked = isChecked(item.id);
+                const checkboxStyle: CSSProperties | undefined = checked
+                  ? {
+                      backgroundColor: agentColor.tint,
+                      borderColor: agentColor.tint,
+                      color: 'var(--background)',
+                    }
+                  : undefined;
 
-              return (
-                <li key={item.id}>
-                  <label
-                    data-testid={`${testIdPrefix}-filter-item-${item.id}`}
-                    data-checked={checked ? 'true' : 'false'}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
-                      disabled && 'cursor-not-allowed opacity-60',
-                    )}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      disabled={disabled}
-                      onCheckedChange={() => onToggle(item.id)}
-                      style={checkboxStyle}
-                      data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
-                      className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-                    />
-                    {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
-                    <span className="truncate">{item.label}</span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                return (
+                  <li key={item.id}>
+                    <label
+                      data-testid={`${testIdPrefix}-filter-item-${item.id}`}
+                      data-checked={checked ? 'true' : 'false'}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-caption text-foreground select-none hover:bg-fill-subtle',
+                        disabled && 'cursor-not-allowed opacity-60',
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        disabled={disabled}
+                        onCheckedChange={() => onToggle(item.id)}
+                        style={checkboxStyle}
+                        data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
+                        className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
+                      />
+                      {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
+                      <span className="truncate">{item.label}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );

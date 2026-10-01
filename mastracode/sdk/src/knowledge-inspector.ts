@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 import type { Session } from '@mastra/core/agent-controller';
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
@@ -193,7 +191,7 @@ const RRF_K = 60;
 const MAX_NODE_CONTENT_BYTES = 32 * 1024;
 
 function opaqueToken(): string {
-  return randomBytes(24).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(24))).toString('base64url');
 }
 
 function boundedLimit(value: number | undefined, fallback: number, maximum: number): number {

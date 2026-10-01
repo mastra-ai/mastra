@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { MastraError } from '@mastra/core/error';
 import { ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -176,7 +174,7 @@ export function parseBufferedChunks(value: unknown): BufferedObservationChunk[] 
   return parsed.map(chunk => {
     const item = chunk as Partial<BufferedObservationChunk>;
     return {
-      id: String(item.id ?? `ombuf-${randomUUID()}`),
+      id: String(item.id ?? `ombuf-${globalThis.crypto.randomUUID()}`),
       cycleId: String(item.cycleId ?? ''),
       observations: String(item.observations ?? ''),
       tokenCount: Math.round(numberOrZero(item.tokenCount)),

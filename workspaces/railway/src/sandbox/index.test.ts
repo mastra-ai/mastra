@@ -229,6 +229,29 @@ describe('RailwaySandbox', () => {
       expect(() => sandbox.railway).toThrow(SandboxNotReadyError);
     });
 
+    it('exposes the created physical sandboxId after start', async () => {
+      const sandbox = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+      expect(sandbox.sandboxId).toBeUndefined();
+      await sandbox._start();
+      expect(sandbox.sandboxId).toBe('rw-sandbox-123');
+    });
+
+    it('reports the configured reattach id as sandboxId after reconnect', async () => {
+      mockConnect.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-existing', status: 'RUNNING' });
+      const sandbox = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
+      expect(sandbox.sandboxId).toBe('rw-existing');
+      await sandbox._start();
+      expect(sandbox.sandboxId).toBe('rw-existing');
+    });
+
+    it('reports the replacement physical sandboxId after a stale reattach', async () => {
+      mockConnect.mockResolvedValueOnce({ ...mockSandbox, status: 'DESTROYED' });
+      mockCreate.mockResolvedValueOnce({ ...mockSandbox, id: 'rw-replacement', status: 'RUNNING' });
+      const sandbox = new RailwaySandbox({ token: 'tok', sandboxId: 'rw-existing' });
+      await sandbox._start();
+      expect(sandbox.sandboxId).toBe('rw-replacement');
+    });
+
     it('destroys the underlying sandbox', async () => {
       const sandbox = new RailwaySandbox({ token: 't' });
       await sandbox._start();

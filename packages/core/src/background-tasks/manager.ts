@@ -1675,7 +1675,9 @@ export class BackgroundTaskManager {
         agentId: task.agentId,
         threadId: task.threadId,
         resourceId: task.resourceId,
-        args: task.args,
+        // Output events can fire once per chunk; subscribers never read `args`
+        // from them, so don't repeat a possibly large input on each one.
+        args: type === 'task.output' ? undefined : task.args,
         result: task.result,
         error: task.error,
         chunk: task.chunk,

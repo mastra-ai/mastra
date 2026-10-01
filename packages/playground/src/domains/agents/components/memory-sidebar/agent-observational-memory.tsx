@@ -79,14 +79,16 @@ const ProgressBar = ({
   const containerBg = isProcessing ? 'bg-transparent' : 'bg-muted';
   const fillColor = isProcessing ? 'bg-info-subtle' : barColor;
   const textColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
-  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-white';
+  const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
 
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-meta tracking-wider text-muted-foreground uppercase">{label}</span>
+        <Txt as="span" variant="meta" tone="muted" className="tracking-wider uppercase">
+          {label}
+        </Txt>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
@@ -123,7 +125,7 @@ const ProgressBar = ({
                 {isAdaptive && totalBudget && (
                   <div>
                     <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-badge-yellow-indicator">Adaptive</span>{' '}
+                    <span className="text-badge-amber-indicator">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
                   </div>
                 )}
@@ -179,11 +181,11 @@ const ProgressBar = ({
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-badge-yellow-indicator">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-badge-amber-indicator">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-caption">
-                  <span className="text-badge-yellow-indicator">{formatTokens(baseThreshold)}</span>
+                  <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
@@ -201,7 +203,9 @@ const ProgressBar = ({
 const ObservationalMemoryHeader = () => (
   <div className="mb-3 flex items-center gap-2">
     <Brain className="h-4 w-4 text-badge-purple-indicator" />
-    <h3 className="text-subheading text-foreground">Observational Memory</h3>
+    <Txt as="h3" variant="subheading" tone="ink">
+      Observational Memory
+    </Txt>
   </div>
 );
 
@@ -209,13 +213,15 @@ const ObservationalMemoryDisabled = () => (
   <div className="p-4">
     <div className="mb-3 flex items-center gap-2">
       <Brain className="h-4 w-4 text-muted-foreground" />
-      <h3 className="text-subheading text-foreground">Observational Memory</h3>
+      <Txt as="h3" variant="subheading" tone="ink">
+        Observational Memory
+      </Txt>
     </div>
     <div className={cn(raisedSurfaceStyle, 'rounded-lg p-4')}>
-      <p className="mb-3 text-body text-muted-foreground">
+      <Txt tone="muted" className="mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
-      </p>
+      </Txt>
       <a
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
