@@ -6,13 +6,14 @@ export type TimePickerProps = {
   defaultValue?: string;
   onValueChange: (value: string) => void;
   className?: string;
+  label?: string;
 };
 
 const hourOptions = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
 const minuteOptions = ['00', '15', '30', '45', '59'];
 const timePeriodOptions = ['AM', 'PM'];
 
-export function TimePicker({ defaultValue, onValueChange, className }: TimePickerProps) {
+export function TimePicker({ defaultValue, onValueChange, className, label = 'Time' }: TimePickerProps) {
   const [hour, setHour] = useState<string>('12');
   const [minute, setMinute] = useState<string>('00');
   const [timePeriod, setTimePeriod] = useState('AM');
@@ -62,9 +63,9 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   };
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div role="group" aria-label={label} className={cn('flex items-center gap-2', className)}>
       <Select name="hour" value={hourOptions.indexOf(hour).toString()} onValueChange={handleHourChange}>
-        <SelectTrigger size="sm">
+        <SelectTrigger size="sm" aria-label="Hour">
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
         <SelectContent>
@@ -77,7 +78,7 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
       </Select>
       :
       <Select name="minute" value={minuteOptions.indexOf(minute).toString()} onValueChange={handleMinuteChange}>
-        <SelectTrigger size="sm">
+        <SelectTrigger size="sm" aria-label="Minute">
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
         <SelectContent>
@@ -93,7 +94,7 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
         value={timePeriodOptions.indexOf(timePeriod).toString()}
         onValueChange={handleTimePeriodChange}
       >
-        <SelectTrigger size="sm">
+        <SelectTrigger size="sm" aria-label="AM or PM">
           <SelectValue placeholder="Select..." />
         </SelectTrigger>
         <SelectContent>

@@ -126,49 +126,51 @@ export function DateTimeRangePicker({
           </PopoverTrigger>
         )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <Field invalid={Boolean(customRangeError)} role="group" aria-label="Custom date range" className="block">
-            <div className={cn('flex')}>
-              <div className={cn('border-r border-border')}>
-                <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
-                  Start
-                </Txt>
-                <DatePicker
-                  mode="single"
-                  selected={draftDateFrom}
-                  month={draftDateFrom}
-                  onSelect={setDraftDateFrom}
-                  disabled={disabled}
-                  toDate={draftDateTo}
-                />
-                <TimePicker
-                  className="mx-4 mb-3 w-auto"
-                  defaultValue={draftTimeFrom}
-                  onValueChange={v => {
-                    if (!disabled) setDraftTimeFrom(v);
-                  }}
-                />
-              </div>
-              <div>
-                <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
-                  End
-                </Txt>
-                <DatePicker
-                  mode="single"
-                  selected={draftDateTo}
-                  month={draftDateTo}
-                  onSelect={setDraftDateTo}
-                  disabled={disabled}
-                  fromDate={draftDateFrom}
-                />
-                <TimePicker
-                  className="mx-4 mb-3 w-auto"
-                  defaultValue={draftTimeTo}
-                  onValueChange={v => {
-                    if (!disabled) setDraftTimeTo(v);
-                  }}
-                />
-              </div>
+          <div role="group" aria-label="Custom date range" className="flex">
+            <div className={cn('border-r border-border')}>
+              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                Start
+              </Txt>
+              <DatePicker
+                mode="single"
+                selected={draftDateFrom}
+                month={draftDateFrom}
+                onSelect={setDraftDateFrom}
+                disabled={disabled}
+                toDate={draftDateTo}
+              />
+              <TimePicker
+                label="Start time"
+                className="mx-4 mb-3 w-auto"
+                defaultValue={draftTimeFrom}
+                onValueChange={v => {
+                  if (!disabled) setDraftTimeFrom(v);
+                }}
+              />
             </div>
+            <div>
+              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                End
+              </Txt>
+              <DatePicker
+                mode="single"
+                selected={draftDateTo}
+                month={draftDateTo}
+                onSelect={setDraftDateTo}
+                disabled={disabled}
+                fromDate={draftDateFrom}
+              />
+              <TimePicker
+                label="End time"
+                className="mx-4 mb-3 w-auto"
+                defaultValue={draftTimeTo}
+                onValueChange={v => {
+                  if (!disabled) setDraftTimeTo(v);
+                }}
+              />
+            </div>
+          </div>
+          <Field invalid={Boolean(customRangeError)}>
             <FieldError className="px-4 pb-1">{customRangeError}</FieldError>
           </Field>
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
