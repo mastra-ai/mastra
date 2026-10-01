@@ -1013,6 +1013,7 @@ export interface ObservationalMemoryConfig {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
 
   /**

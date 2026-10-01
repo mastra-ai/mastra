@@ -207,6 +207,11 @@ export type StorageRequest =
       /** ISO timestamp; records with createdAt <= to */
       to?: string;
       offset?: number;
+      groupId?: string;
+      recordId?: string;
+      beforeGeneration?: number;
+      afterGeneration?: number;
+      sortDirection?: 'ASC' | 'DESC';
     }
   | {
       op: 'omUpdateActive';

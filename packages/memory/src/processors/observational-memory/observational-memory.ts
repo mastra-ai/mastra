@@ -338,6 +338,7 @@ export class ObservationalMemory {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
   /** Config-level lifecycle hooks fired for every observation/reflection cycle. */
   readonly hooks?: ObserveHooks;
@@ -1803,7 +1804,8 @@ export class ObservationalMemory {
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
-      ? (renderObservationGroupsForReflection(observations) ?? optimizeObservationsForContext(observations))
+      ? (renderObservationGroupsForReflection(observations, { includeReflectionKind: true }) ??
+        optimizeObservationsForContext(observations))
       : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
@@ -1812,7 +1814,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
+      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch, this.storage.supportsObservationalMemoryHistorySearch === true)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -2715,7 +2717,8 @@ ${formattedMessages}
    *
    * Loads thread metadata (currentTask, suggestedResponse), formats observations
    * with context prompts and instructions, and returns the fully-formed string.
-   * Returns undefined if no observations exist.
+   * Returns recall guidance even without observations when retrieval is enabled;
+   * otherwise returns undefined when no observations exist.
    *
    * This is the public entry point for context formatting — used by both
    * Memory.getContext() (standalone) and the processor (via injectObservationsIntoMessages).
@@ -2731,7 +2734,7 @@ ${formattedMessages}
   async buildContextSystemMessage(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string | undefined> {
@@ -2748,18 +2751,25 @@ ${formattedMessages}
   async buildContextSystemMessages(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
-    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    // null means the read-only caller already checked storage; do not create a record.
+    const record = opts.record === undefined ? await this.getOrCreateRecord(threadId, resourceId) : opts.record;
 
-    if (!record.activeObservations) {
-      // Resource-scoped recall can browse and search other threads even before any
-      // observation group exists, so the actor still needs to know how to use it.
-      if (this.retrieval && this.retrievalScope === 'resource') {
-        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+    if (!record?.activeObservations) {
+      // Recall can browse raw history even before the first observation exists.
+      if (this.retrieval) {
+        return [
+          getRetrievalInstructions(
+            this.retrievalScope,
+            this.retrievalInstructions,
+            this.retrievalSearch,
+            this.storage.supportsObservationalMemoryHistorySearch === true,
+          ),
+        ];
       }
       return undefined;
     }
