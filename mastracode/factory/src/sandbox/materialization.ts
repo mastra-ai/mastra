@@ -20,7 +20,8 @@ export interface SandboxCommandResult {
  * started, or for providers with no separate physical id); it is carried here
  * so callers can persist it for deterministic reattach on resume.
  */
-export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id' | 'sandboxId'> & {
+export type ExecutableSandbox = Pick<WorkspaceSandbox, 'id'> & {
+  sandboxId?: string;
   /**
    * Runs a command. The options are core's, but the result is only the part
    * these helpers read: core's `CommandResult` also carries `success` and
