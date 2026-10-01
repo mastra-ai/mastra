@@ -64,7 +64,7 @@ function connected(agentId = 'agent-a', providerId?: string) {
   return provider;
 }
 
-function mastraWith(storage: { getStore: (name: string) => Promise<unknown> }) {
+function mastraWith(storage: object) {
   return { getStorage: () => storage } as any;
 }
 
@@ -142,24 +142,28 @@ describe('SignalProvider durable subscriptions', () => {
     });
   });
 
-  describe('scope lifetime', () => {
+  describe('subscription ids', () => {
     it('always generates subscription ids, even if a caller passes one', async () => {
       const provider = connected();
       const [upserted, staged] = await provider.withStore(async scope => [
-        await scope.upsertSubscription({ ...target, externalResourceId: 'ext-1', id: 'chosen-1' } as never),
+        // @ts-expect-error -- the scope does not accept caller-chosen ids
+        await scope.upsertSubscription({ ...target, externalResourceId: 'ext-1', id: 'chosen-1' }),
         await scope.insertSubscribingSubscription({
           ...target,
           externalResourceId: 'ext-2',
+          // @ts-expect-error -- the scope does not accept caller-chosen ids
           id: 'chosen-2',
           owner: 'op',
           ttlMs: 60_000,
-        } as never),
+        }),
       ]);
       expect(upserted.id).not.toBe('chosen-1');
       expect(staged!.id).not.toBe('chosen-2');
       expect(await provider.withStore(scope => scope.getSubscriptionById({ id: 'chosen-1' }))).toBeNull();
     });
+  });
 
+  describe('scope lifetime', () => {
     it('rejects a scope used after its callback settled', async () => {
       const provider = connected();
       let retained: DurableSubscriptionScope | undefined;

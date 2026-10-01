@@ -209,6 +209,9 @@ export function createSignalSubscriptionsConformanceTests({
         expect(await replica.renewSubscriptionClaimIfEnabled({ ...other, owner: 'poller', ttlMs: LONG })).toBe(false);
         expect(await replica.validateSubscriptionClaimIfEnabled({ ...other, owner: 'poller' })).toBe(false);
         expect(await replica.releaseSubscriptionClaim({ ...other, owner: 'poller' })).toBe(false);
+        expect(await replica.renewSubscriptionClaimIfEnabled({ ...ref(row.id), owner: 'poller', ttlMs: LONG })).toBe(
+          true,
+        );
         expect(await replica.validateSubscriptionClaimIfEnabled({ ...ref(row.id), owner: 'poller' })).toBe(true);
         expect(await replica.releaseSubscriptionClaim({ ...ref(row.id), owner: 'poller' })).toBe(true);
 
@@ -232,7 +235,14 @@ export function createSignalSubscriptionsConformanceTests({
 
         const leaving = await store.upsertSubscription(createSampleSignalIdentity({ externalResourceId: 'ext-leave' }));
         await store.setSubscriptionEnabled({ ...ref(leaving.id), enabled: false });
-        await store.beginSubscriptionOperation({ ...ref(leaving.id), kind: 'unsubscribe', owner: 'op-u', ttlMs: LONG });
+        expect(
+          await store.beginSubscriptionOperation({
+            ...ref(leaving.id),
+            kind: 'unsubscribe',
+            owner: 'op-u',
+            ttlMs: LONG,
+          }),
+        ).not.toBeNull();
         expect(await replica.commitUnsubscribe({ ...wrong(leaving.id), owner: 'op-u' })).toBe(false);
         expect(await replica.commitUnsubscribe({ ...ref(leaving.id), owner: 'op-u' })).toBe(true);
 

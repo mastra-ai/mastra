@@ -206,7 +206,7 @@ export class SignalSubscriptionFenceError extends MastraError {
  *   (`nextPollAt = now + cadenceMs`); taking over an expired claim preserves
  *   it; release clears ownership but preserves `nextPollAt`.
  * - Delivery claims are `'claimed'` for new or expired keys, `'in-progress'`
- *   for any live pending key (including the same owner), and `'delivered'`
+ *   for any live pending key (including the same owner), `'delivered'`
  *   once completed, and `'missing'` when the subscription does not exist.
  *   A key completed while a claim waited on it may still read `'in-progress'`
  *   (PostgreSQL reads the ledger as of the statement start); callers treat
