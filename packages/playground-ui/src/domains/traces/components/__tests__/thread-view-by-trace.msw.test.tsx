@@ -669,26 +669,26 @@ describe('ThreadViewByTrace', () => {
       expect(onOpenScore).toHaveBeenCalledWith(traceId, 'score-1');
     });
 
-    it('shows the feedback count on the Feedback tab', async () => {
+    it('does not fetch feedback until the Feedback tab is opened', async () => {
       installHandlers();
-      installFeedbackHandlers(
-        listFeedbackResponse([
-          feedbackRecord({ feedbackId: 'trace-a-fb-1', traceId: 'trace-a', reviewStatus: 'needs-review' }),
-        ]),
+      const onFeedbackRequest = vi.fn();
+      server.use(
+        http.get(FEEDBACK_URL, () => {
+          onFeedbackRequest();
+          return HttpResponse.json(traceAFeedback);
+        }),
       );
       renderView();
 
-      await screen.findByText('Chef agent run');
-      expect((await screen.findAllByRole('tab', { name: /^Feedback \(1\)/ })).length).toBeGreaterThan(0);
-    });
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      // Both rows are rendered with their tabs, yet no row fetched feedback for a badge.
+      expect(screen.getAllByRole('tab', { name: 'Feedback' }).length).toBeGreaterThan(1);
+      expect(onFeedbackRequest).not.toHaveBeenCalled();
 
-    it('shows a zero count on the Feedback tab when there is no feedback', async () => {
-      installHandlers();
-      installFeedbackHandlers(listFeedbackResponse([]));
-      renderView();
+      fireEvent.click(firstRow.getByRole('tab', { name: 'Feedback' }));
 
-      await screen.findByText('Chef agent run');
-      expect((await screen.findAllByRole('tab', { name: /^Feedback \(0\)/ })).length).toBeGreaterThan(0);
+      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      await waitFor(() => expect(onFeedbackRequest).toHaveBeenCalled());
     });
 
     it('submits trace-level feedback from the Feedback tab', async () => {

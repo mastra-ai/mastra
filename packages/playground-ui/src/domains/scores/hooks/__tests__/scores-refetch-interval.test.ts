@@ -28,7 +28,7 @@ describe('getScoresRefetchInterval', () => {
   it('keeps polling for supported scores queries', () => {
     const query = { state: { error: null } };
 
-    expect(getScoresRefetchInterval(query)).toBe(5000);
+    expect(getScoresRefetchInterval(query)).toBe(15_000);
   });
 });
 
@@ -48,6 +48,6 @@ describe('getTraceSpanScoresRefetchInterval', () => {
   it('keeps polling for supported queries', () => {
     const query = { state: { error: null } };
 
-    expect(getTraceSpanScoresRefetchInterval(query)).toBe(3000);
+    expect(getTraceSpanScoresRefetchInterval(query)).toBe(15_000);
   });
 });

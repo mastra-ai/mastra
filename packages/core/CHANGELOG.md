@@ -1,5 +1,46 @@
 # @mastra/core
 
+## 1.74.0
+
+### Minor Changes
+
+- Added `agent.getMessages()` to tool execution context in standard and durable agent loops. Tools can read the current conversation, including remembered messages and in-run responses, without changing the existing input-only `messages` field. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  ```ts
+  execute: async (input, context) => {
+    const messages = context?.agent?.getMessages?.() ?? [];
+    return { messageCount: messages.length };
+  };
+  ```
+
+  The getter reflects message-list removals, but not transient transforms applied only to the provider prompt. Treat returned messages as read-only.
+
+- Added group filtering and generation ordering to observational memory history. For example, `getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, sortDirection: "ASC" })` finds the earliest retained record containing a group in active observations or persisted buffered chunks. Adapters advertise support through `supportsObservationalMemoryHistorySearch`. Pass `recordId` to read one record by ID; it only matches records for the requested thread or resource. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  Convex users need to redeploy their Mastra server functions for these filters to apply.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9))
+
+- Fixed chat channel agents ignoring mentions of their current display name after being renamed. For example, a Slack app renamed from `acme-bot` to `helper` now responds to `@helper` in channels, instead of only recognising its original username. The bot's current profile name is looked up once through the adapter and exposed as `botDisplayName` on the channel context. ([#25652](https://github.com/mastra-ai/mastra/pull/25652))
+
+- Raise transitive security dependency floors (dompurify, js-yaml, @ai-sdk/provider-utils) and bump nested/template deps (nodemailer, fastify, hono, ajv) for the 2026-10-01 Vanta remediation pass. ([#25694](https://github.com/mastra-ai/mastra/pull/25694))
+
+## 1.73.1-alpha.1
+
+### Patch Changes
+
+- Raise transitive security dependency floors (dompurify, js-yaml, @ai-sdk/provider-utils) and bump nested/template deps (nodemailer, fastify, hono, ajv) for the 2026-10-01 Vanta remediation pass. ([#25694](https://github.com/mastra-ai/mastra/pull/25694))
+
+## 1.73.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9))
+
+- Fixed chat channel agents ignoring mentions of their current display name after being renamed. For example, a Slack app renamed from `acme-bot` to `helper` now responds to `@helper` in channels, instead of only recognising its original username. The bot's current profile name is looked up once through the adapter and exposed as `botDisplayName` on the channel context. ([#25652](https://github.com/mastra-ai/mastra/pull/25652))
+
 ## 1.73.0
 
 ### Minor Changes

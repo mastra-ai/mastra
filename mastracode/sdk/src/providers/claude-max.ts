@@ -12,6 +12,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
 import type { ThinkingLevel } from './openai-codex.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
@@ -89,7 +90,7 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
   transformParams: async ({ params }) => {
     const prompt = [...params.prompt];
 
-    const cacheControl = { type: 'ephemeral' as const, ttl: '5m' as const };
+    const cacheControl = { type: 'ephemeral' as const, ttl: ANTHROPIC_PROMPT_CACHE_TTL };
 
     // Helper to add cache control to a message's last content part
     const addCacheToMessage = (msg: any) => {

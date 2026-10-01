@@ -4,6 +4,13 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 
+import {
+  addRelativeTimeToObservations,
+  formatRelativeTime,
+  resolveTimeZone,
+} from '../processors/observational-memory/date-utils';
+import { getBufferedChunks } from '../processors/observational-memory/message-utils';
+import { parseObservationGroups } from '../processors/observational-memory/observation-groups';
 import { safeSlice } from '../processors/observational-memory/string-utils';
 import { decodeImageBuffer, isHttpUrlString } from '../processors/observational-memory/token-counter';
 import {
@@ -11,6 +18,9 @@ import {
   resolveToolResultValue,
   truncateStringByTokens,
 } from '../processors/observational-memory/tool-result-helpers';
+import { groupCursor, pageObservationGroups, pagingCall, parseGroupCursor } from './om-observations';
+import type { OMTimelineEngine } from './om-observations';
+import { getVisibleSearchExcerpts, searchContextKey, sourceRangeOverlapsContext } from './om-search-context';
 
 export type RecallDetail = 'low' | 'high';
 
@@ -37,16 +47,17 @@ type RecallThread = {
   updatedAt: Date;
 };
 
-type RecallSearchResult = {
+export type RecallSearchResult = {
   threadId: string;
   score: number;
   groupId?: string;
+  recordId?: string;
   range?: string;
   text?: string;
   observedAt?: Date;
 };
 
-type RecallMemory = {
+export type RecallMemory = {
   getMemoryStore: () => Promise<{
     listMessagesById: (args: { messageIds: string[] }) => Promise<{ messages: MastraDBMessage[] }>;
   }>;
@@ -304,6 +315,7 @@ export const SEARCH_NOT_CONFIGURED_MESSAGE =
 
 export async function searchMessagesForResource({
   memory,
+  om,
   resourceId,
   currentThreadId,
   query,
@@ -312,8 +324,11 @@ export async function searchMessagesForResource({
   before,
   after,
   threadScope,
+  includeThreadId = true,
+  currentMessages = [],
 }: {
   memory: RecallMemory;
+  om?: OMTimelineEngine | null;
   resourceId: string;
   currentThreadId?: string;
   query: string;
@@ -323,6 +338,10 @@ export async function searchMessagesForResource({
   after?: string;
   /** When set, restrict search results to only this thread */
   threadScope?: string;
+  /** Whether paging calls name the thread; thread-scope retrieval can only page its own thread. */
+  includeThreadId?: boolean;
+  /** Current conversation at tool execution time, not an ever-seen history. */
+  currentMessages?: readonly MastraDBMessage[];
 }): Promise<{
   results: string;
   count: number;
@@ -342,16 +361,12 @@ export async function searchMessagesForResource({
   const beforeDate = before ? new Date(before) : undefined;
   const afterDate = after ? new Date(after) : undefined;
 
-  const { results } = await memory.searchMessages({
-    query,
-    resourceId,
-    topK: searchTopK,
-    filter: {
-      ...(threadScope ? { threadId: threadScope } : {}),
-      ...(afterDate ? { observedAfter: afterDate } : {}),
-      ...(beforeDate ? { observedBefore: beforeDate } : {}),
-    },
-  });
+  const filter = {
+    ...(threadScope ? { threadId: threadScope } : {}),
+    ...(afterDate ? { observedAfter: afterDate } : {}),
+    ...(beforeDate ? { observedBefore: beforeDate } : {}),
+  };
+  const { results } = await memory.searchMessages({ query, resourceId, topK: searchTopK, filter });
 
   if (results.length === 0) {
     return {
@@ -371,60 +386,218 @@ export async function searchMessagesForResource({
     );
   }
 
-  const filteredMatches = results.filter(match => {
+  const matchesFilter = (match: RecallSearchResult) => {
     if (threadScope && match.threadId !== threadScope) return false;
     if (beforeDate && match.observedAt && match.observedAt >= beforeDate) return false;
     if (afterDate && match.observedAt && match.observedAt <= afterDate) return false;
     return true;
-  });
+  };
+  const filteredMatches = results.filter(matchesFilter);
 
   if (filteredMatches.length === 0) {
     return { results: 'No matching messages found.', count: 0 };
   }
 
   const limitedMatches = filteredMatches.slice(0, clampedTopK);
+  const contentBudget = Math.max(0, Math.floor(maxTokens));
+  const perGroupBudget = Math.floor(contentBudget / limitedMatches.length);
+  const now = new Date();
+  const terms = excerptQueryTerms(query);
+  const setExcerpt = (entry: { body: string; excerpt: string; excerptContent: string }, budget: number) => {
+    const selected = selectSearchExcerpt(entry.body, terms, budget);
+    entry.excerpt = selected.text;
+    entry.excerptContent = selected.content;
+  };
 
-  const sections = limitedMatches.map(match => {
+  // One history read per search: the current record supplies the user's timezone and
+  // the groups already in context. Hits are not resolved to their own generations.
+  const [currentRecord] = om && currentThreadId ? await om.getHistory(currentThreadId, resourceId, 1) : [];
+  const timeZone = resolveTimeZone(currentRecord?.observedTimezone ?? undefined);
+
+  // Reserve an excerpt for every hit before distributing spare space in similarity order.
+  // Metadata and navigation do not consume the observation-text allowance.
+  const prepareEntry = (match: RecallSearchResult, index: number, budget: number) => {
+    const rawBody = (match.text || '').trim() || '_Observation text unavailable._';
+    const body = match.groupId ? addRelativeTimeToObservations(rawBody, now, timeZone) : rawBody;
+    const entry = { match, index, body, excerpt: '', excerptContent: '', suppression: '' };
+    setExcerpt(entry, budget);
+    return entry;
+  };
+  const ordered = limitedMatches.map((match, index) => prepareEntry(match, index, perGroupBudget));
+  let remaining = contentBudget - ordered.reduce((sum, entry) => sum + estimateTokenCount(entry.excerpt), 0);
+  for (const entry of ordered) {
+    if (remaining <= 0) break;
+    if (entry.excerpt === entry.body) continue;
+    const previousTokens = estimateTokenCount(entry.excerpt);
+    setExcerpt(entry, previousTokens + remaining);
+    remaining -= estimateTokenCount(entry.excerpt) - previousTokens;
+  }
+
+  const visibleExcerpts = getVisibleSearchExcerpts(currentMessages);
+  // Groups in the current record are already in context: active ones as observations,
+  // unactivated buffered ones as their raw messages. Reflected-away groups are not.
+  const contextGroupIds = new Set<string>();
+  for (const observations of [
+    currentRecord?.activeObservations ?? '',
+    ...getBufferedChunks(currentRecord).map(chunk => chunk.observations),
+  ]) {
+    for (const group of parseObservationGroups(observations)) contextGroupIds.add(group.id);
+  }
+  const suppressCoveredEntry = (entry: (typeof ordered)[number]) => {
+    if (!entry.match.groupId) return;
+    if (
+      entry.excerptContent &&
+      visibleExcerpts.get(searchContextKey(entry.match))?.some(text => text.includes(entry.excerptContent))
+    ) {
+      entry.suppression = 'Excerpt already in current context.';
+    } else if (contextGroupIds.has(entry.match.groupId)) {
+      entry.suppression = 'Group already in current context.';
+    } else if (sourceRangeOverlapsContext({ match: entry.match, messages: currentMessages })) {
+      entry.suppression = 'Source range overlaps current context.';
+    }
+    if (entry.suppression) {
+      entry.excerpt = '';
+      entry.excerptContent = '';
+    }
+  };
+  ordered.forEach(suppressCoveredEntry);
+
+  let freshCount = ordered.filter(entry => !entry.suppression).length;
+  if (freshCount < ordered.length && contentBudget > 0) {
+    // Reserve space for the requested fresh-hit count before filling empty slots.
+    // An initial pool shortened by vector-group deduplication may have spent it all.
+    const backfillBudget = Math.floor(contentBudget / clampedTopK);
+    for (const entry of ordered) {
+      if (entry.suppression) continue;
+      setExcerpt(entry, backfillBudget);
+      suppressCoveredEntry(entry);
+    }
+    freshCount = ordered.filter(entry => !entry.suppression).length;
+    // At most one deeper query, independent of thread/date overfetch. Vector chunks
+    // may collapse into fewer groups, so a short first result is not exhaustion.
+    const candidateLimit = Math.max(searchTopK, Math.min(100, clampedTopK * 5));
+    const candidateKey = (match: RecallSearchResult) =>
+      match.groupId ? searchContextKey(match) : JSON.stringify([match.threadId, match.range, match.text]);
+    const seen = new Set(ordered.map(entry => candidateKey(entry.match)));
+    const addCandidates = async (candidates: RecallSearchResult[]) => {
+      for (const match of candidates.slice(0, candidateLimit)) {
+        if (freshCount >= clampedTopK || seen.size >= candidateLimit) break;
+        if (!matchesFilter(match)) continue;
+        const key = candidateKey(match);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!threadMap.has(match.threadId) && memory.getThreadById) {
+          const thread = await memory.getThreadById({ threadId: match.threadId });
+          if (thread) threadMap.set(match.threadId, thread);
+        }
+        const entry = prepareEntry(match, ordered.length, backfillBudget);
+        suppressCoveredEntry(entry);
+        ordered.push(entry);
+        if (!entry.suppression) freshCount++;
+      }
+    };
+    await addCandidates(filteredMatches.slice(limitedMatches.length));
+    if (freshCount < clampedTopK && seen.size < candidateLimit && searchTopK < candidateLimit) {
+      const deeper = await memory.searchMessages({ query, resourceId, topK: candidateLimit, filter });
+      await addCandidates(deeper.results);
+    }
+  }
+
+  // Reuse the space from compact references without making a previously covered excerpt longer.
+  remaining = contentBudget - ordered.reduce((sum, entry) => sum + estimateTokenCount(entry.excerpt), 0);
+  for (const entry of ordered) {
+    if (remaining <= 0) break;
+    if (entry.suppression || entry.excerpt === entry.body) continue;
+    const previousTokens = estimateTokenCount(entry.excerpt);
+    setExcerpt(entry, previousTokens + remaining);
+    remaining -= estimateTokenCount(entry.excerpt) - previousTokens;
+  }
+
+  // Chronology controls presentation, not which hits get the available text budget.
+  ordered.sort((a, b) => {
+    const at = a.match.observedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    const bt = b.match.observedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+    if (at !== bt) return at < bt ? -1 : 1;
+    if (a.match.threadId !== b.match.threadId) return a.match.threadId.localeCompare(b.match.threadId);
+    return a.index - b.index;
+  });
+
+  const sections: string[] = [];
+  const compactCount = ordered.length - freshCount;
+  if (compactCount > 0) {
+    sections.push(
+      `Showing ${freshCount} excerpts and ${compactCount} already-in-context references.` +
+        (freshCount < clampedTopK ? ' Backfill is bounded; fewer excerpts do not mean history is exhausted.' : ''),
+    );
+  }
+  for (let i = 0; i < ordered.length; i++) {
+    const { match, body, excerpt, suppression } = ordered[i]!;
     const thread = threadMap.get(match.threadId);
     const title = thread?.title || '(untitled)';
     const isCurrentThread = match.threadId === currentThreadId;
-    const generationLabel = isCurrentThread ? 'Current thread memory' : 'Older memory from another thread';
+    const generationLabel = isCurrentThread ? 'Current thread memory' : 'Memory from another thread';
     const generationDetail = isCurrentThread
       ? 'This result came from the current thread.'
-      : 'This result came from an older memory generation in another thread.';
+      : 'This result came from another thread.';
     const threadLine = `- thread: ${match.threadId}${thread ? ` (${title})` : ''}`;
+    const observedLine = match.observedAt
+      ? `- observed: ${formatTimestamp(match.observedAt)} (${formatRelativeTime(match.observedAt, now, timeZone)})`
+      : undefined;
     const sourceLine = match.range
       ? `- source: raw messages from ID ${match.range.split(':')[0] ?? '(unknown)'} through ID ${match.range.split(':')[1] ?? '(unknown)'}`
       : '- source: raw message range unavailable';
-    const updatedLine = thread ? `- thread updated: ${formatTimestamp(thread.updatedAt)}` : undefined;
-    const groupLine = match.groupId ? `- observation group: ${match.groupId}` : undefined;
+    const groupLine = match.groupId ? `- observation group: ${groupCursor(match.groupId, match.recordId)}` : undefined;
     const scoreLine = `- score: ${match.score.toFixed(2)}`;
-    const body = (match.text || '').trim() || '_Observation text unavailable._';
 
-    return [
-      `### ${generationLabel}`,
-      '',
-      generationDetail,
-      threadLine,
-      sourceLine,
-      updatedLine,
-      groupLine,
-      scoreLine,
-      '',
-      '```text',
-      body,
-      '```',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  });
+    const prev = i > 0 ? ordered[i - 1]!.match : undefined;
+    if (om && prev?.groupId && match.groupId && prev.threadId === match.threadId) {
+      sections.push(
+        `— Observation groups may be hidden between these results; continue with ${pagingCall(prev.groupId, 'after', includeThreadId ? prev.threadId : undefined, prev.recordId)} —`,
+      );
+    }
 
-  const assembled = sections.join('\n\n');
-  const { text: limited } = truncateByTokens(assembled, maxTokens);
+    if (suppression) {
+      sections.push(`${groupLine}\n  thread: ${match.threadId}; ${suppression}`);
+      continue;
+    }
+    sections.push(
+      [
+        `### ${generationLabel}`,
+        '',
+        generationDetail,
+        threadLine,
+        observedLine,
+        sourceLine,
+        groupLine,
+        scoreLine,
+        '',
+        '```text',
+        excerpt,
+        '```',
+        excerpt !== body ? '[Excerpt truncated]' : undefined,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
+  }
+
+  if (ordered.some(entry => !entry.suppression && entry.excerpt !== entry.body)) {
+    sections.push(
+      [
+        `All ${ordered.length} selected matching groups are shown; some excerpts are truncated.`,
+        om
+          ? 'To read a full group, use mode="observations" with its threadId and groupId, omitting direction.'
+          : undefined,
+        'Use mode="messages" with a source-range cursor for original messages.',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
+  }
 
   return {
-    results: limited,
-    count: limitedMatches.length,
+    results: sections.join('\n\n'),
+    count: ordered.length,
   };
 }
 
@@ -502,6 +675,52 @@ function chunkTextByTokens(
     nextCharOffset,
     truncated: nextCharOffset < text.length,
   };
+}
+
+const EXCERPT_STOP_WORDS = new Set(
+  'the and for with that this from have has had what when where which while who whom why how many much did does was were are you your our their them they there been being some also just than then those these its into about any all can could would should not but user agent asked said mention mentioned total'.split(
+    ' ',
+  ),
+);
+
+function excerptQueryTerms(query: string): string[] {
+  const words = query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return [...new Set(words.filter(word => word.length >= 3 && !EXCERPT_STOP_WORDS.has(word)))];
+}
+
+const EXCERPT_OMISSION_MARKER = '[earlier lines omitted]';
+
+/**
+ * Fit an observation to a token budget. When it does not fit, start at the observation
+ * line matching the most query terms (keeping that line's date header) instead of the head,
+ * so repeated searches can reach text a head-only excerpt would never show.
+ * `content` is the slice of the body that is shown, used to recognize excerpts already in context.
+ */
+function selectSearchExcerpt(body: string, terms: string[], maxTokens: number): { text: string; content: string } {
+  const head = chunkTextByTokens(body, maxTokens);
+  if (!head.truncated || terms.length === 0) return { text: head.text, content: head.text };
+
+  // Observation lines begin with a date header or a bullet; vector chunks may join them on one line.
+  const starts = [0, ...[...body.matchAll(/(?<=\s)(?:Date: |\* )/g)].map(match => match.index)];
+  let best: { start: number; end: number; score: number } | undefined;
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i]!;
+    const end = starts[i + 1] ?? body.length;
+    const line = body.slice(start, end).toLowerCase();
+    const score = terms.filter(term => line.includes(term)).length;
+    if (score > (best?.score ?? 0)) best = { start, end, score };
+  }
+  if (!best || best.end <= head.text.length) return { text: head.text, content: head.text };
+
+  const dateStart = body.lastIndexOf('Date: ', best.start);
+  const dateHeader =
+    dateStart >= 0 && dateStart < best.start
+      ? body.slice(dateStart, starts.find(start => start > dateStart) ?? best.start).trim()
+      : '';
+  const prefix = `${dateHeader ? `${dateHeader} ` : ''}${EXCERPT_OMISSION_MARKER} `;
+  const window = chunkTextByTokens(body, maxTokens - estimateTokenCount(prefix), best.start);
+  if (!window.text) return { text: head.text, content: head.text };
+  return { text: prefix + window.text, content: window.text };
 }
 
 function lowDetailPartLimit(type: string): number {
@@ -1460,17 +1679,23 @@ export async function recallThreadFromStart({
 
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
-  options?: { retrievalScope?: 'thread' | 'resource'; searchEnabled?: boolean },
+  options?: {
+    retrievalScope?: 'thread' | 'resource';
+    searchEnabled?: boolean;
+    /** Resolves the observational memory engine so search hits can be dated and paged by observation group. */
+    getOMEngine?: () => Promise<OMTimelineEngine | null> | OMTimelineEngine | null;
+  },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
   const searchEnabled = options?.searchEnabled ?? true;
+  const getOMEngine = options?.getOMEngine;
 
   const description = isResourceScope
-    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads.' : ''}`
-    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread.' : ''} Use mode="threads" to get the current thread's ID and title.`;
+    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads; results come back oldest-first with markers where observation groups were skipped. Use mode="observations" with a groupId from a search result to page chronologically through the observation groups around it.' : ''}`
+    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread; results come back oldest-first with markers where observation groups were skipped. Use mode="observations" with a groupId from a search result to page chronologically through the observation groups around it.' : ''} Use mode="threads" to get the current thread's ID and title.`;
 
-  const modeEnum = searchEnabled ? ['messages', 'threads', 'search'] : ['messages', 'threads'];
+  const modeEnum = searchEnabled ? ['messages', 'threads', 'search', 'observations'] : ['messages', 'threads'];
 
   return createTool({
     id: 'recall',
@@ -1484,7 +1709,7 @@ export const recallTool = (
               mode: {
                 type: 'string',
                 enum: modeEnum,
-                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads.' : ''}`,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads. "observations" pages observation groups chronologically around a groupId from a search result.' : ''}`,
               },
               threadId: {
                 type: 'string',
@@ -1495,27 +1720,51 @@ export const recallTool = (
               before: {
                 type: 'string',
                 description:
-                  'For mode="threads": only show threads created before this date. ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
+                  'Only show results before this date. Applies to mode="threads" (thread creation date) and mode="search" (observation date). ISO 8601 or natural date string (e.g. "2026-03-15", "2026-03-10T00:00:00Z").',
               },
               after: {
                 type: 'string',
                 description:
-                  'For mode="threads": only show threads created after this date. ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
+                  'Only show results after this date. Applies to mode="threads" (thread creation date) and mode="search" (observation date). ISO 8601 or natural date string (e.g. "2026-03-01", "2026-03-10T00:00:00Z").',
               },
             }
           : {
               mode: {
                 type: 'string',
                 enum: modeEnum,
-                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread.' : ''}`,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread. "observations" pages observation groups chronologically around a groupId from a search result.' : ''}`,
               },
             }),
         ...(searchEnabled
           ? {
+              ...(!isResourceScope
+                ? {
+                    before: {
+                      type: 'string',
+                      description: 'For mode="search": only show observations dated before this ISO 8601 date.',
+                    },
+                    after: {
+                      type: 'string',
+                      description: 'For mode="search": only show observations dated after this ISO 8601 date.',
+                    },
+                  }
+                : {}),
               query: {
                 type: 'string',
                 minLength: 1,
                 description: 'Search query for mode="search". Finds messages semantically similar to this text.',
+              },
+              groupId: {
+                type: 'string',
+                minLength: 1,
+                description:
+                  'Observation group ID to page around, for mode="observations". Copy it exactly from the "observation group:" line of a search result or a continuation call.',
+              },
+              direction: {
+                type: 'string',
+                enum: ['before', 'after'],
+                description:
+                  'For mode="observations": page strictly before or after the groupId. Omit to read the full anchor group and following groups.',
               },
             }
           : {}),
@@ -1542,7 +1791,8 @@ export const recallTool = (
           type: 'integer',
           minimum: 1,
           maximum: 20,
-          description: 'Maximum number of items to return per page. Defaults to 20.',
+          description:
+            'Maximum items per page: defaults to 20 for messages, 5 for observations. For search, target number of excerpts (default 10), plus compact references for evidence already in context; bounded backfill may return fewer excerpts.',
         },
         detail: {
           type: 'string',
@@ -1584,6 +1834,8 @@ export const recallTool = (
       const {
         mode,
         query,
+        groupId,
+        direction,
         cursor,
         threadId: explicitThreadId,
         anchor,
@@ -1598,8 +1850,10 @@ export const recallTool = (
         after,
         viewAttachment,
       } = inputData as {
-        mode?: 'messages' | 'threads' | 'search';
+        mode?: 'messages' | 'threads' | 'search' | 'observations';
         query?: string;
+        groupId?: string;
+        direction?: 'before' | 'after';
         cursor?: string;
         threadId?: string;
         anchor?: 'start' | 'end';
@@ -1627,6 +1881,59 @@ export const recallTool = (
         throw new Error('Could not resolve current thread.');
       }
 
+      // Observation group paging mode
+      if (mode === 'observations') {
+        if (!searchEnabled) {
+          return { results: SEARCH_NOT_CONFIGURED_MESSAGE, count: 0 };
+        }
+        if (!groupId) {
+          throw new Error('groupId is required for mode="observations"');
+        }
+        if (!resourceId) {
+          throw new Error('Resource ID is required for recall');
+        }
+        const om = (await getOMEngine?.()) ?? null;
+        if (!om) {
+          return {
+            results:
+              'Observation group paging requires observational memory and a storage adapter supporting observation history search.',
+            count: 0,
+          };
+        }
+        const pagingThreadId = !isResourceScope ? currentThreadId : resolvedExplicitThreadId || currentThreadId;
+        if (!pagingThreadId) {
+          throw new Error('Could not resolve current thread.');
+        }
+        const thread = await memory.getThreadById?.({ threadId: pagingThreadId });
+        if (!thread || thread.resourceId !== resourceId) {
+          throw new Error('Thread not found');
+        }
+        return pageObservationGroups({
+          om,
+          threadId: pagingThreadId,
+          resourceId,
+          ...parseGroupCursor(groupId),
+          direction,
+          limit: Math.min(Math.max(limit ?? 5, 1), 20),
+          threadTitle: thread.title,
+          includeThreadId: isResourceScope,
+          countNewerMessages: async cursor => {
+            const store = await memory.getMemoryStore();
+            const end = (await store.listMessagesById({ messageIds: [cursor] })).messages.find(m => m.id === cursor);
+            if (!end || end.threadId !== pagingThreadId) return 0;
+            const { total } = await memory.recall({
+              threadId: pagingThreadId,
+              resourceId,
+              page: 0,
+              perPage: 1,
+              orderBy: { field: 'createdAt', direction: 'ASC' },
+              filter: { dateRange: { start: end.createdAt, startExclusive: true } },
+            });
+            return total;
+          },
+        });
+      }
+
       // Search mode
       if (mode === 'search') {
         // Schema validation rejects mode="search" when search is disabled, but
@@ -1644,13 +1951,16 @@ export const recallTool = (
         }
         return searchMessagesForResource({
           memory,
+          om: (await getOMEngine?.()) ?? null,
           resourceId,
           currentThreadId: currentThreadId || undefined,
+          currentMessages: context?.agent?.getMessages?.(),
           query,
           topK: limit ?? 10,
           before,
           after,
           threadScope: !isResourceScope ? currentThreadId || undefined : resolvedExplicitThreadId || undefined,
+          includeThreadId: isResourceScope,
         });
       }
 

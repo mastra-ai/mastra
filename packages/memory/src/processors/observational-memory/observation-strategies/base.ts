@@ -50,6 +50,7 @@ export interface StrategyDeps {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
@@ -326,8 +327,9 @@ export abstract class ObservationStrategy {
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
-    resourceId?: string,
-    observedAt?: Date,
+    resourceId: string | undefined,
+    observedAt: Date | undefined,
+    recordId: string,
   ): Promise<void> {
     if (!resourceId || !this.deps.onIndexObservations) {
       return;
@@ -349,6 +351,7 @@ export abstract class ObservationStrategy {
               threadId,
               resourceId,
               observedAt,
+              recordId,
             }),
           { label: 'index-observations', abortSignal: this.opts.abortSignal },
         ),
