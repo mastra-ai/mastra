@@ -109,8 +109,6 @@ export function Combobox(props: ComboboxProps) {
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
   const field = useFieldAriaIds();
-  const describedBy =
-    [ariaDescribedBy, field?.invalid ? field.errorId : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -138,8 +136,7 @@ export function Combobox(props: ComboboxProps) {
         id={id}
         aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
         {...keepOwnAccessibleName({ 'aria-label': ariaLabel })}
-        aria-invalid={field?.invalid || undefined}
-        aria-describedby={describedBy}
+        aria-describedby={ariaDescribedBy}
         data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({
           variant,
