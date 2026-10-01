@@ -1729,7 +1729,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           suspendedRun = await findTargetRun();
         }
-        if (!suspendedRun) {
+        if (!suspendedRun && !storageUnavailable) {
           throw new MastraError({
             id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
             domain: ErrorDomain.AGENT,

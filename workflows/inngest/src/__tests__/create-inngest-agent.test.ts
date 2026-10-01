@@ -2104,6 +2104,39 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     vi.useRealTimers();
   });
 
+  it('resumes without target resolution when suspended-run storage is unavailable', async () => {
+    const durableAgent = makeDurable('send-tool-approval-no-storage');
+    const { resumeSpy } = spyResume(durableAgent);
+    const suspensionSpy = vi
+      .spyOn(agentThreadStreamRuntime, 'getResumableThreadRunSuspension')
+      .mockReturnValue(undefined);
+    const listSpy = vi.spyOn(Agent.prototype, 'listSuspendedRuns').mockRejectedValue(
+      new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'no storage',
+      }),
+    );
+
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved: true,
+    });
+
+    expect(resumeSpy).toHaveBeenCalledWith(
+      'r1',
+      { approved: true },
+      expect.objectContaining({ toolCallId: 't1', memory: { thread: 'th', resource: 'res' } }),
+    );
+    expect(listSpy).toHaveBeenCalledTimes(1);
+    suspensionSpy.mockRestore();
+    listSpy.mockRestore();
+  });
+
   it('sendToolApproval rejects custom data that cannot carry an approval decision', async () => {
     const durableAgent = makeDurable('send-tool-approval-invalid-data');
     const { resumeSpy } = spyResume(durableAgent);
