@@ -176,7 +176,7 @@ Read that complete body and call `source_control_review_change_request` with `ch
 - approve → `event: "approve"`
 - request changes → `event: "request-changes"`
 
-Pass the complete handoff as `body`. Never use `gh pr review`, `gh pr comment`, raw provider APIs, or credentials from the environment to publish it. If the provider rejects approve/request-changes because Factory's stable service identity authored the PR, retry `source_control_review_change_request` once with `event: "comment"` and the same body so the verdict still lands as an attributed review. Report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+Pass the complete handoff as `body`. Never use `gh pr review`, `gh pr comment`, raw provider APIs, or credentials from the environment to publish it. If the provider rejects approve/request-changes because Factory's stable service identity authored the PR, change only the first line to `Verdict: approve (approval not recorded)` or `Verdict: request changes` as applicable, then retry `source_control_review_change_request` once with `event: "comment"` and the otherwise identical body so the verdict still lands as an attributed review. The approval fallback wording is mandatory: it distinguishes an App-authored COMMENT from a recorded GitHub approval and is the only approving body the broker accepts with `event: "comment"`. Report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
 
 After the body is posted successfully (review or comment fallback), delete the body file so no later pass can post it.
 

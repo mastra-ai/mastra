@@ -59,7 +59,12 @@ type ReviewEvent = 'approve' | 'request-changes' | 'comment';
 
 /** Returns why a review's leading `Verdict:` line contradicts the submitted event, if it does. */
 export function verdictEventMismatch(event: ReviewEvent, body: string | undefined): string | undefined {
-  const match = /^verdict: ?(approve|request changes|changes requested)\b/.exec(normalizedVerdictLine(body) ?? '');
+  const normalized = normalizedVerdictLine(body) ?? '';
+  if (normalized === 'verdict: approve (approval not recorded)') {
+    if (event === 'comment') return undefined;
+    return `Review body opens with "Verdict: approve (approval not recorded)" but event is "${event}". Nothing was posted. Use event "comment" for this fallback body, or regenerate the body for the verdict you intend.`;
+  }
+  const match = /^verdict: ?(approve|request changes|changes requested)\b/.exec(normalized);
   if (!match) return undefined;
   const verdict = match[1] === 'approve' ? 'approve' : 'request changes';
   // GitLab has no request-changes state, so a blocking verdict is published as a comment review.

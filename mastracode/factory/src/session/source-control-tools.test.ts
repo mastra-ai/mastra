@@ -503,6 +503,20 @@ describe('createSourceControlTools', () => {
       expect(await schemaError({ event: 'comment', body: 'Verdict: approve\n\nLGTM.' })).toMatch(/event is "comment"/);
     });
 
+    it('accepts only the explicit approval-not-recorded fallback as an approving comment', async () => {
+      const { setup } = await submit({});
+      const tools = createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+      });
+      const schema = tools.source_control_review_change_request!.inputSchema as any;
+      const fallback = `Verdict: approve (approval not recorded)\nReviewed head: ${head}\n`;
+
+      expect(schema.safeParse({ changeRequestId: 17, event: 'comment', body: fallback }).success).toBe(true);
+      expect(schema.safeParse({ changeRequestId: 17, event: 'approve', body: fallback }).success).toBe(false);
+    });
+
     it.each(['`ce79aaafad`', head.slice(0, 10), 'the latest commit'])(
       'rejects a reviewed head that is not a full SHA: %s',
       async value => {

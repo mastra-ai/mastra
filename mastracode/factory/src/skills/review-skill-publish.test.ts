@@ -10,8 +10,10 @@ describe.each(['factory-review', 'factory-rereview'])('%s brokered publish fallb
   it('retries an author-identity verdict through the source-control broker as a comment', () => {
     expect(content).toContain('call `source_control_review_change_request`');
     expect(content).toContain(
-      'retry `source_control_review_change_request` once with `event: "comment"` and the same body',
+      'retry `source_control_review_change_request` once with `event: "comment"` and the otherwise identical body',
     );
+    expect(content).toContain('Verdict: approve (approval not recorded)');
+    expect(content).toContain('is the only approving body the broker accepts with `event: "comment"`');
     expect(content).toContain("because Factory's stable service identity authored the PR");
     expect(content).toContain('Never use `gh pr review`, `gh pr comment`, raw provider APIs');
     expect(content).toContain('Factory routing');
