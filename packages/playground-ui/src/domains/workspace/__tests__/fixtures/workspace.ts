@@ -1,4 +1,5 @@
 import type {
+  RouteResponse,
   SearchSkillsResponse,
   SkillSearchResult,
   WorkspaceFsListResponse,
@@ -99,3 +100,19 @@ export const mountedRootListing: WorkspaceFsListResponse = {
     { name: 'src', type: 'directory' },
   ],
 };
+
+export const popularSkills: RouteResponse<'GET /workspaces/:workspaceId/skills-sh/popular'> = {
+  skills: [{ id: 'acme/skills/pdf', name: 'pdf', installs: 42, topSource: 'acme/skills' }],
+  count: 1,
+  limit: 10,
+  offset: 0,
+};
+
+export const skillPreview: RouteResponse<'GET /workspaces/:workspaceId/skills-sh/preview'> = {
+  content: '# PDF skill',
+};
+
+export const skillsShHandlers = [
+  http.get(`${WORKSPACE_URL}/skills-sh/popular`, () => HttpResponse.json(popularSkills)),
+  http.get(`${WORKSPACE_URL}/skills-sh/preview`, () => HttpResponse.json(skillPreview)),
+];

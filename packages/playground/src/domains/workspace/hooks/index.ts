@@ -31,13 +31,9 @@ export {
 
 // Skills.sh hooks
 export {
-  useSearchSkillsSh,
-  usePopularSkillsSh,
-  useSkillPreview,
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
-  parseSkillSource,
   type InstallSkillParams,
   type UpdateSkillsParams,
   type RemoveSkillParams,

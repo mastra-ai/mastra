@@ -248,31 +248,6 @@ export interface MountInfo {
 }
 
 // =============================================================================
-// skills.sh Types
-// =============================================================================
-
-export interface SkillsShSkill {
-  id: string;
-  name: string;
-  installs: number;
-  topSource: string;
-}
-
-export interface SkillsShSearchResponse {
-  query: string;
-  searchType: string;
-  skills: SkillsShSkill[];
-  count: number;
-}
-
-export interface SkillsShListResponse {
-  skills: SkillsShSkill[];
-  count: number;
-  limit: number;
-  offset: number;
-}
-
-// =============================================================================
 // skills.sh Install Types
 // =============================================================================
 

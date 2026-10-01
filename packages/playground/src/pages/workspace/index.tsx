@@ -7,16 +7,15 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
+import type { WorkspaceSkillInstallParams } from '@mastra/playground-ui/domains/workspace';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Wand2 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
-import { AddSkillDialog } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
@@ -38,7 +37,6 @@ export default function Workspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
 
   // Get state from URL query params (path, file, tab are still query params)
   const fileFromUrl = searchParams.get('file');
@@ -167,50 +165,19 @@ export default function Workspace() {
     ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
 
-  // Skills.sh handlers
-  const handleInstallSkill = useCallback(
-    (params: { repository: string; skillName: string; mount?: string }) => {
-      if (!effectiveWorkspaceId) return;
-
-      installSkill.mutate(
-        { ...params, workspaceId: effectiveWorkspaceId },
-        {
-          onSuccess: async result => {
-            if (result.success) {
-              setShowAddSkillDialog(false);
-              void queryClient.invalidateQueries({ queryKey: ['workspace', effectiveWorkspaceId, 'fs'] });
-
-              // Refetch skills and check if the installed skill appears in the list
-              const { data: refreshedData, error } = await refetchSkills();
-
-              // If refetch failed, just show success (can't verify discovery)
-              if (error || !refreshedData) {
-                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-                return;
-              }
-
-              const installedSkillFound = refreshedData.skills.some(s => s.name === result.skillName);
-
-              if (installedSkillFound) {
-                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-              } else {
-                // Skill was installed but not discovered - likely missing path config
-                toast.warning(
-                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
-                );
-              }
-            } else {
-              toast.error('Failed to install skill');
-            }
-          },
-          onError: error => {
-            toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          },
-        },
-      );
-    },
-    [effectiveWorkspaceId, installSkill, refetchSkills, queryClient],
-  );
+  const handleInstallSkill = async (params: WorkspaceSkillInstallParams) => {
+    if (!effectiveWorkspaceId) return;
+    try {
+      const result = await installSkill.mutateAsync({ ...params, workspaceId: effectiveWorkspaceId });
+      if (!result.success) throw new Error('Unknown error');
+      void queryClient.invalidateQueries({ queryKey: ['workspace', effectiveWorkspaceId, 'fs'] });
+      void refetchSkills();
+      toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+    } catch (error) {
+      toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
@@ -369,38 +336,31 @@ export default function Workspace() {
                 createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId })
               }
               asideActions={
-                canManageSkills ? (
-                  <>
-                    {skills.some(s => s.path?.includes('.agents/skills/')) ? (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        tooltip="Update skills"
-                        disabled={updateSkills.isPending}
-                        onClick={() => void handleUpdateSkills()}
-                      >
-                        <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Add skill"
-                      tooltip="Add skill"
-                      onClick={() => setShowAddSkillDialog(true)}
-                    >
-                      <Wand2 />
-                    </Button>
-                  </>
-                ) : undefined
-              }
-              emptyActions={
-                canManageSkills ? (
-                  <Button variant="ghost" onClick={() => setShowAddSkillDialog(true)}>
-                    <Wand2 />
-                    Add skill
+                canManageSkills && skills.some(s => s.path?.includes('.agents/skills/')) ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    tooltip="Update skills"
+                    disabled={updateSkills.isPending}
+                    onClick={() => void handleUpdateSkills()}
+                  >
+                    <RefreshCw className={updateSkills.isPending ? 'animate-spin' : undefined} />
                   </Button>
                 ) : undefined
+              }
+              addSkill={
+                canManageSkills
+                  ? {
+                      onInstall: handleInstallSkill,
+                      // Precise IDs for skills with source info (owner/repo/name); names as fallback.
+                      installedSkillIds: skills
+                        .filter(s => s.skillsShSource)
+                        .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`),
+                      installedSkillNames: skills.filter(s => !s.skillsShSource).map(s => s.name),
+                      writableMounts,
+                      installedSkillPaths: Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path])),
+                    }
+                  : undefined
               }
               onDelete={handleDelete}
             />
@@ -417,25 +377,6 @@ export default function Workspace() {
           </div>
         )}
       </div>
-
-      {/* Add Skill Dialog */}
-      {effectiveWorkspaceId && canManageSkills && (
-        <AddSkillDialog
-          open={showAddSkillDialog}
-          onOpenChange={setShowAddSkillDialog}
-          workspaceId={effectiveWorkspaceId}
-          onInstall={handleInstallSkill}
-          isInstalling={installSkill.isPending}
-          // Pass precise IDs for skills with source info (format: owner/repo/name)
-          installedSkillIds={skills
-            .filter(s => s.skillsShSource)
-            .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
-          // Fallback to names for skills without source info
-          installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
-          writableMounts={writableMounts}
-          installedSkillPaths={Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path]))}
-        />
-      )}
     </PageLayout>
   );
 }

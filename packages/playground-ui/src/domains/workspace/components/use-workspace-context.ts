@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { WorkspaceAddSkillOptions } from './workspace-add-skill';
 
 export interface WorkspaceEntryRef {
   path: string;
@@ -27,6 +28,7 @@ export interface WorkspaceContextValue {
   searchSkills: boolean;
   fileCount?: number;
   skillCount?: number;
+  addSkill?: WorkspaceAddSkillOptions;
   /** Expanded folders; the active file's parents are added whenever it changes. */
   openFolders: ReadonlySet<string>;
   setFolderOpen: (path: string, open: boolean) => void;

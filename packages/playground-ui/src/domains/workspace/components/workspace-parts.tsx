@@ -5,6 +5,7 @@ import { ROOT_PATH } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceActiveFileContent as ActiveFileBody } from './workspace-active-file';
 import type { WorkspacePreviewFactory } from './workspace-active-file';
+import { WorkspaceAddSkill } from './workspace-add-skill';
 import { WorkspaceProvider } from './workspace-context';
 import type { WorkspaceProviderProps } from './workspace-context';
 import { WorkspaceCreateDirectory } from './workspace-create-directory';
@@ -17,21 +18,18 @@ import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { PanelGroup } from '@/lib/resize/panel-group';
 import { PanelSeparator } from '@/lib/resize/separator';
 
-export interface WorkspaceRootProps extends WorkspaceProviderProps {
-  /** Extra actions shown next to "New folder" when the workspace is empty. */
-  emptyActions?: ReactNode;
-}
+export type WorkspaceRootProps = WorkspaceProviderProps;
 
-export function WorkspaceRoot({ children, emptyActions, ...props }: WorkspaceRootProps) {
+export function WorkspaceRoot({ children, ...props }: WorkspaceRootProps) {
   return (
     <WorkspaceProvider {...props}>
-      <WorkspaceRootBody emptyActions={emptyActions}>{children}</WorkspaceRootBody>
+      <WorkspaceRootBody>{children}</WorkspaceRootBody>
     </WorkspaceProvider>
   );
 }
 
 /** An empty workspace (or one whose root folder doesn't exist yet) gets a single empty state instead of two panes. */
-function WorkspaceRootBody({ children, emptyActions }: { children: ReactNode; emptyActions?: ReactNode }) {
+function WorkspaceRootBody({ children }: { children: ReactNode }) {
   const { workspaceId } = useWorkspaceContext();
   const { data, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
   const isEmpty = data ? data.length === 0 : is404NotFoundError(error);
@@ -45,7 +43,7 @@ function WorkspaceRootBody({ children, emptyActions }: { children: ReactNode; em
         actionSlot={
           <div className="flex flex-wrap items-center justify-center gap-2">
             <WorkspaceCreateDirectory labeled />
-            {emptyActions}
+            <WorkspaceAddSkill labeled />
           </div>
         }
       />

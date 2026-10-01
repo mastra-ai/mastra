@@ -40,3 +40,5 @@ More optional props for embedding the view in a page:
 - `emptyActions`: extra labeled actions shown next to "New folder" when the workspace is empty (for example an "Add skill" button).
 
 The tree also opens the parent folders of the active file and scrolls it into view, shows optional `fileCount` / `skillCount` totals in the aside title (for example `3 Skills`), and marks mounted folders with their provider icon, a lock when read-only, and an alert when the mount failed.
+
+Pass `addSkill` to show an "Add skill" action (in the aside header and the empty state) that opens the skills.sh browser and calls your `onInstall` handler.

@@ -20,6 +20,7 @@ import {
   readResponse,
   rootListing,
   skillSearchResponse,
+  skillsShHandlers,
   srcListing,
 } from '../../__tests__/fixtures/workspace';
 import { WorkspaceTreeView } from '../workspace-tree-view';
@@ -409,12 +410,40 @@ describe('WorkspaceTreeView', () => {
       expect(screen.queryByText('Select a file')).toBeNull();
     });
 
-    it('offers the empty actions next to New folder', async () => {
-      server.use(http.get(`${WORKSPACE_URL}/fs/list`, () => HttpResponse.json({ error: 'nope' }, { status: 404 })));
-      renderView({ onCreateDirectory: vi.fn(), emptyActions: <button type="button">Add skill</button> });
+    it('offers Add skill next to New folder', async () => {
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, () => HttpResponse.json({ error: 'nope' }, { status: 404 })),
+        ...skillsShHandlers,
+      );
+      renderView({ onCreateDirectory: vi.fn(), addSkill: { onInstall: vi.fn() } });
 
       expect(await screen.findByRole('button', { name: 'Add skill' })).toBeTruthy();
       expect(screen.getByRole('button', { name: /New folder/ })).toBeTruthy();
+    });
+  });
+
+  describe('when addSkill is provided', () => {
+    it('installs the picked skill from the dialog and closes it', async () => {
+      server.use(listHandler({ '.': rootListing }), ...skillsShHandlers);
+      const onInstall = vi.fn().mockResolvedValue(undefined);
+      renderView({ addSkill: { onInstall } });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Add skill' }));
+      fireEvent.click(await screen.findByText('pdf'));
+      fireEvent.click(await screen.findByTestId('install-skill-button'));
+
+      await waitFor(() => expect(onInstall).toHaveBeenCalledWith({ repository: 'acme/skills', skillName: 'pdf' }));
+      await waitFor(() => expect(screen.queryByTestId('install-skill-button')).toBeNull());
+    });
+  });
+
+  describe('when addSkill is omitted', () => {
+    it('hides the Add skill action', async () => {
+      server.use(listHandler({ '.': rootListing }));
+      renderView();
+
+      expect(await screen.findByRole('treeitem', { name: /README\.md/ })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Add skill' })).toBeNull();
     });
   });
 

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import type { WorkspaceCreateDirectoryHandler, WorkspaceDeleteHandler } from './use-workspace-context';
 import { Workspace } from './workspace';
 import type { WorkspacePreviewFactory } from './workspace-active-file';
+import { WorkspaceAddSkill } from './workspace-add-skill';
+import type { WorkspaceAddSkillOptions } from './workspace-add-skill';
 
 export interface WorkspaceTreeViewProps {
   workspaceId: string;
@@ -25,8 +27,8 @@ export interface WorkspaceTreeViewProps {
   skillCount?: number;
   /** Extra icon buttons rendered in the aside header, after search and new folder. */
   asideActions?: ReactNode;
-  /** Extra labeled actions shown next to "New folder" when the workspace is empty. */
-  emptyActions?: ReactNode;
+  /** Enables the "Add skill" action (aside header and empty state) with its skills.sh dialog. Omit to hide it. */
+  addSkill?: WorkspaceAddSkillOptions;
   /** Custom preview for a file; return `undefined` to keep the built-in rendering. */
   renderPreview?: WorkspacePreviewFactory;
 }
@@ -40,6 +42,7 @@ export function WorkspaceTreeView({ asideActions, renderPreview, ...rootProps }:
             <>
               <Workspace.SearchToggle />
               <Workspace.CreateDirectory />
+              <WorkspaceAddSkill />
               {asideActions}
             </>
           }

@@ -13,4 +13,6 @@ export type {
 } from './components/use-workspace-context';
 export type { WorkspaceFilePreview, WorkspacePreviewFactory } from './components/workspace-active-file';
 export { WorkspaceMarkdownPreview } from './components/workspace-markdown-preview';
+export type { WorkspaceAddSkillOptions, WorkspaceSkillInstallParams } from './components/workspace-add-skill';
+export type { WritableMount } from './components/workspace-add-skill-dialog';
 export { splitFrontmatter } from './components/frontmatter';

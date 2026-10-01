@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ancestorsOf } from '../path';
 import { WorkspaceContext } from './use-workspace-context';
 import type { WorkspaceCreateDirectoryHandler, WorkspaceDeleteHandler } from './use-workspace-context';
+import type { WorkspaceAddSkillOptions } from './workspace-add-skill';
 
 export interface WorkspaceProviderProps {
   workspaceId: string;
@@ -25,6 +26,8 @@ export interface WorkspaceProviderProps {
   fileCount?: number;
   /** Shown as `N Skills` in the aside title. */
   skillCount?: number;
+  /** Enables the "Add skill" action and its skills.sh dialog. Omit to hide it. */
+  addSkill?: WorkspaceAddSkillOptions;
   children: ReactNode;
 }
 
@@ -39,6 +42,7 @@ export function WorkspaceProvider({
   searchSkills = true,
   fileCount,
   skillCount,
+  addSkill,
   children,
 }: WorkspaceProviderProps) {
   const [isSearching, setIsSearching] = useState(false);
@@ -78,6 +82,7 @@ export function WorkspaceProvider({
       searchSkills,
       fileCount,
       skillCount,
+      addSkill,
       openFolders,
       setFolderOpen: (path: string, open: boolean) =>
         setOpenFolders(current => {
@@ -101,6 +106,7 @@ export function WorkspaceProvider({
       searchSkills,
       fileCount,
       skillCount,
+      addSkill,
       openFolders,
     ],
   );
