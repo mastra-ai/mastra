@@ -25,6 +25,16 @@ const SCHEMA_MAP_KEYWORDS = new Set(['properties', 'patternProperties', '$defs',
 export const MAX_JSON_SCHEMA_DEPTH = 128;
 export const MAX_JSON_SCHEMA_NODES = 10_000;
 
+/**
+ * Raw JSON values a single schema may contribute before generation widens it, and the total a whole
+ * catalogue may contribute before generation widens the remainder. The node limit above counts only
+ * schema-bearing keywords, so these bound the annotation and extension values it deliberately
+ * ignores. They live here rather than with the generator so the CLI can apply them without loading
+ * the converter.
+ */
+export const MAX_SCHEMA_VALUES = MAX_JSON_SCHEMA_NODES * 10;
+export const MAX_CATALOG_VALUES = MAX_SCHEMA_VALUES * 10;
+
 class Unconvertible extends Error {}
 
 /**

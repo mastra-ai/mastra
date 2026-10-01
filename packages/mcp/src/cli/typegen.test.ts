@@ -6,8 +6,8 @@ import { compile } from 'json-schema-to-typescript';
 import { describe, expect, it, vi } from 'vitest';
 import { compileConsumer, compileStrict } from '../client/__fixtures__/typed-client/compile';
 import type { SerializableMCPToolCatalog } from '../client/types';
-import { MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
-import { generateToolTypes, MAX_CATALOG_VALUES, MAX_SCHEMA_VALUES } from './typegen';
+import { MAX_CATALOG_VALUES, MAX_JSON_SCHEMA_NODES, MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
+import { generateToolTypes } from './typegen';
 
 vi.mock('json-schema-to-typescript', async importOriginal => {
   const original = await importOriginal<typeof import('json-schema-to-typescript')>();

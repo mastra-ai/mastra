@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { noopLogger } from '@mastra/core/logger';
 import { MCPClient } from '@mastra/mcp';
-import type { SerializableMCPToolCatalog } from '../client/types';
+import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from '../client/types';
+import { countJsonValues, MAX_CATALOG_VALUES, MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
 
 class GenerationError extends Error {}
 
@@ -20,6 +21,40 @@ function isClient(value: unknown): value is MCPClient {
 
 function missing(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+/**
+ * Apply the value budget to a discovered catalogue before it crosses to the worker. The transfer
+ * copies whatever is sent, so an oversized schema has to be widened while it is still only being
+ * counted rather than after it has been copied in full. Widening to `true` generates `unknown`,
+ * which is the same contract the worker produces for a schema it widens itself.
+ */
+export function boundTransfer(catalog: SerializableMCPToolCatalog): {
+  catalog: SerializableMCPToolCatalog;
+  widened: number;
+} {
+  const bounded: SerializableMCPToolCatalog = {};
+  let widened = 0;
+  let values = 0;
+  for (const server of Object.keys(catalog)) {
+    const tools: Record<string, SerializableMCPToolDefinition> = {};
+    bounded[server] = tools;
+    for (const tool of Object.keys(catalog[server]!)) {
+      const definition = { ...catalog[server]![tool]! };
+      for (const key of ['inputSchema', 'outputSchema'] as const) {
+        const schema = definition[key];
+        if (schema === undefined) continue;
+        const counted = countJsonValues(schema, MAX_SCHEMA_VALUES);
+        values += counted;
+        if (counted > MAX_SCHEMA_VALUES || values > MAX_CATALOG_VALUES) {
+          definition[key] = true;
+          widened += 1;
+        }
+      }
+      tools[tool] = definition;
+    }
+  }
+  return { catalog: bounded, widened };
 }
 
 async function canonical(path: string): Promise<string> {
@@ -144,7 +179,9 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       if (Object.keys(result.errors).length || Object.keys(result.errorDetails).length) {
         throw new GenerationError('MCP discovery failed; no generated files were replaced');
       }
-      const converted = await convert(result.definitions, abort.signal);
+      const bounded = boundTransfer(result.definitions);
+      warnings += bounded.widened;
+      const converted = await convert(bounded.catalog, abort.signal);
       warnings += converted.warnings.length;
       prepared.push({ output, source: converted.source });
     }
