@@ -435,6 +435,25 @@ describe('Session active-run input authorization', () => {
       await finish(ctx, [alice]);
     });
 
+    it('rejects a denied respondToPersistedToolApproval before looking up suspended runs', async () => {
+      const ctx = await setup();
+      const { alice } = await startAliceRun(ctx);
+      const listSuspendedRuns = vi.spyOn(ctx.agent, 'listSuspendedRuns');
+      const sendToolApproval = vi.spyOn(ctx.agent, 'sendToolApproval');
+
+      await expect(
+        ctx.session.respondToPersistedToolApproval({
+          toolCallId: 'missing-call',
+          approved: true,
+          requestContext: mappedCaller('bob'),
+        }),
+      ).rejects.toMatchObject(mismatch);
+      expect(listSuspendedRuns).not.toHaveBeenCalled();
+      expect(sendToolApproval).not.toHaveBeenCalled();
+      expect(ctx.authorize).toHaveBeenCalledTimes(1);
+      await finish(ctx, [alice]);
+    });
+
     it('lets an approved caller through respondToToolSuspension with the policy called once', async () => {
       const ctx = await setup();
       const { alice } = await startAliceRun(ctx);

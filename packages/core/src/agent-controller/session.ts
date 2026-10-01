@@ -3771,6 +3771,8 @@ export class Session<TState = unknown> {
     const threadId = this.thread.getId();
     const resourceId = this.identity.getResourceId();
     if (!threadId) throw new Error('Cannot answer a tool approval without a current thread');
+    // Authorize before the lookup so a denied caller can't probe for suspended runs.
+    requestContext = await this.#authorizeCaller(requestContext);
     const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
     const run = runs.find(candidate =>
       candidate.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId),
