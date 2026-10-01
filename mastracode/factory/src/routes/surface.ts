@@ -263,6 +263,22 @@ async function inheritEarlierSession(
 }
 
 /**
+ * A later role can continue in the same source-control session as an earlier
+ * role. In that case consent does not make the approver the run's initiator:
+ * keep the durable starter already attached to the session. Prefer an
+ * automation ref when repairing data written by the old approval behavior,
+ * which could stamp a later role on the same session as human-started.
+ *
+ * An explicit human decision is a real takeover and intentionally starts a
+ * human run, so it does not inherit the earlier starter.
+ */
+function continuedSessionStarter(input: FactoryBindingPreparationInput, preparedSession: EnsuredFactorySourceSession) {
+  if (input.record.actor?.type === 'human') return undefined;
+  const refs = Object.values(input.item.sessions).filter(ref => ref.sessionId === preparedSession.sessionId);
+  return refs.find(ref => !isHumanActorId(ref.startedBy)) ?? refs[0];
+}
+
+/**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
  * default model. Exported for tests — this is the autonomous entry point with no
@@ -374,8 +390,13 @@ export async function prepareFactoryRuleBinding(
     const initiator = parseFactoryInitiatorProfile(input.record.actor?.initiator);
     const approvedByProfile = parseFactoryInitiatorProfile(input.record.actor?.approvedByProfile);
     const sessionRef = input.item.sessions[input.role];
+    const continuedStarter = continuedSessionStarter(input, preparedSession);
     const sessionProfile = parseFactoryInitiatorProfile(
-      sessionRef ? { userId: sessionRef.startedBy, displayName: sessionRef.startedByDisplayName } : undefined,
+      continuedStarter
+        ? { userId: continuedStarter.startedBy, displayName: continuedStarter.startedByDisplayName }
+        : sessionRef
+          ? { userId: sessionRef.startedBy, displayName: sessionRef.startedByDisplayName }
+          : undefined,
     );
     const actorProfile =
       approvedByProfile &&
@@ -386,11 +407,16 @@ export async function prepareFactoryRuleBinding(
           ? initiator
           : undefined;
     const originalActorId = input.record.actor?.id;
-    const humanStarterId = isHumanActorId(approver)
-      ? approver
-      : input.record.actor?.type === 'human' && typeof originalActorId === 'string' && isHumanActorId(originalActorId)
-        ? originalActorId
-        : actorProfile?.userId;
+    const continuedStarterId = continuedStarter?.startedBy;
+    const humanStarterId = continuedStarterId
+      ? isHumanActorId(continuedStarterId)
+        ? continuedStarterId
+        : undefined
+      : isHumanActorId(approver)
+        ? approver
+        : input.record.actor?.type === 'human' && typeof originalActorId === 'string' && isHumanActorId(originalActorId)
+          ? originalActorId
+          : actorProfile?.userId;
     const starter = humanStarterId
       ? { type: 'human' as const, id: humanStarterId }
       : { type: 'system' as const, id: 'factory-rule-dispatcher' };

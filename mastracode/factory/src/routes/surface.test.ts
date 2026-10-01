@@ -150,6 +150,139 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(sourceControl.sessions.getBySessionId(request.sessionId)).resolves.toMatchObject({ userId: 'user-1' });
   });
 
+  it('keeps the automation starter when a human approves the next role in the same session', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'sess-automation',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id, ['planning'], { role: 'plan' });
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: 'thread-automation',
+        startedBy: 'factory-rule-dispatcher',
+        credentialUserId: 'user-1',
+      },
+    };
+    (input.record as { approvedBy?: string | null }).approvedBy = 'user-1';
+    input.record.actor = {
+      type: 'agent',
+      id: 'agent:triage-binding',
+      approvedByProfile: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      sessionId: session.sessionId,
+      userId: 'user-1',
+      starter: { type: 'system', id: 'factory-rule-dispatcher' },
+    });
+  });
+
+  it('repairs a later human starter on an automation-owned session', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'sess-automation-repair',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id, ['execute'], { role: 'work' });
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: 'thread-automation',
+        startedBy: 'factory-rule-dispatcher',
+        credentialUserId: 'user-1',
+      },
+      plan: {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: 'thread-automation',
+        startedBy: 'user-1',
+      },
+    };
+    (input.record as { approvedBy?: string | null }).approvedBy = 'user-1';
+    input.record.actor = { type: 'agent', id: 'agent:plan-binding' };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      sessionId: session.sessionId,
+      userId: 'user-1',
+      starter: { type: 'system', id: 'factory-rule-dispatcher' },
+    });
+  });
+
+  it('lets an explicit human decision take over an automation-owned session', async () => {
+    const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'sess-human-takeover',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-49',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id, ['planning'], { role: 'plan' });
+    (input.item as { sessions: unknown }).sessions = {
+      triage: {
+        sessionId: session.sessionId,
+        branch: session.branch,
+        threadId: 'thread-automation',
+        startedBy: 'factory-rule-dispatcher',
+        credentialUserId: 'user-1',
+      },
+    };
+    input.record.actor = {
+      type: 'human',
+      id: 'user-1',
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      sessionId: session.sessionId,
+      userId: 'user-1',
+      starter: { type: 'human', id: 'user-1' },
+    });
+  });
+
   it('preserves a human actor as the run starter without making the repository connector the actor', async () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
