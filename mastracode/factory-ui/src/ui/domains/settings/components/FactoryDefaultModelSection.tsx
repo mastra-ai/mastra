@@ -76,14 +76,15 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           </>
         }
       >
-        <div className="flex w-full max-w-72 flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {setDefaultModel.isPending && (
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
-            <label className="min-w-0 flex-1">
+            <label className="flex min-w-0">
               <span className="sr-only">Factory default model</span>
               <ModelCombobox
+                className="w-64 max-w-full shrink-0"
                 models={models}
                 value={defaultModelId}
                 placeholder="Select a model"
