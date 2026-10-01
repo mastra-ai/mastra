@@ -10,7 +10,7 @@ import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
-import { WORKSPACE_EXTERNALS } from '../build/analyze/constants';
+import { OUTPUT_DEPENDENCIES } from '../build/analyze/constants';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageMetadata, getPackageRootPath } from '../build/package-info';
@@ -312,6 +312,26 @@ export abstract class Bundler extends MastraBundler {
 
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
     await ensureDir(join(outputDirectory, this.outputDir));
+  }
+
+  protected async getOutputDependencies(parentPath: string): Promise<Map<string, ExternalDependencyInfo>> {
+    const dependencies = new Map<string, ExternalDependencyInfo>();
+    const coreRootPath = await getPackageRootPath('@mastra/core', parentPath);
+
+    for (const dependency of OUTPUT_DEPENDENCIES) {
+      const dependencyInfo = await getPackageMetadata(dependency, coreRootPath ?? parentPath);
+      if (!dependencyInfo.version && !dependencyInfo.packageSpec) {
+        throw new MastraError({
+          id: 'DEPLOYER_BUNDLER_OUTPUT_DEPENDENCY_NOT_FOUND',
+          text: `Failed to resolve the installed ${dependency} version`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        });
+      }
+      dependencies.set(dependency, dependencyInfo);
+    }
+
+    return dependencies;
   }
 
   async writePackageJson(
@@ -691,8 +711,8 @@ export abstract class Bundler extends MastraBundler {
     const initialWorkspaceDependencies = new Set<string>();
     for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
       const pkgName = getPackageName(dep);
-      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(dep, external));
-      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName) && !isWorkspaceExternal) {
+      const isOutputDependency = OUTPUT_DEPENDENCIES.some(outputDep => isDependencyPartOfPackage(dep, outputDep));
+      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName) && !isOutputDependency) {
         initialWorkspaceDependencies.add(pkgName);
       }
     }
@@ -710,17 +730,9 @@ export abstract class Bundler extends MastraBundler {
       });
     }
 
-    const coreRootPath = await getPackageRootPath('@mastra/core', entryProjectRoot);
-    const schemaCompatInfo = await getPackageMetadata('@mastra/schema-compat', coreRootPath ?? entryProjectRoot);
-    if (!schemaCompatInfo.version && !schemaCompatInfo.packageSpec) {
-      throw new MastraError({
-        id: 'DEPLOYER_BUNDLER_SCHEMA_COMPAT_NOT_FOUND',
-        text: 'Failed to resolve the installed @mastra/schema-compat version',
-        domain: ErrorDomain.DEPLOYER,
-        category: ErrorCategory.SYSTEM,
-      });
+    for (const [dependency, dependencyInfo] of await this.getOutputDependencies(entryProjectRoot)) {
+      dependenciesToInstall.set(dependency, dependencyInfo);
     }
-    dependenciesToInstall.set('@mastra/schema-compat', schemaCompatInfo);
 
     try {
       await this.writePackageJson(

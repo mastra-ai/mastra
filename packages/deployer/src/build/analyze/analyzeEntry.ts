@@ -17,7 +17,11 @@ import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
 import type { BundlerPlatform } from '../utils';
-import { DEPS_TO_IGNORE, WORKSPACE_EXTERNALS } from './constants';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './constants';
+
+function isGlobalExternal(source: string) {
+  return GLOBAL_EXTERNALS.some(external => isDependencyPartOfPackage(source, external));
+}
 
 function analysisExternals({
   workspaceMap,
@@ -35,7 +39,7 @@ function analysisExternals({
         return null;
       }
 
-      if (WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(source, external))) {
+      if (isGlobalExternal(source)) {
         return { id: source, external: true };
       }
 
@@ -183,8 +187,7 @@ async function captureDependenciesToOptimize(
       rootPath = metadata.rootPath;
       version = metadata.version;
       packageSpec = metadata.packageSpec;
-      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(dependency, external));
-      isWorkspace = !isWorkspaceExternal && workspaceMap.has(pkgName);
+      isWorkspace = workspaceMap.has(pkgName) && !isGlobalExternal(dependency);
     }
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;

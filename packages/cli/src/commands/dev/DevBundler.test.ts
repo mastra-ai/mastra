@@ -223,6 +223,11 @@ describe('DevBundler', () => {
           },
           expect.objectContaining({ sourcemap: false }),
         );
+
+        const { readFile } = await import('node:fs/promises');
+        const { join } = await import('node:path');
+        const outputPackage = JSON.parse(await readFile(join(tmpDir, 'output', 'package.json'), 'utf-8'));
+        expect(outputPackage.dependencies['@mastra/schema-compat']).toBeTruthy();
       } finally {
         await remove(tmpDir);
       }

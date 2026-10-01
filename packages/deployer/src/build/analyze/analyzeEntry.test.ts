@@ -319,12 +319,12 @@ describe('analyzeEntry', () => {
     expect(openaiDep?.isWorkspace).toBe(false);
   });
 
-  it('should not traverse schema-compat when it is present in the workspace map', async () => {
+  it('should externalize global subpaths from workspace packages', async () => {
     const workspaceMap = new Map<string, WorkspacePackageInfo>([
       [
         '@mastra/schema-compat',
         {
-          location: join(process.cwd(), '..', 'schema-compat'),
+          location: '/workspace/packages/schema-compat',
           dependencies: {},
           version: '1.0.0',
         },
@@ -333,7 +333,7 @@ describe('analyzeEntry', () => {
 
     const result = await analyzeEntry(
       {
-        entry: `import { toStandardSchema } from '@mastra/schema-compat/schema'; export { toStandardSchema };`,
+        entry: `import { compileDefault } from '@mastra/schema-compat/validation-runtime';\nexport { compileDefault };`,
         isVirtualFile: true,
       },
       '',
@@ -345,7 +345,10 @@ describe('analyzeEntry', () => {
       },
     );
 
-    expect(result.dependencies.get('@mastra/schema-compat/schema')?.isWorkspace).toBe(false);
+    expect(result.dependencies.get('@mastra/schema-compat/validation-runtime')).toMatchObject({
+      isWorkspace: false,
+      exports: ['compileDefault'],
+    });
   });
 
   it('should handle dynamic imports', async () => {

@@ -127,8 +127,9 @@ export class DevBundler extends Bundler {
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
+    const outputDependencies = await this.getOutputDependencies(entryFile);
 
-    await this.writePackageJson(outputDir, new Map(), {});
+    await this.writePackageJson(outputDir, outputDependencies, {});
 
     let lastFsAgentsModuleSource = fsRoutingWatchOptions?.preparedEntry.moduleSource;
 
