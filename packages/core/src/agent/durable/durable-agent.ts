@@ -3200,7 +3200,10 @@ export class DurableAgent<
         workflowInput.messageListState as { memoryInfo?: { resourceId?: string } } | undefined
       )?.memoryInfo;
       return { found: true, resourceId: workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId };
-    } catch {
+    } catch (error) {
+      this.logger.warn(`Could not resolve the resource that owns run ${runId}; treating it as unresolved`, {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
       return { found: false };
     }
   }
