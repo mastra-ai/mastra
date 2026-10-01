@@ -146,9 +146,12 @@ export abstract class DatasetsStorage extends StorageDomain {
         pagination: { page: 0, perPage: false }, // Get all items
       });
       const items = itemsResult.items;
+      const validator = getSchemaValidator();
 
       if (items.length > 0) {
-        const validator = getSchemaValidator();
+        // The proposed schema differs on every update, so never reuse a validator compiled for an earlier one.
+        validator.clearCache(`dataset:${args.id}:schema-update:input`);
+        validator.clearCache(`dataset:${args.id}:schema-update:output`);
         const newInputSchema = args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema;
         const newOutputSchema =
           args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema;
@@ -164,11 +167,13 @@ export abstract class DatasetsStorage extends StorageDomain {
         if (result.invalid.length > 0) {
           throw new SchemaUpdateValidationError(result.invalid);
         }
-
-        // Clear old cache since schema changed
-        validator.clearCache(`dataset:${args.id}:input`);
-        validator.clearCache(`dataset:${args.id}:output`);
       }
+
+      // Drop validators compiled for the old schema, even when the dataset is empty.
+      const updated = await this._doUpdateDataset(args);
+      validator.clearCache(`dataset:${args.id}:input`);
+      validator.clearCache(`dataset:${args.id}:output`);
+      return updated;
     }
 
     return this._doUpdateDataset(args);
