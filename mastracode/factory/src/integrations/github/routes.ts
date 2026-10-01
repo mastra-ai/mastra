@@ -26,6 +26,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
+import { factoryGithubIdempotencyKey } from '../../session/agent-write-idempotency.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
@@ -1634,6 +1635,15 @@ function buildProjectGitRoutes({
               title,
               body: prBody,
               actingUserId: userId,
+              idempotencyKey: factoryGithubIdempotencyKey({
+                orgId,
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                repositoryId: project.repository.externalId,
+                threadId: sessionWorkspace.session.sessionId,
+                operation: 'manual-create-pull-request',
+                operationId: JSON.stringify([head, base, title, prBody ?? null]),
+              }),
             });
             await emitAudit?.({
               context: loose(c),
