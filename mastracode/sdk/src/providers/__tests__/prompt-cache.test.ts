@@ -68,7 +68,25 @@ describe('Anthropic provider string seen by observational memory', () => {
     expect(model.provider).toBe('anthropic.messages');
   });
 
-  it('is anthropic.messages on the Claude Max OAuth route', () => {
+  it('is anthropic.messages on the OAuth route through the Mastra gateway', () => {
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      routeThroughMastraGateway: true,
+      credentialStore: fakeStore({
+        anthropic: { type: 'oauth', access: 'access', refresh: 'refresh', expires: Date.now() + 60_000 },
+      }),
+    });
+
+    const model = gateway.resolveLanguageModel({
+      providerId: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      apiKey: 'gateway-key',
+    });
+
+    expect(model.provider).toBe('anthropic.messages');
+  });
+
+  it('is anthropic.messages from opencodeClaudeMaxProvider (test-env branch; production uses the same createAnthropic name)', () => {
     const model = opencodeClaudeMaxProvider('claude-sonnet-4-5') as { provider: string };
 
     expect(model.provider).toBe('anthropic.messages');
