@@ -477,6 +477,26 @@ describe('Session active-run input authorization', () => {
       await finish(ctx, [alice]);
     });
 
+    it('lets an approved caller through respondToPersistedToolApproval with the policy called once', async () => {
+      const ctx = await setup();
+      const { alice } = await startAliceRun(ctx);
+      const listSuspendedRuns = vi.spyOn(ctx.agent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [{ runId: 'alice-run', toolCalls: [{ toolCallId: 'call-1', requiresApproval: true }] }],
+      } as never);
+      const sendToolApproval = vi.spyOn(ctx.agent, 'sendToolApproval').mockResolvedValue(undefined as never);
+
+      await ctx.session.respondToPersistedToolApproval({
+        toolCallId: 'call-1',
+        approved: true,
+        requestContext: mappedCaller('carol'),
+      });
+      expect(listSuspendedRuns).toHaveBeenCalledOnce();
+      expect(sendToolApproval).toHaveBeenCalledOnce();
+      expect(sendToolApproval.mock.calls[0]![0].requestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe(SESSION_RESOURCE);
+      expect(ctx.authorize).toHaveBeenCalledTimes(1);
+      await finish(ctx, [alice]);
+    });
+
     it('lets an approved caller through approveToolCall with the policy called once', async () => {
       const ctx = await setup();
       const { alice } = await startAliceRun(ctx);
