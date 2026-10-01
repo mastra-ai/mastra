@@ -10,11 +10,18 @@ import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
+import { WORKSPACE_EXTERNALS } from '../build/analyze/constants';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import type { ExternalDependencyInfo, InternalBundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from '../build/utils';
+import {
+  getPackageName,
+  isBareModuleSpecifier,
+  isDependencyPartOfPackage,
+  shouldSkipInstall,
+  slash,
+} from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import {
@@ -673,7 +680,8 @@ export abstract class Bundler extends MastraBundler {
     });
     const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
-      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
+      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(dep, external));
+      if ((analyzedBundleInfo.workspaceMap.has(dep) && !isWorkspaceExternal) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
@@ -683,7 +691,8 @@ export abstract class Bundler extends MastraBundler {
     const initialWorkspaceDependencies = new Set<string>();
     for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
       const pkgName = getPackageName(dep);
-      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(dep, external));
+      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName) && !isWorkspaceExternal) {
         initialWorkspaceDependencies.add(pkgName);
       }
     }

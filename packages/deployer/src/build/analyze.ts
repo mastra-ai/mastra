@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE } from './analyze/constants';
+import { DEPS_TO_IGNORE, WORKSPACE_EXTERNALS } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
@@ -570,8 +570,9 @@ export async function analyzeBundle(
       }
 
       const pkgName = getPackageName(i);
+      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(i, external));
 
-      if (pkgName && workspaceMap.has(pkgName)) {
+      if (pkgName && workspaceMap.has(pkgName) && !isWorkspaceExternal) {
         continue;
       }
 
