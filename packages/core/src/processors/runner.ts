@@ -885,6 +885,7 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -994,6 +995,7 @@ export class ProcessorRunner {
                 messageList,
                 retryCount,
                 writer,
+                abortSignal,
               });
             } finally {
               state.hookDurationMs += performance.now() - hookStart;
@@ -1099,6 +1101,7 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<
     Array<{
       part: ChunkType<OUTPUT> | null | undefined;
@@ -1142,6 +1145,7 @@ export class ProcessorRunner {
         messageList,
         retryCount,
         writer,
+        abortSignal,
       );
       results.push(result);
       if (result.blocked) {
