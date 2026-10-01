@@ -1,4 +1,5 @@
 import {
+  TRACE_AGGREGATE_COST_ATTACHMENTS,
   TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX,
   TRACE_AGGREGATE_INTERVALS,
   TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS,
@@ -33,7 +34,7 @@ import type {
 } from './trace-query';
 
 /**
- * Trusted, backend-independent plan for `aggregateTraces()` (Aggregate Query API Decision 8).
+ * Trusted, backend-independent plan for `aggregateTraces()`.
  *
  * `planTraceAggregate` enforces everything the request schema leaves to the planner: the
  * groupable-dimension allowlist, `countDistinct` targets, `having` / `orderBy` referencing
@@ -43,7 +44,7 @@ import type {
 
 export const TRACE_AGGREGATE_MAX_BUCKETS = 1000;
 
-/** Upper bound on `limit × bucket count` when `interval` is present (Decision 5). */
+/** Upper bound on `limit × bucket count` when `interval` is present. */
 export const TRACE_AGGREGATE_MAX_ROWS = 10_000;
 
 export const TRACE_AGGREGATE_INTERVAL_MS: Record<TraceAggregateInterval, number> = {
@@ -63,8 +64,12 @@ export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['nam
 
 /**
  * Predicate over a group's whole-window measures. `measure` is a requested measure or `count`
- * (always available, Decision 5); when `count` is not in `measures`, backends compute it for
+ * (always available); when `count` is not in `measures`, backends compute it for
  * filtering without projecting it into the response.
+ *
+ * Token and cost measures can be null, so `having` uses SQL three-valued logic: a comparison or
+ * membership test against null is UNKNOWN, `not` of UNKNOWN is UNKNOWN, `and` / `or` follow
+ * Kleene logic, and a group whose predicate is not TRUE is removed.
  */
 export type TrustedTraceAggregateHavingPredicate =
   | {
@@ -86,7 +91,7 @@ export type TrustedTraceAggregateOrderBy =
   | {
       target: 'measure';
       /**
-       * A requested measure, or `count` (always available, Decision 5). When `count` is not in
+       * A requested measure, or `count` (always available). When `count` is not in
        * `measures`, backends compute it for ordering without projecting it into the response.
        */
       measure: TrustedTraceAggregateMeasureName;
@@ -95,7 +100,7 @@ export type TrustedTraceAggregateOrderBy =
   | { target: 'dimension'; dimension: TraceAggregateDimension; direction: 'asc' | 'desc' };
 
 /**
- * Group semantics every evaluator and store compiler must implement (Decision 5):
+ * Group semantics every evaluator and store compiler must implement:
  *
  * - A **group** is one distinct tuple of `dimensions` values (null values form their own group).
  *   `having`, `orderBy`, and `limit` operate on groups, never on individual bucket rows.
@@ -113,6 +118,39 @@ export type TrustedTraceAggregateOrderBy =
  *   empty buckets are omitted, and buckets are never dropped from the middle of a series.
  * - The planner alone enforces the bucket cap and the row cap (`limit × buckets ≤ 10,000`);
  *   backends trust the plan and do not re-check them.
+ * - Null measure values (see below) sort last in both directions; a `having` predicate over a
+ *   null measure is UNKNOWN and removes the group (see `TrustedTraceAggregateHavingPredicate`).
+ *
+ * Token and cost semantics:
+ *
+ * - **Usage stage.** Usage is aggregated per candidate trace before grouping, so fan-out from
+ *   several metric rows per model call never reaches the group stage. A metric row belongs to
+ *   candidate trace T when its `traceId` is T, its `name` is in
+ *   `TRACE_AGGREGATE_USAGE_METRIC_NAMES`, its `timestamp >= timeRange.from` (no upper bound; a
+ *   trace that starts in the window may finish after it), and it matches `scope` when present.
+ *   There is no current-span or current-attempt filter: every row for the trace counts, including
+ *   spend before a suspend/resume and rows whose `spanId` has no span row. Rows collapse on
+ *   `metricId` (exporter retries); ClickHouse dedupes inside this stage without relying on merges.
+ *   Grouping, `where`, and `interval` still use the current root.
+ * - **Tokens.** A trace is usage-bearing when at least one metric row belongs to it. Its
+ *   `tokens.<x>` value is the sum of `value` over the rows named by the measure's
+ *   `metricNames` (0 when there are none); a trace that is not usage-bearing has no token value.
+ *   `tokens.<x>.sum` sums over the group's usage-bearing traces, `tokens.<x>.avg` divides by
+ *   their count, and both are null when the group has none.
+ * - **Cost.** Only `TRACE_AGGREGATE_COST_METRIC_NAMES` rows carry cost. Such a row is priced when
+ *   `estimatedCost` is not null and `costMetadata.error` is not set (a `partial_cost` row is
+ *   unpriced even though it carries a partial cost). A trace is priced when it has at least one
+ *   priced row; its cost is the sum of its priced rows' `estimatedCost`. Unpriced rows contribute
+ *   nothing to cost, cost unit, or coverage. `cost.sum` sums over priced traces, `cost.avg`
+ *   divides by their count.
+ * - **Cost attachments.** Whenever any `cost.*` measure is requested, every row also carries
+ *   `cost.coverage` (priced traces ÷ usage-bearing traces; null when the group has no
+ *   usage-bearing traces) and `costUnit` (the priced rows' single `costUnit`, `'mixed'` when they
+ *   use more than one, null when there are no priced rows; a null unit counts as its own value).
+ *   `cost.sum` and `cost.avg` are null when the group has no priced traces or `costUnit` is
+ *   `'mixed'`. Attachments cannot be requested, filtered on, or ordered by.
+ * - Measures are computed independently for the whole-window group (for `having` / `orderBy`) and
+ *   for each bucket row.
  */
 export interface TrustedTraceAggregatePlan {
   result: 'aggregate';
@@ -131,7 +169,7 @@ export interface TrustedTraceAggregatePlan {
 }
 
 /**
- * Number of UTC-aligned buckets a `[from, to)` range touches (Decision 6). A range that does not
+ * Number of UTC-aligned buckets a `[from, to)` range touches. A range that does not
  * start on a bucket boundary touches one more bucket than `(to - from) / interval`.
  */
 export function countTraceAggregateBuckets(fromMs: number, toMs: number, interval: TraceAggregateInterval): number {
@@ -226,7 +264,7 @@ export function planTraceAggregate(
     measures.push(measure);
   });
 
-  // `count` is always available to `having` and `orderBy`, requested or not (Decision 5).
+  // `count` is always available to `having` and `orderBy`, requested or not.
   const referenceable = new Map(measureNames).set('count', 'count');
 
   const having = request.having
@@ -268,6 +306,10 @@ function planMeasure(
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateMeasure | undefined {
   const name = normalizeTraceAggregateMeasureName(raw);
+  if (isCostAttachment(name)) {
+    issues.push({ code: 'field_not_allowed', path, message: COST_ATTACHMENT_MESSAGE });
+    return undefined;
+  }
   const parsed = parseTraceAggregateMeasure(name);
   if (parsed?.type === 'canonical') return { type: 'canonical', name: parsed.measure };
   if (parsed?.type === 'countDistinct') {
@@ -319,7 +361,7 @@ function planHaving(
     state.issues.push({
       code: 'operator_not_allowed',
       path: [...path, 'op'],
-      message: 'Presence operators are not supported in having; measures are always present',
+      message: 'Presence operators are not supported in having',
     });
     return undefined;
   }
@@ -375,12 +417,13 @@ function resolveHavingMeasure(
   path: IssuePath,
   state: HavingState,
 ): TrustedTraceAggregateMeasureName | undefined {
-  const measure = state.measureNames.get(normalizeTraceAggregateMeasureName(raw));
+  const name = normalizeTraceAggregateMeasureName(raw);
+  const measure = state.measureNames.get(name);
   if (measure) return measure;
   state.issues.push({
     code: 'field_not_allowed',
     path,
-    message: 'having may only reference requested measures or count',
+    message: isCostAttachment(name) ? COST_ATTACHMENT_MESSAGE : 'having may only reference requested measures or count',
   });
   return undefined;
 }
@@ -399,9 +442,18 @@ function planOrderBy(
   issues.push({
     code: 'field_not_allowed',
     path: ['orderBy', 'field'],
-    message: 'orderBy must reference a requested measure, count, or a requested dimension',
+    message: isCostAttachment(field)
+      ? COST_ATTACHMENT_MESSAGE
+      : 'orderBy must reference a requested measure, count, or a requested dimension',
   });
   return undefined;
+}
+
+const COST_ATTACHMENT_MESSAGE =
+  'cost.coverage and costUnit are returned with any cost measure and cannot be requested, filtered, or ordered by';
+
+function isCostAttachment(name: string): boolean {
+  return (TRACE_AGGREGATE_COST_ATTACHMENTS as readonly string[]).includes(name);
 }
 
 function toFiniteNumber(value: TraceQueryLiteral): number | undefined {

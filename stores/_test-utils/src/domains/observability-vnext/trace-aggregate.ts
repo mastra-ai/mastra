@@ -2,7 +2,11 @@ import {
   compareTraceQueryStrings,
   parseTraceAggregateRequest,
   planTraceAggregate,
+  TRACE_AGGREGATE_COST_METRIC_NAMES,
   TRACE_AGGREGATE_INTERVAL_MS,
+  TRACE_AGGREGATE_MEASURE_REGISTRY,
+  TRACE_AGGREGATE_MIXED_COST_UNIT,
+  TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   traceAggregateRowSchema,
   type TraceAggregateCountDistinctField,
   type TraceAggregateRequest,
@@ -13,9 +17,11 @@ import {
   type TrustedTraceAggregateMeasureName,
   type TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
+import { TokenMetrics } from '@mastra/core/observability';
 
 import {
   makeTraceQuerySpan as span,
+  matchesScope,
   selectTraceQueryRoots,
   traceQueryDimensionValue,
   type RawTraceQuerySpan,
@@ -23,14 +29,97 @@ import {
 } from './trace-query';
 
 /**
- * In-memory reference evaluator for `TrustedTraceAggregatePlan` (Aggregate Query API Decision 5).
+ * In-memory reference evaluator for `TrustedTraceAggregatePlan`.
  *
  * Candidate traces come from `selectTraceQueryRoots`, so this evaluator aggregates exactly the
- * population `evaluateTraceQuery` paginates (Decision 2). Groups are distinct dimension tuples;
+ * population `evaluateTraceQuery` paginates. Groups are distinct dimension tuples;
  * `having`, `orderBy`, and `limit` act on whole-window group measures, and only the surviving
  * groups expand into bucket rows. The planner alone enforces bucket/row caps — nothing is
  * re-checked here.
+ *
+ * Token and cost measures read `metrics` rows: usage is first summed per
+ * candidate trace (`computeTraceUsage`), then per group. See the `TrustedTraceAggregatePlan`
+ * JSDoc in core for the contract this implements.
  */
+
+/** Storage-shaped subset of a `metric_events` row (`CreateMetricRecord`) that usage aggregation reads. */
+export interface RawTraceAggregateMetric {
+  metricId: string;
+  timestamp: string;
+  traceId: string | null;
+  spanId: string | null;
+  name: string;
+  value: number;
+  estimatedCost: number | null;
+  costUnit: string | null;
+  costMetadata: Record<string, unknown> | null;
+  provider: string | null;
+  model: string | null;
+  organizationId: string | null;
+  resourceId: string | null;
+}
+
+/** Trace-query fixture data plus the token metric rows correlated to its traces by `traceId`. */
+export type TraceAggregateFixtureData = TraceQueryFixtureData & { metrics?: RawTraceAggregateMetric[] };
+
+interface TraceUsage {
+  /** Sum of `value` per token metric name. */
+  tokens: Map<string, number>;
+  /** Sum of `estimatedCost` over priced total rows. */
+  cost: number;
+  /** Whether at least one total row is priced. */
+  priced: boolean;
+  /** `costUnit` of every priced row; a null unit is its own value. */
+  costUnits: Set<string | null>;
+}
+
+const usageMetricNames = new Set<string>(TRACE_AGGREGATE_USAGE_METRIC_NAMES);
+const costMetricNames = new Set<string>(TRACE_AGGREGATE_COST_METRIC_NAMES);
+
+/** A total row is unpriced when `costMetadata.error` is set (including `partial_cost`) or it has no cost. */
+function isPricedMetric(metric: RawTraceAggregateMetric): boolean {
+  if (!costMetricNames.has(metric.name) || metric.estimatedCost === null) return false;
+  const error = metric.costMetadata?.error;
+  return error === undefined || error === null;
+}
+
+/**
+ * Usage stage: every token metric row for a candidate trace counts — including spend before a
+ * suspend/resume and rows whose span was never persisted — deduplicated on `metricId`. Rows are
+ * pruned only by `timestamp >= from` (no upper bound) and the trusted tenant scope. Traces with no
+ * qualifying row are absent from the result, i.e. not usage-bearing.
+ */
+function computeTraceUsage(
+  metrics: RawTraceAggregateMetric[],
+  roots: RawTraceQuerySpan[],
+  plan: TrustedTraceAggregatePlan,
+): Map<string, TraceUsage> {
+  const candidates = new Set(roots.map(root => root.traceId));
+  const fromMs = Date.parse(plan.timeRange.from);
+  const seen = new Set<string>();
+  const usage = new Map<string, TraceUsage>();
+  for (const metric of metrics) {
+    if (metric.traceId === null || !candidates.has(metric.traceId)) continue;
+    if (!usageMetricNames.has(metric.name)) continue;
+    if (Date.parse(metric.timestamp) < fromMs) continue;
+    if (!matchesScope(metric, plan.scope)) continue;
+    if (seen.has(metric.metricId)) continue;
+    seen.add(metric.metricId);
+
+    let trace = usage.get(metric.traceId);
+    if (!trace) {
+      trace = { tokens: new Map(), cost: 0, priced: false, costUnits: new Set() };
+      usage.set(metric.traceId, trace);
+    }
+    trace.tokens.set(metric.name, (trace.tokens.get(metric.name) ?? 0) + metric.value);
+    if (isPricedMetric(metric)) {
+      trace.cost += metric.estimatedCost!;
+      trace.priced = true;
+      trace.costUnits.add(metric.costUnit);
+    }
+  }
+  return usage;
+}
 
 /** Linear interpolation between order statistics (`percentile_cont` / `quantile_cont` semantics). */
 export function traceAggregatePercentile(sortedValues: number[], p: number): number {
@@ -50,11 +139,25 @@ function durationMs(root: RawTraceQuerySpan): number {
   return Date.parse(root.endedAt!) - Date.parse(root.startedAt);
 }
 
-type MeasureValues = Map<TrustedTraceAggregateMeasureName, number>;
+type MeasureValue = number | string | null;
+type MeasureValues = Map<TrustedTraceAggregateMeasureName | 'cost.coverage' | 'costUnit', MeasureValue>;
 
-function computeMeasures(roots: RawTraceQuerySpan[], plan: TrustedTraceAggregatePlan): MeasureValues {
+function hasCostMeasure(plan: TrustedTraceAggregatePlan): boolean {
+  return plan.measures.some(measure => measure.type === 'canonical' && measure.name.startsWith('cost.'));
+}
+
+function computeMeasures(
+  roots: RawTraceQuerySpan[],
+  plan: TrustedTraceAggregatePlan,
+  usage: Map<string, TraceUsage>,
+): MeasureValues {
   const values: MeasureValues = new Map();
   const count = roots.length;
+  const usageBearing = roots.flatMap(root => usage.get(root.traceId!) ?? []);
+  const priced = usageBearing.filter(trace => trace.priced);
+  const costUnits = new Set(priced.flatMap(trace => [...trace.costUnits]));
+  const mixedUnits = costUnits.size > 1;
+  const costSum = priced.length === 0 || mixedUnits ? null : priced.reduce((sum, trace) => sum + trace.cost, 0);
   const errorCount = roots.filter(root => root.error !== null).length;
   let sortedDurations: number[] | undefined;
   const durations = () => (sortedDurations ??= roots.map(durationMs).sort((a, b) => a - b));
@@ -100,26 +203,62 @@ function computeMeasures(roots: RawTraceQuerySpan[], plan: TrustedTraceAggregate
       case 'duration.p99':
         values.set(measure.name, traceAggregatePercentile(durations(), 0.99));
         break;
+      case 'cost.sum':
+        values.set(measure.name, costSum);
+        break;
+      case 'cost.avg':
+        values.set(measure.name, costSum === null ? null : costSum / priced.length);
+        break;
+      default: {
+        const metricNames = TRACE_AGGREGATE_MEASURE_REGISTRY[measure.name].metricNames!;
+        if (usageBearing.length === 0) {
+          values.set(measure.name, null);
+          break;
+        }
+        let sum = 0;
+        for (const trace of usageBearing) {
+          for (const name of metricNames) sum += trace.tokens.get(name) ?? 0;
+        }
+        values.set(measure.name, measure.name.endsWith('.avg') ? sum / usageBearing.length : sum);
+      }
     }
+  }
+  if (hasCostMeasure(plan)) {
+    values.set('cost.coverage', usageBearing.length === 0 ? null : priced.length / usageBearing.length);
+    values.set(
+      'costUnit',
+      priced.length === 0 ? null : mixedUnits ? TRACE_AGGREGATE_MIXED_COST_UNIT : [...costUnits][0]!,
+    );
   }
   return values;
 }
 
-function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measures: MeasureValues): boolean {
+/**
+ * SQL three-valued `having`: `null` is UNKNOWN. A comparison or membership test against a null
+ * measure is UNKNOWN, `not` keeps UNKNOWN, `and` / `or` follow Kleene logic, and only TRUE keeps
+ * the group.
+ */
+function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measures: MeasureValues): boolean | null {
   switch (predicate.type) {
-    case 'boolean':
-      return predicate.operator === 'and'
-        ? predicate.args.every(arg => evaluateHaving(arg, measures))
-        : predicate.args.some(arg => evaluateHaving(arg, measures));
-    case 'not':
-      return !evaluateHaving(predicate.arg, measures);
+    case 'boolean': {
+      const results = predicate.args.map(arg => evaluateHaving(arg, measures));
+      const decisive = predicate.operator === 'and' ? false : true;
+      if (results.includes(decisive)) return decisive;
+      return results.includes(null) ? null : !decisive;
+    }
+    case 'not': {
+      const result = evaluateHaving(predicate.arg, measures);
+      return result === null ? null : !result;
+    }
     case 'membership': {
-      const value = measures.get(predicate.measure)!;
+      const value = measures.get(predicate.measure) as number | null;
+      if (value === null) return null;
       const member = predicate.values.includes(value);
       return predicate.operator === 'in' ? member : !member;
     }
     case 'comparison': {
-      const value = measures.get(predicate.measure)!;
+      const value = measures.get(predicate.measure) as number | null;
+      if (value === null) return null;
       switch (predicate.operator) {
         case 'eq':
           return value === predicate.value;
@@ -145,11 +284,7 @@ interface Group {
 }
 
 /** Nulls sort after every non-null value regardless of direction; only non-null pairs honor `direction`. */
-function compareNullable(
-  left: string | number | null,
-  right: string | number | null,
-  direction: 'asc' | 'desc',
-): number {
+function compareNullable(left: MeasureValue, right: MeasureValue, direction: 'asc' | 'desc'): number {
   if (left === null || right === null) {
     if (left === right) return 0;
     return left === null ? 1 : -1;
@@ -177,9 +312,12 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
 }
 
 function projectMeasures(measures: MeasureValues, plan: TrustedTraceAggregatePlan): TraceAggregateRow['measures'] {
-  return Object.fromEntries(
-    plan.measures.map(measure => [measure.name, measures.get(measure.name)!]),
-  ) as TraceAggregateRow['measures'];
+  const projected = Object.fromEntries(plan.measures.map(measure => [measure.name, measures.get(measure.name)!]));
+  if (hasCostMeasure(plan)) {
+    projected['cost.coverage'] = measures.get('cost.coverage')!;
+    projected.costUnit = measures.get('costUnit')!;
+  }
+  return projected as TraceAggregateRow['measures'];
 }
 
 function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggregateRow['dimensions'] {
@@ -191,10 +329,11 @@ function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggr
 }
 
 export function evaluateTraceAggregate(
-  data: TraceQueryFixtureData,
+  data: TraceAggregateFixtureData,
   plan: TrustedTraceAggregatePlan,
 ): TraceAggregateResponse {
   const roots = selectTraceQueryRoots(data, plan);
+  const usage = computeTraceUsage(data.metrics ?? [], roots, plan);
 
   const groupsByKey = new Map<string, Group>();
   for (const root of roots) {
@@ -209,9 +348,11 @@ export function evaluateTraceAggregate(
   }
 
   const groups = [...groupsByKey.values()];
-  for (const group of groups) group.measures = computeMeasures(group.roots, plan);
+  for (const group of groups) group.measures = computeMeasures(group.roots, plan, usage);
 
-  const surviving = plan.having ? groups.filter(group => evaluateHaving(plan.having!, group.measures)) : groups;
+  const surviving = plan.having
+    ? groups.filter(group => evaluateHaving(plan.having!, group.measures) === true)
+    : groups;
   surviving.sort((left, right) => compareGroups(left, right, plan));
 
   const truncated = surviving.length > plan.limit;
@@ -236,7 +377,7 @@ export function evaluateTraceAggregate(
       rows.push({
         ...(dimensions && { dimensions }),
         bucket: new Date(bucketMs).toISOString(),
-        measures: projectMeasures(computeMeasures(buckets.get(bucketMs)!, plan), plan),
+        measures: projectMeasures(computeMeasures(buckets.get(bucketMs)!, plan, usage), plan),
       });
     }
   }
@@ -245,7 +386,7 @@ export function evaluateTraceAggregate(
 }
 
 export function evaluateTraceAggregateRequest(
-  data: TraceQueryFixtureData,
+  data: TraceAggregateFixtureData,
   request: TraceAggregateRequest,
   scope?: TraceQueryTenantScope,
 ): TraceAggregateResponse {
@@ -568,7 +709,7 @@ export interface TraceAggregateExpectedResponse {
   rows: Array<{
     dimensions?: Record<string, string | null>;
     bucket?: string;
-    measures: Record<string, number>;
+    measures: Record<string, number | string | null>;
   }>;
   truncated: boolean;
 }
@@ -580,8 +721,9 @@ export interface TraceAggregateConformanceCase {
   expected: TraceAggregateExpectedResponse;
   /**
    * Absolute per-measure tolerance for store conformance. Percentile semantics are
-   * backend-native (Decision 3: `percentile_cont` on PostgreSQL, `quantile` on ClickHouse), so
-   * only `duration.p*` measures carry a tolerance; counts, sums, and rates stay exact.
+   * backend-native (`percentile_cont` on PostgreSQL, `quantile` on ClickHouse), so
+   * only `duration.p*` measures carry a tolerance; counts, sums (including tokens and cost),
+   * rates, and `cost.coverage` stay exact.
    */
   tolerance?: Record<string, number>;
 }
@@ -627,10 +769,12 @@ export function traceAggregateResponseMismatch(
     }
     for (const key of Object.keys(expectedRow.measures)) {
       const expectedValue = expectedRow.measures[key]!;
-      const actualValue = (actualRow.measures as Record<string, number>)[key]!;
+      const actualValue = (actualRow.measures as Record<string, number | string | null>)[key]!;
       const allowed = tolerance[key];
       const matches =
-        allowed === undefined ? actualValue === expectedValue : Math.abs(actualValue - expectedValue) <= allowed;
+        allowed !== undefined && typeof actualValue === 'number' && typeof expectedValue === 'number'
+          ? Math.abs(actualValue - expectedValue) <= allowed
+          : actualValue === expectedValue;
       if (!matches) {
         const within = allowed === undefined ? '' : ` (±${allowed})`;
         return `${at}.measures.${key}: expected ${expectedValue}${within}, got ${actualValue}`;
@@ -1011,5 +1155,621 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
       having: { op: 'gt', left: { path: 'count' }, right: { literal: 100 } },
     },
     expected: { rows: [], truncated: false },
+  },
+];
+
+// ---------------------------------------------------------------------------------------------
+// Token and cost fixture and conformance cases.
+//
+// Costs are binary-exact (multiples of 1/8) so every backend sums them without rounding, and
+// every average and coverage divides to an exact value. Expected responses are derived by hand
+// from the tables below.
+// ---------------------------------------------------------------------------------------------
+
+const tokenRange = { from: '2026-06-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+
+interface MetricCost {
+  estimatedCost: number | null;
+  costUnit?: string | null;
+  error?: string;
+}
+
+function tokenMetric(
+  metricId: string,
+  traceId: string,
+  spanId: string | null,
+  name: string,
+  value: number,
+  timestamp: string,
+  cost: MetricCost = { estimatedCost: null },
+  organizationId = 'org-a',
+): RawTraceAggregateMetric {
+  return {
+    metricId,
+    timestamp,
+    traceId,
+    spanId,
+    name,
+    value,
+    estimatedCost: cost.estimatedCost,
+    costUnit: cost.estimatedCost === null && cost.costUnit === undefined ? null : (cost.costUnit ?? 'usd'),
+    costMetadata: cost.error ? { error: cost.error } : null,
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    organizationId,
+    resourceId: null,
+  };
+}
+
+const usd = (estimatedCost: number): MetricCost => ({ estimatedCost, costUnit: 'usd' });
+const eur = (estimatedCost: number): MetricCost => ({ estimatedCost, costUnit: 'eur' });
+const after = (startedAt: string, seconds: number) => new Date(Date.parse(startedAt) + seconds * 1000).toISOString();
+
+const {
+  TOTAL_INPUT: INPUT,
+  TOTAL_OUTPUT: OUTPUT,
+  OUTPUT_REASONING: REASONING,
+  INPUT_CACHE_READ: CACHED,
+  INPUT_TEXT,
+} = TokenMetrics;
+
+/**
+ * Token usage in the window `[2026-06-01, 2026-09-01)`; every root is `production` /
+ * `org-a`. `in` / `out` are the `TOTAL_INPUT` / `TOTAL_OUTPUT` sums per trace; cost is the sum of
+ * priced total rows only.
+ *
+ * | trace     | entity    | day   | in   | out | rsn | cache | cost      | priced | notes                                       |
+ * |-----------|-----------|-------|------|-----|-----|-------|-----------|--------|---------------------------------------------|
+ * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes    | pre-`from` row (999 in, 9 usd) pruned       |
+ * | sup-1     | support   | 08-14 | 1000 | 200 | 50  | 400   | 0.75 usd  | yes    | costed detail rows ignored; dup `metricId`  |
+ * | sup-2     | support   | 08-14 | 2000 | 400 |     |       | 1 usd     | yes    | cost on the input row only (`query_total`)  |
+ * | sup-3     | support   | 08-15 | 500  | 100 |     |       | —         | no     | both rows `no_matching_model`               |
+ * | sup-4     | support   | 08-31 | 3000 | 600 |     |       | 2 usd     | yes    | ends and emits metrics after `to`           |
+ * | res-1     | research  | 08-14 | 800  | 100 |     |       | 0.75 usd  | yes    |                                             |
+ * | res-2     | research  | 08-15 | 1200 | 300 |     |       | 1.5 eur   | yes    | second unit → group is `mixed`              |
+ * | bil-1     | billing   | 08-20 | 1000 | 120 |     |       | —         | no     | `partial_cost` row with 0.75; null-cost row |
+ * | bil-2     | billing   | 08-20 | 600  | 80  |     |       | 0.25 usd  | yes    | error-tagged output row with 0.125 ignored  |
+ * | sch-1     | scheduler | 08-21 |      |     |     |       |           |        | no metric rows (retention skew)             |
+ * | sch-2     | scheduler | 08-22 |      |     |     |       |           |        | no metric rows (retention skew)             |
+ * | resume-1  | planner   | 08-26 | 1000 | 300 |     |       | 1.25 usd  | yes    | resumed: two roots, spend from both         |
+ *
+ * `resume-1` has an older root (`entityName: 'planner-suspended'`, 08-25) carrying 400 in / 100
+ * out / 0.5 usd, and the current root (`planner`, 08-26, `metadata.resumedFromSpanId`) whose
+ * 600 in / 200 out / 0.75 usd rows reference a model span that was never persisted. The trace
+ * counts once, groups as `planner`, buckets on 08-26, and sums usage from both attempts.
+ *
+ * Whole-window groups by `entityName` (usage-bearing / priced → coverage):
+ * support 4 traces, in 6500, out 1300, cost 3.75 usd (4 / 3 → 0.75); planner 1, in 1000, out
+ * 300, cost 1.25 usd (1 / 1); triage 1, in 100, out 20, cost 0.25 usd (1 / 1); billing 2, in
+ * 1600, out 200, cost 0.25 usd (2 / 1 → 0.5); research 2, in 2000, out 400, cost null `mixed`
+ * (2 / 2); scheduler 2, no usage (tokens, cost, coverage, unit all null).
+ *
+ * Outside that window: `tenant-check` (`org-a`, 09-10) has 100 in / 10 out / 0.25 usd of
+ * `org-a` rows plus an `org-b` row sharing its `traceId` (7000 in, 2 usd), which only an
+ * unscoped plan counts.
+ */
+export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
+  spans: [
+    ...aggregateRoot({
+      cursorId: 1000,
+      traceId: 'early-1',
+      entityName: 'triage',
+      startedAt: '2026-06-01T00:00:10.000Z',
+      durationMs: 2000,
+      threadId: 't-20',
+    }),
+    ...aggregateRoot({
+      cursorId: 1010,
+      traceId: 'sup-1',
+      entityName: 'support',
+      startedAt: '2026-08-14T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-21',
+    }),
+    ...aggregateRoot({
+      cursorId: 1020,
+      traceId: 'sup-2',
+      entityName: 'support',
+      startedAt: '2026-08-14T11:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-21',
+    }),
+    ...aggregateRoot({
+      cursorId: 1030,
+      traceId: 'sup-3',
+      entityName: 'support',
+      startedAt: '2026-08-15T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-22',
+    }),
+    ...aggregateRoot({
+      cursorId: 1040,
+      traceId: 'sup-4',
+      entityName: 'support',
+      startedAt: '2026-08-31T23:59:00.000Z',
+      durationMs: 120_000,
+      threadId: 't-22',
+    }),
+    ...aggregateRoot({
+      cursorId: 1050,
+      traceId: 'res-1',
+      entityName: 'research',
+      startedAt: '2026-08-14T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-23',
+    }),
+    ...aggregateRoot({
+      cursorId: 1060,
+      traceId: 'res-2',
+      entityName: 'research',
+      startedAt: '2026-08-15T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-23',
+    }),
+    ...aggregateRoot({
+      cursorId: 1070,
+      traceId: 'bil-1',
+      entityName: 'billing',
+      startedAt: '2026-08-20T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-24',
+    }),
+    ...aggregateRoot({
+      cursorId: 1080,
+      traceId: 'bil-2',
+      entityName: 'billing',
+      startedAt: '2026-08-20T11:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-24',
+    }),
+    ...aggregateRoot({
+      cursorId: 1090,
+      traceId: 'sch-1',
+      entityName: 'scheduler',
+      startedAt: '2026-08-21T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-25',
+    }),
+    ...aggregateRoot({
+      cursorId: 1100,
+      traceId: 'sch-2',
+      entityName: 'scheduler',
+      startedAt: '2026-08-22T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-25',
+    }),
+    span(1110, 'resume-1', 'resume-1-a', {
+      entityName: 'planner-suspended',
+      organizationId: 'org-a',
+      threadId: 't-26',
+      startedAt: '2026-08-25T10:00:00.000Z',
+      endedAt: '2026-08-25T10:01:00.000Z',
+    }),
+    span(1120, 'resume-1', 'resume-1-b', {
+      entityName: 'planner',
+      organizationId: 'org-a',
+      threadId: 't-26',
+      metadata: { resumedFromSpanId: 'resume-1-a' },
+      startedAt: '2026-08-26T09:00:00.000Z',
+      endedAt: '2026-08-26T09:02:00.000Z',
+    }),
+    ...aggregateRoot({
+      cursorId: 1130,
+      traceId: 'tenant-check',
+      entityName: 'tenant-check',
+      startedAt: '2026-09-10T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 't-27',
+    }),
+  ],
+  scores: [],
+  feedback: [],
+  metrics: [
+    tokenMetric('early-1-pre', 'early-1', 'early-1', INPUT, 999, '2026-05-31T23:59:59.000Z', usd(9)),
+    tokenMetric('early-1-in', 'early-1', 'early-1', INPUT, 100, '2026-06-01T00:00:11.000Z', usd(0.125)),
+    tokenMetric('early-1-out', 'early-1', 'early-1', OUTPUT, 20, '2026-06-01T00:00:11.000Z', usd(0.125)),
+
+    tokenMetric('sup-1-in', 'sup-1', 'sup-1', INPUT, 1000, after('2026-08-14T10:00:00.000Z', 1), usd(0.25)),
+    tokenMetric('sup-1-in', 'sup-1', 'sup-1', INPUT, 1000, after('2026-08-14T10:00:00.000Z', 1), usd(0.25)),
+    tokenMetric('sup-1-out', 'sup-1', 'sup-1', OUTPUT, 200, after('2026-08-14T10:00:00.000Z', 1), usd(0.5)),
+    tokenMetric('sup-1-text', 'sup-1', 'sup-1', INPUT_TEXT, 600, after('2026-08-14T10:00:00.000Z', 1), usd(0.125)),
+    tokenMetric('sup-1-cache', 'sup-1', 'sup-1', CACHED, 400, after('2026-08-14T10:00:00.000Z', 1), usd(0.125)),
+    tokenMetric('sup-1-rsn', 'sup-1', 'sup-1', REASONING, 50, after('2026-08-14T10:00:00.000Z', 1), usd(0.125)),
+
+    tokenMetric('sup-2-in', 'sup-2', 'sup-2', INPUT, 2000, after('2026-08-14T11:00:00.000Z', 1), usd(1)),
+    tokenMetric('sup-2-out', 'sup-2', 'sup-2', OUTPUT, 400, after('2026-08-14T11:00:00.000Z', 1)),
+
+    tokenMetric('sup-3-in', 'sup-3', 'sup-3', INPUT, 500, after('2026-08-15T10:00:00.000Z', 1), {
+      estimatedCost: null,
+      error: 'no_matching_model',
+    }),
+    tokenMetric('sup-3-out', 'sup-3', 'sup-3', OUTPUT, 100, after('2026-08-15T10:00:00.000Z', 1), {
+      estimatedCost: null,
+      error: 'no_matching_model',
+    }),
+
+    tokenMetric('sup-4-in', 'sup-4', 'sup-4', INPUT, 3000, '2026-09-01T00:00:30.000Z', usd(1.5)),
+    tokenMetric('sup-4-out', 'sup-4', 'sup-4', OUTPUT, 600, '2026-09-01T00:00:30.000Z', usd(0.5)),
+
+    tokenMetric('res-1-in', 'res-1', 'res-1', INPUT, 800, after('2026-08-14T10:00:00.000Z', 1), usd(0.5)),
+    tokenMetric('res-1-out', 'res-1', 'res-1', OUTPUT, 100, after('2026-08-14T10:00:00.000Z', 1), usd(0.25)),
+    tokenMetric('res-2-in', 'res-2', 'res-2', INPUT, 1200, after('2026-08-15T10:00:00.000Z', 1), eur(1)),
+    tokenMetric('res-2-out', 'res-2', 'res-2', OUTPUT, 300, after('2026-08-15T10:00:00.000Z', 1), eur(0.5)),
+
+    tokenMetric('bil-1-in', 'bil-1', 'bil-1', INPUT, 1000, after('2026-08-20T10:00:00.000Z', 1), {
+      estimatedCost: 0.75,
+      costUnit: 'usd',
+      error: 'partial_cost',
+    }),
+    tokenMetric('bil-1-out', 'bil-1', 'bil-1', OUTPUT, 120, after('2026-08-20T10:00:00.000Z', 1)),
+    tokenMetric('bil-2-in', 'bil-2', 'bil-2', INPUT, 600, after('2026-08-20T11:00:00.000Z', 1), usd(0.25)),
+    tokenMetric('bil-2-out', 'bil-2', 'bil-2', OUTPUT, 80, after('2026-08-20T11:00:00.000Z', 1), {
+      estimatedCost: 0.125,
+      costUnit: 'usd',
+      error: 'no_pricing_for_usage_type',
+    }),
+
+    tokenMetric('resume-1-pre-in', 'resume-1', 'resume-1-a', INPUT, 400, '2026-08-25T10:00:30.000Z', usd(0.25)),
+    tokenMetric('resume-1-pre-out', 'resume-1', 'resume-1-a', OUTPUT, 100, '2026-08-25T10:00:30.000Z', usd(0.25)),
+    tokenMetric('resume-1-post-in', 'resume-1', 'resume-1-b-model', INPUT, 600, '2026-08-26T09:01:00.000Z', usd(0.5)),
+    tokenMetric(
+      'resume-1-post-out',
+      'resume-1',
+      'resume-1-b-model',
+      OUTPUT,
+      200,
+      '2026-08-26T09:01:00.000Z',
+      usd(0.25),
+    ),
+
+    tokenMetric('tenant-in', 'tenant-check', 'tenant-check', INPUT, 100, '2026-09-10T10:00:01.000Z', usd(0.125)),
+    tokenMetric('tenant-out', 'tenant-check', 'tenant-check', OUTPUT, 10, '2026-09-10T10:00:01.000Z', usd(0.125)),
+    tokenMetric(
+      'tenant-foreign-in',
+      'tenant-check',
+      'tenant-check',
+      INPUT,
+      7000,
+      '2026-09-10T10:00:01.000Z',
+      usd(2),
+      'org-b',
+    ),
+  ],
+};
+
+const supportDims = { entityName: 'support' };
+const plannerDims = { entityName: 'planner' };
+const triageDims = { entityName: 'triage' };
+const billingDims = { entityName: 'billing' };
+const researchDims = { entityName: 'research' };
+const schedulerDims = { entityName: 'scheduler' };
+
+const augDay = (d: number) => `2026-08-${String(d).padStart(2, '0')}T00:00:00.000Z`;
+
+const noUsage = { 'cost.sum': null, 'cost.coverage': null, costUnit: null };
+
+export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'example 4: daily token spend and cost per agent, most expensive first',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum'],
+      orderBy: { field: 'cost.sum', direction: 'desc' },
+      limit: 20,
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: supportDims,
+          bucket: augDay(14),
+          measures: {
+            count: 2,
+            'tokens.input.sum': 3000,
+            'tokens.output.sum': 600,
+            'cost.sum': 1.75,
+            'cost.coverage': 1,
+            costUnit: 'usd',
+          },
+        },
+        {
+          dimensions: supportDims,
+          bucket: augDay(15),
+          measures: {
+            count: 1,
+            'tokens.input.sum': 500,
+            'tokens.output.sum': 100,
+            'cost.sum': null,
+            'cost.coverage': 0,
+            costUnit: null,
+          },
+        },
+        {
+          dimensions: supportDims,
+          bucket: augDay(31),
+          measures: {
+            count: 1,
+            'tokens.input.sum': 3000,
+            'tokens.output.sum': 600,
+            'cost.sum': 2,
+            'cost.coverage': 1,
+            costUnit: 'usd',
+          },
+        },
+        {
+          dimensions: plannerDims,
+          bucket: augDay(26),
+          measures: {
+            count: 1,
+            'tokens.input.sum': 1000,
+            'tokens.output.sum': 300,
+            'cost.sum': 1.25,
+            'cost.coverage': 1,
+            costUnit: 'usd',
+          },
+        },
+        // billing and triage tie on 0.25 and break on entityName ascending.
+        {
+          dimensions: billingDims,
+          bucket: augDay(20),
+          measures: {
+            count: 2,
+            'tokens.input.sum': 1600,
+            'tokens.output.sum': 200,
+            'cost.sum': 0.25,
+            'cost.coverage': 0.5,
+            costUnit: 'usd',
+          },
+        },
+        {
+          dimensions: triageDims,
+          bucket: '2026-06-01T00:00:00.000Z',
+          measures: {
+            count: 1,
+            'tokens.input.sum': 100,
+            'tokens.output.sum': 20,
+            'cost.sum': 0.25,
+            'cost.coverage': 1,
+            costUnit: 'usd',
+          },
+        },
+        // research is `mixed` over the whole window, so its null cost sorts last; each bucket has
+        // a single unit and is priced.
+        {
+          dimensions: researchDims,
+          bucket: augDay(14),
+          measures: {
+            count: 1,
+            'tokens.input.sum': 800,
+            'tokens.output.sum': 100,
+            'cost.sum': 0.75,
+            'cost.coverage': 1,
+            costUnit: 'usd',
+          },
+        },
+        {
+          dimensions: researchDims,
+          bucket: augDay(15),
+          measures: {
+            count: 1,
+            'tokens.input.sum': 1200,
+            'tokens.output.sum': 300,
+            'cost.sum': 1.5,
+            'cost.coverage': 1,
+            costUnit: 'eur',
+          },
+        },
+        {
+          dimensions: schedulerDims,
+          bucket: augDay(21),
+          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, ...noUsage },
+        },
+        {
+          dimensions: schedulerDims,
+          bucket: augDay(22),
+          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, ...noUsage },
+        },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'whole-window cost per agent: mixed units return null cost with costUnit mixed',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      measures: ['cost.sum', 'cost.avg'],
+      orderBy: { field: 'cost.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: supportDims,
+          measures: { 'cost.sum': 3.75, 'cost.avg': 1.25, 'cost.coverage': 0.75, costUnit: 'usd' },
+        },
+        {
+          dimensions: plannerDims,
+          measures: { 'cost.sum': 1.25, 'cost.avg': 1.25, 'cost.coverage': 1, costUnit: 'usd' },
+        },
+        {
+          dimensions: billingDims,
+          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25, 'cost.coverage': 0.5, costUnit: 'usd' },
+        },
+        {
+          dimensions: triageDims,
+          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25, 'cost.coverage': 1, costUnit: 'usd' },
+        },
+        {
+          dimensions: researchDims,
+          measures: { 'cost.sum': null, 'cost.avg': null, 'cost.coverage': 1, costUnit: 'mixed' },
+        },
+        { dimensions: schedulerDims, measures: { 'cost.avg': null, ...noUsage } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'ungrouped: every token and cost measure averages over usage-bearing traces only',
+    request: {
+      timeRange: tokenRange,
+      where: { op: 'in', value: { path: 'entityName' }, set: ['support', 'scheduler', 'planner'] },
+      measures: [
+        'count',
+        'tokens.input.sum',
+        'tokens.input.avg',
+        'tokens.output.sum',
+        'tokens.output.avg',
+        'tokens.total.sum',
+        'tokens.total.avg',
+        'tokens.reasoning.sum',
+        'tokens.reasoning.avg',
+        'tokens.cached.sum',
+        'tokens.cached.avg',
+        'cost.sum',
+        'cost.avg',
+      ],
+    },
+    expected: {
+      rows: [
+        {
+          // 7 traces; 5 usage-bearing (not sch-1/2); 4 priced (not sup-3).
+          measures: {
+            count: 7,
+            'tokens.input.sum': 7500,
+            'tokens.input.avg': 1500,
+            'tokens.output.sum': 1600,
+            'tokens.output.avg': 320,
+            'tokens.total.sum': 9100,
+            'tokens.total.avg': 1820,
+            'tokens.reasoning.sum': 50,
+            'tokens.reasoning.avg': 10,
+            'tokens.cached.sum': 400,
+            'tokens.cached.avg': 80,
+            'cost.sum': 5,
+            'cost.avg': 1.25,
+            'cost.coverage': 0.8,
+            costUnit: 'usd',
+          },
+        },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'ungrouped over the whole window: one eur trace makes the population mixed',
+    request: { timeRange: tokenRange, measures: ['count', 'tokens.total.sum', 'cost.sum'] },
+    expected: {
+      rows: [
+        {
+          // 12 traces; 10 usage-bearing; 8 priced (not sup-3, bil-1).
+          measures: { count: 12, 'tokens.total.sum': 13420, 'cost.sum': null, 'cost.coverage': 0.8, costUnit: 'mixed' },
+        },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'having and orderBy on tokens.total.sum drop the group with no usage',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      measures: ['tokens.total.sum'],
+      having: { op: 'gte', left: { path: 'tokens.total.sum' }, right: { literal: 1000 } },
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: supportDims, measures: { 'tokens.total.sum': 7800 } },
+        { dimensions: researchDims, measures: { 'tokens.total.sum': 2400 } },
+        { dimensions: billingDims, measures: { 'tokens.total.sum': 1800 } },
+        { dimensions: plannerDims, measures: { 'tokens.total.sum': 1300 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'having on cost.sum removes null-cost groups',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      measures: ['cost.sum'],
+      having: { op: 'gt', left: { path: 'cost.sum' }, right: { literal: 0.5 } },
+    },
+    expected: {
+      rows: [
+        { dimensions: supportDims, measures: { 'cost.sum': 3.75, 'cost.coverage': 0.75, costUnit: 'usd' } },
+        { dimensions: plannerDims, measures: { 'cost.sum': 1.25, 'cost.coverage': 1, costUnit: 'usd' } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'not() over a null cost is unknown, so null-cost groups are still removed',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      measures: ['cost.sum'],
+      having: { op: 'not', arg: { op: 'lte', left: { path: 'cost.sum' }, right: { literal: 0.5 } } },
+    },
+    expected: {
+      rows: [
+        { dimensions: supportDims, measures: { 'cost.sum': 3.75, 'cost.coverage': 0.75, costUnit: 'usd' } },
+        { dimensions: plannerDims, measures: { 'cost.sum': 1.25, 'cost.coverage': 1, costUnit: 'usd' } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'orderBy tokens.input.avg asc sorts the group with no usage last',
+    request: {
+      timeRange: tokenRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'tokens.input.avg'],
+      orderBy: { field: 'tokens.input.avg', direction: 'asc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: triageDims, measures: { count: 1, 'tokens.input.avg': 100 } },
+        { dimensions: billingDims, measures: { count: 2, 'tokens.input.avg': 800 } },
+        // planner and research tie on 1000 and break on entityName ascending.
+        { dimensions: plannerDims, measures: { count: 1, 'tokens.input.avg': 1000 } },
+        { dimensions: researchDims, measures: { count: 2, 'tokens.input.avg': 1000 } },
+        { dimensions: supportDims, measures: { count: 4, 'tokens.input.avg': 1625 } },
+        { dimensions: schedulerDims, measures: { count: 2, 'tokens.input.avg': null } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'an empty population returns no rows for token and cost measures',
+    request: {
+      timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-02-01T00:00:00Z' },
+      measures: ['tokens.total.sum', 'cost.sum'],
+    },
+    expected: { rows: [], truncated: false },
+  },
+  {
+    name: 'unscoped: metric rows from another tenant sharing the traceId count',
+    request: {
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+      measures: ['tokens.input.sum', 'cost.sum'],
+    },
+    expected: {
+      rows: [{ measures: { 'tokens.input.sum': 7100, 'cost.sum': 2.25, 'cost.coverage': 1, costUnit: 'usd' } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'scoped: metric rows from another tenant sharing the traceId are excluded',
+    request: {
+      timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-10-01T00:00:00Z' },
+      measures: ['tokens.input.sum', 'cost.sum'],
+    },
+    scope: { organizationId: 'org-a' },
+    expected: {
+      rows: [{ measures: { 'tokens.input.sum': 100, 'cost.sum': 0.25, 'cost.coverage': 1, costUnit: 'usd' } }],
+      truncated: false,
+    },
   },
 ];

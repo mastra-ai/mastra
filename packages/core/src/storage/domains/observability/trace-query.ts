@@ -1353,7 +1353,7 @@ function planThreadPredicate(
  * problems to `issues`.
  *
  * @internal Shared with the trace-aggregate planner so both apply identical selection
- * validation (Aggregate Query API Decision 2).
+ * validation.
  */
 export function planTraceQuerySelectionPredicate(
   where: TraceQueryPredicate,

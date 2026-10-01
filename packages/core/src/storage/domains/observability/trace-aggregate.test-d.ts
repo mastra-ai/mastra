@@ -1,5 +1,10 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { TRACE_AGGREGATE_FIXED_MEASURES, TraceAggregateMeasure, TraceAggregateRow } from './trace-aggregate';
+import type {
+  TRACE_AGGREGATE_FIXED_MEASURES,
+  TraceAggregateCostAttachment,
+  TraceAggregateMeasure,
+  TraceAggregateRow,
+} from './trace-aggregate';
 
 type FixedMeasure = (typeof TRACE_AGGREGATE_FIXED_MEASURES)[number];
 
@@ -13,10 +18,16 @@ describe('TraceAggregateMeasure type', () => {
     expectTypeOf<TraceAggregateMeasure>().toEqualTypeOf<FixedMeasure | `countDistinct.${string}`>();
     expectTypeOf<TraceAggregateMeasure>().not.toEqualTypeOf<string>();
     expectTypeOf<'countDistinct.threadId'>().toMatchTypeOf<TraceAggregateMeasure>();
-    expectTypeOf<'cost.sum'>().not.toMatchTypeOf<TraceAggregateMeasure>();
+    expectTypeOf<'cost.sum'>().toMatchTypeOf<TraceAggregateMeasure>();
+    expectTypeOf<'tokens.total.avg'>().toMatchTypeOf<TraceAggregateMeasure>();
+    expectTypeOf<'cost.coverage'>().not.toMatchTypeOf<TraceAggregateMeasure>();
+    expectTypeOf<'costUnit'>().not.toMatchTypeOf<TraceAggregateMeasure>();
   });
 
-  it('keys response measures by measure name', () => {
-    expectTypeOf<keyof TraceAggregateRow['measures']>().toEqualTypeOf<TraceAggregateMeasure>();
+  it('keys response measures by measure name or cost attachment', () => {
+    expectTypeOf<keyof TraceAggregateRow['measures']>().toEqualTypeOf<
+      TraceAggregateMeasure | TraceAggregateCostAttachment
+    >();
+    expectTypeOf<TraceAggregateRow['measures']['cost.sum']>().toEqualTypeOf<number | string | null>();
   });
 });

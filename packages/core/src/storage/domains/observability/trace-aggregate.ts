@@ -34,7 +34,26 @@ export const TRACE_AGGREGATE_FIXED_MEASURES = [
   'duration.p99',
   'errorCount',
   'errorRate',
+  'tokens.input.sum',
+  'tokens.input.avg',
+  'tokens.output.sum',
+  'tokens.output.avg',
+  'tokens.total.sum',
+  'tokens.total.avg',
+  'tokens.reasoning.sum',
+  'tokens.reasoning.avg',
+  'tokens.cached.sum',
+  'tokens.cached.avg',
+  'cost.sum',
+  'cost.avg',
 ] as const;
+/**
+ * Keys added to `measures` whenever any `cost.*` measure is requested. They are
+ * response-only: they cannot be requested, used in `having`, or used as an `orderBy` field.
+ */
+export const TRACE_AGGREGATE_COST_ATTACHMENTS = ['cost.coverage', 'costUnit'] as const;
+/** `costUnit` value for a group whose priced rows use more than one cost unit. */
+export const TRACE_AGGREGATE_MIXED_COST_UNIT = 'mixed';
 export const TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX = 'countDistinct.';
 
 const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
@@ -121,11 +140,28 @@ export const traceAggregateRequestSchema = z.preprocess((input, context) => {
   return input;
 }, traceAggregateRequestObjectSchema);
 
+const traceAggregateRowMeasureKeySchema = z.union([
+  traceAggregateMeasureSchema,
+  z.enum(TRACE_AGGREGATE_COST_ATTACHMENTS),
+]);
+
+// Measures are numbers, or null when the group has no data for them (tokens with no
+// usage-bearing traces, cost with no priced traces or mixed units). `costUnit` is the only
+// string-valued key.
+const traceAggregateRowMeasuresSchema = z
+  .record(traceAggregateRowMeasureKeySchema, z.union([z.number(), z.string(), z.null()]))
+  .superRefine((measures, context) => {
+    for (const [key, value] of Object.entries(measures)) {
+      const valid = key === 'costUnit' ? value === null || typeof value === 'string' : typeof value !== 'string';
+      if (!valid) context.addIssue({ code: 'custom', path: [key], message: 'Invalid measure value' });
+    }
+  });
+
 export const traceAggregateRowSchema = z
   .object({
     dimensions: z.record(z.string(), z.string().nullable()).optional(),
     bucket: z.string().datetime({ offset: true }).optional(),
-    measures: z.record(traceAggregateMeasureSchema, z.number()),
+    measures: traceAggregateRowMeasuresSchema,
   })
   .strict();
 
@@ -138,6 +174,7 @@ export const traceAggregateResponseSchema = z
 
 export type TraceAggregateInterval = z.infer<typeof traceAggregateIntervalSchema>;
 export type TraceAggregateMeasure = z.infer<typeof traceAggregateMeasureSchema>;
+export type TraceAggregateCostAttachment = (typeof TRACE_AGGREGATE_COST_ATTACHMENTS)[number];
 export type TraceAggregateRequest = z.input<typeof traceAggregateRequestObjectSchema>;
 export type NormalizedTraceAggregateRequest = z.output<typeof traceAggregateRequestObjectSchema>;
 export type TraceAggregateRow = z.infer<typeof traceAggregateRowSchema>;
