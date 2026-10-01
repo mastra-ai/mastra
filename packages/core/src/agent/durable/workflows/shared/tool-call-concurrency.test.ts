@@ -202,7 +202,7 @@ describe('resolveDurableToolCallConcurrency', () => {
       ).toBe(1);
     });
 
-    it('ignores stamps on sibling calls the model did not make', () => {
+    it('keeps the configured limit when no called tool is stamped', () => {
       expect(
         resolveDurableToolCallConcurrency({
           options: { toolCallConcurrency: { limit: 4, strategy: 'called' } },
