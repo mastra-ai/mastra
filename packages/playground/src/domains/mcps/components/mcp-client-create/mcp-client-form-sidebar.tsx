@@ -75,18 +75,17 @@ export function MCPClientFormSidebar({
         <div className="flex flex-col gap-4 p-4">
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
-          <Field invalid={Boolean(errors.name)}>
+          <Field invalid={Boolean(errors.name)} disabled={readOnly}>
             <FieldLabel required>Name</FieldLabel>
-            <Input placeholder="My MCP Client" className={SOLID_FIELD} disabled={readOnly} {...register('name')} />
+            <Input placeholder="My MCP Client" className={SOLID_FIELD} {...register('name')} />
             <FieldError>{errors.name?.message}</FieldError>
           </Field>
 
-          <Field>
+          <Field disabled={readOnly}>
             <FieldLabel>Description</FieldLabel>
             <Textarea
               placeholder="Describe what this MCP client connects to"
               className={SOLID_FIELD}
-              disabled={readOnly}
               {...register('description')}
             />
           </Field>
@@ -112,19 +111,19 @@ export function MCPClientFormSidebar({
 
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
-          <Field invalid={Boolean(errors.serverName)}>
+          <Field invalid={Boolean(errors.serverName)} disabled={readOnly}>
             <FieldLabel required>Server Name</FieldLabel>
-            <Input placeholder="default" className={SOLID_FIELD} disabled={readOnly} {...register('serverName')} />
+            <Input placeholder="default" className={SOLID_FIELD} {...register('serverName')} />
             <FieldError>{errors.serverName?.message}</FieldError>
           </Field>
 
-          <Field>
+          <Field disabled={readOnly}>
             <FieldLabel>Server Type</FieldLabel>
             <Controller
               name="serverType"
               control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
+                <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger className="bg-card">
                     <SelectValue />
                   </SelectTrigger>
@@ -139,24 +138,22 @@ export function MCPClientFormSidebar({
 
           {serverType === 'http' && (
             <>
-              <Field invalid={Boolean(errors.url)}>
+              <Field invalid={Boolean(errors.url)} disabled={readOnly}>
                 <FieldLabel required>URL</FieldLabel>
                 <Input
                   placeholder="http://localhost:4111/api/mcp/server/mcp"
                   className={SOLID_FIELD}
-                  disabled={readOnly}
                   {...register('url')}
                 />
                 <FieldError>{errors.url?.message}</FieldError>
               </Field>
 
-              <Field>
+              <Field disabled={readOnly}>
                 <FieldLabel>Timeout (ms)</FieldLabel>
                 <Input
                   type="number"
                   placeholder="30000"
                   className={SOLID_FIELD}
-                  disabled={readOnly}
                   {...register('timeout', { valueAsNumber: true })}
                 />
               </Field>
@@ -165,23 +162,22 @@ export function MCPClientFormSidebar({
 
           {serverType === 'stdio' && (
             <>
-              <Field invalid={Boolean(errors.command)}>
+              <Field invalid={Boolean(errors.command)} disabled={readOnly}>
                 <FieldLabel required>Command</FieldLabel>
-                <Input placeholder="npx" className={SOLID_FIELD} disabled={readOnly} {...register('command')} />
+                <Input placeholder="npx" className={SOLID_FIELD} {...register('command')} />
                 <FieldError>{errors.command?.message}</FieldError>
               </Field>
 
-              <Field>
+              <Field disabled={readOnly}>
                 <FieldLabel>Arguments (one per line)</FieldLabel>
                 <Textarea
                   placeholder={'-y\n@modelcontextprotocol/server'}
                   className={SOLID_FIELD}
-                  disabled={readOnly}
                   {...register('args')}
                 />
               </Field>
 
-              <Fieldset className="gap-1.5">
+              <Fieldset disabled={readOnly} className="gap-1.5">
                 <FieldsetLegend>Environment Variables</FieldsetLegend>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (

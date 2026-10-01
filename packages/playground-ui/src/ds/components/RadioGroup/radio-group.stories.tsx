@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
-import { FieldContent, FieldDescription, FieldItem, FieldLabel } from '../Field';
+import { FieldContent, FieldDescription, FieldItem, FieldLabel, Fieldset } from '../Field';
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
@@ -101,7 +101,7 @@ export const Default: Story = {
 
 export const Disabled: Story = {
   render: () => (
-    <RadioGroup defaultValue="option-1" disabled>
+    <Fieldset disabled render={<RadioGroup defaultValue="option-1" />}>
       <FieldItem>
         <RadioGroupItem value="option-1" />
         <FieldLabel>Option 1</FieldLabel>
@@ -110,7 +110,7 @@ export const Disabled: Story = {
         <RadioGroupItem value="option-2" />
         <FieldLabel>Option 2</FieldLabel>
       </FieldItem>
-    </RadioGroup>
+    </Fieldset>
   ),
 };
 

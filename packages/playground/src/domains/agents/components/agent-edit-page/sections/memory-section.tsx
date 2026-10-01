@@ -53,12 +53,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
               name="memory.enabled"
               control={control}
               render={({ field }) => (
-                <Field orientation="horizontal">
+                <Field orientation="horizontal" disabled={readOnly}>
                   <FieldContent className="gap-0.5">
                     <FieldLabel>Enable Memory</FieldLabel>
                     <FieldDescription className="mt-0">Store and retrieve conversation history</FieldDescription>
                   </FieldContent>
-                  <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+                  <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                 </Field>
               )}
             />
@@ -95,12 +95,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.semanticRecall"
                   control={control}
                   render={({ field }) => (
-                    <Field orientation="horizontal">
+                    <Field orientation="horizontal" disabled={readOnly}>
                       <FieldContent className="gap-0.5">
                         <FieldLabel>Semantic Recall</FieldLabel>
                         <FieldDescription className="mt-0">Enable semantic search in memory</FieldDescription>
                       </FieldContent>
-                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                     </Field>
                   )}
                 />
@@ -163,14 +163,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.readOnly"
                   control={control}
                   render={({ field }) => (
-                    <Field orientation="horizontal">
+                    <Field orientation="horizontal" disabled={readOnly}>
                       <FieldContent className="gap-0.5">
                         <FieldLabel>Read Only</FieldLabel>
                         <FieldDescription className="mt-0">
                           Memory is read-only (no new messages stored)
                         </FieldDescription>
                       </FieldContent>
-                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                     </Field>
                   )}
                 />
@@ -179,14 +179,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.observationalMemory.enabled"
                   control={control}
                   render={({ field }) => (
-                    <Field orientation="horizontal">
+                    <Field orientation="horizontal" disabled={readOnly}>
                       <FieldContent className="gap-0.5">
                         <FieldLabel>Observational Memory</FieldLabel>
                         <FieldDescription className="mt-0">
                           Automatically observe and reflect on conversations to build long-term memory
                         </FieldDescription>
                       </FieldContent>
-                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                     </Field>
                   )}
                 />
@@ -255,14 +255,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       name="memory.observationalMemory.shareTokenBudget"
                       control={control}
                       render={({ field }) => (
-                        <Field orientation="horizontal">
+                        <Field orientation="horizontal" disabled={readOnly}>
                           <FieldContent className="gap-0.5">
                             <FieldLabel>Share Token Budget</FieldLabel>
                             <FieldDescription className="mt-0">
                               Share token budget between observation and reflection
                             </FieldDescription>
                           </FieldContent>
-                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
                         </Field>
                       )}
                     />

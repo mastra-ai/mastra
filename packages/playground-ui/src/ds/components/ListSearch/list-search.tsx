@@ -1,9 +1,7 @@
-import { SearchIcon, XIcon } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import type { InputProps } from '@/ds/components/Input';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { useKeydown } from '@/lib/keyboard';
 
 export type ListSearchProps = {
@@ -11,7 +9,7 @@ export type ListSearchProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
-  size?: InputProps['size'];
+  size?: SearchInputProps['size'];
   /**
    * Optional controlled value. When provided, ListSearch stays in sync with this
    * prop — useful when the parent needs to clear the input programmatically
@@ -63,37 +61,25 @@ export const ListSearch = ({
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInternalValue(e.target.value);
-      debouncedSearch(e.target.value);
-    },
-    [debouncedSearch],
-  );
-
-  const handleReset = useCallback(() => {
-    setInternalValue('');
-    onSearch('');
+  const searchNowOrDebounced = (next: string) => {
+    setInternalValue(next);
+    if (next) {
+      debouncedSearch(next);
+      return;
+    }
     debouncedSearch.cancel();
-    inputRef.current?.focus();
-  }, [onSearch, debouncedSearch]);
+    onSearch('');
+  };
 
   return (
-    <Field className="w-full max-w-120">
-      <FieldLabel className="sr-only">{label}</FieldLabel>
-      <InputGroup size={size ?? undefined}>
-        <InputGroupAddon>
-          <SearchIcon aria-hidden />
-        </InputGroupAddon>
-        <InputGroupInput ref={inputRef} placeholder={placeholder} value={internalValue} onChange={handleChange} />
-        {internalValue ? (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Clear search" onClick={handleReset}>
-              <XIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        ) : null}
-      </InputGroup>
-    </Field>
+    <SearchInput
+      ref={inputRef}
+      label={label}
+      placeholder={placeholder}
+      size={size}
+      value={internalValue}
+      onValueChange={searchNowOrDebounced}
+      className="w-full max-w-120"
+    />
   );
 };

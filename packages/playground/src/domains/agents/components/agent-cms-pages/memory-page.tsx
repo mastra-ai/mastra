@@ -357,12 +357,12 @@ function ObservationalMemoryFields() {
           name="memory.observationalMemory.shareTokenBudget"
           control={control}
           render={({ field }) => (
-            <Field className="gap-1.5">
+            <Field disabled={readOnly} className="gap-1.5">
               <FieldLabel>Share Token Budget</FieldLabel>
               <FieldDescription className="mt-0 text-placeholder">
                 Share token budget between observation and reflection
               </FieldDescription>
-              <Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={readOnly} />
+              <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
             </Field>
           )}
         />

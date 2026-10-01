@@ -1,6 +1,6 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
@@ -82,7 +82,6 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
           placeholder="Enter dataset name"
           autoFocus
         />
-        <FieldError />
       </Field>
 
       <Field>

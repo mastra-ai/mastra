@@ -3,10 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { server } from '@/test/msw-server';
-
 import { AttachFilePopover } from '../attach-file-popover';
 import { ComposerAttachmentsProvider } from '../composer-attachments';
+import { server } from '@/test/msw-server';
 
 // The native picker is the only browser boundary; the real provider validates the files.
 const pickLocalFiles = (files: File[]) => {

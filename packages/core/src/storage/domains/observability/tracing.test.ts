@@ -40,6 +40,8 @@ describe('lightSpanRecordSchema', () => {
     entityType: 'agent',
     entityId: 'agent-1',
     entityName: 'Test Agent',
+    threadId: 'thread-1',
+    resourceId: 'user-1',
     metadata: { environment: 'production' },
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-01T00:00:01Z'),
@@ -60,6 +62,8 @@ describe('lightSpanRecordSchema', () => {
     expect(result.entityType).toBe('agent');
     expect(result.entityId).toBe('agent-1');
     expect(result.entityName).toBe('Test Agent');
+    expect(result.threadId).toBe('thread-1');
+    expect(result.resourceId).toBe('user-1');
     expect(result.metadata).toEqual({ environment: 'production' });
     expect(result.createdAt).toEqual(new Date('2024-01-01T00:00:00Z'));
     expect(result.updatedAt).toEqual(new Date('2024-01-01T00:00:01Z'));
@@ -86,6 +90,8 @@ describe('lightSpanRecordSchema', () => {
     expect(result.entityType).toBeUndefined();
     expect(result.entityId).toBeUndefined();
     expect(result.entityName).toBeUndefined();
+    expect(result.threadId).toBeUndefined();
+    expect(result.resourceId).toBeUndefined();
     expect(result.metadata).toBeUndefined();
   });
 

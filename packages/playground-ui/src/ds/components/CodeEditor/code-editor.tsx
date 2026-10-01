@@ -107,7 +107,7 @@ function buildDarkTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--warning-indicator) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
@@ -149,7 +149,7 @@ function buildLightTheme(): Extension {
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'var(--info-subtle) !important',
+        background: 'var(--info-edge) !important',
       },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',
@@ -183,7 +183,7 @@ function buildLightTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--warning-indicator) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
@@ -213,7 +213,7 @@ function buildLightTheme(): Extension {
     { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: [t.deleted], color: 'var(--syntax-keyword)' },
-    { tag: t.invalid, color: 'var(--destructive-indicator)' },
+    { tag: t.invalid, color: 'var(--destructive-foreground)' },
     { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
   ]);
 

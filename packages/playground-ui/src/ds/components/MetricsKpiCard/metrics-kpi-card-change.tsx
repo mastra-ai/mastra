@@ -1,5 +1,6 @@
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -37,10 +38,10 @@ export function MetricsKpiCardChange({
       >
         {formattedChange}
       </Badge>
-      <span className="text-meta text-placeholder">
+      <Txt as="span" variant="meta" tone="faint">
         vs prior period
         {prevValue ? <span className="sr-only">, previous value {prevValue}</span> : null}
-      </span>
+      </Txt>
     </div>
   );
 }

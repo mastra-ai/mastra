@@ -125,7 +125,7 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
         <div
-          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-indicator"
+          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -143,7 +143,7 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-indicator">
+        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
             Set{' '}

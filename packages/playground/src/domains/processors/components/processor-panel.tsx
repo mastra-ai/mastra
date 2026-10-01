@@ -35,6 +35,7 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
   outputResult: 'Output Result - Process complete output after streaming',
   outputStep: 'Output Step - Process after each LLM response (before tools)',
   toolResult: 'Tool Result - Process tool output before it is added to the message list',
+  llmRequest: 'LLM Request - Transform the provider prompt before each LLM call',
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
@@ -185,15 +186,21 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           <Button
             icon={<Play />}
             onClick={handleExecute}
-            disabled={executeProcessor.isPending || selectedPhase === 'outputStream'}
+            disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
           >
             {executeProcessor.isPending ? 'Running...' : 'Run Processor'}
           </Button>
 
           {selectedPhase === 'outputStream' && (
-            <Txt variant="meta" className="text-warning-indicator">
+            <Txt variant="meta" className="text-warning-foreground">
               Output Stream phase cannot be executed directly. Use streaming instead.
+            </Txt>
+          )}
+
+          {selectedPhase === 'llmRequest' && (
+            <Txt variant="meta" className="text-warning-foreground">
+              LLM Request phase cannot be executed directly. It runs on the provider prompt during an agent call.
             </Txt>
           )}
 
@@ -203,8 +210,10 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'success' : 'destructive'}>
+                  {result.success ? 'Success' : 'Failed'}
+                </Badge>
+                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">

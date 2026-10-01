@@ -6,9 +6,11 @@ import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
+import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
@@ -344,6 +346,13 @@ export interface AgentControllerConfig<TState = {}> {
   subagents?: AgentControllerSubagent[];
 
   /**
+   * Resolves a subagent's model id for the run that spawned it. Without it the
+   * bare id resolves through {@link gateways}; provide it when model resolution
+   * depends on the request (tenant credentials, request-scoped custom providers).
+   */
+  resolveSubagentModel?: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
+
+  /**
    * Model gateways registered on AgentController' internal Mastra instance.
    * The AgentController resolves every model — mode agents, Observational Memory,
    * subagents — and builds the `listAvailableModels()` catalog through these
@@ -617,6 +626,7 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: number;
   durationMs?: number;
   result?: string;
 }

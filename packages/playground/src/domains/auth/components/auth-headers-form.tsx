@@ -48,7 +48,7 @@ export const AuthHeadersForm = () => {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit} className="w-full max-w-md text-left">
+      <Form onSubmit={handleSubmit} className="w-full max-w-md gap-6 text-left">
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
         <Button type="submit" className="ml-auto">

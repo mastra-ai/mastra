@@ -9,7 +9,7 @@ import { dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
 import type { DialogSize } from './dialog-shell';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
@@ -154,10 +154,12 @@ function DialogBody({ className, layout = 'scroll', flush = false, children, ...
     );
   }
   return (
-    <ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col" viewPortClassName="h-auto min-h-0" mask>
-      <div data-slot="dialog-body" className={bodyClassName} {...props}>
-        {children}
-      </div>
+    <ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col" mask>
+      <ScrollAreaViewport className="h-auto min-h-0">
+        <div data-slot="dialog-body" className={bodyClassName} {...props}>
+          {children}
+        </div>
+      </ScrollAreaViewport>
     </ScrollArea>
   );
 }

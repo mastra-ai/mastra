@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 
 type TemplatesToolsProps = {
   selectedTag: string;
@@ -12,8 +11,8 @@ type TemplatesToolsProps = {
   selectedProvider: string;
   providerOptions: { value: string; label: string }[];
   onProviderChange: (value: string) => void;
-  searchTerm?: string;
-  onSearchChange?: (value: string) => void;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
   onReset?: () => void;
   className?: string;
   isLoading?: boolean;
@@ -48,22 +47,13 @@ export function TemplatesTools({
 
   return (
     <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-4 bg-background py-5', className)}>
-      <Field>
-        <FieldLabel className="sr-only">Search templates</FieldLabel>
-        <InputGroup>
-          <InputGroupAddon>
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            name="search-templates"
-            value={searchTerm}
-            onChange={e => onSearchChange?.(e.target.value)}
-            placeholder="Search Template"
-          />
-        </InputGroup>
-      </Field>
-      <Select name="filter-tag" value={selectedTag} onValueChange={onTagChange}>
+      <SearchInput
+        label="Search templates"
+        placeholder="Search Template"
+        value={searchTerm}
+        onValueChange={onSearchChange}
+      />
+      <Select value={selectedTag} onValueChange={onTagChange}>
         <SelectTrigger aria-label="Filter by tag" size="md">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
@@ -75,7 +65,7 @@ export function TemplatesTools({
           ))}
         </SelectContent>
       </Select>
-      <Select name="filter-provider" value={selectedProvider} onValueChange={onProviderChange}>
+      <Select value={selectedProvider} onValueChange={onProviderChange}>
         <SelectTrigger aria-label="Filter by provider" size="md">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>

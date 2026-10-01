@@ -189,20 +189,20 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   className="flex flex-col gap-3"
                 >
                   {!isSupportedModel && (
-                    <FieldItem>
-                      <RadioGroupItem value="generateLegacy" className="text-foreground" disabled={!canEditSettings} />
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="generateLegacy" className="text-foreground" />
                       <FieldLabel>Generate (Legacy)</FieldLabel>
                     </FieldItem>
                   )}
                   {isSupportedModel && (
-                    <FieldItem>
-                      <RadioGroupItem value="generate" className="text-foreground" disabled={!canEditSettings} />
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="generate" className="text-foreground" />
                       <FieldLabel>Generate</FieldLabel>
                     </FieldItem>
                   )}
                   {!isSupportedModel && (
-                    <FieldItem>
-                      <RadioGroupItem value="streamLegacy" className="text-foreground" disabled={!canEditSettings} />
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="streamLegacy" className="text-foreground" />
                       <FieldLabel>Stream (Legacy)</FieldLabel>
                     </FieldItem>
                   )}
@@ -210,8 +210,8 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
                   )}
                   {isSupportedModel && (
-                    <FieldItem>
-                      <RadioGroupItem value="stream" className="text-foreground" disabled={!canEditSettings} />
+                    <FieldItem disabled={!canEditSettings}>
+                      <RadioGroupItem value="stream" className="text-foreground" />
                       <FieldLabel>Stream</FieldLabel>
                     </FieldItem>
                   )}

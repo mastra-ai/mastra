@@ -1,4 +1,4 @@
-import { generateKeyPairSync, verify } from 'node:crypto';
+import { constants, generateKeyPairSync, sign as nodeSign, verify } from 'node:crypto';
 import type { AgentCard } from '@mastra/core/a2a';
 import { AgentCard as AgentCardCodec } from '@mastra/core/a2a/v1';
 import canonicalize from 'canonicalize';
@@ -103,4 +103,66 @@ describe('createV1AgentCard', () => {
     }
     expect(card).not.toHaveProperty('signatures');
   });
+
+  it.each([
+    { algorithm: 'ES256', keyType: 'sec1' },
+    { algorithm: 'RS256', keyType: 'pkcs1' },
+  ] as const)('continues to accept $keyType PEM for $algorithm', async ({ algorithm, keyType }) => {
+    const { privateKey, publicKey } =
+      keyType === 'sec1'
+        ? generateKeyPairSync('ec', { namedCurve: 'P-256' })
+        : generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const signed = await signAgentCard({
+      agentCard: legacyCard,
+      signing: {
+        privateKey: privateKey.export({ type: keyType, format: 'pem' }).toString(),
+        protectedHeader: { alg: algorithm },
+      },
+    });
+    const { signatures, ...payload } = signed;
+    const signature = signatures[0]!;
+    const input = Buffer.from(`${signature.protected}.${Buffer.from(canonicalize(payload)!).toString('base64url')}`);
+    expect(
+      verify(
+        'sha256',
+        input,
+        keyType === 'sec1' ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey,
+        Buffer.from(signature.signature, 'base64url'),
+      ),
+    ).toBe(true);
+  });
+
+  it.each(['ES256', 'ES384', 'ES512', 'RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512'])(
+    'signs %s with PKCS#8 PEM and JWK keys in the same JWS format',
+    async algorithm => {
+      const hash = `sha${algorithm.slice(2)}`;
+      const { privateKey, publicKey } = algorithm.startsWith('ES')
+        ? generateKeyPairSync('ec', { namedCurve: algorithm === 'ES512' ? 'P-521' : `P-${algorithm.slice(2)}` })
+        : generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+      const jwk = privateKey.export({ format: 'jwk' }) as JsonWebKey;
+
+      for (const key of [pem, jwk]) {
+        const signed = await signAgentCard({
+          agentCard: legacyCard,
+          signing: { privateKey: key, protectedHeader: { alg: algorithm } },
+        });
+        const { signatures, ...payload } = signed;
+        const signature = signatures[0]!;
+        const input = Buffer.from(
+          `${signature.protected}.${Buffer.from(canonicalize(payload)!).toString('base64url')}`,
+        );
+        const signatureBytes = Buffer.from(signature.signature, 'base64url');
+        const options = algorithm.startsWith('ES')
+          ? { key: publicKey, dsaEncoding: 'ieee-p1363' as const }
+          : algorithm.startsWith('PS')
+            ? { key: publicKey, padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: constants.RSA_PSS_SALTLEN_DIGEST }
+            : { key: publicKey };
+        expect(verify(hash, input, options, signatureBytes)).toBe(true);
+        if (algorithm.startsWith('RS')) {
+          expect(signatureBytes).toEqual(nodeSign(hash, input, privateKey));
+        }
+      }
+    },
+  );
 });

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
@@ -12,7 +13,13 @@ import {
 } from './index';
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
+import { Switch } from '@/ds/components/Switch';
 
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
+  }
+});
 afterEach(cleanup);
 
 describe('Settings', () => {
@@ -83,6 +90,18 @@ describe('Settings', () => {
         new FormData(screen.getByRole<HTMLFormElement>('form', { name: 'Connection settings' })).get('apiPrefix'),
       ).toBe('/custom-api');
     });
+
+    it('toggles a switch when its label is clicked', () => {
+      render(
+        <SettingsRow label="Notifications">
+          <Switch />
+        </SettingsRow>,
+      );
+
+      fireEvent.click(screen.getByText('Notifications'));
+
+      expect(screen.getByRole('switch', { name: 'Notifications' }).getAttribute('aria-checked')).toBe('true');
+    });
   });
 
   describe('when a setting is required', () => {
@@ -120,6 +139,22 @@ describe('Settings', () => {
       );
 
       expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when one row holds several controls', () => {
+    it('names the group by the row and keeps each control apart', () => {
+      render(
+        <SettingsFieldsetRow label="Add label route" description="Pick a label and a board.">
+          <Input aria-label="Label" />
+          <Input aria-label="Board" />
+        </SettingsFieldsetRow>,
+      );
+
+      screen.getByRole('group', { name: 'Add label route', description: 'Pick a label and a board.' });
+      const label = screen.getByRole('textbox', { name: 'Label' });
+      const board = screen.getByRole('textbox', { name: 'Board' });
+      expect(label.id).not.toBe(board.id);
     });
   });
 

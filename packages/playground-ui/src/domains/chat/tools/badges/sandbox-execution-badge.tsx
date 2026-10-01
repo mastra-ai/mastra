@@ -45,7 +45,7 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
 const ExitStatus = ({ exit }: { exit: SandboxExit }) => {
   if (exit.exitCode === undefined || exit.success) return null;
   return (
-    <Txt as="span" variant="meta" className={exit.killed ? 'text-warning-indicator' : 'text-destructive-indicator'}>
+    <Txt as="span" variant="meta" className={exit.killed ? 'text-warning-foreground' : 'text-destructive-foreground'}>
       {exit.killed ? 'killed' : `exit ${exit.exitCode}`}
     </Txt>
   );

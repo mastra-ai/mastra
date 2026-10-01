@@ -6,9 +6,12 @@ import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +49,10 @@ type ComboboxSharedProps = {
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
+  /** @deprecated Wrap the combobox in `<Field invalid>` with a `FieldError`. */
+  error?: string;
+  /** @deprecated Only keyed the `error` message id; a `Field` links its error without one. */
+  name?: string;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -105,12 +112,16 @@ export function Combobox(props: ComboboxProps) {
     iconOnlyValue = false,
     allowCustomValue = false,
     onInputValueChange,
+    error,
+    name,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
   const field = useFieldAriaIds();
+  const generatedName = React.useId();
+  const errorName = name ?? generatedName;
   const describedBy =
-    [ariaDescribedBy, field?.invalid ? field.errorId : undefined].filter(Boolean).join(' ') || undefined;
+    [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -138,13 +149,13 @@ export function Combobox(props: ComboboxProps) {
         id={id}
         aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
         {...keepOwnAccessibleName({ 'aria-label': ariaLabel })}
-        aria-invalid={field?.invalid || undefined}
+        {...deprecatedErrorAria(Boolean(error))}
         aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({
           variant,
           size,
-          className: cn(iconOnlyValue && 'px-2.5', className),
+          className: cn(iconOnlyValue && 'w-auto px-2.5', className),
         })}
       >
         {iconOnly ? (
@@ -184,46 +195,48 @@ export function Combobox(props: ComboboxProps) {
               <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
             </div>
             <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
-            <ScrollArea maxHeight="var(--spacing-dropdown)" viewPortClassName="scroll-py-8">
-              <div className={menu.containerClassName} {...menu.getContainerProps({})}>
-                <FluidMenuItems menu={menu}>
-                  <BaseCombobox.List className={comboboxStyles.list}>
-                    {(option: ComboboxOption) => {
-                      const isSelected = selectedValueSet.has(option.value);
+            <ScrollArea maxHeight="var(--spacing-dropdown)">
+              <ScrollAreaViewport className="scroll-py-8">
+                <div className={menu.containerClassName} {...menu.getContainerProps({})}>
+                  <FluidMenuItems menu={menu}>
+                    <BaseCombobox.List className={comboboxStyles.list}>
+                      {(option: ComboboxOption) => {
+                        const isSelected = selectedValueSet.has(option.value);
 
-                      return (
-                        <ComboboxItem key={option.value} value={option} className={comboboxItemClass({ multiple })}>
-                          {multiple ? (
-                            <>
-                              {option.start}
-                              <ComboboxOptionText option={option} />
-                              <span className={comboboxStyles.itemRightSlot}>
-                                {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                                <span className={comboboxStyles.checkContainer}>
-                                  {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
+                        return (
+                          <ComboboxItem key={option.value} value={option} className={comboboxItemClass({ multiple })}>
+                            {multiple ? (
+                              <>
+                                {option.start}
+                                <ComboboxOptionText option={option} />
+                                <span className={comboboxStyles.itemRightSlot}>
+                                  {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                                  <span className={comboboxStyles.checkContainer}>
+                                    {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
+                                  </span>
                                 </span>
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              {option.start}
-                              <ComboboxOptionText option={option} />
-                              <span className={comboboxStyles.itemRightSlot}>
-                                {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                                <span className={comboboxStyles.checkContainer}>
-                                  <BaseCombobox.ItemIndicator>
-                                    <Check className={comboboxStyles.checkIcon} />
-                                  </BaseCombobox.ItemIndicator>
+                              </>
+                            ) : (
+                              <>
+                                {option.start}
+                                <ComboboxOptionText option={option} />
+                                <span className={comboboxStyles.itemRightSlot}>
+                                  {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                                  <span className={comboboxStyles.checkContainer}>
+                                    <BaseCombobox.ItemIndicator>
+                                      <Check className={comboboxStyles.checkIcon} />
+                                    </BaseCombobox.ItemIndicator>
+                                  </span>
                                 </span>
-                              </span>
-                            </>
-                          )}
-                        </ComboboxItem>
-                      );
-                    }}
-                  </BaseCombobox.List>
-                </FluidMenuItems>
-              </div>
+                              </>
+                            )}
+                          </ComboboxItem>
+                        );
+                      }}
+                    </BaseCombobox.List>
+                  </FluidMenuItems>
+                </div>
+              </ScrollAreaViewport>
             </ScrollArea>
             {selectedValues.length > 0 && clearLabel ? (
               <div className={cn('border-t', 'border-border', 'p-1')}>
@@ -245,7 +258,7 @@ export function Combobox(props: ComboboxProps) {
     </>
   );
 
-  return multiple ? (
+  const root = multiple ? (
     <BaseCombobox.Root
       multiple
       autoHighlight
@@ -281,5 +294,14 @@ export function Combobox(props: ComboboxProps) {
     >
       {comboboxContent}
     </BaseCombobox.Root>
+  );
+
+  if (!error) return root;
+
+  return (
+    <div className={comboboxStyles.root}>
+      {root}
+      <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>
+    </div>
   );
 }

@@ -56,3 +56,41 @@ describe('a cross-field error shown on one field', () => {
     expect(onSubmit.mock.calls[0][0]).toEqual({ start: '0', end: 'a' });
   });
 });
+
+describe('an error on a nested object', () => {
+  it('shows the message without describing each control inside the object', async () => {
+    const schema = z.object({
+      address: z
+        .object({ street: z.string(), city: z.string() })
+        .refine(value => value.street !== value.city, { message: 'Street and city must differ' }),
+    });
+    render(<DynamicForm schema={schema} onSubmit={() => {}} submitButtonLabel="Run" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Address' }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: /^Street/ }), { target: { value: 'same' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /^City/ }), { target: { value: 'same' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Street and city must differ'));
+    const street = screen.getByRole('textbox', { name: /^Street/ });
+    expect(street.getAttribute('aria-invalid')).toBeNull();
+    const describedBy = (street.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(describedBy.map(id => document.getElementById(id)?.textContent)).not.toContain(
+      'Street and city must differ',
+    );
+  });
+});
+
+describe('a record field', () => {
+  it('names the group by the field and keeps each key and value apart', () => {
+    render(
+      <DynamicForm schema={z.object({ headers: z.record(z.string()) })} onSubmit={() => {}} submitButtonLabel="Run" />,
+    );
+
+    const group = screen.getByRole('group', { name: /^Headers/ });
+    const key = screen.getByRole('textbox', { name: 'Key' });
+    const value = screen.getByRole('textbox', { name: 'Value' });
+    expect(group.contains(key)).toBe(true);
+    expect(key.id).not.toBe(value.id);
+  });
+});

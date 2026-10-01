@@ -74,13 +74,12 @@ export const AskUserOptionRow = ({
   className,
   ...props
 }: AskUserOptionRowProps) => (
-  <FieldItem className="contents">
+  <FieldItem disabled={disabled} className="contents">
     <FieldLabel
       // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
       aria-disabled={disabled || undefined}
       className={cn(
-        'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2',
-        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
         className,
       )}
       {...props}
@@ -128,7 +127,7 @@ export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProp
     <Badge size="xs" variant={result.isError ? 'destructive' : 'success'} className="justify-self-start">
       {result.isError ? 'Error' : 'Answered'}
     </Badge>
-    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-indicator')}>
+    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-foreground')}>
       {result.content}
     </Txt>
   </div>

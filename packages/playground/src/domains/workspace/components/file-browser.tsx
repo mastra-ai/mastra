@@ -3,6 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
 import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
 import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
@@ -71,7 +72,7 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <AmazonIcon className="h-4 w-4 text-badge-orange-indicator" />;
+      return <AmazonIcon className="h-4 w-4 text-foreground" />;
     case 'google-cloud':
     case 'google-cloud-storage':
     case 'gcs':
@@ -89,7 +90,7 @@ function getMountIcon(mount: FileEntry['mount']) {
       return <Database className="h-4 w-4 text-badge-green-indicator" />;
     case 'local':
     case 'folder':
-      return <Folder className="h-4 w-4 text-badge-yellow-indicator" />;
+      return <Folder className="h-4 w-4 text-badge-amber-indicator" />;
     case 'hard-drive':
       return <HardDrive className="h-4 w-4 text-muted-foreground" />;
     case 'cloud':
@@ -109,9 +110,9 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
       return getMountIcon(mount);
     }
     return isOpen ? (
-      <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
+      <FolderOpen className="h-4 w-4 text-badge-amber-indicator" />
     ) : (
-      <Folder className="h-4 w-4 text-badge-yellow-indicator" />
+      <Folder className="h-4 w-4 text-badge-amber-indicator" />
     );
   }
 
@@ -123,7 +124,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
     case 'jsx':
       return <FileCode className="h-4 w-4 text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="h-4 w-4 text-badge-yellow-indicator" />;
+      return <FileJson className="h-4 w-4 text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
       return <FileText className="h-4 w-4 text-muted-foreground" />;
@@ -319,10 +320,14 @@ export function FileBrowser({
         ) : error ? (
           <div className="px-4 py-8 text-center">
             <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-destructive-subtle">
-              <AlertCircle className="h-6 w-6 text-destructive-indicator" />
+              <AlertCircle className="h-6 w-6 text-destructive-foreground" />
             </div>
-            <p className="mb-1 text-subheading text-foreground">Failed to load directory</p>
-            <p className="mx-auto max-w-sm text-caption text-muted-foreground">{getErrorMessage(error)}</p>
+            <Txt variant="subheading" tone="ink" className="mb-1">
+              Failed to load directory
+            </Txt>
+            <Txt variant="caption" tone="muted" className="mx-auto max-w-sm">
+              {getErrorMessage(error)}
+            </Txt>
           </div>
         ) : sortedEntries.length === 0 ? (
           <div className="py-8 text-center text-body text-muted-foreground">
@@ -341,8 +346,10 @@ export function FileBrowser({
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-fill-subtle"
                   >
-                    <FolderOpen className="h-4 w-4 text-badge-yellow-indicator" />
-                    <span className="text-body text-foreground">..</span>
+                    <FolderOpen className="h-4 w-4 text-badge-amber-indicator" />
+                    <Txt as="span" tone="ink">
+                      ..
+                    </Txt>
                   </button>
                 </li>
               )}
@@ -358,17 +365,19 @@ export function FileBrowser({
                         className="flex flex-1 items-center gap-3 px-4 py-2 text-left"
                       >
                         {getFileIcon(entry)}
-                        <span className="flex-1 truncate text-body text-foreground">{entry.name}</span>
+                        <Txt as="span" tone="ink" className="flex-1 truncate">
+                          {entry.name}
+                        </Txt>
                         {/* Mount error indicator */}
                         {entry.mount && isError && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span tabIndex={0} className="flex items-center">
-                                <AlertCircle className="h-4 w-4 text-destructive-indicator" />
+                                <AlertCircle className="h-4 w-4 text-destructive-foreground" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <span className="text-destructive-indicator">Error:</span>{' '}
+                              <span className="text-destructive-foreground">Error:</span>{' '}
                               {entry.mount.error || 'Failed to connect to this filesystem'}
                             </TooltipContent>
                           </Tooltip>
@@ -395,16 +404,16 @@ export function FileBrowser({
                             </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
-                          <span className="text-caption text-muted-foreground tabular-nums">
+                          <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
                             {formatBytes(entry.size)}
-                          </span>
+                          </Txt>
                         )}
                       </button>
                       {onDelete && !entry.mount && (
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
-                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-indicator"
+                          className="p-2 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:text-destructive-foreground"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -547,7 +556,9 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
         <div className="flex items-center gap-2">
           {getFileIcon({ name: fileName, type: 'file' })}
-          <span className="text-subheading text-foreground">{fileName}</span>
+          <Txt as="span" variant="subheading" tone="ink">
+            {fileName}
+          </Txt>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />

@@ -1,5 +1,7 @@
 import { CUSTOM_DOMAIN_UNSUPPORTED_ERROR, isPlatformAuthSupportedHost } from '@mastra/factory/platform-auth-host';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -34,7 +36,7 @@ export function safeReturnTo(raw?: string): string {
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
     <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive-indicator">
+      <Txt as="h2" variant="subheading" className="text-destructive-foreground">
         Mastra Platform sign-in isn&apos;t available on custom domains
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
@@ -91,10 +93,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-5">
+    <Form onSubmit={handleSubmit} className="w-full gap-5">
       {mode === 'sign-up' ? (
-        <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-          Name
+        <Field>
+          <FieldLabel>Name</FieldLabel>
           <Input
             type="text"
             size="lg"
@@ -104,10 +106,11 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
             value={name}
             onChange={e => setName(e.target.value)}
           />
-        </label>
+          <FieldError />
+        </Field>
       ) : null}
-      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-        Email
+      <Field>
+        <FieldLabel>Email</FieldLabel>
         <Input
           type="email"
           size="lg"
@@ -117,9 +120,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
-      </label>
-      <label className="text-foreground flex flex-col gap-2 text-sm font-medium">
-        Password
+        <FieldError />
+      </Field>
+      <Field>
+        <FieldLabel>Password</FieldLabel>
         <Input
           type="password"
           size="lg"
@@ -129,9 +133,10 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           value={password}
           onChange={e => setPassword(e.target.value)}
         />
-      </label>
+        <FieldError />
+      </Field>
       {error ? (
-        <Txt as="p" variant="caption" role="alert" className="text-destructive-indicator">
+        <Txt as="p" variant="caption" role="alert" className="text-destructive-foreground">
           {error}
         </Txt>
       ) : null}
@@ -156,7 +161,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           Account creation is managed by your administrator.
         </Txt>
       )}
-    </form>
+    </Form>
   );
 }
 
@@ -203,7 +208,7 @@ export function SignInPage() {
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
               <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive-indicator">
+                <Txt as="p" variant="subheading" className="text-destructive-foreground">
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (
@@ -223,7 +228,9 @@ export function SignInPage() {
             ) : credentialForm ? (
               <>
                 <div className="mb-6">
-                  <h2 className="font-display text-title">Welcome back</h2>
+                  <Txt as="h2" variant="title" className="font-display">
+                    Welcome back
+                  </Txt>
                   <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
                     Sign in to continue building with your team.
                   </Txt>

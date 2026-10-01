@@ -12,6 +12,7 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { Trash2, ChevronRight } from 'lucide-react';
@@ -192,7 +193,9 @@ function ScorerConfigPanel({
           <Icon size="xs">
             <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-column text-foreground">{scorerName}</span>
+          <Txt as="span" variant="column" tone="ink">
+            {scorerName}
+          </Txt>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -212,25 +215,22 @@ function ScorerConfigPanel({
       />
 
       <div className="flex flex-col gap-2">
-        <Field>
-          <Fieldset
-            className="gap-2"
-            render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} disabled={readOnly} />}
-          >
+        <Field disabled={readOnly}>
+          <Fieldset className="gap-2" render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} />}>
             <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
             <FieldItem>
-              <RadioGroupItem value="none" disabled={readOnly} />
+              <RadioGroupItem value="none" />
               <FieldLabel>None (evaluate all)</FieldLabel>
             </FieldItem>
             <FieldItem>
-              <RadioGroupItem value="ratio" disabled={readOnly} />
+              <RadioGroupItem value="ratio" />
               <FieldLabel>Ratio (percentage)</FieldLabel>
             </FieldItem>
           </Fieldset>
         </Field>
 
         {samplingType === 'ratio' && (
-          <Field className="mt-1 gap-1.5">
+          <Field disabled={readOnly} className="mt-1 gap-1.5">
             <FieldLabel>Sample Rate (0-1)</FieldLabel>
             <Input
               type="number"
@@ -240,7 +240,6 @@ function ScorerConfigPanel({
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
               className="h-8"
-              disabled={readOnly}
             />
           </Field>
         )}

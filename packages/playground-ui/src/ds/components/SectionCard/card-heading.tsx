@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface CardHeadingProps {
@@ -20,20 +21,19 @@ export function CardHeading({
 }: CardHeadingProps) {
   return (
     <>
-      <h3
+      <Txt
+        as="h3"
+        variant="heading"
+        tone="ink"
         id={id}
-        className={cn(
-          'text-heading text-foreground',
-          tone === 'danger' && 'text-destructive-subtle-foreground',
-          className,
-        )}
+        className={cn(tone === 'danger' && 'text-destructive-subtle-foreground', className)}
       >
         {title}
-      </h3>
+      </Txt>
       {description != null && (
-        <p className={cn('mt-1 max-w-[62ch] text-caption text-muted-foreground', descriptionClassName)}>
+        <Txt variant="caption" tone="muted" className={cn('mt-1 max-w-[62ch]', descriptionClassName)}>
           {description}
-        </p>
+        </Txt>
       )}
     </>
   );

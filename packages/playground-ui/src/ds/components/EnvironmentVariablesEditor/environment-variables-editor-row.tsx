@@ -33,8 +33,8 @@ export function EnvironmentVariablesEditorRow({
   const revealValueLabel = editor.isValueRevealed(index) ? 'Hide value' : 'Show value';
   const removeRowLabel = `Remove environment variable ${row.key.trim() || index + 1}`;
 
-  function handlePaste(text: string) {
-    return editor.handlePaste(index, text);
+  function handlePaste(text: string, field: 'key' | 'value') {
+    return editor.handlePaste(index, text, field);
   }
 
   return (
@@ -49,7 +49,7 @@ export function EnvironmentVariablesEditorRow({
             disabled={isDisabled}
             onChange={event => editor.updateRow(index, { key: event.target.value })}
             onPaste={event => {
-              if (handlePaste(event.clipboardData.getData('text'))) {
+              if (handlePaste(event.clipboardData.getData('text'), 'key')) {
                 event.preventDefault();
               }
             }}
@@ -69,7 +69,7 @@ export function EnvironmentVariablesEditorRow({
             disabled={isDisabled}
             onChange={event => editor.updateRow(index, { value: event.target.value })}
             onPaste={event => {
-              if (handlePaste(event.clipboardData.getData('text'))) {
+              if (handlePaste(event.clipboardData.getData('text'), 'value')) {
                 event.preventDefault();
               }
             }}

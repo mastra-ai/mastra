@@ -8,7 +8,6 @@ import {
   ThreadTraceTabContent,
   ThreadTraceTabList,
 } from './thread-trace-messages';
-import { ThreadTraceRail } from './thread-trace-rail';
 import { ThreadTraceRoot } from './thread-trace-root';
 import { ThreadTraceRow } from './thread-trace-row';
 import { ThreadTraceSpanPanel } from './thread-trace-span-panel';
@@ -23,7 +22,6 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  * @example
  * <ThreadTrace traceIds={ids} anchorTraceId={anchor}>
  *   <ThreadTrace.List>
- *     <ThreadTrace.Rail turns={turns} />
  *     <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
  *     {ids.map((traceId, i) => (
  *       <ThreadTrace.Row key={traceId} traceId={traceId}>
@@ -49,7 +47,6 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  */
 export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   List: ThreadTraceList,
-  Rail: ThreadTraceRail,
   LoadMoreSentinel: ThreadTraceLoadMoreSentinel,
   Row: ThreadTraceRow,
   Messages: ThreadTraceMessages,
@@ -71,7 +68,6 @@ export type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 export { THREAD_TRACE_MESSAGES_TAB } from './thread-trace-row';
 export type { ThreadTraceRootProps } from './thread-trace-root';
 export type { ThreadTraceListProps } from './thread-trace-list';
-export type { ThreadTraceRailProps } from './thread-trace-rail';
 export type { ThreadTraceLoadMoreSentinelProps } from './thread-trace-load-more-sentinel';
 export type { ThreadTraceRowProps } from './thread-trace-row';
 export type {

@@ -85,7 +85,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
       <div className="flex px-3 py-1.5">
         <DialogTrigger
           render={
-            <button type="button" className={cn('flex rounded-lg p-1 hover:bg-fill-subtle', focusRing.visible)}>
+            <button type="button" className={cn('flex rounded-lg p-1 hover:bg-fill-subtle', focusRing)}>
               <span className="relative inline-flex">
                 {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
                   <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
@@ -231,9 +231,9 @@ const PackagesModalContent = ({
                           className={cn(
                             'cursor-help',
                             pkg.isDeprecated
-                              ? 'text-destructive-indicator'
+                              ? 'text-destructive-foreground'
                               : pkg.isOutdated
-                                ? 'text-warning-indicator'
+                                ? 'text-warning-foreground'
                                 : '',
                           )}
                         >

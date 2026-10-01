@@ -3,12 +3,13 @@ import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
 
@@ -41,7 +42,7 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   hybrid: {
     label: 'Hybrid',
     icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-badge-yellow-strong text-badge-yellow-foreground border-badge-yellow-edge',
+    color: 'bg-badge-amber-strong text-badge-amber-foreground border-badge-amber-edge',
   },
 };
 
@@ -84,18 +85,16 @@ export function SearchWorkspacePanel({
   return (
     <div className="rounded-lg bg-muted">
       <Form onSubmit={handleSearch} className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-              placeholder="Search workspace files..."
-              className="pl-9"
-            />
-          </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+          <SearchInput
+            label="Search workspace files"
+            className="flex-1"
+            placeholder="Search workspace files..."
+            value={query}
+            onValueChange={setQuery}
+          />
 
-          <Field className="gap-1">
+          <Field className="contents">
             <div className="flex items-center gap-1.5">
               <FieldLabel size="smaller">Top</FieldLabel>
               <Input
@@ -108,7 +107,7 @@ export function SearchWorkspacePanel({
                 title="Number of results"
               />
             </div>
-            <FieldError />
+            <FieldError className="col-span-full row-start-2" />
           </Field>
 
           <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
@@ -184,7 +183,9 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   return (
     <li className="border-t border-border first:border-t-0">
       <button onClick={onClick} className="flex w-full gap-3 px-4 py-3 text-left hover:bg-fill-subtle">
-        <span className="w-4 shrink-0 text-caption text-muted-foreground tabular-nums">{rank}</span>
+        <Txt as="span" variant="caption" tone="muted" className="w-4 shrink-0 tabular-nums">
+          {rank}
+        </Txt>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -195,14 +196,18 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
               <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
                 <div className="h-full rounded-full bg-chart-green" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-meta text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
+              <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+                {result.score.toFixed(2)}
+              </Txt>
             </div>
           </div>
-          <p className="line-clamp-2 text-caption text-muted-foreground">{result.content}</p>
+          <Txt variant="caption" tone="muted" className="line-clamp-2">
+            {result.content}
+          </Txt>
           {result.lineRange && (
-            <p className="mt-1 text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted" className="mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </button>
@@ -236,19 +241,13 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
     <div className="space-y-4">
       <Form onSubmit={handleSearch}>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search across skills..."
-              className={cn(
-                raisedSurfaceStyle,
-                'w-full rounded-lg py-2 pr-4 pl-10 text-body text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-border-focus focus:outline-hidden',
-              )}
-            />
-          </div>
+          <SearchInput
+            label="Search skills"
+            className="flex-1"
+            placeholder="Search across skills..."
+            value={query}
+            onValueChange={setQuery}
+          />
           <Button type="submit" disabled={!query.trim() || isSearching}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
@@ -280,9 +279,9 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-subheading text-foreground">
+          <Txt as="h3" variant="subheading" tone="ink">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
-          </h3>
+          </Txt>
           <div className="space-y-2">
             {results.map((result, index) => (
               <SkillSearchResultCard
@@ -317,17 +316,21 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className="font-medium text-foreground">{result.skillName}</span>
-            <span className="text-caption text-muted-foreground">{result.source}</span>
-            <span className="ml-auto text-caption text-muted-foreground">Score: {result.score.toFixed(3)}</span>
+            <Txt as="span" variant="caption" tone="muted">
+              {result.source}
+            </Txt>
+            <Txt as="span" variant="caption" tone="muted" className="ml-auto">
+              Score: {result.score.toFixed(3)}
+            </Txt>
           </div>
-          <p className="line-clamp-3 text-body whitespace-pre-wrap text-muted-foreground">
+          <Txt tone="muted" className="line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
-          </p>
+          </Txt>
           {result.lineRange && (
-            <p className="mt-2 text-caption text-muted-foreground">
+            <Txt variant="caption" tone="muted" className="mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </div>

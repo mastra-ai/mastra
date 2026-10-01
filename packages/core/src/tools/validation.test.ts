@@ -1,8 +1,10 @@
+import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
+import { RequestContext } from '../request-context';
 import { createTool } from './tool';
-import { validateToolInput } from './validation';
+import { validateRequestContext, validateToolInput } from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -2451,5 +2453,62 @@ describe('Standard Schema path segment format (PathSegment objects)', () => {
     expect(result.error!.message).toContain('address.city');
     expect(result.error!.message).toContain('address.zip');
     expect(result.error!.message).not.toContain('[object Object]');
+  });
+});
+
+describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', () => {
+  it('reports the retry failure instead of already-stripped optional nulls', () => {
+    const schema = z.object({
+      hero: z.object({ name: z.string() }).optional(),
+      events: z.array(z.string()).min(1),
+    });
+
+    const result = validateToolInput(schema, { hero: null, events: [] }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- events:');
+    expect(result.error?.message).not.toContain('- hero:');
+    expect(result.error?.validationErrors).toHaveProperty('fields.events');
+    expect(result.error?.validationErrors).not.toHaveProperty('fields.hero');
+  });
+
+  it('still reports a required field sent as null', () => {
+    const schema = z.object({
+      title: z.string(),
+      note: z.string().optional(),
+    });
+
+    const result = validateToolInput(schema, { title: null, note: 'ok' }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- title:');
+  });
+
+  it('does not report a valid nullable null when another field fails', () => {
+    const schema = z.object({
+      parent: z.string().nullable(),
+      count: z.number(),
+    });
+
+    const result = validateToolInput(schema, { parent: null, count: 'x' }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count:');
+    expect(result.error?.message).not.toContain('- parent:');
+  });
+});
+
+describe('validateRequestContext', () => {
+  it('rejects values when a Valibot schema returns both value and issues', () => {
+    const valibotSchema = v.object({ tenantId: v.string() });
+    const jsonSchema = () => ({ type: 'object' as const, properties: { tenantId: { type: 'string' as const } } });
+    const schema = {
+      '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } },
+    };
+    const requestContext = new RequestContext([['tenantId', 42]]);
+
+    const result = validateRequestContext(schema as any, requestContext, 'tenant-tool');
+
+    expect(result.error?.message).toContain('tenantId');
   });
 });

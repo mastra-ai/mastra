@@ -10,7 +10,7 @@ export type JSONSchemaFormFieldDescriptionProps = Omit<InputProps, 'value' | 'on
 };
 
 export function FieldDescription({
-  label,
+  label = 'Description',
   labelIsHidden = false,
   className,
   ...props
@@ -26,7 +26,7 @@ export function FieldDescription({
 
   return (
     <Field className={className}>
-      {label ? <FieldLabel className={labelIsHidden ? 'sr-only' : undefined}>{label}</FieldLabel> : null}
+      <FieldLabel className={labelIsHidden ? 'sr-only' : undefined}>{label}</FieldLabel>
       <Input {...props} size="md" value={field.description || ''} onChange={handleChange} />
     </Field>
   );

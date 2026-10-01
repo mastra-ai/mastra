@@ -44,7 +44,7 @@ export function ScorersToolbar({
             onSearch={onSearchChange}
           />
         </div>
-        <Select name="filter-source" value={sourceFilter} onValueChange={onSourceFilterChange}>
+        <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
           <SelectTrigger aria-label="Source" size="md" className="whitespace-nowrap">
             <SelectValue placeholder="Select an option" />
           </SelectTrigger>

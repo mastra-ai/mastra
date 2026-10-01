@@ -2200,6 +2200,42 @@ describe('PIIDetector', () => {
       expect(emitted.join('')).toBe(`${'a'.repeat(10)} [EMAIL] ${'z'.repeat(114)}`);
     });
 
+    it('redacts the same text for every two-chunk split', async () => {
+      // Split-Boundary Leaks in Streaming Guardrails, doi:10.5281/zenodo.22909585
+      const text = `${'a'.repeat(100)} mail «secret@example.com», n°123-45-6789, card 4111 1111 1111 1111 end`;
+      const stream = async (chunks: string[]) => {
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy: 'redact',
+          redactionMethod: 'placeholder',
+          detectionTypes: ['email', 'ssn', 'credit-card'],
+        });
+        const state: Record<string, any> = {};
+        const parts = [
+          ...chunks.map((chunk, i) => ({ type: 'text-delta', payload: { id: `text-${i}`, text: chunk } })),
+          { type: 'step-finish', payload: {} },
+        ];
+        let output = '';
+        for (const part of parts) {
+          const result = await detector.processOutputStream({
+            part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+            streamParts: [],
+            state,
+            abort: vi.fn() as any,
+          });
+          if (result?.type === 'text-delta') output += result.payload.text;
+        }
+        return output;
+      };
+
+      const whole = await stream([text]);
+      expect(whole).toBe(`${'a'.repeat(100)} mail «[EMAIL]», n°[SSN], card [CREDIT-CARD] end`);
+      for (let i = 1; i < text.length; i++) {
+        const chunks = [text.slice(0, i), text.slice(i)];
+        expect(await stream(chunks), JSON.stringify(chunks)).toBe(whole);
+      }
+    });
+
     it('keeps mixed-mode sentence fragments in regex carryover', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',

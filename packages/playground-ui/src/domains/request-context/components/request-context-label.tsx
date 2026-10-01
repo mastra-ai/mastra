@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { FieldLabel } from '@/ds/components/Field';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
 
@@ -27,11 +27,7 @@ export function RequestContextLabel({ children, tooltip }: RequestContextLabelPr
               <button
                 type="button"
                 aria-label={ariaLabel}
-                className={cn(
-                  quietTextHover,
-                  controlStateColorTransition,
-                  'rounded-sm focus-visible:ring-2 focus-visible:ring-border-strong focus-visible:outline-none',
-                )}
+                className={cn(quietTextHover, controlStateColorTransition, 'rounded-sm', focusRing)}
               >
                 <Icon size="xs">
                   <Info />

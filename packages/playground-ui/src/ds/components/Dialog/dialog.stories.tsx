@@ -17,8 +17,8 @@ import { Button } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
-import { ListSearch } from '@/ds/components/ListSearch';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { SearchInput } from '@/ds/components/SearchInput';
 
 const SIZES: DialogSize[] = ['sm', 'md', 'lg', 'xl', 'full'];
 
@@ -124,8 +124,6 @@ function RenameForm() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('Design engineering');
   const [saved, setSaved] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const missingName = submitted && !name.trim();
   return (
     <div className="flex flex-col gap-4">
       <Dialog open={open} onOpenChange={setOpen}>
@@ -134,11 +132,8 @@ function RenameForm() {
           <Form
             onSubmit={event => {
               event.preventDefault();
-              setSubmitted(true);
-              if (name.trim()) {
-                setSaved(name.trim());
-                setOpen(false);
-              }
+              setSaved(name.trim());
+              setOpen(false);
             }}
           >
             <DialogHeader>
@@ -146,10 +141,10 @@ function RenameForm() {
               <DialogDescription>Choose a name your team will recognize.</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <Field invalid={missingName}>
+              <Field>
                 <FieldLabel required>Team name</FieldLabel>
                 <Input required value={name} onChange={event => setName(event.target.value)} />
-                <FieldError>{missingName ? 'Enter a team name' : undefined}</FieldError>
+                <FieldError />
               </Field>
             </DialogBody>
             <DialogFooter>
@@ -258,7 +253,7 @@ function SkillBrowser() {
           <DialogDescription>Search the registry and preview a skill before installing it.</DialogDescription>
         </DialogHeader>
         <DialogBody layout="fill">
-          <ListSearch label="Search skills" placeholder="Search skills" onSearch={setSearch} debounceMs={0} />
+          <SearchInput label="Search skills" placeholder="Search skills" value={search} onValueChange={setSearch} />
           <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] gap-4">
             <ScrollArea className="min-h-0">
               <ul className="flex flex-col">

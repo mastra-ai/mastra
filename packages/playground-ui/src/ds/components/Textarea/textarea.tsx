@@ -3,6 +3,7 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
+  deprecatedErrorAria,
   fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
@@ -49,13 +50,16 @@ export type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'size'> &
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
+    error?: boolean;
   };
 
-function Textarea({ className, size, testId, variant, ...props }: TextareaProps) {
+function Textarea({ className, size, testId, variant, error, ...props }: TextareaProps) {
   return (
     <TextareaControl
       className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
+      {...deprecatedErrorAria(error)}
       {...props}
     />
   );

@@ -62,6 +62,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
             <Field>
               <FieldLabel required>Name</FieldLabel>
               <Input
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter experiment name"

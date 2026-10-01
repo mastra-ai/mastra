@@ -16,6 +16,7 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
+import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -198,7 +199,7 @@ export function PropertyFilterCreator({
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="text-caption text-muted-foreground">{`${selectedField.label} · is`}</span>
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} · is`}</Txt>
             </div>
           )}
 

@@ -1,5 +1,221 @@
 # @mastra/server
 
+## 1.73.0
+
+### Patch Changes
+
+- Fixed agent controller sessions losing the signed-in user when memory is configured as a function. Cloning a thread, forking a subagent, and opening a thread's history subscription (opening a session, switching or creating a thread, sending a message or notification, resuming a suspended tool) now pass the caller's request context to the memory factory. If the session already has the thread open, the open subscription is reused and its history keeps the memory it resolved when it opened. Per-user memory now resolves correctly instead of failing with a missing user context. ([#25082](https://github.com/mastra-ai/mastra/pull/25082))
+
+  Pass the caller's context when cloning, switching, or creating a thread:
+
+  ```ts
+  await session.thread.clone({ sourceThreadId, requestContext });
+  await session.thread.switch({ threadId, requestContext });
+  await session.thread.create({ title, requestContext });
+  await session.thread.delete({ threadId, requestContext });
+  ```
+
+  Deleting a thread also removes it from the caller's resolved memory, so a cloned thread's messages are not left behind.
+
+  A message sent while a run is active joins that run and uses the memory resolved for the caller who started it. The next run resolves memory with the context of the caller whose message starts it.
+
+- Fixed durable agent resume, approve, and decline routes returning 403 to the run's own caller when no auth middleware sets a server-side identity. Requests without an identity are now treated like workflow run ownership checks treat them, while requests with an identity are still checked against the run's resource and thread. Fixes #25511. ([#25556](https://github.com/mastra-ai/mastra/pull/25556))
+
+- Fixed durable agent resume and tool approval routes returning 403 ("belongs to a different resource" or "tool call is not suspended") when the client resumes immediately after receiving a tool approval event. The access check now waits briefly for the suspended run to be saved before denying the request. ([#25611](https://github.com/mastra-ai/mastra/pull/25611))
+
+- Use Web Crypto for server-generated IDs and compatible A2A agent-card signatures while preserving legacy PEM key support. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Tool approval and tool suspension requests now report whether they were actually accepted. Previously, `approveTool()` and `respondToToolSuspension()` always returned success, even when the decision was stale, a duplicate, or answered a question that was no longer pending. They now resolve to `{ ok: false, reason }` in those cases, so you can tell an accepted decision from one that was ignored. ([#25087](https://github.com/mastra-ai/mastra/pull/25087))
+
+  ```ts
+  const ack = await session.approveTool(toolCallId, true);
+  if (!ack.ok) console.warn(`Approval not applied: ${ack.reason}`);
+  ```
+
+  `approveTool()` and `respondToToolSuspension()` no longer retry automatically. A retried decision would be rejected as already handled, so an applied decision could be reported as ignored.
+
+- Fixed Studio hiding processors that only implement `processLLMRequest`, such as `ToolCallFilter`. The processors API now reports an `llmRequest` phase for these processors, so they appear in the Processors page, sidebar, and picker. Studio disables direct execution of this phase because it operates on the provider prompt during an agent call. Direct API requests return a 400 error. ([#25500](https://github.com/mastra-ai/mastra/pull/25500))
+
+  For example, `GET /api/processors` can return:
+
+  ```json
+  {
+    "tool-call-filter": {
+      "id": "tool-call-filter",
+      "phases": ["llmRequest"],
+      "agentIds": ["my-agent"],
+      "configurations": [{ "agentId": "my-agent", "type": "input" }],
+      "isWorkflow": false
+    }
+  }
+  ```
+
+- Fixed Studio showing the wrong provider for durable or dynamic agents that use a gateway model. An agent on `mastra/openai/gpt-5-mini` now shows the Mastra gateway instead of OpenAI, so Studio no longer asks for `OPENAI_API_KEY` when `MASTRA_GATEWAY_API_KEY` is set. ([#25620](https://github.com/mastra-ai/mastra/pull/25620))
+
+- Fixed A2A `tasks/list` returning the full message history when `historyLength` is 0. It now returns no history, as requested. ([#25607](https://github.com/mastra-ai/mastra/pull/25607))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0
+
+## 1.73.0-alpha.1
+
+### Patch Changes
+
+- Fixed agent controller sessions losing the signed-in user when memory is configured as a function. Cloning a thread, forking a subagent, and opening a thread's history subscription (opening a session, switching or creating a thread, sending a message or notification, resuming a suspended tool) now pass the caller's request context to the memory factory. If the session already has the thread open, the open subscription is reused and its history keeps the memory it resolved when it opened. Per-user memory now resolves correctly instead of failing with a missing user context. ([#25082](https://github.com/mastra-ai/mastra/pull/25082))
+
+  Pass the caller's context when cloning, switching, or creating a thread:
+
+  ```ts
+  await session.thread.clone({ sourceThreadId, requestContext });
+  await session.thread.switch({ threadId, requestContext });
+  await session.thread.create({ title, requestContext });
+  await session.thread.delete({ threadId, requestContext });
+  ```
+
+  Deleting a thread also removes it from the caller's resolved memory, so a cloned thread's messages are not left behind.
+
+  A message sent while a run is active joins that run and uses the memory resolved for the caller who started it. The next run resolves memory with the context of the caller whose message starts it.
+
+- Fixed durable agent resume and tool approval routes returning 403 ("belongs to a different resource" or "tool call is not suspended") when the client resumes immediately after receiving a tool approval event. The access check now waits briefly for the suspended run to be saved before denying the request. ([#25611](https://github.com/mastra-ai/mastra/pull/25611))
+
+- Tool approval and tool suspension requests now report whether they were actually accepted. Previously, `approveTool()` and `respondToToolSuspension()` always returned success, even when the decision was stale, a duplicate, or answered a question that was no longer pending. They now resolve to `{ ok: false, reason }` in those cases, so you can tell an accepted decision from one that was ignored. ([#25087](https://github.com/mastra-ai/mastra/pull/25087))
+
+  ```ts
+  const ack = await session.approveTool(toolCallId, true);
+  if (!ack.ok) console.warn(`Approval not applied: ${ack.reason}`);
+  ```
+
+  `approveTool()` and `respondToToolSuspension()` no longer retry automatically. A retried decision would be rejected as already handled, so an applied decision could be reported as ignored.
+
+- Fixed Studio showing the wrong provider for durable or dynamic agents that use a gateway model. An agent on `mastra/openai/gpt-5-mini` now shows the Mastra gateway instead of OpenAI, so Studio no longer asks for `OPENAI_API_KEY` when `MASTRA_GATEWAY_API_KEY` is set. ([#25620](https://github.com/mastra-ai/mastra/pull/25620))
+
+- Fixed A2A `tasks/list` returning the full message history when `historyLength` is 0. It now returns no history, as requested. ([#25607](https://github.com/mastra-ai/mastra/pull/25607))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0-alpha.1
+
+## 1.73.0-alpha.0
+
+### Patch Changes
+
+- Fixed durable agent resume, approve, and decline routes returning 403 to the run's own caller when no auth middleware sets a server-side identity. Requests without an identity are now treated like workflow run ownership checks treat them, while requests with an identity are still checked against the run's resource and thread. Fixes #25511. ([#25556](https://github.com/mastra-ai/mastra/pull/25556))
+
+- Use Web Crypto for server-generated IDs and compatible A2A agent-card signatures while preserving legacy PEM key support. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Fixed Studio hiding processors that only implement `processLLMRequest`, such as `ToolCallFilter`. The processors API now reports an `llmRequest` phase for these processors, so they appear in the Processors page, sidebar, and picker. Studio disables direct execution of this phase because it operates on the provider prompt during an agent call. Direct API requests return a 400 error. ([#25500](https://github.com/mastra-ai/mastra/pull/25500))
+
+  For example, `GET /api/processors` can return:
+
+  ```json
+  {
+    "tool-call-filter": {
+      "id": "tool-call-filter",
+      "phases": ["llmRequest"],
+      "agentIds": ["my-agent"],
+      "configurations": [{ "agentId": "my-agent", "type": "input" }],
+      "isWorkflow": false
+    }
+  }
+  ```
+
+- Updated dependencies [[`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f)]:
+  - @mastra/core@1.73.0-alpha.0
+
+## 1.72.0
+
+### Minor Changes
+
+- Added a `summary` query parameter to `GET /workflows/:workflowId/runs`. With `summary=true`, each run snapshot is reduced to `{ status, timestamp }`, keeping run lists small when snapshots are large. ([#25135](https://github.com/mastra-ai/mastra/pull/25135))
+
+  ```
+  GET /api/workflows/my-workflow/runs?summary=true
+  ```
+
+- Added `POST /observability/traces/aggregate`, which returns grouped and optionally time-bucketed trace measures such as counts, duration percentiles, and error rates. The endpoint requires the `observability:read` permission and uses the same error contract as `POST /observability/traces/query`: malformed JSON returns 400, invalid queries return 422 with structured `issues`, and execution timeouts return 504. Observability stores that do not support the `trace-aggregate` capability return 501 with code `TRACE_AGGREGATE_UNSUPPORTED`. ([#25501](https://github.com/mastra-ai/mastra/pull/25501))
+
+  ```ts
+  const response = await fetch('/api/observability/traces/aggregate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'duration.p95', 'errorRate'],
+    }),
+  });
+  // { rows: [{ dimensions, bucket, measures }], truncated }
+  ```
+
+- Added `withInitialHistory` to thread subscriptions over HTTP. Pass it to `subscribeToThread` in `@mastra/client-js`, or to `useChat` in `@mastra/react`, to get stored thread messages as one `thread-history` chunk before live parts. Completed runs no longer replay on reconnect. ([#24876](https://github.com/mastra-ai/mastra/pull/24876))
+
+  ```ts
+  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: { perPage: 40 } });
+  ```
+
+  ```tsx
+  const chat = useChat({ agentId, threadId, resourceId, enableThreadSignals: true, withInitialHistory: true });
+  ```
+
+  Agent controller tool-approval requests now resume the stored suspended run when no approval is waiting in the session, so approval cards restored from thread history after a restart can be answered.
+
+### Patch Changes
+
+- Fixed concurrent A2A `message/stream` follow-ups to a task waiting for input starting duplicate agent runs. Only one follow-up now resumes the suspended run; the others wait and receive the final task, so task state and history are no longer overwritten. ([#25162](https://github.com/mastra-ai/mastra/pull/25162))
+
+- Trace queries that filter by `runId`, `sessionId`, `userId`, or `organizationId` now return `501` with a clear message when the configured observability store is too old to support them, instead of failing with a `500`. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+- Fixed an authorization gap in `resume-stream` and `resume-stream-until-idle` for durable agents. Resuming a durable run now checks that the run exists, belongs to the caller, is suspended, and matches the requested thread; otherwise the request returns 403. ([#25169](https://github.com/mastra-ai/mastra/pull/25169))
+
+- Stored agents now retain durable execution settings, and changing durability creates a new agent version. ([#25123](https://github.com/mastra-ai/mastra/pull/25123))
+
+- Fixed tool approvals for Inngest durable agents ([#25154](https://github.com/mastra-ai/mastra/issues/25154)). ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+  - Runs created with `createInngestAgent()` that wait on tool approval now appear in `GET /api/agents/:agentId/suspended-runs` and `agent.listSuspendedRuns()`.
+  - `approve-tool-call` and `decline-tool-call` now accept these runs. They no longer return "Access denied: durable run belongs to a different resource".
+  - Durable runs waiting on an approval-gated tool now report `requiresApproval: true` and the tool's `args`.
+
+- Channel API routes now resolve providers at request time when the Mastra instance is configured with a channel resolver, so platform connections added after boot are usable immediately. Static channel configurations behave as before. ([#25149](https://github.com/mastra-ai/mastra/pull/25149))
+
+- Fixed Studio showing a provider as not connected (for example "Set OPENAI_API_KEY to use this provider") when a registered gateway authenticates it, such as the Mastra Code gateway with a ChatGPT subscription login. `GET /api/agents/providers` now reports these providers as `connected: true`. Fixes [#23668](https://github.com/mastra-ai/mastra/issues/23668). ([#25316](https://github.com/mastra-ai/mastra/pull/25316))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`e1c3193`](https://github.com/mastra-ai/mastra/commit/e1c3193b18ca68e5cca27f7dce9b0381a6e7b95d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`0c23429`](https://github.com/mastra-ai/mastra/commit/0c23429515b5c307e8a5759f5be1ce20d09d2347), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`c64bf75`](https://github.com/mastra-ai/mastra/commit/c64bf752dec931f5f6c8b3d5afc91a8b9aa670d8), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`4b5b212`](https://github.com/mastra-ai/mastra/commit/4b5b212f1c5caa40a2d02308806bbe610f194503), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`d3a7dba`](https://github.com/mastra-ai/mastra/commit/d3a7dbaeb0d027e1e47e4e4ddb2ede271a007e17), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`64916c6`](https://github.com/mastra-ai/mastra/commit/64916c66e8d9dec107da2f81e7c1301471bf7bc3), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`6946c4d`](https://github.com/mastra-ai/mastra/commit/6946c4db91071cb43fb36514a42a1e4ce05c37ba), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`d8fcd39`](https://github.com/mastra-ai/mastra/commit/d8fcd397230a83f5fe9ef16e6b41237f057c2c29), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53), [`5036e61`](https://github.com/mastra-ai/mastra/commit/5036e6179bee4105ad8f1fc57d315f78024565f4), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`d9790fd`](https://github.com/mastra-ai/mastra/commit/d9790fd00d95063de288560f6a0d2bac8f57cc4d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0
+
+## 1.72.0-alpha.10
+
+### Minor Changes
+
+- Added `POST /observability/traces/aggregate`, which returns grouped and optionally time-bucketed trace measures such as counts, duration percentiles, and error rates. The endpoint requires the `observability:read` permission and uses the same error contract as `POST /observability/traces/query`: malformed JSON returns 400, invalid queries return 422 with structured `issues`, and execution timeouts return 504. Observability stores that do not support the `trace-aggregate` capability return 501 with code `TRACE_AGGREGATE_UNSUPPORTED`. ([#25501](https://github.com/mastra-ai/mastra/pull/25501))
+
+  ```ts
+  const response = await fetch('/api/observability/traces/aggregate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'duration.p95', 'errorRate'],
+    }),
+  });
+  // { rows: [{ dimensions, bucket, measures }], truncated }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f)]:
+  - @mastra/core@1.72.0-alpha.10
+
+## 1.72.0-alpha.9
+
+### Patch Changes
+
+- Trace queries that filter by `runId`, `sessionId`, `userId`, or `organizationId` now return `501` with a clear message when the configured observability store is too old to support them, instead of failing with a `500`. ([#24935](https://github.com/mastra-ai/mastra/pull/24935))
+
+- Updated dependencies [[`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e)]:
+  - @mastra/core@1.72.0-alpha.9
+
 ## 1.72.0-alpha.8
 
 ### Patch Changes

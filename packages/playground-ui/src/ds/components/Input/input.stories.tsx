@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment } from 'react';
 import { Button } from '../Button/Button';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -134,8 +135,14 @@ export const Error: Story = {
   args: {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
-    'aria-invalid': true,
   },
+  render: args => (
+    <Field invalid className="w-50">
+      <FieldLabel>Email</FieldLabel>
+      <Input {...args} />
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
+  ),
 };
 
 export const OnDifferentSurfaces: Story = {

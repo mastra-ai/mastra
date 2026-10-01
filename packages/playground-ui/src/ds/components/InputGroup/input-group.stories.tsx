@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Kbd } from '../Kbd';
 import { Txt } from '../Txt/Txt';
 import {
@@ -192,14 +193,16 @@ export const Disabled: Story = {
 
 export const Invalid: Story = {
   render: () => (
-    <div className="w-80">
+    <Field invalid className="w-80">
+      <FieldLabel>Email</FieldLabel>
       <InputGroup>
         <InputGroupAddon>
           <MailIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Invalid" defaultValue="not an email" aria-invalid />
+        <InputGroupInput placeholder="Invalid" defaultValue="not an email" />
       </InputGroup>
-    </div>
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
   ),
 };
 

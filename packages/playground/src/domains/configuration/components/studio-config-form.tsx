@@ -3,7 +3,7 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -83,7 +83,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
 
   return (
     <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit}>
+      <Form onSubmit={handleSubmit} className={isFactoryLayout ? undefined : 'gap-6'}>
         <FieldsContainer>
           {connectionFields.map(({ label, ...field }) => {
             if (isFactoryLayout) {
@@ -103,15 +103,15 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
             );
           })}
           {isFactoryLayout ? (
-            <SettingsRow label="Headers">
+            <SettingsFieldsetRow label="Headers">
               <div className="w-full lg:max-w-96">{headersEditor}</div>
-            </SettingsRow>
+            </SettingsFieldsetRow>
           ) : (
             headersEditor
           )}
         </FieldsContainer>
 
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-10! ml-auto'} icon={<SaveIcon />}>
+        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
           Save Configuration
         </Button>
       </Form>

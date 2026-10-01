@@ -3,6 +3,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Pencil, X, Check } from 'lucide-react';
 import { DatasetFieldErrors } from '../dataset-field-errors';
 import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
@@ -64,9 +65,9 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-heading">
+        <Txt as="h3" variant="heading" className="flex items-center gap-2">
           <Pencil className="h-5 w-5" /> Edit Item
-        </h3>
+        </Txt>
       </div>
 
       <div className="space-y-6">

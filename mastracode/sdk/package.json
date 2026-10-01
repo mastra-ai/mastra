@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.9.0-alpha.8",
+  "version": "1.10.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -16,6 +16,12 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
       }
     },
     "./*": {

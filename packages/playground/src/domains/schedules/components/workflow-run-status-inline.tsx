@@ -28,7 +28,7 @@ function getStatusVisual(status: WorkflowRunStatus): { icon: React.ReactNode; co
     case 'success':
       return { icon: <Check size={14} />, color: 'text-success-indicator' };
     case 'failed':
-      return { icon: <X size={14} />, color: 'text-destructive-indicator' };
+      return { icon: <X size={14} />, color: 'text-destructive-foreground' };
     case 'running':
       return { icon: <Spinner />, color: 'text-muted-foreground' };
     case 'suspended':

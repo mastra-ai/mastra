@@ -2,6 +2,7 @@
 
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorerSelector } from '../experiment-trigger/scorer-selector';
 
 export interface DatasetItemScorerSelectorProps {
@@ -21,15 +22,15 @@ export function DatasetItemScorerSelector({
 }: DatasetItemScorerSelectorProps) {
   return (
     <div className="grid gap-3">
-      <Field orientation="horizontal" className="gap-3">
-        <Switch checked={overrideEnabled} onCheckedChange={onOverrideEnabledChange} disabled={disabled} />
+      <Field orientation="horizontal" disabled={disabled} className="gap-3">
+        <Switch checked={overrideEnabled} onCheckedChange={onOverrideEnabledChange} />
         <FieldLabel>Override dataset scorers</FieldLabel>
       </Field>
-      <p className="text-caption text-muted-foreground">
+      <Txt variant="caption" tone="muted">
         {overrideEnabled
           ? 'Only selected scorers run for this item. Leave empty to run no scorers.'
           : 'Use scorers attached to the dataset.'}
-      </p>
+      </Txt>
       {overrideEnabled ? (
         <ScorerSelector
           selectedScorers={selectedScorerIds}

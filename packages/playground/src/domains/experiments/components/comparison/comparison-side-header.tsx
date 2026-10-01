@@ -85,7 +85,7 @@ export function ComparisonSideHeader({
               <TargetIcon /> {experiment.targetId}
             </TextAndIcon>
           )}
-          <TextAndIcon className={cn(versionMismatch && 'text-warning-indicator')}>
+          <TextAndIcon className={cn(versionMismatch && 'text-warning-foreground')}>
             <LayersIcon /> v{experiment.datasetVersion ?? '—'}
             {versionMismatch && ' · different dataset version'}
           </TextAndIcon>

@@ -107,20 +107,17 @@ export const ToolCardInner = ({
       }
       break;
     case 'submit_plan':
-      if (chatAgent) {
-        return (
-          <SubmitPlanTool
-            agentId={chatAgent.agentId}
-            agentVersionId={chatAgent.agentVersionId}
-            requestContext={chatAgent.requestContext}
-            toolName={toolName}
-            toolCallId={toolCallId}
-            output={output}
-            metadata={metadata}
-          />
-        );
-      }
-      break;
+      return (
+        <SubmitPlanTool
+          agentId={chatAgent?.agentId}
+          agentVersionId={chatAgent?.agentVersionId}
+          requestContext={chatAgent?.requestContext}
+          toolName={toolName}
+          toolCallId={toolCallId}
+          output={output}
+          metadata={metadata}
+        />
+      );
     case 'background': {
       const isAgent = isAgentCall(metadata, toolName);
       const isWorkflow = isWorkflowCall(metadata, toolName);

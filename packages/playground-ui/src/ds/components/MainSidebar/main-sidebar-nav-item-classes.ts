@@ -66,7 +66,7 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
     'w-full justify-start',
     controlStateColorTransition,
     '[&_svg]:size-4 [&_svg]:shrink-0',
-    focusRing.visible,
+    focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     isCollapsed && 'gap-0 px-[13.5px] py-0',
   );

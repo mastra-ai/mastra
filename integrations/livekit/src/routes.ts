@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
 import type { ContextWithMastra, ApiRoute } from '@mastra/core/server';
 import { AccessToken } from 'livekit-server-sdk';
@@ -97,11 +96,11 @@ export function liveKitConnectionRoute(options: LiveKitConnectionRouteOptions = 
     const roomName =
       typeof options.roomName === 'function'
         ? options.roomName(args)
-        : (options.roomName ?? `mastra-voice-${randomUUID().slice(0, 8)}`);
+        : (options.roomName ?? `mastra-voice-${globalThis.crypto.randomUUID().slice(0, 8)}`);
     const identity =
       typeof options.participantIdentity === 'function'
         ? options.participantIdentity(args)
-        : (options.participantIdentity ?? metadata.resourceId ?? `user-${randomUUID().slice(0, 8)}`);
+        : (options.participantIdentity ?? metadata.resourceId ?? `user-${globalThis.crypto.randomUUID().slice(0, 8)}`);
     // One memory thread per room unless the caller pins a thread explicitly.
     metadata.threadId ??= roomName;
 

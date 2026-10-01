@@ -1,5 +1,6 @@
 import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -57,9 +58,17 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
             <div key={zone.id} className="flex flex-col gap-2">
               {/* Zone header */}
               <div className="flex items-center gap-2">
-                <span className="text-subheading text-placeholder">{zone.label}</span>
-                {zone.required && <span className="text-caption text-muted-foreground">*</span>}
-                <span className="text-caption text-muted-foreground">{zone.description}</span>
+                <Txt as="span" variant="subheading" tone="faint">
+                  {zone.label}
+                </Txt>
+                {zone.required && (
+                  <Txt as="span" variant="caption" tone="muted">
+                    *
+                  </Txt>
+                )}
+                <Txt as="span" variant="caption" tone="muted">
+                  {zone.description}
+                </Txt>
               </div>
 
               {/* Drop zone */}
@@ -71,9 +80,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                     className={`flex min-h-header-default flex-wrap items-center gap-2 rounded-lg border-2 border-dashed p-2 transition-colors ${snapshot.isDraggingOver ? 'border-border-strong bg-fill-subtle' : 'border-border'} ${needsAttention ? 'border-warning-edge bg-warning-subtle' : ''} `}
                   >
                     {isEmpty && !snapshot.isDraggingOver && (
-                      <span className="text-caption text-muted-foreground italic">
+                      <Txt as="span" variant="caption" tone="muted" className="italic">
                         {needsAttention ? 'Drag at least one column here' : 'No columns assigned'}
-                      </span>
+                      </Txt>
                     )}
 
                     {columnsInZone.map((column, index) => (
@@ -119,7 +128,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <div className="text-body text-warning-indicator">At least one column must be mapped to Input</div>
+          <div className="text-body text-warning-foreground">At least one column must be mapped to Input</div>
         )}
       </div>
     </DragDropContext>

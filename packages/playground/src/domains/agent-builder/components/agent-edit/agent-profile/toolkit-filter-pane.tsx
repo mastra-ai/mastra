@@ -1,13 +1,12 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -217,17 +216,15 @@ export const ToolkitFilterPane = ({
       className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <InputGroup size="md" className="flex-none" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroupAddon align="inline-start">
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          type="search"
-          aria-label="Filter toolkits"
-          placeholder="Filter toolkits..."
-          onChange={event => setSearch(event.target.value)}
-        />
-      </InputGroup>
+      <SearchInput
+        label="Filter toolkits"
+        size="md"
+        className="flex-none"
+        data-testid={`${TEST_ID_PREFIX}-filter-search`}
+        placeholder="Filter toolkits..."
+        value={search}
+        onValueChange={setSearch}
+      />
 
       <div className="flex shrink-0 items-center gap-2 text-meta">
         <button
@@ -253,42 +250,44 @@ export const ToolkitFilterPane = ({
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
-        <div className="flex flex-col gap-3">
-          {filteredBuiltIn.length > 0 && (
-            <ul className="flex flex-col gap-0.5">
-              {filteredBuiltIn.map(item => (
-                <ToolkitFilterRow
-                  key={item.id}
-                  item={item}
-                  checked={isChecked(item.id)}
-                  disabled={disabled}
-                  onToggle={onToggle}
-                />
-              ))}
-            </ul>
-          )}
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="pr-2">
+          <div className="flex flex-col gap-3">
+            {filteredBuiltIn.length > 0 && (
+              <ul className="flex flex-col gap-0.5">
+                {filteredBuiltIn.map(item => (
+                  <ToolkitFilterRow
+                    key={item.id}
+                    item={item}
+                    checked={isChecked(item.id)}
+                    disabled={disabled}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </ul>
+            )}
 
-          {providers.map(provider => (
-            <ProviderToolkitSection
-              key={provider.providerId}
-              provider={provider}
-              term={term}
-              isChecked={isChecked}
-              onToggle={onToggle}
-              disabled={disabled}
-              multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
-            />
-          ))}
+            {providers.map(provider => (
+              <ProviderToolkitSection
+                key={provider.providerId}
+                provider={provider}
+                term={term}
+                isChecked={isChecked}
+                onToggle={onToggle}
+                disabled={disabled}
+                multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
+              />
+            ))}
 
-          {isProvidersLoading && (
-            <div className="flex flex-col gap-1 px-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-full" />
-              ))}
-            </div>
-          )}
-        </div>
+            {isProvidersLoading && (
+              <div className="flex flex-col gap-1 px-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-7 w-full" />
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );

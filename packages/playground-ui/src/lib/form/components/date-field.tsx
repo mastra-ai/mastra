@@ -53,9 +53,9 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) =
           icon={<CalendarIcon />}
         >
           {value ? (
-            <span className="text-white">{format(value, 'PPP')}</span>
+            <span className="text-foreground">{format(value, 'PPP')}</span>
           ) : (
-            <span className="text-gray">Pick a date</span>
+            <span className="text-muted-foreground">Pick a date</span>
           )}
         </Button>
       </PopoverTrigger>
