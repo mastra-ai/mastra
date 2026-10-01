@@ -11,7 +11,6 @@ import {
   EMPTY_GITIGNORE,
   EMPTY_TSCONFIG,
   PNPM_WORKSPACE,
-  PRERELEASE_NPMRC,
   publishStagedProject,
   writeEmptyScaffold,
 } from './utils';
@@ -68,12 +67,10 @@ describe('empty scaffold', () => {
 
     expect(await listRelativeFiles(staging.projectPath)).toEqual([
       '.gitignore',
-      '.npmrc',
       'package.json',
       'src/mastra/index.ts',
       'tsconfig.json',
     ]);
-    expect(await fs.readFile(path.join(staging.projectPath, '.npmrc'), 'utf8')).toBe(PRERELEASE_NPMRC);
 
     const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
     expect(manifest).toEqual({
@@ -94,6 +91,9 @@ describe('empty scaffold', () => {
         mastra: 'snapshot-channel',
         typescript: '^6.0.3',
         '@types/node': 'latest',
+      },
+      overrides: {
+        '@mastra/core': '$@mastra/core',
       },
     });
     expect(await fs.readFile(path.join(staging.projectPath, 'tsconfig.json'), 'utf8')).toBe(
@@ -131,6 +131,8 @@ describe('empty scaffold', () => {
       'tsconfig.json',
     ]);
     expect(await fs.readFile(path.join(staging.projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
+    const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
+    expect(manifest.overrides).toBeUndefined();
   });
 
   it('allows only package-manager install artifacts beyond the authored scaffold', async () => {
@@ -167,6 +169,7 @@ describe('empty scaffold', () => {
     const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
     expect(manifest.dependencies['@mastra/core']).toBe('latest');
     expect(manifest.devDependencies.mastra).toBe('latest');
+    expect(manifest.overrides).toBeUndefined();
     expect(
       JSON.parse(await fs.readFile(path.join(staging.projectPath, 'node_modules/@mastra/core/package.json'), 'utf8'))
         .version,

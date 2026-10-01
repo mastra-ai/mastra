@@ -497,6 +497,7 @@ describe('adaptDefaultTemplate', () => {
     expect(manifest.dependencies['@mastra/memory']).toBe('1.24.0-alpha.0');
     expect(manifest.dependencies['@mastra/observability']).toBe('1.16.3-alpha.0');
     expect(manifest.devDependencies.mastra).toBe('1.21.0-alpha.0');
+    expect(manifest.overrides).toEqual({ '@mastra/core': '$@mastra/core' });
   });
 
   it('warns once and preserves the channel tag for all Mastra packages on resolution failure', async () => {

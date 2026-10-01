@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { PackageManager } from '../../utils/package-manager';
 import type { CreateLLMProvider } from './command';
-import { needsPrereleaseNpmrc, PNPM_WORKSPACE, PRERELEASE_NPMRC } from './utils';
+import { npmPrereleaseCoreOverrides, PNPM_WORKSPACE } from './utils';
 import type { ResolvedMastraVersions } from './version-resolver';
 import { resolveMastraPackageVersions } from './version-resolver';
 
@@ -98,6 +98,7 @@ function normalizeManagedManifest(
   content: string,
   mastraVersions: ResolvedMastraVersions | undefined,
   fallbackTag: string,
+  npmOverrides: Record<string, string> | undefined,
 ): TransformResult {
   let manifest: Record<string, unknown>;
   try {
@@ -121,6 +122,11 @@ function normalizeManagedManifest(
         section[packageName] = mastraVersions?.[packageName] ?? fallbackTag;
       }
     }
+  }
+
+  if (npmOverrides && '@mastra/core' in dependencies) {
+    const templateOverrides = typeof manifest.overrides === 'object' ? manifest.overrides : {};
+    manifest.overrides = { ...templateOverrides, ...npmOverrides };
   }
 
   return { applied: true, content: `${JSON.stringify(manifest, null, 2)}\n` };
@@ -242,7 +248,12 @@ export async function adaptDefaultTemplate({
         `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
       );
     }
-    const result = normalizeManagedManifest(source, resolvedVersions, versionTag);
+    const result = normalizeManagedManifest(
+      source,
+      resolvedVersions,
+      versionTag,
+      npmPrereleaseCoreOverrides(packageManager, versionTag),
+    );
     if (!result.applied) adaptationFailed = true;
     else await write(packageJsonPath, result.content);
   } catch {
@@ -295,9 +306,6 @@ export async function adaptDefaultTemplate({
 
   if (packageManager === 'pnpm') {
     await write(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE);
-  }
-  if (needsPrereleaseNpmrc(packageManager, versionTag)) {
-    await write(path.join(projectPath, '.npmrc'), PRERELEASE_NPMRC);
   }
 
   return {

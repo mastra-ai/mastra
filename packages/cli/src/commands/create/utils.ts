@@ -45,10 +45,12 @@ allowBuilds:
 `;
 
 // npm semver never matches a newer prerelease core against already-published `>=x.y.z-0` peer ranges.
-export const PRERELEASE_NPMRC = 'legacy-peer-deps=true\n';
-
-export function needsPrereleaseNpmrc(packageManager: PackageManager, versionTag: string): boolean {
-  return packageManager === 'npm' && versionTag !== 'latest';
+export function npmPrereleaseCoreOverrides(
+  packageManager: PackageManager,
+  versionTag: string,
+): Record<string, string> | undefined {
+  if (packageManager !== 'npm' || versionTag === 'latest') return undefined;
+  return { '@mastra/core': '$@mastra/core' };
 }
 
 export interface OwnedStagingDirectory {
@@ -120,6 +122,7 @@ export async function writeEmptyScaffold({
   }
   const coreVersion = resolved?.['@mastra/core'] ?? versionTag;
   const mastraVersion = resolved?.mastra ?? versionTag;
+  const overrides = npmPrereleaseCoreOverrides(packageManager, versionTag);
 
   const packageJson = {
     name: projectName,
@@ -142,6 +145,7 @@ export async function writeEmptyScaffold({
       typescript: '^6.0.3',
       '@types/node': 'latest',
     },
+    ...(overrides && { overrides }),
   };
 
   const writes = [
@@ -157,9 +161,6 @@ export async function writeEmptyScaffold({
 
   if (packageManager === 'pnpm') {
     writes.push(fs.writeFile(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE, 'utf8'));
-  }
-  if (needsPrereleaseNpmrc(packageManager, versionTag)) {
-    writes.push(fs.writeFile(path.join(projectPath, '.npmrc'), PRERELEASE_NPMRC, 'utf8'));
   }
 
   await Promise.all(writes);
