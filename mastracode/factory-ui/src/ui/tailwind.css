@@ -13,6 +13,37 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Editor accent ramp.
+ *
+ * The editor domain (`.tok-*` syntax palette in editor-syntax.css, the
+ * CodeMirror chrome in editor-theme.ts, and `*-accent3/NN` utilities across
+ * the editor UI) was written against the design system's legacy `--accent1..6`
+ * tokens, which playground-ui has since deleted (theme-export.test.ts asserts
+ * they no longer ship). Without a definition every `var(--accentN)` resolves
+ * to nothing: syntax tokens inherit plain foreground (monochrome code) and
+ * accent-tinted utilities silently drop out.
+ *
+ * Alias them locally onto the current chromatic ramps. The ramps flip with
+ * `html.light`, so these stay mode-aware for free. Mapping follows the
+ * palette documented in editor-syntax.css: green · red · blue · light blue ·
+ * amber. */
+:root {
+  --accent1: var(--green-400);
+  --accent2: var(--red-400);
+  --accent3: var(--blue-400);
+  --accent5: var(--cyan-400);
+  --accent6: var(--amber-400);
+}
+
+/* Tailwind color tokens so `ring-accent3/60`-style utilities compile. */
+@theme inline {
+  --color-accent1: var(--accent1);
+  --color-accent2: var(--accent2);
+  --color-accent3: var(--accent3);
+  --color-accent5: var(--accent5);
+  --color-accent6: var(--accent6);
+}
+
 /* Mona Sans everywhere, same as Studio. Faces come from
  * @fontsource-variable/mona-sans, imported in main.tsx. */
 @layer base {

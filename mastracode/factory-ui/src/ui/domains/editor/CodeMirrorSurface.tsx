@@ -157,6 +157,7 @@ export function CodeMirrorSurface({
   const mergeCompartmentRef = useRef(new Compartment());
   const collabCompartmentRef = useRef(new Compartment());
   const collabBoundRef = useRef<CollabBinding | null>(null);
+  const blameCompartmentRef = useRef(new Compartment());
   const settingsCompartmentRef = useRef(new Compartment());
   const settingsRef = useRef(settings);
   const buildSettingsRef = useRef<((next: EditorSettings) => Extension) | null>(null);
@@ -327,7 +328,10 @@ export function CodeMirrorSurface({
       mergeCompartment.of(mergeExtension(diffOriginalRef.current)),
       collabCompartmentRef.current.of([]),
       codeLensExtension(() => codeLensActionRef.current ?? null),
-      blameExtension(),
+      // Starts empty: the blame gutter's spacer + 14rem min-width reserve a
+      // wide column even with zero data, so the whole extension only mounts
+      // when blame entries actually arrive (see the blame effect below).
+      blameCompartmentRef.current.of([]),
       editorTheme,
       EditorView.domEventHandlers({
         contextmenu: (event, view) => {
@@ -505,12 +509,20 @@ export function CodeMirrorSurface({
     view.dispatch({ effects: setCodeLenses.of(codeLenses ?? []) });
   }, [codeLenses]);
 
-  // Push blame data into the editor when it arrives. Passing null clears the
-  // gutter (useful when blame is toggled off or the file switches).
+  // Mount the blame gutter only while blame entries exist — the gutter
+  // reserves its full column width (author + sha spacer, 14rem min) even when
+  // empty, so an always-on extension shows a wide blank strip. Reconfigure
+  // first so the blame StateField exists before the data effect lands.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    view.dispatch({ effects: setBlameData.of(blame ?? null) });
+    const active = !!blame && blame.length > 0;
+    view.dispatch({
+      effects: blameCompartmentRef.current.reconfigure(active ? blameExtension() : []),
+    });
+    if (active) {
+      view.dispatch({ effects: setBlameData.of(blame) });
+    }
   }, [blame]);
 
   // React to diff-mode toggles: reconfigure the merge compartment with the
