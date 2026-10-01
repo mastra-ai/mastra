@@ -188,39 +188,74 @@ export function createSignalSubscriptionsConformanceTests({
 
     describe('row references', () => {
       it('matches a row id only within its agent and provider', async () => {
-        const row = await store.upsertSubscription(createSampleSignalIdentity());
-        const op = await store.insertSubscribingSubscription({
-          ...createSampleSignalIdentity({ externalResourceId: 'ext-op' }),
-          owner: 'op',
-          ttlMs: LONG,
-        });
-        await store.claimSubscription({ ...ref(row.id), owner: 'poller', ttlMs: LONG, cadenceMs: CADENCE });
+        // Every wrong-provider call below targets a row on which the same call
+        // with the right ref succeeds, so each assertion fails without the filter.
         const wrong = (id: string) => ({ agentId: SIGNAL_AGENT, providerId: 'other-provider', id });
+        const row = await store.upsertSubscription(createSampleSignalIdentity());
         const other = wrong(row.id);
-        const otherOp = wrong(op!.id);
+        const delivery = { subscriptionId: row.id, deliveryId: 'kept' };
+        await store.claimDelivery({ ...delivery, owner: 'd', ttlMs: LONG });
 
         expect(await replica.getSubscriptionById(other)).toBeNull();
         expect(await replica.updateSubscription({ ...other, patch: { metadata: { x: 1 } } })).toBeNull();
         expect(await replica.setSubscriptionEnabled({ ...other, enabled: false })).toBeNull();
-        expect(
-          await replica.claimSubscription({ ...other, owner: 'o', ttlMs: LONG, cadenceMs: CADENCE, force: true }),
-        ).toBeNull();
+        const untouched = await replica.getSubscriptionById(ref(row.id));
+        expect(untouched?.metadata).toEqual({});
+        expect(untouched?.enabled).toBe(true);
+        const claim = { owner: 'poller', ttlMs: LONG, cadenceMs: CADENCE, force: true };
+        expect(await replica.claimSubscription({ ...other, ...claim })).toBeNull();
+        expect(await replica.claimSubscription({ ...ref(row.id), ...claim })).not.toBeNull();
+
         expect(await replica.renewSubscriptionClaimIfEnabled({ ...other, owner: 'poller', ttlMs: LONG })).toBe(false);
         expect(await replica.validateSubscriptionClaimIfEnabled({ ...other, owner: 'poller' })).toBe(false);
         expect(await replica.releaseSubscriptionClaim({ ...other, owner: 'poller' })).toBe(false);
-        expect(
-          await replica.beginSubscriptionOperation({ ...other, kind: 'unsubscribe', owner: 'x', ttlMs: LONG }),
-        ).toBeNull();
-        expect(await replica.renewSubscriptionOperation({ ...otherOp, owner: 'op', ttlMs: LONG })).toBe(false);
-        expect(await replica.commitSubscribe({ ...otherOp, owner: 'op' })).toBeNull();
-        expect(await replica.abortSubscriptionOperation({ ...otherOp, owner: 'op' })).toBe(false);
-        expect(await replica.commitUnsubscribe({ ...otherOp, owner: 'op' })).toBe(false);
-        expect(await replica.deleteSubscription(other)).toBe(false);
+        expect(await replica.validateSubscriptionClaimIfEnabled({ ...ref(row.id), owner: 'poller' })).toBe(true);
+        expect(await replica.releaseSubscriptionClaim({ ...ref(row.id), owner: 'poller' })).toBe(true);
 
-        const kept = await replica.getSubscriptionById(ref(row.id));
-        expect(kept).toMatchObject({ enabled: true, metadata: {}, claimOwner: 'poller' });
-        expect(kept?.operationOwner).toBeUndefined();
-        expect(await replica.getSubscriptionById(ref(op!.id))).toMatchObject({ operationOwner: 'op', enabled: false });
+        const begin = { kind: 'unsubscribe' as const, owner: 'op-row', ttlMs: LONG };
+        expect(await replica.beginSubscriptionOperation({ ...other, ...begin })).toBeNull();
+        expect((await replica.getSubscriptionById(ref(row.id)))?.operationOwner).toBeUndefined();
+        expect(await replica.beginSubscriptionOperation({ ...ref(row.id), ...begin })).not.toBeNull();
+        expect(await replica.abortSubscriptionOperation({ ...ref(row.id), owner: 'op-row' })).toBe(true);
+
+        const staged = await store.insertSubscribingSubscription({
+          ...createSampleSignalIdentity({ externalResourceId: 'ext-op' }),
+          owner: 'op',
+          ttlMs: LONG,
+        });
+        const otherStaged = wrong(staged!.id);
+        expect(await replica.renewSubscriptionOperation({ ...otherStaged, owner: 'op', ttlMs: LONG })).toBe(false);
+        expect(await replica.abortSubscriptionOperation({ ...otherStaged, owner: 'op' })).toBe(false);
+        expect(await replica.commitSubscribe({ ...otherStaged, owner: 'op' })).toBeNull();
+        expect(await replica.renewSubscriptionOperation({ ...ref(staged!.id), owner: 'op', ttlMs: LONG })).toBe(true);
+        expect(await replica.commitSubscribe({ ...ref(staged!.id), owner: 'op' })).not.toBeNull();
+
+        const leaving = await store.upsertSubscription(createSampleSignalIdentity({ externalResourceId: 'ext-leave' }));
+        await store.setSubscriptionEnabled({ ...ref(leaving.id), enabled: false });
+        await store.beginSubscriptionOperation({ ...ref(leaving.id), kind: 'unsubscribe', owner: 'op-u', ttlMs: LONG });
+        expect(await replica.commitUnsubscribe({ ...wrong(leaving.id), owner: 'op-u' })).toBe(false);
+        expect(await replica.commitUnsubscribe({ ...ref(leaving.id), owner: 'op-u' })).toBe(true);
+
+        expect(await replica.deleteSubscription(other)).toBe(false);
+        expect(await replica.getDelivery(delivery)).not.toBeNull();
+        expect(await replica.getSubscriptionById(ref(row.id))).not.toBeNull();
+        expect(await replica.deleteSubscription(ref(row.id))).toBe(true);
+      });
+
+      it('treats an owned row of another provider as missing rather than rejecting its fence', async () => {
+        const owned = createSampleSignalIdentity({ providerId: 'github' });
+        const owner = await store.claimDocumentOwner(
+          createSampleDocumentOwner('owned-doc', { providerId: 'github', threadId: owned.threadId }),
+        );
+        const row = await store.upsertSubscription(owned, { key: 'owned-doc', fencingToken: owner!.fencingToken });
+        const other = { agentId: SIGNAL_AGENT, providerId: 'other-provider', id: row.id };
+        await expect(replica.updateSubscription({ ...other, patch: { metadata: { x: 1 } } })).resolves.toBeNull();
+        await expect(replica.setSubscriptionEnabled({ ...other, enabled: false })).resolves.toBeNull();
+        await expect(replica.deleteSubscription(other)).resolves.toBe(false);
+        // The owner's provider still needs the fence.
+        await expect(
+          replica.updateSubscription({ ...ref(row.id, 'github'), patch: { metadata: { x: 1 } } }),
+        ).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
       });
 
       it('rejects a caller-supplied id already used by another subscription', async () => {

@@ -208,6 +208,9 @@ export class SignalSubscriptionFenceError extends MastraError {
  * - Delivery claims are `'claimed'` for new or expired keys, `'in-progress'`
  *   for any live pending key (including the same owner), and `'delivered'`
  *   once completed, and `'missing'` when the subscription does not exist.
+ *   A key completed while a claim waited on it may still read `'in-progress'`
+ *   (PostgreSQL reads the ledger as of the statement start); callers treat
+ *   both as "skip, someone else has it".
  *   Delivered identities are kept until their subscription is deleted, so the
  *   ledger never outlives its subscription.
  * - Rows of an owned document can only be mutated with that owner's fence.

@@ -143,6 +143,23 @@ describe('SignalProvider durable subscriptions', () => {
   });
 
   describe('scope lifetime', () => {
+    it('always generates subscription ids, even if a caller passes one', async () => {
+      const provider = connected();
+      const [upserted, staged] = await provider.withStore(async scope => [
+        await scope.upsertSubscription({ ...target, externalResourceId: 'ext-1', id: 'chosen-1' } as never),
+        await scope.insertSubscribingSubscription({
+          ...target,
+          externalResourceId: 'ext-2',
+          id: 'chosen-2',
+          owner: 'op',
+          ttlMs: 60_000,
+        } as never),
+      ]);
+      expect(upserted.id).not.toBe('chosen-1');
+      expect(staged!.id).not.toBe('chosen-2');
+      expect(await provider.withStore(scope => scope.getSubscriptionById({ id: 'chosen-1' }))).toBeNull();
+    });
+
     it('rejects a scope used after its callback settled', async () => {
       const provider = connected();
       let retained: DurableSubscriptionScope | undefined;
