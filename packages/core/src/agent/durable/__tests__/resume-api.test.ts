@@ -18,11 +18,12 @@ import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
@@ -80,6 +81,76 @@ function createTextModel(text: string) {
       warnings: [],
     }),
   });
+}
+
+function createSuspendingThenTextModel(toolName: string, texts: string[]) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      call++;
+      const chunks =
+        call === 1
+          ? [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-1',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'tool-call' as const,
+                toolCallType: 'function' as const,
+                toolCallId: 'call-1',
+                toolName,
+                input: JSON.stringify({ action: 'continue' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]
+          : (() => {
+              const text = texts[call - 2];
+              if (text === undefined) throw new Error(`Unexpected model call ${call}`);
+              return [
+                { type: 'stream-start' as const, warnings: [] },
+                {
+                  type: 'response-metadata' as const,
+                  id: `id-${call}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start' as const, id: `text-${call}` },
+                { type: 'text-delta' as const, id: `text-${call}`, delta: text },
+                { type: 'text-end' as const, id: `text-${call}` },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'stop' as const,
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ];
+            })();
+      return {
+        stream: convertArrayToReadableStream(chunks),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
+async function drain(stream: ReadableStream<any>) {
+  const chunks: any[] = [];
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return chunks;
 }
 
 async function seedSuspendedRun(
@@ -590,6 +661,88 @@ describe('Resume with CachingPubSub Event Replay', () => {
 
     // Disconnect (cleanup)
     initialCleanup();
+  });
+
+  it('resumes after cached history and gives the autonomous continuation a fresh run identity', async () => {
+    const store = new InMemoryStore();
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'A tool requiring approval',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (input, context) => {
+        if (!context?.agent?.resumeData) {
+          return context?.agent?.suspend?.({ reason: `Approve ${input.action}?` });
+        }
+        return { completed: true };
+      },
+    });
+    const model = createSuspendingThenTextModel('approvalTool', ['resumed response', 'continuation response']);
+    const baseAgent = new Agent({
+      id: 'resume-until-idle-agent',
+      name: 'Resume Until Idle Agent',
+      instructions: 'Test resume until idle stream boundaries',
+      model: model as LanguageModelV2,
+      memory: new MockMemory(),
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+    const mastra = new Mastra({
+      agents: { resumeUntilIdleAgent: durableAgent },
+      storage: store,
+      logger: false,
+      backgroundTasks: { enabled: true },
+    });
+    const runId = 'resume-until-idle-run';
+    const threadId = 'resume-until-idle-thread';
+    const resourceId = 'resume-until-idle-resource';
+    const initial = await durableAgent.stream('Start', {
+      runId,
+      memory: { thread: threadId, resource: resourceId },
+      closeOnSuspend: true,
+    });
+    const retainedChunks = await drain(initial.fullStream);
+    expect(retainedChunks.some(chunk => chunk.type === 'tool-call')).toBe(true);
+
+    const streamSpy = vi.spyOn(durableAgent, 'stream');
+    const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: true });
+    const chunksPromise = drain(result.fullStream);
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = async (type: string) => {
+      await (bgManager as any).publishLifecycleEvent(type, {
+        id: 'resume-task',
+        toolName: 'dummy',
+        toolCallId: 'resume-task',
+        runId: 'background-run',
+        agentId: durableAgent.id,
+        threadId,
+        resourceId,
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+    };
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+
+    const chunks = await chunksPromise;
+    const texts = chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text);
+    expect(texts).toEqual(['resumed response', 'continuation response']);
+    expect(chunks.some(chunk => chunk.type === 'tool-call')).toBe(false);
+    expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(2);
+    expect(result.runId).toBe(runId);
+    expect(streamSpy).toHaveBeenCalledOnce();
+    expect(streamSpy.mock.calls[0]?.[1]).not.toHaveProperty('runId');
+
+    result.cleanup();
+    await mastra.backgroundTaskManager?.shutdown();
   });
 
   it('should deduplicate events during resume replay', async () => {

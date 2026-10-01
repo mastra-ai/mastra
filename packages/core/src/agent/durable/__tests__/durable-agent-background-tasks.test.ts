@@ -646,7 +646,10 @@ describe('DurableAgent.streamUntilIdle', () => {
     result.cleanup();
   });
 
-  it('streams each segment once when a caller supplies a runId', async () => {
+  it.each([
+    { label: 'without a caller runId', runId: undefined },
+    { label: 'with a caller runId', runId: 'caller-run-id' },
+  ])('streams each segment once $label', async ({ runId }) => {
     const memory = new MockMemory();
     const { model, getCallCount } = makeScriptedModel([
       textResponse('first response'),
@@ -684,7 +687,7 @@ describe('DurableAgent.streamUntilIdle', () => {
       });
 
     const outer = await durableAgent.stream('hi', {
-      runId: 'caller-run-id',
+      ...(runId ? { runId } : {}),
       memory: { thread: 'thread-2', resource: 'user-1' },
       untilIdle: true,
     });
@@ -699,7 +702,7 @@ describe('DurableAgent.streamUntilIdle', () => {
     expect(text).toEqual(['first response', 'continuation response']);
     expect(chunks.filter(c => c.type === 'finish')).toHaveLength(2);
     expect(getCallCount()).toBe(2);
-    expect(outer.runId).toBe('caller-run-id');
+    if (runId) expect(outer.runId).toBe(runId);
 
     outer.cleanup();
   });
