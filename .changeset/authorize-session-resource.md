@@ -15,7 +15,7 @@ const controller = new AgentController({
 
 The decision also governs input sent into a run that is already active. Approved callers join the live run; denied callers are rejected.
 
-Agent sends now reject a caller whose request context carries a `MASTRA_RESOURCE_ID_KEY` that does not match the target thread's resource, before anything is queued, stored or delivered. This covers `sendSignal`, `sendMessage`, `queueMessage`, `sendStateSignal`, `sendNotificationSignal`, `sendToolApproval`, `approveToolCall` and `declineToolCall`. Only the caller's top-level `requestContext` is checked; `ifIdle.streamOptions.requestContext` is not.
+Agent sends now reject a caller whose request context carries a `MASTRA_RESOURCE_ID_KEY` that does not match the target thread's resource, before anything is queued, stored or delivered. This covers `sendSignal`, `sendMessage`, `queueMessage`, `sendStateSignal`, `sendNotificationSignal`, `sendToolApproval`, `approveToolCall` and `declineToolCall` (and their `…Generate` variants). On a session, `approveToolCall`, `declineToolCall` and `resumeToolCall` are checked; `respondToToolApproval` is not yet. Only the caller's top-level `requestContext` is checked; `ifIdle.streamOptions.requestContext` is not.
 
 `SendAgentSignalOptions` gains an optional top-level `requestContext`. It applies whether the thread is idle or active, and wins over `ifIdle.streamOptions.requestContext`.
 

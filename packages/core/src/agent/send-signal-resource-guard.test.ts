@@ -331,6 +331,15 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
           ),
         ),
       );
+      await expectMismatch(
+        syncCall(() =>
+          agent.queueMessage('MALLORY-OWN-QUEUED', {
+            runId: stream.runId,
+            resourceId: MALLORY,
+            requestContext: callerContext(MALLORY),
+          }),
+        ),
+      );
     } finally {
       release();
     }
@@ -340,6 +349,7 @@ describe('Agent send entry points reject a mismatched caller resource', () => {
     expect(prompts.join('\n')).not.toContain('MALLORY-SECRET');
     expect(prompts.join('\n')).not.toContain('MALLORY-QUEUED');
     expect(prompts.join('\n')).not.toContain('MALLORY-OWN-RESOURCE');
+    expect(prompts.join('\n')).not.toContain('MALLORY-OWN-QUEUED');
   });
 
   it('a queued message never inherits the active run’s requestContext', async () => {

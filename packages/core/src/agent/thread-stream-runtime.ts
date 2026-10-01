@@ -4764,10 +4764,11 @@ export class AgentThreadStreamRuntime {
     if (!resourceId || !threadId) {
       throw new Error('resourceId and threadId are required to queue a message');
     }
+    // A resolved run's owner wins over a caller-supplied resourceId.
     assertRequestContextResourceMatches({
       requestContext: target.requestContext,
-      resourceId,
-      threadId,
+      resourceId: activeRecord?.resourceId ?? resourceId,
+      threadId: activeRecord?.threadId ?? threadId,
       agentName: agent.name,
     });
 
