@@ -11,7 +11,7 @@ export interface WorkspaceNoticesProps {
   /** File search needs `workspace.init()` to have indexed the workspace. */
   showInitWarning: boolean;
   /** Discovered skills; leave undefined while they load so nothing is flagged early. */
-  skills?: SkillMetadata[];
+  skills?: Pick<SkillMetadata, 'name' | 'path'>[];
 }
 
 /** Page-level notices shown above the workspace tree. */
