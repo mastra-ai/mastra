@@ -4503,6 +4503,10 @@ export class Session<TState = unknown> {
 
     const suspension = this.suspensions.get({ toolCallId: resolvedToolCallId });
 
+    // Authorize before a plan approval can switch modes, and let a denial
+    // propagate: the owner's suspended run is untouched, so it must not end.
+    requestContext = await this.#authorizeCaller(requestContext);
+
     try {
       if (suspension?.toolName === 'submit_plan') {
         await this.handlePlanApprovalResume({

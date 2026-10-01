@@ -375,6 +375,37 @@ describe('Session active-run input authorization', () => {
       await finish(ctx, [alice]);
     });
 
+    it('rejects a denied respondToToolSuspension without ending the owner run', async () => {
+      const ctx = await setup();
+      const { alice } = await startAliceRun(ctx);
+      ctx.session.suspensions.register({
+        toolCallId: 'call-1',
+        runId: 'alice-run',
+        toolName: 'ask',
+        threadId: ctx.session.thread.getId()!,
+        resourceId: SESSION_RESOURCE,
+      });
+      const resume = vi.spyOn(ctx.agent, 'resumeStream');
+      const events: string[] = [];
+      ctx.session.subscribe(event => {
+        events.push(event.type);
+      });
+
+      await expect(
+        ctx.session.respondToToolSuspension({
+          toolCallId: 'call-1',
+          resumeData: 'x',
+          requestContext: mappedCaller('bob'),
+        }),
+      ).rejects.toMatchObject(mismatch);
+      expect(ctx.session.suspensions.get({ toolCallId: 'call-1' })).toBeDefined();
+      expect(resume).not.toHaveBeenCalled();
+      expect(events).not.toContain('agent_end');
+      expect(events).not.toContain('error');
+      expect(ctx.authorize).toHaveBeenCalledTimes(1);
+      await finish(ctx, [alice]);
+    });
+
     it('lets an approved caller through approveToolCall with the policy called once', async () => {
       const ctx = await setup();
       const { alice } = await startAliceRun(ctx);
