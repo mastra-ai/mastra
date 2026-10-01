@@ -60,9 +60,10 @@ export function emitTokenMetricsForUsage(
   usage: UsageStats,
   provider: string | undefined,
   model: string | undefined,
+  usageIncomplete: boolean | undefined,
   metrics: MetricsContext,
 ): void {
-  emitUsageMetrics({ provider, model } as ModelGenerationAttributes, usage, metrics);
+  emitUsageMetrics({ provider, model, usageIncomplete } as ModelGenerationAttributes, usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */
