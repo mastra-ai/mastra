@@ -467,6 +467,7 @@ const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) =>
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const enforceFactoryCommitIdentityBeforePush = vi.fn(async () => {});
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async (_input: CreatePullRequestInput) => ({
   url: 'https://github.com/octo/hello/pull/1',
@@ -499,6 +500,8 @@ vi.mock('./sandbox', () => {
     runTeardownCommand: (sb: any, worktreePath: string, command: string, options?: { timeoutMs?: number }) =>
       runTeardownCommand(sb, worktreePath, command, options),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
+    enforceFactoryCommitIdentityBeforePush: (...args: any[]) => enforceFactoryCommitIdentityBeforePush(...(args as [])),
+    FACTORY_COMMIT_IDENTITY: { name: 'Mastra Factory', email: 'noreply@mastra.ai' },
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
     // Match the real ref validator closely enough for route tests.
@@ -733,6 +736,7 @@ beforeEach(() => {
   runSetupCommand.mockClear();
   runTeardownCommand.mockClear();
   commitAll.mockClear();
+  enforceFactoryCommitIdentityBeforePush.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
   addIssueLabels.mockClear();
@@ -2443,7 +2447,10 @@ describe('commit route', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ committed: true });
-    expect((commitAll.mock.calls[0] as unknown as any[])[1]).toBe('/workspace/worktrees/feat-x');
+    expect(commitAll).toHaveBeenCalledWith(expect.anything(), '/workspace/worktrees/feat-x', 'wip', {
+      name: 'Mastra Factory',
+      email: 'noreply@mastra.ai',
+    });
   });
 });
 
@@ -2478,6 +2485,10 @@ describe('push route', () => {
       repositoryId: 'repository-99',
     });
     expect(githubStub.mintInstallationToken).not.toHaveBeenCalled();
+    expect(enforceFactoryCommitIdentityBeforePush).toHaveBeenCalledWith(
+      expect.anything(),
+      '/workspace/worktrees/feat-x',
+    );
     expect(pushBranch).toHaveBeenCalledOnce();
     // pushBranch(sandbox, workdir, branch, token, repoFullName)
     const call = pushBranch.mock.calls[0] as unknown as any[];

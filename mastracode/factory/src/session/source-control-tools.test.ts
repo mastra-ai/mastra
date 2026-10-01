@@ -5,7 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
-import { createSourceControlTools } from './source-control-tools.js';
+import { createSourceControlTools, verdictEventMismatch } from './source-control-tools.js';
+
+describe('verdictEventMismatch', () => {
+  it('allows the explicit unrecorded-approval fallback only as a comment', () => {
+    expect(verdictEventMismatch('comment', 'Verdict: approve (approval not recorded)')).toBeUndefined();
+    expect(verdictEventMismatch('approve', 'Verdict: approve (approval not recorded)')).toContain('event "comment"');
+  });
+});
 
 function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();

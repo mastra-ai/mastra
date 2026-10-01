@@ -752,6 +752,9 @@ export interface GitIdentity {
   login?: string | null;
 }
 
+/** Repository-local identity used for every commit produced by a Factory session. */
+export const FACTORY_COMMIT_IDENTITY: GitIdentity = { name: 'Mastra Factory', email: 'noreply@mastra.ai' };
+
 /**
  * Resolve a concrete `{ name, email }` for git authorship from a possibly-sparse
  * identity. Falls back to a GitHub-style noreply identity so commits are never
@@ -845,6 +848,94 @@ export async function pushRepositoryBranch(
     authorization.token,
     authorization.username ?? 'x-access-token',
   );
+}
+
+/**
+ * Reassert and verify Factory's service commit identity immediately before a
+ * brokered push. The tip is safe to rewrite only while it remains unpublished;
+ * every earlier unpublished commit must already carry the same identity.
+ */
+export async function enforceFactoryCommitIdentityBeforePush(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+): Promise<void> {
+  const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
+  if (head.exitCode !== 0 || !head.stdout.trim()) return;
+  const unpublishedBeforeAmend = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'rev-list',
+    'HEAD',
+    '--not',
+    '--remotes',
+  ]);
+  if (unpublishedBeforeAmend.exitCode !== 0) {
+    throw new MaterializeError(
+      `Failed to identify unpublished commits: ${unpublishedBeforeAmend.stderr.trim()}`,
+      'push-failed',
+    );
+  }
+  if (!unpublishedBeforeAmend.stdout.trim()) return;
+
+  const upstream = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '@{upstream}']);
+  if (upstream.exitCode === 0 && upstream.stdout.trim() === head.stdout.trim()) return;
+  if (upstream.exitCode === 0 && upstream.stdout.trim()) {
+    const fastForward = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      upstream.stdout.trim(),
+      head.stdout.trim(),
+    ]);
+    if (fastForward.exitCode !== 0) {
+      throw new MaterializeError('Refusing to rewrite a commit whose upstream branch has diverged.', 'push-failed');
+    }
+  }
+
+  await configureGitIdentity(sandbox, workdir, FACTORY_COMMIT_IDENTITY);
+  const amend = await execute(sandbox, 'git', ['-C', workdir, 'commit', '--amend', '--no-edit', '--reset-author']);
+  if (amend.exitCode !== 0) {
+    throw new MaterializeError(`Failed to enforce Factory commit identity: ${amend.stderr.trim()}`, 'commit-failed');
+  }
+
+  const unpublishedAfterAmend = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'rev-list',
+    'HEAD',
+    '--not',
+    '--remotes',
+  ]);
+  if (unpublishedAfterAmend.exitCode !== 0) {
+    throw new MaterializeError(
+      `Failed to verify commit identity: ${unpublishedAfterAmend.stderr.trim()}`,
+      'push-failed',
+    );
+  }
+  for (const commit of unpublishedAfterAmend.stdout.split(/\s+/).filter(Boolean)) {
+    const identity = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'show',
+      '-s',
+      '--format=%an%x00%ae%x00%cn%x00%ce',
+      commit,
+    ]);
+    const [authorName, authorEmail, committerName, committerEmail] = identity.stdout.trimEnd().split('\0');
+    if (
+      identity.exitCode !== 0 ||
+      authorName !== FACTORY_COMMIT_IDENTITY.name ||
+      authorEmail !== FACTORY_COMMIT_IDENTITY.email ||
+      committerName !== FACTORY_COMMIT_IDENTITY.name ||
+      committerEmail !== FACTORY_COMMIT_IDENTITY.email
+    ) {
+      throw new MaterializeError(
+        `Refusing to push commit ${commit.slice(0, 12)} because it does not use the stable Factory author and committer identity.`,
+        'push-failed',
+      );
+    }
+  }
 }
 
 export interface CommitResult {

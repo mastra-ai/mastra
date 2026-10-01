@@ -272,6 +272,14 @@ export interface MastraFactoryDispatcherConfig {
 }
 
 const CONTROLLER_ID = 'code';
+const FACTORY_SOURCE_CONTROL_INSTRUCTIONS = `# Factory source-control identity
+
+Factory overrides the generic coding-agent commit and pull-request instructions:
+- Do not add a Co-Authored-By trailer. Factory enforces the stable Mastra Factory author and committer at the workspace and push boundaries.
+- Push only with source_control_push_branch.
+- Create or update pull requests and merge requests only with source_control_create_change_request and source_control_update_change_request.
+- Publish reviews only with source_control_review_change_request, and mutate GitHub issue comments or labels only with the provided github_* tools.
+- Never use a provider CLI, raw provider API, or ambient environment credential for a source-control write.`;
 
 function hasPlatformCredentials(): boolean {
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
@@ -909,7 +917,6 @@ export class MastraFactory {
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
-        coAuthor: { name: 'mastra-platform[bot]' },
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
@@ -944,7 +951,9 @@ export class MastraFactory {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
+          if (parseSupervisorResourceId(context?.resourceId)) {
+            return `${FACTORY_SOURCE_CONTROL_INSTRUCTIONS}\n\n${SUPERVISOR_INSTRUCTIONS}`;
+          }
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -979,7 +988,7 @@ export class MastraFactory {
               }
             }
           }
-          return undefined;
+          return FACTORY_SOURCE_CONTROL_INSTRUCTIONS;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller

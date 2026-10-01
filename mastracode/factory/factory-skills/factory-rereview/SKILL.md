@@ -152,7 +152,7 @@ On any mismatch, stop and record it as a blocking security finding with both val
 
 Compose two artifacts, in order — the **published body** goes on the PR, the **session handoff** goes back into the run's conversation. Don't send either to the conversation yet; both are drafted here, the published body is sent to the PR, the verdict is recorded, and only then is the session handoff posted.
 
-The **published body** (what `gh pr review --body-file` receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
+The **published body** (what the source-control broker receives) **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, then on the next line `Reviewed head: <full 40-character SHA>` naming the exact head you verified, followed by:
 
 - **Prior pass disposition** — every substantive item from your previous review, classified: addressed, partially addressed, still open, refuted by the push, or invalidated by the push. Cite the commit or `file:line` proving each addressed/refuted/invalidated call. A prior blocking finding still open is called out plainly at the top of this section.
 - **Findings** — lead with the mechanism of the most consequential finding; new-this-pass findings from the push and from the fresh whole-PR sweep are each labeled as `[push]` or `[fresh]` so the record is honest about where they came from. Distill — this is a handoff, not a transcript.
@@ -174,33 +174,27 @@ The **session handoff** (posted as the final conversation message after the verd
 
 Next, publish the re-review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the published body to `.artifacts/factory-rereview/pr-<number>-<headSha>.md`, where `<headSha>` is the full SHA you reviewed. Always write this file fresh in the current pass — never reuse, copy, or edit a body file from an earlier pass, which describes a different head and may carry the opposite verdict.
 
-**Gate the file immediately before posting.** Run these checks against the exact file you are about to pass to `--body-file`, and post nothing if any fails — regenerate the body from this pass's findings instead:
+**Gate the file immediately before posting.** Run these checks against the exact file you are about to pass as `body`, and post nothing if any fails — regenerate the body from this pass's findings instead:
 
-1. `head -n1 <file>` is exactly `Verdict: approve` when you will use `--approve`, or exactly `Verdict: request changes` when you will use `--request-changes`.
+1. `head -n1 <file>` is exactly `Verdict: approve` when you will use `event: "approve"`, or exactly `Verdict: request changes` when you will use `event: "request-changes"`.
 2. The `Reviewed head:` SHA in the file equals `gh pr view <number> --json headRefOid --jq .headRefOid` and the `reviewedHeadSha` you will pass to `factory_record_review_verdict`.
 
-Then submit a PR review matching the verdict:
+Then read that complete body and call `source_control_review_change_request` with `changeRequestId: <number>` and the event matching the verdict:
 
-- approve → `gh pr review <number> --approve --body-file <file>`
-- request changes → `gh pr review <number> --request-changes --body-file <file>`
+- approve → `event: "approve"`
+- request changes → `event: "request-changes"`
 
-**Author-identity misconfiguration must be visible, never silent.** GitHub refuses both approve and request changes from the PR's author, so a review token that authored the PR can never record a verdict in `reviewDecision` or satisfy branch protection. Before submitting, compare the reviewing identity (`gh api user --jq .login`; for an App installation token that call may fail — then treat a submission rejected with GitHub's "Can not approve/request changes on your own pull request" error as the same signal) with the PR's `.author.login`. When they match:
-
-1. Add this line to the published body immediately after the `Reviewed head:` line (the verdict line stays first and `Reviewed head:` stays second): `> ⚠️ **Factory misconfiguration:** the review token is the PR author, so GitHub cannot record this verdict as an approving or changes-requested review (it will not satisfy branch protection or workflows that require an approving or changes-requested review). Configure a separate reviewer token for Factory reviews.`
-2. Publish with `gh pr comment <number> --body-file <file>`. Do not use `gh pr review --comment`: Factory's repair loop only routes a request-changes verdict from a plain PR comment whose first line is the verdict, and ignores `COMMENTED` reviews.
-3. Report the misconfiguration and the publish method under **Verification** and in the **Factory routing** block of the handoff.
-
-If submission fails for any other reason, fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+Pass the complete handoff as `body`. Never use `gh pr review`, `gh pr comment`, raw provider APIs, or credentials from the environment to publish it. If the provider rejects approve/request-changes because Factory's stable service identity authored the PR, change only the first line to `Verdict: approve (approval not recorded)` or `Verdict: request changes` as applicable, then retry `source_control_review_change_request` once with `event: "comment"` and the otherwise identical body. The approval fallback wording is mandatory: it distinguishes an App-authored comment from a recorded GitHub approval and is the only approving body the broker accepts with `event: "comment"`. Report the fallback under **Verification**.
 
 After the body is posted successfully (review or comment fallback), delete the body file so no later pass can post it.
 
-After publishing, reconcile the verdict label: approve adds `status:auto-approved` and removes `status:changes-requested`; request changes adds `status:changes-requested` and removes `status:auto-approved`.
+After publishing, reconcile the verdict label with one `github_update_issue_labels` call for the PR number: approve adds `status:auto-approved` and removes `status:changes-requested`; request changes adds `status:changes-requested` and removes `status:auto-approved`.
 
 **Non-blocking follow-ups become a PR, not homework.** After publishing the re-review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
 1. Branch from the reviewed PR's current head: `git fetch origin pull/<number>/head && git checkout -b factory/rereview-followups-pr-<number> FETCH_HEAD`.
 2. Apply the fixes, run the narrowest tests covering them, and commit. **Credit the human whose work these commits build on.** The reviewed PR's `author` (from the Phase 1 `gh pr view --json` call) tells you who: when `is_bot` is false, add a `Co-Authored-By: <login> <ID+<login>@users.noreply.github.com>` trailer to every commit, resolving `ID` with `gh api users/<login> --jq .id`. When the author is a bot — the Factory's own pull requests are — credit the reporter of the issue the PR closes instead, if it links one. Credit nobody rather than guess at an identity: a trailer naming the wrong account is worse than no trailer.
-3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
+3. Push with `source_control_push_branch` and open a follow-up PR with `source_control_create_change_request`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
 4. Write the follow-up body to `.artifacts/factory-rereview/follow-up-pr-<number>.md`; it links the re-review and lists each finding it addresses, and the handoff links the follow-up PR.
 
 Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.

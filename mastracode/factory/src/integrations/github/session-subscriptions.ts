@@ -41,6 +41,15 @@ const triageCommentInputSchema = z.object({
   issueNumber: z.number().int().positive(),
   body: z.string().startsWith(TRIAGE_COMMENT_MARKER),
 });
+const issueCommentInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  body: z.string().trim().min(1),
+});
+const issueLabelsInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  add: z.array(z.string().trim().min(1)).default([]),
+  remove: z.array(z.string().trim().min(1)).default([]),
+});
 
 const triageCommentLocks = new Map<string, Promise<void>>();
 
@@ -194,6 +203,47 @@ export async function upsertFactoryTriageComment(
   );
 }
 
+export async function commentCurrentSessionIssue(
+  requestContext: RequestContext,
+  input: { issueNumber: number; body: string },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const repositoryTarget = await github.versionControl.getRepositoryTarget({
+    orgId: target.orgId,
+    repositoryId: target.repository.id,
+  });
+  const created = await github.intake.createComment({
+    ...repositoryTarget,
+    issueId: String(input.issueNumber),
+    body: input.body,
+    actingUserId: target.userId,
+  });
+  if (!created) throw new Error(`GitHub issue ${input.issueNumber} was not found in the active project repository.`);
+  return created;
+}
+
+export async function updateCurrentSessionIssueLabels(
+  requestContext: RequestContext,
+  input: { issueNumber: number; add: string[]; remove: string[] },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const installationId = Number(target.installation.externalId);
+  if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  const add = [...new Set(input.add.map(label => label.trim()).filter(Boolean))];
+  const remove = [...new Set(input.remove.map(label => label.trim()).filter(Boolean))].filter(
+    label => !add.includes(label),
+  );
+  await Promise.all([
+    add.length > 0
+      ? github.addIssueLabels(installationId, target.repository.slug, input.issueNumber, add)
+      : Promise.resolve(),
+    ...remove.map(label => github.removeIssueLabel(installationId, target.repository.slug, input.issueNumber, label)),
+  ]);
+  return { issueNumber: input.issueNumber, added: add, removed: remove };
+}
+
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
   const target = await resolveSessionTarget(requestContext, github);
   // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
@@ -238,6 +288,20 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         'Create or update this Factory App’s canonical triage handoff comment on an issue in the active repository. Use this for every marked pending or final Factory triage handoff; never use gh to create or edit that handoff.',
       inputSchema: triageCommentInputSchema,
       execute: async input => upsertFactoryTriageComment(requestContext, input, github),
+    }),
+    github_comment_issue: createTool({
+      id: 'github_comment_issue',
+      description:
+        'Add a comment to a GitHub issue in the active repository through Factory’s stable provider identity. Never use gh issue comment for Factory-authored issue comments.',
+      inputSchema: issueCommentInputSchema,
+      execute: async input => commentCurrentSessionIssue(requestContext, input, github),
+    }),
+    github_update_issue_labels: createTool({
+      id: 'github_update_issue_labels',
+      description:
+        'Add or remove existing labels on an issue or pull request in the active GitHub repository through Factory’s stable provider identity. Read the current labels first and request only necessary changes.',
+      inputSchema: issueLabelsInputSchema,
+      execute: async input => updateCurrentSessionIssueLabels(requestContext, input, github),
     }),
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',

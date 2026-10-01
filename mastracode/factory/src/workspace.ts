@@ -23,7 +23,9 @@ import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
+  configureGitIdentity,
   DEFAULT_COMMAND_TIMEOUT_MS,
+  FACTORY_COMMIT_IDENTITY,
   materializeRepo,
   runSetupCommand,
   runTeardownCommand,
@@ -887,6 +889,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
         mergeRequestNumber: sourceControl.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
       });
+      await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
@@ -904,6 +907,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
         try {
           await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -920,6 +924,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               });
             }
           }
+          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
           if (setupError instanceof SetupCommandError) {
             // The command ran and exited non-zero — a config problem, not an
             // infra one. Remember it so the next start recovers, and tell the
