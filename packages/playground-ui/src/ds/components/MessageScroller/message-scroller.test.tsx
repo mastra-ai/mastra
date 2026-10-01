@@ -812,6 +812,52 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
   });
 
+  it('follows the first reply of a fresh thread, which has nothing to scroll yet', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => frames.push(callback));
+    stubLayout({ 'message-1': 0 });
+    const { rerender } = render(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={[]} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    const scrollTo = installScrollTo(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 400, clientHeight: 400, scrollTop: 0 });
+    rerender(<HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1']} />);
+    act(() => frames.shift()?.(0));
+    act(() => frames.shift()?.(16));
+
+    scrollTo.mockClear();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+    rerender(
+      <HistoryHarness
+        autoScroll
+        defaultScrollPosition="last-anchor"
+        messageIds={['message-1']}
+        replyIds={['reply-1']}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, behavior: 'auto' });
+  });
+
+  it('keeps a following reader at the end when the box shrinks under a growing composer', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    render(<HistoryHarness autoScroll messageIds={['message-1']} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+
+    const observer = MockResizeObserver.instances.find(instance => instance.observed.has(viewport));
+    if (!observer) throw new Error('No resize observer registered for the viewport');
+    const scrollTo = installScrollTo(viewport);
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 340 });
+    await act(async () => {
+      observer.trigger([{ target: viewport }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 660, behavior: 'auto' });
+  });
+
   it('stays attached when a scroll lands behind a reply that is still growing', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     render(<HistoryHarness autoScroll messageIds={['message-1']} />);
@@ -842,6 +888,9 @@ describe('MessageScroller autoScroll', () => {
 
   it('leaves a reopened thread on the turn it restored instead of following the stream', () => {
     stubLayout({ 'message-1': 0, 'message-2': 300 });
+    // Sized before mount: jsdom's empty box would read as a fresh thread at its end.
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(400);
     const { rerender } = render(
       <HistoryHarness autoScroll defaultScrollPosition="last-anchor" messageIds={['message-1', 'message-2']} />,
     );

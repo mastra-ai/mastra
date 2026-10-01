@@ -41,13 +41,13 @@ const Shell = ({ children }: { children: React.ReactNode }) => (
           <ChatShell.Content className="gap-0 pt-6">
             <ChatShell.Column className="flex-1">{children}</ChatShell.Column>
           </ChatShell.Content>
-          <ChatShell.Dock>
-            <ChatShell.ScrollButton />
-            <ChatShell.Column>
-              <Composer />
-            </ChatShell.Column>
-          </ChatShell.Dock>
         </ChatShell.Viewport>
+        <ChatShell.Dock>
+          <ChatShell.ScrollButton />
+          <ChatShell.Column>
+            <Composer />
+          </ChatShell.Column>
+        </ChatShell.Dock>
       </ChatShell.Stage>
     </ChatShell>
   </div>

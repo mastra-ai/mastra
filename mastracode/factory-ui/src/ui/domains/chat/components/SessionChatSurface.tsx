@@ -64,17 +64,17 @@ export function SessionChatSurface({
                 </ChatMessageBoundary>
               </ChatShell.Column>
             </ChatShell.Content>
-            <ChatShell.Dock>
-              <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
-                <TaskPanel />
-                <div role="region" aria-label={composerLabel}>
-                  <ComposerPanel />
-                </div>
-              </ChatShell.Column>
-            </ChatShell.Dock>
           </div>
         </ChatShell.Viewport>
+        <ChatShell.Dock>
+          <ChatShell.ScrollButton aria-label="Jump to latest message" />
+          <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
+            <TaskPanel />
+            <div role="region" aria-label={composerLabel}>
+              <ComposerPanel />
+            </div>
+          </ChatShell.Column>
+        </ChatShell.Dock>
         {stageSurface}
       </ChatShell.Stage>
     </ChatShell>

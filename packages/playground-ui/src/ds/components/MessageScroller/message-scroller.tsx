@@ -506,10 +506,12 @@ export function MessageScrollerProvider({
 
   React.useEffect(() => {
     if (!viewportElement || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(syncAfterScroll);
+    // The box shrinking (a composer growing under it) pushes the end out of view just
+    // as content growing does, and a following reader is carried the same way.
+    const observer = new ResizeObserver(notifyContentResize);
     observer.observe(viewportElement);
     return () => observer.disconnect();
-  }, [syncAfterScroll, viewportElement]);
+  }, [notifyContentResize, viewportElement]);
 
   React.useLayoutEffect(() => {
     updateScrollable();
@@ -541,6 +543,9 @@ export function MessageScrollerProvider({
 
       if (!didScroll) return;
       defaultScrollAppliedRef.current = true;
+      // A fresh thread opens on its first message with nothing to scroll yet: it is
+      // at its end, so the reply streaming in under it is followed.
+      if (autoScroll && getMaxScroll(viewportElement) <= VISIBILITY_EPSILON) followingRef.current = true;
       // Settling is what arms turn anchoring: the rows the transcript opened with
       // are recorded as read here, and on a settled thread the next anchor to
       // register is the send itself — an arming left to a later anchoring pass
@@ -572,6 +577,7 @@ export function MessageScrollerProvider({
       defaultScrollScheduledRef.current = false;
     };
   }, [
+    autoScroll,
     defaultScrollPosition,
     getLastAnchorId,
     getOrderedItems,

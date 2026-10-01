@@ -22,7 +22,7 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
 
 /**
  * A chat page frame with exactly one scroll container. Bars sit above it, the
- * composer docks inside it, every region shares one column.
+ * composer docks below it, every region shares one column.
  *
  * Tuned through custom properties, all defaulted here: `--chat-column` (column
  * width), `--chat-surface` (the colour the composer veil ramps to — the shell
@@ -39,8 +39,8 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
         data-slot="chat-shell"
         className={cn(
           '@container relative isolate flex min-h-0 min-w-0 flex-col',
-          '[--chat-column:48rem] [--chat-fade:1.5rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
-          '[--chat-surface:var(--color-background)] [--chat-veil:70%]',
+          '[--chat-column:48rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+          '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
           className,
         )}
         {...props}
@@ -79,15 +79,22 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
       {...props}
     >
       {/* Sticky against the scroller itself is clamped to its box, not the
-          scrolled height, and strands the dock mid-transcript. */}
+          scrolled height, and strands the fade mid-transcript. */}
       <div data-slot="chat-shell-track" className="relative flex min-h-full min-w-0 flex-col">
         {children}
+        {/* The air under the last row, and the band the transcript fades out across
+            as it scrolls toward the dock. */}
+        <div
+          aria-hidden
+          data-slot="chat-shell-fade"
+          className="pointer-events-none sticky bottom-0 z-10 h-(--chat-fade) shrink-0 bg-(--chat-surface) [mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil)))]"
+        />
       </div>
     </MessageScrollerViewport>
   );
 }
 
-/** Scrolling content. The air above the composer belongs to the dock's fade band. */
+/** Scrolling content. The air under it belongs to the viewport's fade band. */
 export function ChatShellContent({ className, ...props }: MessageScrollerContentProps) {
   return <MessageScrollerContent className={cn('flex-1', className)} {...props} />;
 }
@@ -140,23 +147,17 @@ export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...pr
 }
 
 /**
- * Composer region, sticky but left in flow: its own height reserves the room the
- * transcript scrolls behind, so nothing measures it and a composer growing under
- * the cursor resizes no box the scroller watches.
- *
- * Behind it, one sheet of the page masked in over `--chat-fade` of air and never
- * past `--chat-veil`, so the transcript dims as it slides under but stays
- * readable through the card's surroundings. The ramp runs three times the air, so
- * it tops out behind the card and its end never shows.
+ * Composer region, the scroller's sibling under it, so neither the transcript nor
+ * the scrollbar runs behind it. It takes the end inset with the scroller, so the
+ * two stay on one axis.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (
     <div
       data-slot="chat-shell-dock"
       className={cn(
-        'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
-        'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
-        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_calc(var(--chat-fade)*3))]',
+        'relative z-10 shrink-0 pe-(--chat-inset-end) pb-(--chat-gutter)',
+        'transition-[padding-inline-end] duration-360 ease-out-custom motion-reduce:transition-none',
         className,
       )}
       {...props}
@@ -173,7 +174,7 @@ export function ChatShellScrollButton({ className, ...props }: MessageScrollerBu
   return (
     <div
       data-slot="chat-shell-scroll-button"
-      className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+0.5rem)] flex"
+      className="pointer-events-none absolute inset-s-0 inset-e-(--chat-inset-end) bottom-[calc(100%+0.5rem)] flex"
     >
       <ChatShellColumn className="flex-row justify-center">
         <MessageScrollerButton

@@ -85,42 +85,42 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
                 ))}
               </ChatShell.Column>
             </ChatShell.Content>
-            <ChatShell.Dock>
-              <ChatShell.ScrollButton aria-label="Jump to latest message" />
-              <ChatShell.Column className="gap-2">
-                {activeTurn?.review && (
-                  <TaskList
-                    defaultOpen={false}
-                    hideWhenComplete={false}
-                    scrollActiveIntoView={false}
-                    tasks={[
-                      {
-                        id: 'inspect',
-                        content: 'Inspect the composer',
-                        activeForm: 'Inspecting the composer',
-                        status: 'completed',
-                      },
-                      { id: 'plan', content: 'Review the plan', activeForm: 'Reviewing the plan', status: 'completed' },
-                      {
-                        id: 'verify',
-                        content: 'Verify the interaction',
-                        activeForm: 'Verifying the interaction',
-                        status: verificationStatus,
-                      },
-                    ]}
-                  />
-                )}
-                <ConversationComposer
-                  phase={phase}
-                  busy={busy}
-                  onSend={sendMessage}
-                  onStop={() => {
-                    if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
-                  }}
-                />
-              </ChatShell.Column>
-            </ChatShell.Dock>
           </ChatShell.Viewport>
+          <ChatShell.Dock>
+            <ChatShell.ScrollButton aria-label="Jump to latest message" />
+            <ChatShell.Column className="gap-2">
+              {activeTurn?.review && (
+                <TaskList
+                  defaultOpen={false}
+                  hideWhenComplete={false}
+                  scrollActiveIntoView={false}
+                  tasks={[
+                    {
+                      id: 'inspect',
+                      content: 'Inspect the composer',
+                      activeForm: 'Inspecting the composer',
+                      status: 'completed',
+                    },
+                    { id: 'plan', content: 'Review the plan', activeForm: 'Reviewing the plan', status: 'completed' },
+                    {
+                      id: 'verify',
+                      content: 'Verify the interaction',
+                      activeForm: 'Verifying the interaction',
+                      status: verificationStatus,
+                    },
+                  ]}
+                />
+              )}
+              <ConversationComposer
+                phase={phase}
+                busy={busy}
+                onSend={sendMessage}
+                onStop={() => {
+                  if (activeTurn) transitionTurn(activeTurn.id, 'streaming', 'stopped');
+                }}
+              />
+            </ChatShell.Column>
+          </ChatShell.Dock>
           <ThreadRail
             turns={turns.map(turn => ({
               key: turn.id,
