@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Added shared span predicate validation for the span-query contract prototype.
+Added internal groundwork for querying individual spans across traces.

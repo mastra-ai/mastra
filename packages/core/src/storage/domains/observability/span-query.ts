@@ -21,7 +21,6 @@ import {
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
 
-export const SPAN_QUERY_MAX_PREVIEW_BYTES = 1024;
 export const SPAN_QUERY_MAX_PREVIEW_CHARACTERS = 256;
 export const SPAN_QUERY_MAX_LIMIT = 1000;
 export const SPAN_QUERY_MAX_CURSOR_BYTES = 8192;
@@ -89,7 +88,6 @@ export const spanQueryCostSchema = z.discriminatedUnion('state', [
 
 const previewSchema = z
   .string()
-  .refine(value => Buffer.byteLength(value, 'utf8') <= SPAN_QUERY_MAX_PREVIEW_BYTES, 'Preview exceeds its byte limit')
   .refine(value => [...value].length <= SPAN_QUERY_MAX_PREVIEW_CHARACTERS, 'Preview exceeds its character limit')
   .nullable();
 
@@ -246,13 +244,11 @@ export function encodeSpanQueryCursor(plan: TrustedSpanQueryPlan, values: z.infe
 /** Raw-text fallback for already-selected payloads, not an unbounded JSON parser/serializer. */
 export function createSpanQueryPreview(value: string | null): { value: string | null; truncated: boolean } {
   if (value === null) return { value: null, truncated: false };
-  let bytes = 0;
   let characters = 0;
   let preview = '';
   for (const character of value) {
-    bytes += Buffer.byteLength(character, 'utf8');
     characters += 1;
-    if (bytes > SPAN_QUERY_MAX_PREVIEW_BYTES || characters > SPAN_QUERY_MAX_PREVIEW_CHARACTERS) {
+    if (characters > SPAN_QUERY_MAX_PREVIEW_CHARACTERS) {
       return { value: preview, truncated: true };
     }
     preview += character;
