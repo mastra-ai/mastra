@@ -24,6 +24,7 @@ function getDraft(schema: Schema | boolean): SchemaDraft {
 
 const schemaMapKeywords = ['properties', 'patternProperties', 'dependentSchemas', '$defs', 'definitions'] as const;
 const schemaKeywords = [
+  'additionalItems',
   'additionalProperties',
   'contains',
   'contentSchema',

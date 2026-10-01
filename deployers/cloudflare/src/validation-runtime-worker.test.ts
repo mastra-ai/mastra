@@ -52,6 +52,16 @@ describe('Workers-compatible JSON Schema validation runtime', () => {
     expect(validate({ format: 42 })).toBe(false);
   });
 
+  it('ignores formats nested under additionalItems', () => {
+    const validate = compileDefault({
+      type: 'array',
+      items: [{ type: 'string' }],
+      additionalItems: { type: 'string', format: 'email' },
+    });
+
+    expect(validate(['first', 'not-an-email'])).toBe(true);
+  });
+
   it('rejects asynchronous schemas', () => {
     expect(() => compileDefault({ $async: true, type: 'string' })).toThrow(
       'Asynchronous JSON Schema validation is not supported in Cloudflare Workers',
