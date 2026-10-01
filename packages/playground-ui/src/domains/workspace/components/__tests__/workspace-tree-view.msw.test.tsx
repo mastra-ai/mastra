@@ -135,6 +135,22 @@ describe('WorkspaceTreeView', () => {
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('true');
       expect([...paths]).toEqual(['.', 'src']);
     });
+
+    it('shows a spinner next to the folder instead of skeleton rows while it loads', async () => {
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, async ({ request }) => {
+          if (new URL(request.url).searchParams.get('path') === 'src') await delay('infinite');
+          return HttpResponse.json(rootListing);
+        }),
+      );
+      renderView();
+
+      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+
+      const folder = screen.getByRole('treeitem', { name: /^src/ });
+      expect(await within(folder).findByRole('status', { name: 'Loading src' })).toBeTruthy();
+      expect(screen.queryByTestId('workspace-folder-skeleton')).toBeNull();
+    });
   });
 
   describe('when a file is clicked', () => {

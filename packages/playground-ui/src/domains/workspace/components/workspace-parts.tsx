@@ -62,8 +62,7 @@ export function WorkspaceAside({ children }: { children: ReactNode }) {
         minSize={200}
         maxSize="50%"
         defaultSize="25%"
-        collapsedSize={60}
-        collapsible
+        collapsible={false}
         className="min-w-0"
       >
         <div className="flex h-full min-h-0 flex-col">{children}</div>

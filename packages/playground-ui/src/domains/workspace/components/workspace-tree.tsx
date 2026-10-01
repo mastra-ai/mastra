@@ -11,6 +11,7 @@ import { WorkspaceError } from './workspace-error';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
+import { Spinner } from '@/ds/components/Spinner';
 import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
 import { FileIcon, FolderIcon, TrashIcon } from '@/ds/icons';
@@ -21,9 +22,6 @@ const formatBytes = (bytes: number) => {
   return `${parseFloat((bytes / 1024 ** i).toFixed(1))} ${units[i]}`;
 };
 
-// Skeleton rows line up with tree rows; kept as a style since depth is unbounded.
-const indent = (depth: number) => ({ paddingLeft: `${depth * 12 + 18}px` });
-
 type RequestDelete = (entry: WorkspaceEntryRef) => void;
 
 export function WorkspaceTree() {
@@ -31,7 +29,7 @@ export function WorkspaceTree() {
   const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
   const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
 
-  if (isLoading) return <TreeSkeleton depth={0} testId="workspace-tree-skeleton" />;
+  if (isLoading) return <TreeSkeleton />;
   // A failed background refetch keeps showing the last listing.
   if (!data) return <WorkspaceError error={error} fallback="Could not load files." className="m-2" />;
 
@@ -97,8 +95,10 @@ interface NodeProps {
 }
 
 function FolderNode({ name, path, onRequestDelete }: NodeProps) {
-  const { onDelete, onCreateDirectory, isReadOnly } = useWorkspaceContext();
+  const { workspaceId, onDelete, onCreateDirectory, isReadOnly } = useWorkspaceContext();
   const [open, setOpen] = useState(false);
+  // Shares the query with FolderChildren; only used to flag the first load next to the name.
+  const { isLoading } = useWorkspaceDirectory(workspaceId, path, { enabled: open });
   const [creating, setCreating] = useState(false);
   const canDelete = onDelete && !isReadOnly(path);
   const canCreate = onCreateDirectory && !isReadOnly(path);
@@ -135,6 +135,13 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
           <FolderIcon />
         </Tree.Icon>
         <Tree.Label>{name}</Tree.Label>
+        {open && isLoading ? (
+          <Spinner
+            size="sm"
+            aria-label={`Loading ${name}`}
+            className="size-3 shrink-0 animate-in text-muted-foreground delay-200 fill-mode-backwards fade-in"
+          />
+        ) : null}
       </Tree.FolderTrigger>
       <Tree.FolderContent>
         {open ? (
@@ -177,9 +184,7 @@ function FolderChildren({
       {creating ? (
         <Tree.Input type="folder" placeholder="Folder name" onSubmit={name => void create(name)} onCancel={onCreated} />
       ) : null}
-      {isLoading ? (
-        <TreeSkeleton depth={1} />
-      ) : data ? (
+      {isLoading ? null : data ? (
         <Entries entries={data} parent={path} onRequestDelete={onRequestDelete} />
       ) : (
         <WorkspaceError error={error} fallback="Could not load folder." className="my-1 mr-1" />
@@ -261,9 +266,9 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
   );
 }
 
-function TreeSkeleton({ depth, testId }: { depth: number; testId?: string }) {
+function TreeSkeleton() {
   return (
-    <div data-testid={testId} aria-busy="true" className="flex flex-col gap-2 py-2" style={indent(depth)}>
+    <div data-testid="workspace-tree-skeleton" aria-busy="true" className="flex flex-col gap-2 py-2 pl-[18px]">
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-4 w-2/3" />
