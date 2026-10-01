@@ -306,7 +306,7 @@ describe('catalog-backed MCP providers', () => {
 
 describe('MCP tool approval', () => {
   type ApprovalTool = { requireApproval?: boolean; needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown };
-  const discover = async (integrations?: Record<string, { autoApproveTools?: string[] }>) => {
+  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch();
     const tools = connect({
       projectId: 'project-1',
@@ -317,25 +317,40 @@ describe('MCP tool approval', () => {
     return (await tools()) as Record<string, ApprovalTool>;
   };
 
-  it('requires approval for every discovered tool regardless of server annotations', async () => {
+  it('does not require approval for any tool by default', async () => {
     const discovered = await discover();
     for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
-      expect(discovered[key]!.requireApproval).toBe(true);
-      expect(await discovered[key]!.needsApprovalFn!({}, {})).toBe(true);
+      expect(discovered[key]!.requireApproval).toBeFalsy();
     }
   });
 
-  it('skips approval only for tools in the local autoApproveTools list', async () => {
-    const discovered = await discover({ [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } });
+  it('requires approval for every tool when requireApproval is true', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: true } });
+    for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
+      expect(discovered[key]!.requireApproval).toBe(true);
+    }
+  });
+
+  it('treats requireApproval: false the same as omitting the option', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: false } });
+    for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
+      expect(discovered[key]!.requireApproval).toBeFalsy();
+    }
+  });
+
+  it('requires approval only for tools in the requireApproval list', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_update_record'] } });
+    // Both tools report requireApproval: true because the server policy is a
+    // function; the per-call decision runs through needsApprovalFn.
     expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({}, {})).toBe(false);
     expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
   });
 
-  it('skips the provider and warns when autoApproveTools names an unknown tool', async () => {
+  it('skips the provider and warns when requireApproval names an unknown tool', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const discovered = await discover({ [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_delete_everything'] } });
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_everything'] } });
     expect(discovered).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('autoApproveTools'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('requireApproval'));
     warnSpy.mockRestore();
   });
 });
@@ -366,7 +381,7 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     },
   ];
 
-  const discover = async (integrations?: Record<string, { autoApproveTools?: string[] }>) => {
+  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch({ connections: TWO_CONNECTIONS, matchAnyConnectionMcpPath: true });
     const tools = connect({
       projectId: 'project-1',
@@ -377,47 +392,40 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     return (await tools()) as Record<string, ApprovalTool>;
   };
 
-  it('preserves requireApproval and needsApprovalFn on wrapped multi-connection MCP tools', async () => {
+  it('does not require approval or attach needsApprovalFn by default', async () => {
     const discovered = await discover();
     for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
-      expect(discovered[key]!.requireApproval).toBe(true);
-      // Fail-closed on missing connection_name so the approval prompt is
-      // still triggered even when the caller has not selected a connection.
-      expect(await discovered[key]!.needsApprovalFn!({}, {})).toBe(true);
-      // The resolved inner connection still says approval is required.
-      expect(await discovered[key]!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(true);
+      expect(discovered[key]!.requireApproval).toBeFalsy();
+      expect(discovered[key]!.needsApprovalFn).toBeUndefined();
     }
     // The list_connections helper is auto-generated and must never gate the
     // agent behind an approval prompt.
     expect(discovered['catalog-mcp__list_connections']!.requireApproval).toBeFalsy();
   });
 
-  it('does not require approval for a tool the caller placed in autoApproveTools, even through the wrapper', async () => {
-    const discovered = await discover({
-      [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] },
-    });
-    // list_records is auto-approved on every connection: the wrapper's
-    // needsApprovalFn resolves to Acme's inner tool, which returns false.
-    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(false);
-    // update_record still requires approval on every connection.
-    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(true);
-    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Globex' }, {})).toBe(
-      true,
-    );
+  it('propagates requireApproval: true through the wrapper so every tool is gated', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: true } });
+    for (const key of ['catalog-mcp_list_records', 'catalog-mcp_update_record']) {
+      expect(discovered[key]!.requireApproval).toBe(true);
+    }
   });
 
-  it('fails closed when connection_name resolves to an unknown connection', async () => {
-    const discovered = await discover();
-    // Unknown / missing connection_name should require approval regardless of
-    // the inner policy — a caller must never bypass approval by omitting the
-    // routing input.
-    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Nope' }, {})).toBe(true);
+  it('propagates requireApproval list policy through the wrapper per tool', async () => {
+    const discovered = await discover({
+      [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_update_record'] },
+    });
+    // Resolved inner connection: update_record is in the list → gated,
+    // list_records is not → auto-approved.
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(true);
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({ connection_name: 'Acme' }, {})).toBe(false);
+    // Fail-closed on missing connection_name so a caller cannot bypass
+    // approval by omitting the routing input.
     expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
   });
 
-  it('validates autoApproveTools against the union of MCP catalogs across connections', async () => {
+  it('validates requireApproval against the union of MCP catalogs across connections', async () => {
     // Second connection exposes an extra tool the first does not. The union
-    // must include it so autoApproveTools can reference it without being
+    // must include it so requireApproval can reference it without being
     // rejected by an earlier connection's catalog.
     const gateway = createGatewayFetch({
       connections: TWO_CONNECTIONS,
@@ -454,16 +462,18 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_delete_record'] } },
+      integrations: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
     const discovered = (await tools()) as Record<string, ApprovalTool>;
-    // delete_record surfaces via the key-union; auto-approved on Globex.
+    // delete_record surfaces via the key-union; approval required on Globex
+    // because it's listed in requireApproval even though the server did not
+    // advertise a readOnlyHint on it.
     expect(discovered).toHaveProperty('catalog-mcp_delete_record');
     expect(
       await discovered['catalog-mcp_delete_record']!.needsApprovalFn!({ id: 'r1', connection_name: 'Globex' }, {}),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('accepts per-connection input differences at the wrapper (inner tool re-validates)', async () => {

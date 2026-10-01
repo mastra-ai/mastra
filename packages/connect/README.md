@@ -35,7 +35,7 @@ const tools = connect({
 });
 ```
 
-Use the object form (shown above) whenever you need `allowTools`, `disallowTools`, `autoApproveTools`, `connectionId`, or `disabled` for any provider. `allowTools` and `disallowTools` are mutually exclusive on the same provider.
+Use the object form (shown above) whenever you need `allowTools`, `disallowTools`, `requireApproval`, `connectionId`, or `disabled` for any provider. `allowTools` and `disallowTools` are mutually exclusive on the same provider.
 
 The resolver discovers active project connections. Where multiple connections match, you can either pin one — via `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option — or leave it unpinned and let the agent route each call. When unpinned, the provider's `<integrationId>__list_connections` tool is added to the toolset, every other tool takes a required `connection_name`, and the agent uses the display name returned by `list_connections` to pick a connection per call. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
 
@@ -52,7 +52,7 @@ Every MCP provider uses `/v2/connections/:connectionId/mcp` for discovery and in
 
 The application sends only its Mastra Platform token. The transport is locked to the selected Platform connection URL. Platform removes caller authentication before Nango injects the provider credential and proxies each protocol request to the MCP server configured for that Nango integration.
 
-MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Every discovered MCP tool requires tool approval; the server's annotations are advisory and cannot lift the requirement. List the tool keys an agent may run unattended in `autoApproveTools` for that integration, for example `neon: { autoApproveTools: ['neon_list_projects'] }`. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
+MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Discovered MCP tools do not require approval by default, matching `@mastra/mcp`'s own default. Opt into approval per integration with `requireApproval`: pass `true` to require approval for every tool, or an array of tool keys to require approval only for those, for example `neon: { requireApproval: ['neon_delete_project'] }`. Unknown names in the array throw at build time so a typo cannot silently widen access. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
 
 ### Generated HTTP providers
 

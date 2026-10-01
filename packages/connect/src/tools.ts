@@ -19,12 +19,14 @@ interface ToolsIntegrationOptionsBase {
   /** Pin a specific connection id (bypasses env-var fallback and single-active-connection resolution). */
   connectionId?: string;
   /**
-   * MCP tool keys that may run without tool approval. Every other discovered
-   * MCP tool requires approval, whatever the server's annotations claim, since
-   * a remote catalog cannot be trusted to classify its own tools. An unknown
-   * name skips the provider with a warning, so a typo never widens access.
+   * Tool-approval policy for this MCP provider. Discovered tools do not
+   * require approval by default, matching `@mastra/mcp`'s own default. Pass
+   * `true` to require approval for every discovered tool on this provider,
+   * or an array of tool keys to require approval only for those tools.
+   * Unknown names in the array throw at build time so a typo never silently
+   * widens access. (Explicit `false` is equivalent to omitting the option.)
    */
-  autoApproveTools?: string[];
+  requireApproval?: boolean | string[];
   /** Exclude this provider entirely, even if a connection exists. */
   disabled?: boolean;
 }
@@ -366,7 +368,7 @@ async function mapTools(
             connectionId: resolution.connectionId,
             allowTools: request.options.allowTools,
             disallowTools: request.options.disallowTools,
-            autoApproveTools: request.options.autoApproveTools,
+            requireApproval: request.options.requireApproval,
             client,
             mcpClients,
             resolverId,
@@ -389,7 +391,7 @@ async function mapTools(
             connections: resolution.connections,
             allowTools: request.options.allowTools,
             disallowTools: request.options.disallowTools,
-            autoApproveTools: request.options.autoApproveTools,
+            requireApproval: request.options.requireApproval,
             client,
             mcpClients,
             resolverId,
@@ -451,14 +453,14 @@ async function discoverMcpTools(input: {
   connectionId: string;
   allowTools?: string[];
   disallowTools?: string[];
-  autoApproveTools?: string[];
+  requireApproval?: boolean | string[];
   client: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ResolvedToolsRecord> {
-  const { registration, connectionId, allowTools, disallowTools, autoApproveTools, client, mcpClients, resolverId } =
+  const { registration, connectionId, allowTools, disallowTools, requireApproval, client, mcpClients, resolverId } =
     input;
-  const autoApproved = new Set(autoApproveTools ?? []);
+  const requireApprovalFor = Array.isArray(requireApproval) ? new Set(requireApproval) : undefined;
   const cacheKey = `${registration.integrationId}::${connectionId}`;
   let entry = mcpClients.get(cacheKey);
   if (!entry) {
@@ -471,11 +473,17 @@ async function discoverMcpTools(input: {
         servers: {
           [registration.integrationId]: {
             ...transport,
-            // Server annotations are advisory: a remote catalog could mark a
-            // destructive tool non-destructive. Only a local allowlist skips
-            // approval.
-            requireToolApproval: ({ toolName }) =>
-              !autoApproved.has(`${registration.integrationId}_${String(toolName)}`),
+            // Default: no approval required, matching @mastra/mcp's own
+            // default. Opt in with `requireApproval: true` to gate every tool
+            // on this provider, or with an array to gate only listed keys.
+            ...(requireApproval === true
+              ? { requireToolApproval: true as const }
+              : requireApprovalFor
+                ? {
+                    requireToolApproval: ({ toolName }: { toolName: string }) =>
+                      requireApprovalFor.has(`${registration.integrationId}_${String(toolName)}`),
+                  }
+                : {}),
           },
         },
       }),
@@ -486,12 +494,14 @@ async function discoverMcpTools(input: {
   const discovery = await entry.client.listToolsWithErrors();
   const error = discovery.errors[registration.integrationId];
   if (error) throw new Error(`MCP tool discovery failed: ${error}`);
-  const unknown = [...autoApproved].filter(name => !(name in discovery.tools));
-  if (unknown.length > 0) {
-    throw new MastraConnectError(
-      'invalid_options',
-      `Unknown tool name(s) in autoApproveTools for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
-    );
+  if (requireApprovalFor) {
+    const unknown = [...requireApprovalFor].filter(name => !(name in discovery.tools));
+    if (unknown.length > 0) {
+      throw new MastraConnectError(
+        'invalid_options',
+        `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(', ')}. Known tools: ${Object.keys(discovery.tools).join(', ')}.`,
+      );
+    }
   }
   return applyToolFilter(discovery.tools, { allowTools, disallowTools }) as ResolvedToolsRecord;
 }
