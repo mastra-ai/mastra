@@ -561,8 +561,8 @@ describe('workspace changes', () => {
       additions: 8,
       deletions: 1,
       changes: [
-        { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
-        { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
+        { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1, uncommitted: true },
+        { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0, uncommitted: true },
       ],
     });
     expect(executeCommand).toHaveBeenCalledTimes(4);
@@ -599,7 +599,7 @@ describe('workspace changes', () => {
     await expect(listSessionWorkspaceChanges(session)).resolves.toEqual({
       workspacePath: session.sessionId,
       available: true,
-      changes: [{ path: 'src/edited.ts', status: 'modified' }],
+      changes: [{ path: 'src/edited.ts', status: 'modified', uncommitted: true }],
     });
   });
 

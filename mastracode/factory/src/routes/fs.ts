@@ -102,6 +102,8 @@ export interface WorkspaceChange {
   additions?: number;
   deletions?: number;
   binary?: boolean;
+  /** True when the file shows in `git status` — staged or working-tree edits not yet committed. */
+  uncommitted?: boolean;
 }
 
 export interface WorkspaceChanges {
@@ -711,7 +713,10 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
       changesByPath.set(change.path, change);
     }
   }
-  const changes = [...changesByPath.values()].toSorted((a, b) => a.path.localeCompare(b.path));
+  const statusPaths = new Set(statusChanges.map(change => change.path));
+  const changes = [...changesByPath.values()]
+    .map(change => (statusPaths.has(change.path) ? { ...change, uncommitted: true } : change))
+    .toSorted((a, b) => a.path.localeCompare(b.path));
   if (statsResult.exitCode !== 0) {
     return { workspacePath: session.sessionId, available: true, changes };
   }

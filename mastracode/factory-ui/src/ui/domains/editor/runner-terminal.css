@@ -1,0 +1,22 @@
+/**
+ * Terminal surface theming. A terminal is black — always, in both color
+ * schemes. The panel injects the active editor theme's DARK swatch fg/accent
+ * (--term-fg-dark, --term-accent-dark), which are designed for a dark
+ * background, and this sheet derives the muted/raised/border tints via
+ * color-mix. Only the accent/fg follow the theme; the background does not.
+ */
+.runner-terminal {
+  --term-bg: #000;
+  --term-fg: var(--term-fg-dark);
+  --term-accent: var(--term-accent-dark);
+  --term-muted: color-mix(in srgb, var(--term-fg) 55%, transparent);
+  --term-faint: color-mix(in srgb, var(--term-fg) 35%, transparent);
+  --term-line: color-mix(in srgb, var(--term-fg) 12%, transparent);
+  --term-raised: color-mix(in srgb, var(--term-fg) 8%, var(--term-bg));
+  background: var(--term-bg);
+  color: var(--term-fg);
+}
+
+.runner-terminal ::selection {
+  background: color-mix(in srgb, var(--term-accent) 30%, transparent);
+}

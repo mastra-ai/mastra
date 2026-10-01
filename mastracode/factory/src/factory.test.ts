@@ -1151,6 +1151,40 @@ describe('MastraFactory.prepare', () => {
     await prepareFactory({ storage: fakeStorage(), auth: null });
     expect(lastStudioProvider()).toBeUndefined();
   });
+
+  it('widens the default Studio cookie to `.localhost` when preview subdomains are enabled locally', async () => {
+    // Enabling preview subdomains means the auth cookie must ride requests
+    // to `p-*.preview.localhost` — that only works if the browser sees the
+    // parent Domain attribute. Modern browsers (Chrome 87+, Firefox 68+,
+    // Safari 14+) accept `Domain=.localhost`; the widening is opt-in so
+    // deploys that don't want the wider scope keep host-only cookies.
+    await withCleanCookieEnv(async () => {
+      await prepareFactory({
+        storage: fakeStorage(),
+        publicUrl: 'http://localhost:4111',
+        preview: { enabled: true },
+      });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toBeDefined();
+      expect(setCookie).toContain('Domain=.localhost');
+    });
+  });
+
+  it('leaves cookie domain alone when preview subdomains are enabled on a subdomain deploy', async () => {
+    // `.mastra.cloud` is already an allowlisted platform parent, so the
+    // pre-existing derivation already delivers the shared cookie domain
+    // regardless of preview.enabled — no need to double up.
+    await withCleanCookieEnv(async () => {
+      await prepareFactory({
+        storage: fakeStorage(),
+        publicUrl: 'https://studio-abc.mastra.cloud',
+        preview: { enabled: true },
+      });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toBeDefined();
+      expect(setCookie).toContain('Domain=.mastra.cloud');
+    });
+  });
 });
 
 function fakeIntegration(overrides: Partial<FactoryIntegration> & { id: string }): FactoryIntegration {

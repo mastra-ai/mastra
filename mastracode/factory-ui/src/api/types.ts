@@ -40,6 +40,32 @@ import type {
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
+import type { BlameLine, BlameResult } from '@mastra/factory/routes/blame';
+import type { CollabSyncRequest, CollabSyncResponse } from '@mastra/factory/routes/collab';
+import type { ScmActionResult, ScmDiff, ScmEntry, ScmStatus } from '@mastra/factory/routes/scm';
+import type { PreviewBase } from '@mastra/factory/routes/preview-base';
+import type {
+  RunnerPollResult,
+  RunnerScript,
+  RunnerScripts,
+  RunnerStartResult,
+} from '@mastra/factory/routes/runner';
+import type {
+  EditorFileOriginal,
+  EditorLspCodeAction,
+  EditorLspDiagnostic,
+  EditorLspLocation,
+  EditorLspQueryKind,
+  EditorLspRenameResult,
+  EditorLspResponse,
+  EditorLspSymbol,
+  EditorLspTextEdit,
+  EditorSearchMatch,
+  EditorSearchResponse,
+  EditorTreeEntry,
+  EditorTreeListing,
+} from '@mastra/factory/routes/editor';
+
 export type {
   ProviderInfo,
   CustomProviderInfo,
@@ -62,6 +88,26 @@ export type {
   WorkspaceFilesListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+};
+export type { BlameLine, BlameResult };
+export type { CollabSyncRequest, CollabSyncResponse };
+export type { ScmActionResult, ScmDiff, ScmEntry, ScmStatus };
+export type { RunnerPollResult, RunnerScript, RunnerScripts, RunnerStartResult };
+export type { PreviewBase };
+export type {
+  EditorFileOriginal,
+  EditorLspCodeAction,
+  EditorLspDiagnostic,
+  EditorLspLocation,
+  EditorLspQueryKind,
+  EditorLspRenameResult,
+  EditorLspResponse,
+  EditorLspSymbol,
+  EditorLspTextEdit,
+  EditorSearchMatch,
+  EditorSearchResponse,
+  EditorTreeEntry,
+  EditorTreeListing,
 };
 
 // ── GET response envelopes ─────────────────────────────────────────────────

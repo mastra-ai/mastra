@@ -1,8 +1,8 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useRef } from 'react';
-import { useParams } from 'react-router';
+import { Suspense, lazy, useRef } from 'react';
+import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
@@ -26,6 +26,12 @@ import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layou
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 
 import '../domains/chat/components/chat-enter.css';
+
+// Lazy so CodeMirror + editor chrome stay out of the chat-path bundle; the
+// chunk loads the first time a session flips to `?view=editor`.
+const EditorSurface = lazy(() =>
+  import('../domains/editor/EditorSurface').then(module => ({ default: module.EditorSurface })),
+);
 
 const threadShellClass = cn(
   chatColumnClass,
@@ -77,19 +83,36 @@ function ThreadPageMain({
   useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
   const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
+  const [searchParams] = useSearchParams();
+  // The editor is a session-view tab: `?view=editor` swaps the chat stage for
+  // the code editor while the chat session (streaming, transcript cache) stays
+  // alive in the boundary above.
+  const editorView = searchParams.get('view') === 'editor' && Boolean(workspacePath);
 
   return (
     <ThreadSessionEffects workspacePath={workspacePath} threadId={threadId}>
       <FactorySessionPage>
-        <SessionChatSurface
-          secondaryBar={<GoalPanel />}
-          emptyState={<EmptyThreadState />}
-          composerLabel="Thread composer"
-          className={threadShellClass}
-          contentRef={railBoxRef}
-          contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
-          stageSurface={<WorkspaceFilesSurface />}
-        />
+        {editorView && workspacePath ? (
+          <Suspense
+            fallback={
+              <div className="grid min-h-0 flex-1 place-items-center">
+                <Spinner aria-label="Loading editor" className="text-muted-foreground" />
+              </div>
+            }
+          >
+            <EditorSurface workspacePath={workspacePath} threadId={threadId} />
+          </Suspense>
+        ) : (
+          <SessionChatSurface
+            secondaryBar={<GoalPanel />}
+            emptyState={<EmptyThreadState />}
+            composerLabel="Thread composer"
+            className={threadShellClass}
+            contentRef={railBoxRef}
+            contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
+            stageSurface={<WorkspaceFilesSurface />}
+          />
+        )}
       </FactorySessionPage>
     </ThreadSessionEffects>
   );

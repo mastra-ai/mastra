@@ -54,13 +54,19 @@ import {
 } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
+import { buildBlameRoutes } from './blame.js';
+import { buildCollabRoutes } from './collab.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
+import { buildEditorRoutes } from './editor.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { buildPreviewBaseRoutes } from './preview-base.js';
 import type { RouteAuth } from './route.js';
+import { buildRunnerRoutes } from './runner.js';
+import { buildScmRoutes } from './scm.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
@@ -96,6 +102,13 @@ export interface FactoryApiRoutesDeps {
   audit: AuditEmitter & AuditRecorder;
   fsRoot?: string;
   publicOrigin: string;
+  /**
+   * Whether preview subdomain routing is enabled on this Factory. Threaded
+   * to preview-related routes (client asks: "is preview available for my
+   * session?") — does not gate the dispatch middleware itself, which is
+   * conditionally installed at Factory boot.
+   */
+  previewEnabled: boolean;
   stateSigner?: StateSigner;
   /** Sandbox surface (enablement, provider label, create callback). */
   sandbox?: MastraFactorySandboxConfig;
@@ -707,6 +720,32 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         sessions: sourceControlSessions,
         filesystem: deps.domains.filesystem,
       },
+    }),
+    ...buildEditorRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+    }),
+    ...buildCollabRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+    }),
+    ...buildScmRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+    }),
+    ...buildRunnerRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+    }),
+    ...buildBlameRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+    }),
+    ...buildPreviewBaseRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+      previewEnabled: deps.previewEnabled,
+      publicUrl: deps.publicOrigin,
     }),
     ...new ConfigRoutes({
       auth: deps.auth,
