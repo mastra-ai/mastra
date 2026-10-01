@@ -160,9 +160,8 @@ function InputGroupInput({ className, testId, type = 'text', ...props }: InputGr
       data-slot="input-group-control"
       data-testid={testId}
       className={cn(
-        'min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden',
+        'min-w-0 flex-1 bg-transparent px-3 text-label text-foreground outline-hidden',
         inputGroupControlHeightBySize,
-        inputGroupControlTextBySize,
         'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
         'focus:placeholder:opacity-70',
         'disabled:cursor-not-allowed',
