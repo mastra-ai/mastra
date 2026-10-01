@@ -755,6 +755,52 @@ describe('built-in board and integration handlers', () => {
       expect(await rule?.(reviewContext({ item: undefined, board: undefined }))).toBeUndefined();
       expect(await rule?.(reviewContext({ review: undefined }))).toBeUndefined();
     });
+
+    describe('Factory approval', () => {
+      function approvalContext(overrides: Partial<FactoryGithubRuleContext> = {}): FactoryGithubRuleContext {
+        const base = reviewContext();
+        return {
+          ...base,
+          repository: { ...base.repository, installationId: 7 },
+          pullRequest: { ...base.pullRequest!, factoryAuthored: true },
+          review: {
+            id: 101,
+            state: 'approved',
+            url: 'https://github.test/r',
+            author: 'factory-reviewer',
+            body: '**Verdict: approve**\n\nAll findings addressed.',
+          },
+          ...overrides,
+        };
+      }
+
+      it('asks to dismiss superseded Factory change requests', async () => {
+        const rule = defaultGithubRules.pullRequestReviewSubmitted;
+        const context = approvalContext();
+        expect(await rule?.(context)).toEqual({
+          type: 'dismissStaleReviews',
+          idempotencyKey: 'delivery-1:dismiss-stale-reviews',
+          installationId: 7,
+          repository: context.repository.fullName,
+          pullRequestNumber: context.pullRequest!.number,
+          approvingReviewId: '101',
+          approvingAuthor: 'factory-reviewer',
+        });
+      });
+
+      it('stays quiet for human approvals, closed PRs, and non-Factory PRs', async () => {
+        const rule = defaultGithubRules.pullRequestReviewSubmitted;
+        const base = approvalContext();
+        for (const context of [
+          approvalContext({ review: { ...base.review!, body: 'LGTM' } }),
+          approvalContext({ pullRequest: { ...base.pullRequest!, state: 'closed' } }),
+          approvalContext({ pullRequest: { ...base.pullRequest!, merged: true } }),
+          approvalContext({ pullRequest: { ...base.pullRequest!, factoryAuthored: false } }),
+        ]) {
+          expect(await rule?.(context)).toBeUndefined();
+        }
+      });
+    });
   });
 
   describe('pullRequestCommentCreated', () => {

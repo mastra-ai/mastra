@@ -17,8 +17,8 @@ import type {
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
 import {
@@ -477,6 +477,22 @@ function resolveInjectedStorageBackend(
   if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
   if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
+/** Whether the model router would resolve `modelId` through a gateway outside `sdkGatewayIds`. */
+function routesToOtherGateway(
+  modelId: string,
+  gateways: MastraModelGatewayInterface[],
+  sdkGatewayIds: ReadonlySet<string>,
+): boolean {
+  try {
+    return !sdkGatewayIds.has(getGatewayId(findGatewayForModel(modelId, gateways)));
+  } catch (error) {
+    // No gateway at all falls back to the SDK resolver; any other lookup
+    // failure is the gateway's to report, not a reason to switch providers.
+    if ((error as { id?: string })?.id === 'MODEL_ROUTER_NO_GATEWAY_FOUND') return false;
+    throw error;
+  }
 }
 
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
@@ -1456,6 +1472,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents,
+    // Subagents resolve like the main agent: tenant credentials and
+    // request-scoped custom providers come from the calling run's context.
+    // Ids the model router would hand to another registered gateway (by
+    // prefix or `handlesModel`) stay strings so that gateway resolves them.
+    resolveSubagentModel: (modelId, { requestContext }) =>
+      routesToOtherGateway(
+        modelId,
+        Object.values(controller.getMastra()?.listGateways() ?? {}),
+        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, 'models.dev']),
+      )
+        ? modelId
+        : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,

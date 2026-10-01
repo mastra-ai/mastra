@@ -55,13 +55,15 @@ jobs:
           node --input-type=module -e '
             import fs from "node:fs";
             import { qualityAssuranceInputs } from "./.github/scripts/ci-routing.cjs";
-            import { discoverPackages } from "./.github/scripts/check-package-readmes.mjs";
+            import { discoverPackages, findPackagesMissingDocs } from "./.github/scripts/check-package-readmes.mjs";
             const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
             const packageReadmePaths = discoverPackages(process.cwd()).map(pkg => `${pkg.relativeDirectory}/README.md`);
-            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons } = qualityAssuranceInputs(changedFiles, packageReadmePaths);
+            const packagesMissingDocs = findPackagesMissingDocs(process.cwd());
+            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons, missingPackageDocs } = qualityAssuranceInputs(changedFiles, packageReadmePaths, packagesMissingDocs);
             const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
+            const formatMissingDocs = packages => packages.length === 0 ? "none" : packages.map(pkg => `\`${pkg.relativeDirectory}\` (missing ${pkg.missing.join(", ")})`).join(", ");
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\nhas_readme_inputs=${hasReadmeInputs}\n`);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}; packages missing docs: ${formatMissingDocs(missingPackageDocs)}\n`);
           '
 
   changeset-check:

@@ -112,13 +112,13 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-badge-yellow-subtle' : 'bg-card',
+        record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
         expanded
           ? record.pinned
-            ? 'border-badge-yellow-indicator'
+            ? 'border-badge-amber-indicator'
             : 'border-badge-purple-edge'
           : record.pinned
-            ? 'border-badge-yellow-edge'
+            ? 'border-badge-amber-edge'
             : 'border-border',
       ].join(' ')}
     >
@@ -137,7 +137,7 @@ function RecordCard({
         <div className="text-foreground text-xs leading-relaxed">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="text-badge-yellow-indicator ml-1 inline" aria-label="Pinned knowledge record" />
+            <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
         <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
@@ -180,9 +180,9 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="border-badge-yellow-edge bg-badge-yellow-subtle mt-2 rounded-md border p-2"
+              className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
             >
-              <div className="text-badge-yellow-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
+              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
                 <Sparkles size={10} /> Reasoning
               </div>
               <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>

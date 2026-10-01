@@ -44,6 +44,9 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsObservationalMemory?: boolean = false;
 
+  /** Supports groupId, generation bounds, and ordering in OM history queries. */
+  readonly supportsObservationalMemoryHistorySearch?: boolean = false;
+
   /**
    * Whether this adapter's `updateThread` treats an omitted `title`/`metadata`
    * as "leave that column untouched" (partial update).

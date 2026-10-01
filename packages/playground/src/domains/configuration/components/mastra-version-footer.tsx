@@ -231,9 +231,9 @@ const PackagesModalContent = ({
                           className={cn(
                             'cursor-help',
                             pkg.isDeprecated
-                              ? 'text-destructive-indicator'
+                              ? 'text-destructive-foreground'
                               : pkg.isOutdated
-                                ? 'text-warning-indicator'
+                                ? 'text-warning-foreground'
                                 : '',
                           )}
                         >

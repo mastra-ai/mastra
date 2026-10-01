@@ -7,7 +7,7 @@ export const sankeySeriesColors: readonly string[] = [
   'var(--chart-purple)',
   'var(--chart-pink)',
   'var(--chart-red)',
-  'var(--chart-yellow)',
+  'var(--chart-amber)',
   'var(--chart-blue-deep)',
 ];
 

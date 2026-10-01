@@ -8,6 +8,7 @@ import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { loadSettings } from '../onboarding/settings.js';
+import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel, resolvePackMemoryModelChain } from './model.js';
@@ -236,7 +237,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
               })
             : undefined,
           scope: omScope,
-          activateAfterIdle: 'auto',
+          // promptCacheMiddleware writes Anthropic cache entries with this TTL; 'auto' can't see it.
+          activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },
           activateOnProviderChange: true,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,

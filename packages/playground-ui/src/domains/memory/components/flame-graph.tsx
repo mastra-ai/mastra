@@ -59,7 +59,7 @@ interface FlameGraphProps {
 type RechartsClickState = { activeLabel?: string | number } | null | undefined;
 
 const MSG_COLOR = 'var(--chart-green)';
-const OBS_COLOR = 'var(--chart-yellow)';
+const OBS_COLOR = 'var(--chart-amber)';
 const REFLECT_COLOR = 'var(--chart-pink)';
 
 function TimeAxis({ domain }: { domain: TDomain }) {

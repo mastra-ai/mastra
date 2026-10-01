@@ -30,7 +30,7 @@ describe('getFeedbackRefetchInterval', () => {
     it('keeps polling', () => {
       const query = { state: { error: undefined } };
 
-      expect(getFeedbackRefetchInterval(query)).toBe(3000);
+      expect(getFeedbackRefetchInterval(query)).toBe(30_000);
     });
   });
 });

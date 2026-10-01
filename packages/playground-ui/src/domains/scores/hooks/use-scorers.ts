@@ -7,7 +7,7 @@ import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationErr
 import { toast } from '@/utils/toast';
 
 const SCORES_PER_PAGE = 25;
-const SCORES_REFETCH_INTERVAL_MS = 5000;
+const SCORES_REFETCH_INTERVAL_MS = 15_000;
 
 export function getScoresRefetchInterval(query: { state: { error: unknown } }) {
   if (

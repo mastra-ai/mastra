@@ -176,7 +176,7 @@ function DatasetItemVersionsComparePage() {
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
           <CardHeader>
             <VersionSelect
-              name="version"
+              label="Version"
               value={leftNumber != null ? String(leftNumber) : ''}
               options={versionOptions(allVersions ?? [], rightNumber != null ? new Set([rightNumber]) : undefined)}
               onValueChange={val => setParam('version', Number(val))}
@@ -199,7 +199,7 @@ function DatasetItemVersionsComparePage() {
         <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
           <CardHeader>
             <VersionSelect
-              name="compare"
+              label="Compare version"
               value={rightNumber != null ? String(rightNumber) : ''}
               placeholder="Select a version to compare"
               options={versionOptions(allVersions ?? [], leftNumber != null ? new Set([leftNumber]) : undefined)}
@@ -231,13 +231,13 @@ function DatasetItemVersionsComparePage() {
 }
 
 function VersionSelect({
-  name,
+  label,
   value,
   options,
   placeholder = 'Select version',
   onValueChange,
 }: {
-  name: string;
+  label: string;
   value: string;
   options: ReturnType<typeof versionOptions>;
   placeholder?: string;
@@ -246,8 +246,8 @@ function VersionSelect({
   return (
     <div className="grid grid-cols-[auto_1fr] items-center gap-4">
       <HistoryIcon className="size-4 opacity-50" />
-      <Select name={name} value={value} onValueChange={onValueChange}>
-        <SelectTrigger aria-label={name === 'compare' ? 'Compare version' : 'Version'} className="w-full">
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger aria-label={label} className="w-full">
           <SelectValue placeholder={placeholder} className="flex-1" />
         </SelectTrigger>
         <SelectContent>

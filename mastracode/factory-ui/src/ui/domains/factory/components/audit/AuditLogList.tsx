@@ -38,7 +38,7 @@ function AuditEventRow({
       <DataList.TextCell className="tabular-nums" title={event.occurredAt}>
         {relativeTime(event.occurredAt)}
       </DataList.TextCell>
-      <DataList.TextCell className={cn(event.actorType === 'agent' && 'text-badge-yellow-indicator')}>
+      <DataList.TextCell className={cn(event.actorType === 'agent' && 'text-badge-amber-indicator')}>
         {auditActorLabel(event, actorName)}
       </DataList.TextCell>
       <DataList.NameCell>

@@ -154,6 +154,8 @@ export type KeyboardLayer = {
   depth: number;
   bindings: UseKeydownArgs;
   shouldHandle?: (event: KeyboardEvent) => boolean;
+  /** When `false`, auto-repeated keydowns from a held key don't fire handlers. */
+  repeat?: boolean;
 };
 
 type ResolvedBinding = {
@@ -246,6 +248,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
           if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
           if (!accepts(layer, event)) return;
           event.preventDefault();
+          // A held key neither advances nor completes a `repeat: false` sequence.
+          if (event.repeat && layer.repeat === false) return;
           if (stepIndex === steps.length - 1) {
             reset();
             handler();
@@ -276,6 +280,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
       if (steps.length === 1 && first && matchesCombo(event, first)) {
         if (!accepts(layer, event)) return;
         event.preventDefault();
+        if (event.repeat && layer.repeat === false) return;
         handler();
         return;
       }

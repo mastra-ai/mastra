@@ -7,7 +7,7 @@ description: "Browse Cortecs model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
-Access 110 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 109 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -174,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 65000,
-    "inputCost": 2.898,
-    "outputCost": 14.493
+    "inputCost": 2.989,
+    "outputCost": 14.945
   },
   {
     "model": "cortecs/claude-sonnet-5",
@@ -412,7 +412,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
+    "contextWindow": 262000,
     "maxOutput": 262000,
     "inputCost": 0.223,
     "outputCost": 0.39
@@ -872,18 +872,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 196000,
     "inputCost": 0.296,
     "outputCost": 1.186
-  },
-  {
-    "model": "cortecs/minimax-m2.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 196608,
-    "inputCost": 0.668,
-    "outputCost": 2.674
   },
   {
     "model": "cortecs/minimax-m3",

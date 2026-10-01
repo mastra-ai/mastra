@@ -1,6 +1,2 @@
-/**
- * Id of the error message for a field, so a control can point at its message with
- * `aria-describedby`. Lives apart from the component file: exporting it alongside a
- * component breaks fast refresh.
- */
+/** @deprecated Wrap the control in a `Field`: `FieldError` links itself to the control. */
 export const fieldErrorId = (name: string) => `error-${name}`;
