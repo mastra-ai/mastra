@@ -153,6 +153,8 @@ export interface WorkItemSessionRef {
   branch: string;
   threadId: string;
   startedBy: string;
+  /** User whose credentials own this session; omitted on legacy and human-owned refs. */
+  credentialUserId?: string;
   /** Safe provider display name captured server-side when the run was prepared. */
   startedByDisplayName?: string;
 }
@@ -540,6 +542,8 @@ export type CommitFactoryTransitionResult =
 export interface PrepareFactoryRunStartInput {
   orgId: string;
   userId: string;
+  /** Actor who started the run; defaults to the credential owner for human starts. */
+  startedBy?: string;
   factoryProjectId: string;
   workItem: { id?: string; input: CreateWorkItemInput };
   role: string;
@@ -876,6 +880,7 @@ export function stampSessions(
   sessions: Record<string, WorkItemSessionInput>,
   by: string,
   startedByDisplayName?: string,
+  credentialUserId?: string,
 ): WorkItemSessions {
   return Object.fromEntries(
     Object.entries(sessions).map(([role, session]) => [
@@ -885,6 +890,7 @@ export function stampSessions(
         branch: session.branch,
         threadId: session.threadId,
         startedBy: by,
+        ...(credentialUserId && credentialUserId !== by ? { credentialUserId } : {}),
         ...(startedByDisplayName ? { startedByDisplayName } : {}),
       },
     ]),
@@ -896,11 +902,13 @@ function applyUpdate({
   userId,
   input,
   startedByDisplayName,
+  credentialUserId,
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
   startedByDisplayName?: string;
+  credentialUserId?: string;
 }): Partial<WorkItemDbRow> {
   const now = new Date();
   return {
@@ -914,7 +922,12 @@ function applyUpdate({
         }
       : {}),
     ...(input.sessions !== undefined
-      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId, startedByDisplayName) } }
+      ? {
+          sessions: {
+            ...current.sessions,
+            ...stampSessions(input.sessions, userId, startedByDisplayName, credentialUserId),
+          },
+        }
       : {}),
     ...(input.metadata !== undefined
       ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
@@ -3112,8 +3125,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
         }
         const now = new Date();
+        const startedBy = input.startedBy ?? input.userId;
         const candidateDisplayName =
-          input.initiator?.userId === input.userId ? input.initiator.displayName?.trim() || undefined : undefined;
+          input.initiator?.userId === startedBy ? input.initiator.displayName?.trim() || undefined : undefined;
         const startedByDisplayName =
           candidateDisplayName && !containsEmailLikeAddress(candidateDisplayName) ? candidateDisplayName : undefined;
         const create = input.workItem.input;
@@ -3137,9 +3151,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             // other roles keep their own session and `startedBy` (#22254).
             const next = applyUpdate({
               current,
-              userId: input.userId,
+              userId: startedBy,
               input: { sessions: { [input.role]: input.session } },
               startedByDisplayName,
+              credentialUserId: input.userId,
             });
             const adopt = this.#claimToAdopt(current, next, create);
             return adopt ? { ...next, claim_key: adopt } : next;
@@ -3168,8 +3183,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             parent_work_item_id: create.parentWorkItemId ?? null,
             title: create.title,
             stages: create.stages ?? [],
-            stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
-            sessions: stampSessions({ [input.role]: input.session }, input.userId, startedByDisplayName),
+            stage_history: applyStageTransition([], [], create.stages ?? [], startedBy, now),
+            sessions: stampSessions({ [input.role]: input.session }, startedBy, startedByDisplayName, input.userId),
             metadata: create.metadata ?? null,
             revision: 1,
             created_at: now,

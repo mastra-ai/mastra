@@ -124,6 +124,86 @@ describe('prepareFactoryRuleBinding', () => {
     );
   });
 
+  it('keeps automation as the run starter while using the source-control owner for credentials', async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    input.record.actor = { type: 'system', id: 'factory-external-orchestrator' };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const request = prepare.mock.calls[0]![0] as unknown as {
+      userId: string;
+      starter: { type: string; id: string };
+      sessionId: string;
+    };
+    expect(request).toMatchObject({
+      userId: 'user-1',
+      starter: { type: 'system', id: 'factory-rule-dispatcher' },
+    });
+    await expect(sourceControl.sessions.getBySessionId(request.sessionId)).resolves.toMatchObject({ userId: 'user-1' });
+  });
+
+  it('preserves a human actor as the run starter without making the repository connector the actor', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    input.record.actor = {
+      type: 'human',
+      id: 'user-1',
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      userId: 'user-1',
+      starter: { type: 'human', id: 'user-1' },
+      requestContext: expect.objectContaining({ get: expect.any(Function) }),
+    });
+    expect(
+      (prepare.mock.calls[0]![0] as unknown as { requestContext: { get(key: string): unknown } }).requestContext.get(
+        'user',
+      ),
+    ).toMatchObject({ workosId: 'user-1', name: 'Ada Lovelace' });
+  });
+
+  it('preserves a human initiator on a system deferred decision when they own the credentials', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    input.record.actor = {
+      type: 'system',
+      id: 'factory-rule-dispatcher',
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      userId: 'user-1',
+      starter: { type: 'human', id: 'user-1' },
+    });
+  });
+
   it('rehydrates the matching persisted human profile for autonomous binding preparation', async () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
@@ -145,8 +225,10 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     const request = prepare.mock.calls[0]![0] as unknown as {
+      starter: { type: string; id: string };
       requestContext: { get(key: string): unknown };
     };
+    expect(request.starter).toEqual({ type: 'human', id: 'user-1' });
     expect(request.requestContext.get('user')).toEqual({
       workosId: 'user-1',
       organizationId: 'org-1',

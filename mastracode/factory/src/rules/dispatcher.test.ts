@@ -5543,11 +5543,12 @@ describe('FactoryDecisionDispatcher', () => {
   /** Prepare a prompt-kickoff pending start bound to the stubbed session. */
   // The kickoff queue outlived the start route that filled it: seed it the way
   // `prepareRunStart` does, so the dispatch, redelivery and retry paths stay covered.
-  async function preparePromptKickoff(storage: WorkItemsStorage) {
+  async function preparePromptKickoff(storage: WorkItemsStorage, options?: { startedBy?: string }) {
     const item = await createItem(storage);
     await storage.prepareRunStart({
       orgId: 'org-1',
       userId: 'user-1',
+      ...(options?.startedBy ? { startedBy: options.startedBy } : {}),
       factoryProjectId: PROJECT_ID,
       workItem: {
         id: item.id,
@@ -5566,6 +5567,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: 'Investigate the issue.',
     });
     return {
+      workItemId: item.id,
       transitionService: new FactoryTransitionService({
         storage,
         configVersion: 'rules-v1',
@@ -5576,7 +5578,10 @@ describe('FactoryDecisionDispatcher', () => {
   it('recovers and dispatches a prepared kickoff after the coordinator returns', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, delivered, sendNotificationSignal } = createSession();
-    const { transitionService } = await preparePromptKickoff(storage);
+    const { transitionService, workItemId } = await preparePromptKickoff(storage);
+    const legacyRef = (await storage.get({ orgId: 'org-1', id: workItemId }))?.sessions.work;
+    expect(legacyRef?.startedBy).toBe('user-1');
+    expect(legacyRef).not.toHaveProperty('credentialUserId');
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -5610,6 +5615,40 @@ describe('FactoryDecisionDispatcher', () => {
       session: { id: 'session-1', ownerId: 'user-1', modeId: 'build', modelId: 'openai/gpt-5.6-sol' },
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
+  });
+
+  it('uses the credential owner for an autonomous kickoff and attributes writes to its Factory trigger', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, sendNotificationSignal } = createSession();
+    const { transitionService } = await preparePromptKickoff(storage, {
+      startedBy: 'factory-rule-dispatcher',
+    });
+    const primeCredentials = vi.fn(async () => {});
+    const resolveUser = vi.fn(async () => ({ id: 'user-1', name: 'Ada Lovelace' }));
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials,
+      resolveUser,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(resolveUser).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({
+      id: 'user-1',
+      name: 'Ada Lovelace',
+      organizationId: 'org-1',
+    });
+    expect(requestContext?.get('factoryArtifactTrigger')).toEqual({
+      source: 'factory rule',
+      id: (await storage.listRunBindings('org-1', PROJECT_ID))[0]?.id,
+    });
   });
 
   it('redelivers a kickoff notification across consecutive ending runs until the session wakes', async () => {

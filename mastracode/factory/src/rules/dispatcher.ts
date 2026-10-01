@@ -297,13 +297,14 @@ function factoryRequestContext(input: {
   session: BoundDispatcherSession;
   binding: FactoryRunBindingRecord;
   userId: string;
+  starterId?: string;
   orgId: string;
   user?: FactoryAuthUser;
 }): RequestContext {
   const { session, binding, userId, orgId, user } = input;
   const requestContext = new RequestContext();
   requestContext.set('user', user ? { ...user, organizationId: orgId } : { workosId: userId, organizationId: orgId });
-  if (userId === 'factory-rule-dispatcher') {
+  if ((input.starterId ?? userId) === 'factory-rule-dispatcher') {
     requestContext.set('factoryArtifactTrigger', { source: 'factory rule', id: binding.id });
   }
   requestContext.set('factoryArtifactSession', {
@@ -462,9 +463,16 @@ function workItemSessionUser(
   userId: string,
 ): FactoryAuthUser | undefined {
   const ref = item?.sessions[role];
-  if (!ref || ref.startedBy !== userId) return undefined;
-  const profile = parseFactoryInitiatorProfile({ userId, displayName: ref.startedByDisplayName });
-  return profile?.displayName ? { workosId: profile.userId, name: profile.displayName } : undefined;
+  if (!ref || (ref.credentialUserId ?? ref.startedBy) !== userId) return undefined;
+  const profile = parseFactoryInitiatorProfile({ userId: ref.startedBy, displayName: ref.startedByDisplayName });
+  return profile?.displayName && ref.startedBy === userId
+    ? { workosId: profile.userId, name: profile.displayName }
+    : undefined;
+}
+
+function workItemSessionCredentialUser(item: WorkItemRow | null | undefined, role: string): string | undefined {
+  const ref = item?.sessions[role];
+  return ref ? (ref.credentialUserId ?? ref.startedBy) : undefined;
 }
 
 function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
@@ -613,6 +621,7 @@ export class FactoryDecisionDispatcher {
     session: BoundDispatcherSession;
     binding: FactoryRunBindingRecord;
     userId: string;
+    starterId?: string;
     orgId: string;
     persistedUser?: FactoryAuthUser;
   }): Promise<RequestContext> {
@@ -975,16 +984,20 @@ export class FactoryDecisionDispatcher {
           const item = record.workItemId
             ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
             : null;
-          const startedBy = item?.sessions[binding.role]?.startedBy;
-          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const starterId = item?.sessions[binding.role]?.startedBy;
+          const credentialUserId = workItemSessionCredentialUser(item, binding.role);
+          if (!starterId || !credentialUserId)
+            throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+          await this.#primeCredentials?.({ orgId: record.orgId, userId: credentialUserId });
           const session = await this.#requireSession(binding);
           const requestContext = await this.#requestContext({
             session,
             binding,
-            userId: startedBy,
+            userId: credentialUserId,
+            starterId,
             orgId: record.orgId,
-            persistedUser: deferredHumanUser(record, startedBy) ?? workItemSessionUser(item, binding.role, startedBy),
+            persistedUser:
+              deferredHumanUser(record, credentialUserId) ?? workItemSessionUser(item, binding.role, credentialUserId),
           });
           const resolved =
             decision.skillName === undefined
@@ -1188,16 +1201,20 @@ export class FactoryDecisionDispatcher {
         // Nobody live on the card means nobody to tell, not a failure to retry.
         if (!binding) return;
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-        const startedBy = item?.sessions[binding.role]?.startedBy;
-        if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const starterId = item?.sessions[binding.role]?.startedBy;
+        const credentialUserId = workItemSessionCredentialUser(item, binding.role);
+        if (!starterId || !credentialUserId)
+          throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: credentialUserId });
         const session = await this.#requireSession(binding);
         const requestContext = await this.#requestContext({
           session,
           binding,
-          userId: startedBy,
+          userId: credentialUserId,
+          starterId,
           orgId: record.orgId,
-          persistedUser: deferredHumanUser(record, startedBy) ?? workItemSessionUser(item, binding.role, startedBy),
+          persistedUser:
+            deferredHumanUser(record, credentialUserId) ?? workItemSessionUser(item, binding.role, credentialUserId),
         });
         await awaitNotification(
           () =>
@@ -1673,16 +1690,19 @@ export class FactoryDecisionDispatcher {
           // Wake runs build the Factory workspace, which requires the
           // authenticated session owner on the request context.
           const item = await this.#storage.get({ orgId: record.orgId, id: binding.workItemId });
-          const startedBy = item?.sessions[binding.role]?.startedBy;
-          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
-          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const starterId = item?.sessions[binding.role]?.startedBy;
+          const credentialUserId = workItemSessionCredentialUser(item, binding.role);
+          if (!starterId || !credentialUserId)
+            throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+          await this.#primeCredentials?.({ orgId: record.orgId, userId: credentialUserId });
           const session = await this.#requireSession(binding);
           const requestContext = await this.#requestContext({
             session,
             binding,
-            userId: startedBy,
+            userId: credentialUserId,
+            starterId,
             orgId: record.orgId,
-            persistedUser: workItemSessionUser(item, binding.role, startedBy),
+            persistedUser: workItemSessionUser(item, binding.role, credentialUserId),
           });
           // The run's own verdict, not the delivery's: a kickoff delivered
           // into a run that is already terminating is consumed without
@@ -1736,7 +1756,7 @@ export class FactoryDecisionDispatcher {
               session,
               binding,
               `factory-kickoff:${record.kickoffKey}:${record.attempts}`,
-              startedBy,
+              starterId,
               run.endReason,
               item?.title,
             );

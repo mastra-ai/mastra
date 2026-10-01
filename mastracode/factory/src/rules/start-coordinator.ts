@@ -16,6 +16,8 @@ import type { FactoryRuleStage, FactoryTransitionResult } from './types.js';
 export interface FactoryStartRequest {
   orgId: string;
   userId: string;
+  /** Identity recorded for the run; `userId` remains the session/credential owner. */
+  starter?: { type: 'human' | 'system'; id: string };
   factoryProjectId: string;
   sessionId: string;
   threadTitle: string;
@@ -185,6 +187,7 @@ export class FactoryStartCoordinator {
       );
     }
     const requestContext = request.requestContext ?? new RequestContext();
+    const starter = request.starter ?? { type: 'human', id: request.userId };
     const authenticatedUser = getFactoryAuthUserFromContext(requestContext);
     const resolvedInitiator = factoryInitiatorProfile(authenticatedUser);
     const initiator = resolvedInitiator?.userId === request.userId ? resolvedInitiator : undefined;
@@ -264,6 +267,7 @@ export class FactoryStartCoordinator {
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
+      startedBy: starter.id,
       factoryProjectId: request.factoryProjectId,
       workItem: { id: request.workItem.id, input: request.workItem.input },
       role: request.workItem.role,
@@ -271,7 +275,7 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage: null,
-      ...(initiator ? { initiator } : {}),
+      ...(starter.type === 'human' && initiator?.userId === starter.id ? { initiator } : {}),
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 
@@ -286,9 +290,12 @@ export class FactoryStartCoordinator {
         board: boardForWorkItem(prepared.item),
         stage: destinationStage,
         expectedRevision: prepared.item.revision,
-        actor: { type: 'human', id: request.userId },
-        ...(initiator ? { initiator } : {}),
-        ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
+        actor: starter,
+        ...(starter.type === 'human' && initiator?.userId === starter.id ? { initiator } : {}),
+        ingress: {
+          type: starter.type === 'human' ? 'human' : 'rule',
+          identity: `start:${request.kickoffKey}:transition`,
+        },
         cause: 'run_start',
       });
       if (transition.status === 'rejected') {

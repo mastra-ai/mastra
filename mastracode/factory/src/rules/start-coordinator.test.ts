@@ -114,11 +114,13 @@ function startRequest(
     role: string;
     defaultModelId: string;
     id: string;
+    starter: { type: 'human' | 'system'; id: string };
   }> = {},
 ) {
   return {
     orgId: 'org-1',
     userId: 'user-1',
+    ...(overrides.starter ? { starter: overrides.starter } : {}),
     factoryProjectId: PROJECT_ID,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
@@ -234,7 +236,72 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+    expect(item?.sessions.work).not.toHaveProperty('credentialUserId');
     expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
+  });
+
+  it('records an autonomous starter separately from the source-control credential owner', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: 'item-1',
+      revision: 2,
+      stage: 'execute' as const,
+      decisions: [],
+    }));
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      { transition },
+      makeSourceControl() as never,
+    );
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1', name: 'Ada Lovelace' });
+    const prepared = await coordinator.prepare({
+      ...startRequest({ starter: { type: 'system', id: 'factory-rule-dispatcher' } }),
+      destinationStage: 'execute',
+      requestContext,
+    });
+
+    const item = await storage.get({ orgId: 'org-1', id: prepared.workItemId });
+    expect(item?.sessions.work).toMatchObject({
+      startedBy: 'factory-rule-dispatcher',
+      credentialUserId: 'user-1',
+    });
+    expect(item?.stages).toEqual(['intake']);
+    expect(item?.stageHistory?.[0]).toMatchObject({ by: 'factory-rule-dispatcher' });
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'system', id: 'factory-rule-dispatcher' },
+        ingress: { type: 'rule', identity: expect.any(String) },
+      }),
+    );
+    expect(transition.mock.calls[0]?.[0]).not.toHaveProperty('initiator');
+  });
+
+  it('replays an autonomous start without replacing its actor or credential owner', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = makeController();
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+    );
+    const autonomous = startRequest({ starter: { type: 'system', id: 'factory-rule-dispatcher' } });
+    const first = await coordinator.prepare(autonomous);
+
+    const replay = await coordinator.prepare({ ...autonomous, starter: { type: 'human', id: 'approver-2' } });
+
+    expect(replay).toMatchObject({ workItemId: first.workItemId, replayed: true });
+    const item = await storage.get({ orgId: 'org-1', id: first.workItemId });
+    expect(item?.sessions.work).toMatchObject({
+      startedBy: 'factory-rule-dispatcher',
+      credentialUserId: 'user-1',
+    });
   });
 
   it('resolves GitLab-backed runs from the GitLab source-control partition', async () => {
@@ -329,6 +396,7 @@ describe('FactoryStartCoordinator', () => {
     expect(transition).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: { type: 'human', id: 'user-1' },
+        ingress: { type: 'human', identity: expect.any(String) },
         initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
       }),
     );

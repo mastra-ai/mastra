@@ -31,6 +31,7 @@ import type { EnsuredFactorySourceSession } from '../session/factory-session.js'
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
@@ -384,6 +385,15 @@ export async function prepareFactoryRuleBinding(
         : initiator?.userId === preparedSession.userId
           ? initiator
           : undefined;
+    const originalActorId = input.record.actor?.id;
+    const humanStarterId = isHumanActorId(approver)
+      ? approver
+      : input.record.actor?.type === 'human' && typeof originalActorId === 'string' && isHumanActorId(originalActorId)
+        ? originalActorId
+        : actorProfile?.userId;
+    const starter = humanStarterId
+      ? { type: 'human' as const, id: humanStarterId }
+      : { type: 'system' as const, id: 'factory-rule-dispatcher' };
     const matchingSessionProfile = sessionProfile?.userId === preparedSession.userId ? sessionProfile : undefined;
     const persistedProfile = actorProfile
       ? {
@@ -405,6 +415,7 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      starter,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
