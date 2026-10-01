@@ -205,6 +205,89 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
+  it('recovers runs from different workflows that share a runId', async () => {
+    const storage = new MockStore();
+    const runId = 'shared-run';
+    const started: Array<() => void> = [];
+    const hang = (i: number) => async () => {
+      started[i]!();
+      await new Promise<never>(() => {});
+    };
+    const waits = [0, 1].map(i => new Promise<void>(resolve => (started[i] = resolve)));
+    const a1 = makeWorkflow('shared-a', async () => ({ seed: 'a' }), hang(0), { autoRestartActiveRuns: true });
+    const a2 = makeWorkflow('shared-b', async () => ({ seed: 'b' }), hang(1), { autoRestartActiveRuns: true });
+    const hostA = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [a1.id]: a1 as any, [a2.id]: a2 as any },
+      pubsub: new EventEmitterPubSub(),
+    });
+    await hostA.startWorkers();
+    for (const wf of [a1, a2]) (await wf.createRun({ runId })).start({ inputData: {} }).catch(() => {});
+    await Promise.all(waits);
+
+    const stepA = vi.fn(async () => ({}));
+    const stepB = vi.fn(async () => ({}));
+    const b1 = makeWorkflow('shared-a', async () => ({}), stepA, { autoRestartActiveRuns: true });
+    const b2 = makeWorkflow('shared-b', async () => ({}), stepB, { autoRestartActiveRuns: true });
+    const hostB = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [b1.id]: b1 as any, [b2.id]: b2 as any },
+      pubsub: new EventEmitterPubSub(),
+    });
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await hostB.startWorkers();
+      await waitForStatus(storage, 'shared-a', runId, 'success');
+      await waitForStatus(storage, 'shared-b', runId, 'success');
+      expect(stepA).toHaveBeenCalledTimes(1);
+      expect(stepB).toHaveBeenCalledTimes(1);
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
+  it('skips evented runs with an unparseable snapshot or no recorded position and keeps sweeping', async () => {
+    const storage = new MockStore();
+    const id = 'evented-unrecoverable';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    const step2B = vi.fn(async () => ({}));
+    const workflowB = makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true });
+    const hostB = newHost(workflowB, storage);
+    const realList = hostB.listActiveWorkflowRuns.bind(hostB);
+    vi.spyOn(hostB, 'listActiveWorkflowRuns').mockImplementation(async () => {
+      const result = await realList();
+      return {
+        ...result,
+        runs: [
+          { ...result.runs[0]!, runId: 'bad-json', snapshot: '{not json' },
+          {
+            ...result.runs[0]!,
+            runId: 'no-position',
+            snapshot: { ...(result.runs[0]!.snapshot as any), activePaths: [] },
+          },
+          ...result.runs,
+        ],
+      };
+    });
+    const createRun = vi.spyOn(workflowB, 'createRun');
+    await hostB.startWorkers();
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(1);
+      const restartedIds = createRun.mock.calls.map(([opts]) => opts?.runId);
+      expect(restartedIds).not.toContain('bad-json');
+      expect(restartedIds).not.toContain('no-position');
+    } finally {
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
   it('leaves evented runs untouched when the workflow does not opt in', async () => {
     const storage = new MockStore();
     const id = 'evented-no-opt-in';

@@ -896,7 +896,7 @@ export class Mastra<
    * stay queued until a full start can publish them.
    */
   #allWorkersStarted = false;
-  /** Evented run restarts requested before a full worker start (runId -> workflow id). */
+  /** Evented run restarts requested before a workflow consumer is wired (`workflowName:runId` -> `{ workflowName, runId }`). */
   #pendingEventedRestarts = new Map<string, { workflowName: string; runId: string }>();
   /** Run ids whose restart is in flight, so overlapping sweeps don't drive a run twice. */
   #inFlightRestarts = new Set<string>();
