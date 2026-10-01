@@ -319,6 +319,35 @@ describe('analyzeEntry', () => {
     expect(openaiDep?.isWorkspace).toBe(false);
   });
 
+  it('should not traverse schema-compat when it is present in the workspace map', async () => {
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@mastra/schema-compat',
+        {
+          location: join(process.cwd(), '..', 'schema-compat'),
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: `import { toStandardSchema } from '@mastra/schema-compat/schema'; export { toStandardSchema };`,
+        isVirtualFile: true,
+      },
+      '',
+      {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: process.cwd(),
+      },
+    );
+
+    expect(result.dependencies.get('@mastra/schema-compat/schema')?.isWorkspace).toBe(false);
+  });
+
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
       import { Mastra } from '@mastra/core/mastra';

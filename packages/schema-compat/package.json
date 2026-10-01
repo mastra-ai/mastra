@@ -69,6 +69,16 @@
         "default": "./dist/standard-schema/adapters/json-schema.cjs"
       }
     },
+    "./validation-runtime": {
+      "import": {
+        "types": "./dist/standard-schema/adapters/validation-runtime.d.ts",
+        "default": "./dist/standard-schema/adapters/validation-runtime.js"
+      },
+      "require": {
+        "types": "./dist/standard-schema/adapters/validation-runtime.d.ts",
+        "default": "./dist/standard-schema/adapters/validation-runtime.cjs"
+      }
+    },
     "./adapters/zod-v3": {
       "import": {
         "types": "./dist/standard-schema/adapters/zod-v3.d.ts",

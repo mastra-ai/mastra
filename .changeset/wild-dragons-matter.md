@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Preserved replaceable JSON Schema validator imports in packaged server builds.
+Preserved the replaceable default JSON Schema validation runtime in packaged server builds.

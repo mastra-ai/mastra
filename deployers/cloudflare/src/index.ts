@@ -12,8 +12,7 @@ import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 const nodeBuiltins = new Set(builtinModules);
-const ajvSpecifier = 'ajv';
-const ajv2020Specifier = 'ajv/dist/2020.js';
+const validationRuntimeSpecifier = '@mastra/schema-compat/validation-runtime';
 
 /**
  * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
@@ -203,7 +202,7 @@ export default { createRequire };
         'readable-stream': `./${readableStreamStubPath}`,
         module: `./${moduleStubPath}`,
         'node:module': `./${moduleStubPath}`,
-        ...this.getWorkersAjvAlias(),
+        ...this.getWorkersValidationRuntimeAlias(),
         ...userAlias,
       },
     };
@@ -315,13 +314,12 @@ try {
     return inputOptions;
   }
 
-  private getWorkersAjvAlias(): Record<string, string> {
+  private getWorkersValidationRuntimeAlias(): Record<string, string> {
     const modulePath = fileURLToPath(import.meta.url);
-    const workersAjvPath = join(dirname(modulePath), `ajv-worker${extname(modulePath)}`);
+    const workersRuntimePath = join(dirname(modulePath), `validation-runtime-worker${extname(modulePath)}`);
 
     return {
-      [ajvSpecifier]: workersAjvPath,
-      [ajv2020Specifier]: workersAjvPath,
+      [validationRuntimeSpecifier]: workersRuntimePath,
     };
   }
 
@@ -337,7 +335,10 @@ try {
         outputDirectory,
         projectRoot,
         enableEsmShim: false,
-        alias: this.getWorkersAjvAlias(),
+        alias: {
+          ...this.getWorkersValidationRuntimeAlias(),
+          ...this.userConfig.alias,
+        },
       },
       toolsPaths,
     );

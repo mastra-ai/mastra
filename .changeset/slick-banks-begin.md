@@ -2,4 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Preserved replaceable JSON Schema validator imports in packaged MCP clients.
+Preserved the replaceable default JSON Schema validation runtime in packaged MCP clients.

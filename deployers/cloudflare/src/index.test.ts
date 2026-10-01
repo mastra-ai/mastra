@@ -43,14 +43,19 @@ describe('CloudflareDeployer', () => {
     });
   });
 
-  describe('AJV compatibility', () => {
-    it('uses the Workers-compatible AJV facade during Mastra bundling', async () => {
-      deployer = new CloudflareDeployer({ name: 'test-worker' });
+  describe('JSON Schema validation compatibility', () => {
+    it('uses the Workers runtime while preserving user AJV aliases during Mastra bundling', async () => {
+      deployer = new CloudflareDeployer({
+        name: 'test-worker',
+        alias: {
+          ajv: './custom-ajv.js',
+          '@mastra/schema-compat/validation-runtime': './custom-validation-runtime.js',
+        },
+      });
       // @ts-expect-error - accessing protected method for testing
       const bundle = vi.spyOn(deployer, '_bundle').mockResolvedValue(undefined);
-      vi.spyOn(deployer as any, 'getWorkersAjvAlias').mockReturnValue({
-        ajv: '/resolved/ajv-worker.js',
-        'ajv/dist/2020.js': '/resolved/ajv-worker.js',
+      vi.spyOn(deployer as any, 'getWorkersValidationRuntimeAlias').mockReturnValue({
+        '@mastra/schema-compat/validation-runtime': '/resolved/validation-runtime-worker.js',
       });
 
       await deployer.bundle(join(tempDir, 'src', 'mastra', 'index.ts'), tempDir, {
@@ -63,15 +68,15 @@ describe('CloudflareDeployer', () => {
         join(tempDir, 'src', 'mastra', 'index.ts'),
         expect.objectContaining({
           alias: {
-            ajv: '/resolved/ajv-worker.js',
-            'ajv/dist/2020.js': '/resolved/ajv-worker.js',
+            '@mastra/schema-compat/validation-runtime': './custom-validation-runtime.js',
+            ajv: './custom-ajv.js',
           },
         }),
         [],
       );
     });
 
-    it('writes the Workers-compatible AJV aliases to Wrangler configuration', async () => {
+    it('writes the Workers validation runtime alias to Wrangler configuration', async () => {
       const outputDirectory = join(tempDir, '.mastra');
       await mkdir(join(outputDirectory, 'output'), { recursive: true });
       deployer = new CloudflareDeployer({ name: 'test-worker' });
@@ -83,11 +88,10 @@ describe('CloudflareDeployer', () => {
       const rootConfig = JSON.parse(
         (await readFile(join(tempDir, 'wrangler.jsonc'), 'utf-8')).replace(/\/\*[\s\S]*?\*\//, ''),
       );
+      const runtimeSpecifier = '@mastra/schema-compat/validation-runtime';
 
-      expect(outputConfig.alias.ajv).toMatch(/ajv-worker\.ts$/);
-      expect(outputConfig.alias['ajv/dist/2020.js']).toBe(outputConfig.alias.ajv);
-      expect(rootConfig.alias.ajv).toBe(outputConfig.alias.ajv);
-      expect(rootConfig.alias['ajv/dist/2020.js']).toBe(outputConfig.alias.ajv);
+      expect(outputConfig.alias[runtimeSpecifier]).toMatch(/validation-runtime-worker\.ts$/);
+      expect(rootConfig.alias[runtimeSpecifier]).toBe(outputConfig.alias[runtimeSpecifier]);
     });
   });
 

@@ -5417,9 +5417,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0
@@ -5448,9 +5448,6 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
@@ -6376,9 +6373,9 @@ importers:
 
   packages/server:
     dependencies:
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       hono:
         specifier: 4.13.8
         version: 4.13.8
@@ -6413,9 +6410,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

@@ -2,4 +2,4 @@
 '@mastra/schema-compat': patch
 ---
 
-Improved JSON Schema validation packaging so runtimes can provide platform-compatible AJV implementations.
+Added a replaceable default JSON Schema validation runtime while preserving AJV options and instance customization.
