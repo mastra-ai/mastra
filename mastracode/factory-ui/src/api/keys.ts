@@ -151,8 +151,6 @@ export const queryKeys = {
     ['editor-search', workspacePath ?? null, query ?? null] as const,
   scmStatus: (workspacePath: string | undefined) => ['scm-status', workspacePath ?? null] as const,
   runnerScripts: (workspacePath: string | undefined) => ['runner-scripts', workspacePath ?? null] as const,
-  runnerPoll: (workspacePath: string | undefined, runId: string | undefined) =>
-    ['runner-poll', workspacePath ?? null, runId ?? null] as const,
   scmDiff: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['scm-diff', workspacePath ?? null, filePath ?? null] as const,
   blame: (workspacePath: string | undefined, filePath: string | undefined) =>

@@ -52,8 +52,10 @@ export function SendSelectionBar({
   onDismiss,
   onSent,
 }: SendSelectionBarProps) {
-  // The host keys this component by selection + prefill, so seeding state
-  // from the prop is safe — a new lens action remounts with fresh text.
+  // The host keys this component by file + prefill, so seeding state from
+  // the prop is safe — a new lens action remounts with fresh text. Selection
+  // range changes update props without a remount (remounting would re-fire
+  // autoFocus and steal focus from the editor).
   const [draft, setDraft] = useState(initialText ?? '');
   const enabled = Boolean(resourceId);
   const { phase, localUser, failLocalUser, pushNotice } = useChatTranscript();

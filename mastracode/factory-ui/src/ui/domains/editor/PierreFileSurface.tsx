@@ -505,9 +505,17 @@ export function PierreFileSurface({
   // Pierre has no selection-change callback, so listen to the document's
   // `selectionchange` (fires for the shadow contenteditable too) and read the
   // editor's view state. Dedupe so a payload only fires when it changes.
+  //
+  // Emission is deferred until the selection SETTLES: never mid pointer-drag,
+  // and only after a short pause for keyboard selection. The send bar
+  // autofocuses its textarea on mount — emitting while the user is still
+  // extending the selection would yank focus out of the contenteditable and
+  // break the drag / shift-arrow sequence.
   const lastSelectionRef = useRef<string>('null');
   useEffect(() => {
-    const handler = () => {
+    let timer: number | null = null;
+    let dragging = false;
+    const emit = () => {
       const editor = editorRef.current;
       const node = containerRef.current;
       if (!editor || !node) return;
@@ -518,11 +526,6 @@ export function PierreFileSurface({
       if (!active || !node.contains(active)) return;
       const selection = editor.getViewState()?.selections?.[0];
       if (!selection) return;
-      const line = selection.end.line + 1;
-      if (cursorLineRef.current !== line) {
-        cursorLineRef.current = line;
-        onCursorLineRef.current?.(line);
-      }
       const selectionFn = onSelectionChangeRef.current;
       if (!selectionFn) return;
       const state = editor.getEditState();
@@ -543,8 +546,48 @@ export function PierreFileSurface({
       lastSelectionRef.current = key;
       selectionFn(payload);
     };
+    const schedule = () => {
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (!dragging) emit();
+      }, 300);
+    };
+    const handler = () => {
+      const editor = editorRef.current;
+      const node = containerRef.current;
+      if (!editor || !node) return;
+      const active = document.activeElement;
+      if (!active || !node.contains(active)) return;
+      const selection = editor.getViewState()?.selections?.[0];
+      if (!selection) return;
+      // Cursor-line breadcrumbs stay immediate; only the bar payload settles.
+      const line = selection.end.line + 1;
+      if (cursorLineRef.current !== line) {
+        cursorLineRef.current = line;
+        onCursorLineRef.current?.(line);
+      }
+      schedule();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button === 0) dragging = true;
+    };
+    const onPointerUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      schedule();
+    };
+    const node = containerRef.current;
     document.addEventListener('selectionchange', handler);
-    return () => document.removeEventListener('selectionchange', handler);
+    node?.addEventListener('pointerdown', onPointerDown);
+    // The drag can end anywhere on the page, so pointerup lives on document.
+    document.addEventListener('pointerup', onPointerUp);
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+      document.removeEventListener('selectionchange', handler);
+      node?.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('pointerup', onPointerUp);
+    };
   }, []);
 
   // Accept a completion: replace the current prefix with the picked word and

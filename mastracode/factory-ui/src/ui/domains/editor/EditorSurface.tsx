@@ -1076,13 +1076,19 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
             {runnerOpen && (
               <RunnerPanel
                 workspacePath={workspacePath}
+                themePreset={getEditorThemePreset(editorTheme)}
                 onJump={(path, line) => openFile(path, line)}
                 onClose={() => setRunnerOpen(false)}
               />
             )}
             {buffers.pendingSelection && (
               <SendSelectionBar
-                key={`${buffers.pendingSelection.path}:${buffers.pendingSelection.startLine}:${buffers.pendingSelection.endLine}:${lensPrompt ?? ''}`}
+                /* Keyed by file + lens prompt ONLY — never by the line range.
+                 * The bar autofocuses on mount, so remounting per selection
+                 * adjustment would steal focus from the editor every time the
+                 * user extends the range. Range/snippet updates flow through
+                 * the `selection` prop without a remount. */
+                key={`${buffers.pendingSelection.path}:${lensPrompt ?? ''}`}
                 selection={buffers.pendingSelection}
                 resourceId={resourceId || undefined}
                 projectPath={projectPath}

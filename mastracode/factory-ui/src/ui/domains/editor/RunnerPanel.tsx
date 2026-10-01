@@ -6,12 +6,14 @@ import type { ReactNode } from 'react';
 import type { PreviewBase } from '../../../api/types';
 import { useSessionPreviewBase } from '../../../hooks/use-preview-base';
 import {
-  useRunnerPoll,
   useRunnerScripts,
   useRunnerStartMutation,
   useRunnerStopMutation,
+  useRunnerStream,
 } from '../../../hooks/use-runner';
+import type { EditorThemePreset } from './editor-themes';
 import { buildSandboxPreviewUrl, detectLocalhostUrls } from './preview-url';
+import './runner-terminal.css';
 import {
   applyCompletion,
   completionCandidates,
@@ -100,7 +102,7 @@ export function OutputLine({
             href={target}
             target="_blank"
             rel="noreferrer"
-            className="text-cyan-300 underline decoration-dotted underline-offset-2 hover:decoration-solid"
+            className="text-(--term-accent) underline decoration-dotted underline-offset-2 hover:decoration-solid"
           >
             {match.match}
           </a>
@@ -120,7 +122,7 @@ export function OutputLine({
             key={`${spanIndex}-file-${start}-${text}`}
             type="button"
             onClick={() => onJump(path!, Number(lineNumber))}
-            className="text-amber-300 underline decoration-dotted underline-offset-2 hover:decoration-solid"
+            className="text-(--amber-400) underline decoration-dotted underline-offset-2 hover:decoration-solid"
           >
             {text}
           </button>
@@ -169,7 +171,7 @@ function ChipButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-400/10 disabled:hover:bg-transparent focus-visible:ring-emerald-400/40 shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50"
+      className="text-(--term-accent)/80 hover:text-(--term-accent) hover:bg-(--term-accent)/10 disabled:hover:bg-transparent focus-visible:ring-(--term-accent)/40 shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -197,7 +199,7 @@ function IconButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={title}
-      className="text-neutral-500 hover:bg-white/5 hover:text-neutral-200 focus-visible:ring-emerald-400/40 grid size-6 shrink-0 place-items-center rounded focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      className="text-(--term-muted) hover:bg-(--term-line) hover:text-(--term-fg) focus-visible:ring-(--term-accent)/40 grid size-6 shrink-0 place-items-center rounded focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
     >
       {children}
     </button>
@@ -221,32 +223,37 @@ function PreviewChip({ port, previewBase }: { port: number; previewBase: Preview
       target="_blank"
       rel="noreferrer"
       title={`${label} — ${url}`}
-      className="text-cyan-400/80 hover:text-cyan-300 hover:bg-cyan-400/10 focus-visible:ring-cyan-400/40 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1"
+      className="text-(--term-accent)/80 hover:text-(--term-accent) hover:bg-(--term-accent)/10 focus-visible:ring-(--term-accent)/40 flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] focus-visible:outline-none focus-visible:ring-1"
     >
       <ExternalLink size={10} className="shrink-0" />
       <span>:{port}</span>
-      <span className="text-neutral-500 max-w-40 truncate">{displayUrl}</span>
+      <span className="text-(--term-muted) max-w-40 truncate">{displayUrl}</span>
     </a>
   );
 }
 
 interface RunnerPanelProps {
   workspacePath: string;
+  /** Active editor theme preset — the terminal palette follows its swatch. */
+  themePreset: EditorThemePreset;
   onJump(path: string, line: number): void;
   onClose(): void;
 }
 
 /** Bottom command runner: pick a script or type a command, watch it stream. */
-export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps) {
+export function RunnerPanel({ workspacePath, themePreset, onJump, onClose }: RunnerPanelProps) {
   const scripts = useRunnerScripts(workspacePath);
   const previewBaseQuery = useSessionPreviewBase(workspacePath);
   const previewBase = previewBaseQuery.data;
   const start = useRunnerStartMutation();
   const stop = useRunnerStopMutation();
   const [command, setCommand] = useState('');
+  // The command echoed in scrollback — the input clears on submit (like a
+  // real terminal), so the echo can't read from `command`.
+  const [lastCommand, setLastCommand] = useState('');
   const [runId, setRunId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const poll = useRunnerPoll(workspacePath, runId ?? undefined);
+  const poll = useRunnerStream(workspacePath, runId ?? undefined);
   const running = Boolean(runId && (poll.data ? poll.data.running : true));
 
   // Persistent command history + in-session navigation cursor. `historyCursor`
@@ -299,7 +306,10 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
     const text = (next ?? command).trim();
     if (!text || start.isPending || running) return;
     setStartError(null);
-    setCommand(text);
+    // Clear the prompt immediately, like a real terminal — the command is
+    // echoed into scrollback instead. Restored below if the start fails.
+    setCommand('');
+    setLastCommand(text);
     setCompletionOpen(false);
     // Push into history unless it's a duplicate of the most recent entry;
     // Zsh-style dedupe keeps the up-arrow list scannable.
@@ -312,6 +322,7 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
       const result = await start.mutateAsync({ workspacePath, command: text });
       setRunId(result.runId);
     } catch (error) {
+      setCommand(text);
       setStartError(error instanceof Error ? error.message : 'Could not start the command.');
     }
   }
@@ -419,24 +430,30 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
 
   const exitCode = poll.data?.exitCode;
   const scriptChips = (scripts.data?.scripts ?? []).slice(0, 6);
-  const echoedCommand = poll.data?.command ?? (runId ? command : '');
+  const echoedCommand = poll.data?.command ?? (runId ? lastCommand : '');
+  const { swatch } = themePreset;
 
   return (
     <div
-      className="border-border flex h-64 shrink-0 flex-col border-t bg-[#0b0e14] font-mono text-[13px] leading-relaxed text-neutral-100 selection:bg-emerald-400/25"
+      className="runner-terminal border-border flex h-64 shrink-0 flex-col border-t font-mono text-[13px] leading-relaxed"
+      style={
+        {
+          '--term-bg-dark': swatch.dark.bg,
+          '--term-fg-dark': swatch.dark.fg,
+          '--term-accent-dark': swatch.dark.accent,
+          '--term-bg-light': swatch.light.bg,
+          '--term-fg-light': swatch.light.fg,
+          '--term-accent-light': swatch.light.accent,
+        } as React.CSSProperties
+      }
       data-testid="runner-panel"
     >
       {/* Terminal chrome — tab-bar-like strip with title + chips + actions. */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-white/5 px-3 py-1">
-        <div className="flex items-center gap-1.5 pr-2">
-          <span className="size-2.5 rounded-full bg-[#ff5f57]" />
-          <span className="size-2.5 rounded-full bg-[#febc2e]" />
-          <span className="size-2.5 rounded-full bg-[#28c840]" />
-        </div>
-        <span className="text-[11px] uppercase tracking-widest text-neutral-500">terminal</span>
+      <div className="border-(--term-line) flex shrink-0 items-center gap-1 border-b px-3 py-1">
+        <span className="text-(--term-muted) text-[11px] uppercase tracking-widest">terminal</span>
         {scriptChips.length > 0 && (
           <>
-            <span className="mx-1 text-neutral-700">·</span>
+            <span className="text-(--term-faint) mx-1">·</span>
             <div className="flex flex-wrap items-center gap-0.5">
               {scriptChips.map(script => (
                 <ChipButton
@@ -453,7 +470,7 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
         )}
         {detectedPorts.length > 0 && (
           <>
-            <span className="mx-1 text-neutral-700">·</span>
+            <span className="text-(--term-faint) mx-1">·</span>
             <div className="flex flex-wrap items-center gap-0.5">
               {detectedPorts.map(port => (
                 <PreviewChip key={`preview-${port}`} port={port} previewBase={previewBase} />
@@ -505,8 +522,8 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
         className="min-h-0 flex-1 cursor-text overflow-y-auto px-3 py-2"
       >
         {startError && (
-          <div className="text-rose-400">
-            <span className="text-rose-500">✗</span> {startError}
+          <div className="text-(--red-400)">
+            <span>✗</span> {startError}
           </div>
         )}
         {runId && (
@@ -515,21 +532,21 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
                 like a normal terminal session: prompt + output + next prompt. */}
             {echoedCommand && (
               <div className="flex items-baseline gap-2">
-                <span className="text-emerald-400 select-none">{PROMPT}</span>
-                <span className="whitespace-pre-wrap text-neutral-200">{echoedCommand}</span>
+                <span className="text-(--term-accent) select-none">{PROMPT}</span>
+                <span className="whitespace-pre-wrap">{echoedCommand}</span>
               </div>
             )}
             {visibleOutput.split('\n').map((line, index) => (
               <OutputLine key={index} line={line} onJump={onJump} previewBase={previewBase} />
             ))}
             {running ? (
-              <div className="flex items-center gap-1.5 pt-0.5 text-[11px] text-neutral-500">
-                <span className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-400" />
+              <div className="text-(--term-muted) flex items-center gap-1.5 pt-0.5 text-[11px]">
+                <span className="bg-(--term-accent) inline-block size-1.5 animate-pulse rounded-full" />
                 running…
               </div>
             ) : (
-              <div className="pt-0.5 text-[11px] text-neutral-500">
-                <span className={exitCode === 0 ? 'text-emerald-400' : 'text-rose-400'}>
+              <div className="text-(--term-muted) pt-0.5 text-[11px]">
+                <span className={exitCode === 0 ? 'text-(--term-accent)' : 'text-(--red-400)'}>
                   {exitCode === 0 ? '✓' : '✗'}
                 </span>{' '}
                 exit {exitCode ?? '?'}
@@ -540,7 +557,7 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
         {/* Prompt line — always visible at the bottom, inside the scroll
             region so the caret follows the output like tmux/xterm. */}
         <div className="relative flex items-baseline gap-2 pt-1">
-          <span className="text-emerald-400 select-none">{PROMPT}</span>
+          <span className="text-(--term-accent) select-none">{PROMPT}</span>
           <div className="relative min-w-0 flex-1">
             <input
               ref={inputRef}
@@ -556,17 +573,17 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
               aria-autocomplete="list"
               aria-expanded={completionOpen}
               aria-label="Terminal command"
-              className="w-full bg-transparent font-mono text-neutral-100 caret-emerald-400 placeholder:text-neutral-600 outline-none"
+              className="caret-(--term-accent) placeholder:text-(--term-faint) w-full bg-transparent font-mono outline-none"
             />
             {completionOpen && completions.length > 0 && (
               <div
                 role="listbox"
-                className="absolute bottom-full left-0 z-20 mb-1 max-h-56 w-72 max-w-full overflow-auto rounded border border-white/10 bg-[#111418] py-1 shadow-2xl"
+                className="border-(--term-line) bg-(--term-raised) absolute bottom-full left-0 z-20 mb-1 max-h-56 w-72 max-w-full overflow-auto rounded border py-1 shadow-2xl"
               >
-                <div className="mb-1 flex items-center justify-between border-b border-white/5 px-2 pb-1 text-[10px] uppercase tracking-wider text-neutral-500">
+                <div className="border-(--term-line) text-(--term-muted) mb-1 flex items-center justify-between border-b px-2 pb-1 text-[10px] uppercase tracking-wider">
                   <span>Suggestions</span>
                   <span>
-                    <kbd className="rounded border border-white/10 bg-white/5 px-1 font-mono text-neutral-300">Tab</kbd>{' '}
+                    <kbd className="border-(--term-line) bg-(--term-line) rounded border px-1 font-mono">Tab</kbd>{' '}
                     accept
                   </span>
                 </div>
@@ -581,8 +598,8 @@ export function RunnerPanel({ workspacePath, onJump, onClose }: RunnerPanelProps
                     className={cn(
                       'block w-full truncate px-2 py-1 text-left font-mono text-[12px]',
                       index === completionIndex
-                        ? 'bg-emerald-400/15 text-neutral-100'
-                        : 'text-neutral-400 hover:bg-white/5 hover:text-neutral-100',
+                        ? 'bg-(--term-accent)/15'
+                        : 'text-(--term-muted) hover:bg-(--term-line) hover:text-(--term-fg)',
                     )}
                   >
                     {candidate}

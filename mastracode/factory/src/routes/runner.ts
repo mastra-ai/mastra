@@ -10,6 +10,7 @@
  *   - GET  /web/workspace/runner/scripts?workspacePath=  → package.json scripts
  *   - POST /web/workspace/runner/start?workspacePath=    → { command } → { runId }
  *   - GET  /web/workspace/runner/poll?workspacePath=&runId= → { running, exitCode, output }
+ *   - GET  /web/workspace/runner/stream?workspacePath=&runId= → SSE `runner` frames
  *   - POST /web/workspace/runner/stop?workspacePath=     → { runId } → { ok }
  */
 
@@ -18,6 +19,7 @@ import { randomBytes } from 'node:crypto';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
+import { streamSSE } from 'hono/streaming';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { resolveAuthorizedSession, sessionSandbox } from './editor.js';
@@ -53,6 +55,8 @@ export interface RunnerPollResult {
 
 const MAX_COMMAND_LENGTH = 2000;
 const MAX_OUTPUT_TAIL_BYTES = 64_000;
+/** Server-side poll cadence behind the SSE stream (the log lives in the sandbox). */
+const STREAM_POLL_MS = 400;
 const MAX_RUNS_PER_SESSION = 5;
 const RUN_IDLE_MS = 30 * 60_000;
 const EXIT_MARKER = '::mastra-runner-exit:';
@@ -236,6 +240,59 @@ export function buildRunnerRoutes(deps: EditorSessionDeps): ApiRoute[] {
         const runId = c.req.query('runId');
         if (!runId) return c.json({ error: 'Missing required query param: runId' }, 400);
         return respond(c, session => pollRunnerCommand(session, runId));
+      },
+    }),
+    registerApiRoute('/web/workspace/runner/stream', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        const runId = c.req.query('runId');
+        if (!runId) return c.json({ error: 'Missing required query param: runId' }, 400);
+        let session: SourceControlSession;
+        try {
+          session = await resolveAuthorizedSession(c, deps, workspacePath);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return c.json({ error: message }, errorStatus(message));
+        }
+        // SSE push to the browser; the sandbox log is still tailed server-side
+        // on a tight cadence because the log file lives inside the sandbox and
+        // only `executeCommand` can read it. One HTTP connection per run
+        // instead of one request per tick, and frames only go out on change.
+        return streamSSE(c, async stream => {
+          let aborted = false;
+          stream.onAbort(() => {
+            aborted = true;
+          });
+          let lastKey = '';
+          while (!aborted && !stream.aborted) {
+            let result: RunnerPollResult;
+            try {
+              result = await pollRunnerCommand(session, runId);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              await stream
+                .writeSSE({ event: 'runner-error', data: JSON.stringify({ error: message }) })
+                .catch(() => {});
+              return;
+            }
+            // Output is tail-capped, so length alone can miss same-size
+            // rewrites — key on the tail too.
+            const key = `${result.running}:${result.exitCode ?? ''}:${result.output.length}:${result.output.slice(-64)}`;
+            if (key !== lastKey) {
+              lastKey = key;
+              try {
+                await stream.writeSSE({ event: 'runner', data: JSON.stringify(result) });
+              } catch {
+                return; // Half-closed socket — the client is gone.
+              }
+            }
+            if (!result.running) return;
+            await new Promise(resolve => setTimeout(resolve, STREAM_POLL_MS));
+          }
+        });
       },
     }),
     registerApiRoute('/web/workspace/runner/stop', {

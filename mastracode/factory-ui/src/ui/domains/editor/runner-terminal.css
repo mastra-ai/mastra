@@ -1,0 +1,29 @@
+/**
+ * Terminal surface theming. The panel sets per-mode custom properties from
+ * the active editor theme preset's swatch (--term-bg-dark, --term-fg-dark,
+ * --term-accent-dark + the light triplet); this sheet picks the pair for the
+ * current color scheme (`html.light` flips it, same as the editor) and
+ * derives the muted/raised/border tints via color-mix so the terminal always
+ * matches the selected editor theme instead of a hardcoded palette.
+ */
+.runner-terminal {
+  --term-bg: var(--term-bg-dark);
+  --term-fg: var(--term-fg-dark);
+  --term-accent: var(--term-accent-dark);
+  --term-muted: color-mix(in srgb, var(--term-fg) 55%, transparent);
+  --term-faint: color-mix(in srgb, var(--term-fg) 35%, transparent);
+  --term-line: color-mix(in srgb, var(--term-fg) 10%, transparent);
+  --term-raised: color-mix(in srgb, var(--term-fg) 7%, var(--term-bg));
+  background: var(--term-bg);
+  color: var(--term-fg);
+}
+
+html.light .runner-terminal {
+  --term-bg: var(--term-bg-light);
+  --term-fg: var(--term-fg-light);
+  --term-accent: var(--term-accent-light);
+}
+
+.runner-terminal ::selection {
+  background: color-mix(in srgb, var(--term-accent) 30%, transparent);
+}
