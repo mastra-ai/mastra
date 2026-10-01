@@ -9,7 +9,6 @@ afterEach(cleanup);
 function renderCustom(props: Partial<React.ComponentProps<typeof DateTimeRangePicker>> = {}) {
   const onPresetChange = vi.fn();
   render(<DateTimeRangePicker preset="custom" onPresetChange={onPresetChange} {...props} />);
-  // Trigger label is "Start – End" or the formatted dates; it is the only button before the popover opens.
   fireEvent.click(screen.getByRole('button'));
   return { onPresetChange };
 }
@@ -21,8 +20,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     const presets = screen.getByRole('button', { name: /presets/i });
     expect(presets.tagName).toBe('BUTTON');
     expect(presets.getAttribute('data-variant')).toBe('ghost');
-    // Unprefixed only: the recipe carries aria-disabled:pointer-events-none, which a
-    // substring match would catch even though it never applies to an enabled control.
+    // the recipe's aria-disabled:pointer-events-none would satisfy a substring match
     expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
@@ -46,6 +44,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     const range = screen.getByRole('group', { name: 'Custom date range' });
     expect(range.getAttribute('aria-invalid')).toBe('true');
     expect(range.getAttribute('aria-describedby')).toBe(error.id);
+    expect(screen.getAllByRole('combobox').filter(select => select.hasAttribute('aria-invalid'))).toEqual([]);
   });
 
   it('names each time select on its own, with its own id', () => {

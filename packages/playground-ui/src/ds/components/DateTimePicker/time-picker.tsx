@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { FieldItem } from '@/ds/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { cn } from '@/lib/utils';
 
@@ -87,19 +86,17 @@ type TimePartSelectProps = {
 
 function TimePartSelect({ label, options, value, onValueChange }: TimePartSelectProps) {
   return (
-    <FieldItem className="contents">
-      <Select value={options.indexOf(value).toString()} onValueChange={onValueChange}>
-        <SelectTrigger size="sm" aria-label={label}>
-          <SelectValue placeholder="Select..." />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option, idx) => (
-            <SelectItem key={option} value={`${idx}`}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </FieldItem>
+    <Select value={options.indexOf(value).toString()} onValueChange={onValueChange}>
+      <SelectTrigger size="sm" aria-label={label}>
+        <SelectValue placeholder="Select..." />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option, idx) => (
+          <SelectItem key={option} value={`${idx}`}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

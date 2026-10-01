@@ -140,7 +140,7 @@ function FieldDescription({ className, ...props }: FieldDescriptionProps) {
   );
 }
 
-type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 'id' | 'render'> & {
+type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 'render'> & {
   className?: string;
 };
 
