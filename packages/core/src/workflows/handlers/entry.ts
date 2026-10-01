@@ -84,6 +84,12 @@ function buildResumedBlockResult(
       const stillSuspended = entrySteps.find(
         s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)]?.status === 'suspended',
       );
+      const stillPaused = entrySteps.some(
+        s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)]?.status === 'paused',
+      );
+      if (!stillSuspended && stillPaused) {
+        return { status: 'paused' };
+      }
       const suspendData =
         stillSuspended && isSingleStepEntry(stillSuspended)
           ? stepResults[getSingleStepEntryId(stillSuspended)]?.suspendPayload
