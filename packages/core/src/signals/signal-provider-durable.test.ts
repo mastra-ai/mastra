@@ -153,7 +153,9 @@ describe('SignalProvider durable subscriptions', () => {
       await expect(async () => retained!.countSubscriptions()).rejects.toMatchObject({
         id: 'SIGNAL_PROVIDER_DURABLE_SCOPE_EXPIRED',
       });
-      expect(() => retained!.claimCoordinationLock({ key: 'k', owner: 'o', ttlMs: 1_000 })).toThrow(MastraError);
+      await expect(retained!.claimCoordinationLock({ key: 'k', owner: 'o', ttlMs: 1_000 })).rejects.toThrow(
+        MastraError,
+      );
     });
 
     it('invalidates the scope when the callback throws', async () => {
@@ -200,7 +202,9 @@ describe('SignalProvider durable subscriptions', () => {
       expect(await second.hasD(target, 'ext-1')).toBe(true);
       expect((await second.forResourceD('ext-1')).map(row => row.id)).toEqual([created.id]);
       const domain = await storage.getStore('signalSubscriptions');
-      expect(await domain!.getSubscriptionById({ agentId: 'agent-a', id: created.id })).toMatchObject({
+      expect(
+        await domain!.getSubscriptionById({ agentId: 'agent-a', providerId: created.providerId, id: created.id }),
+      ).toMatchObject({
         metadata: { from: 'first' },
       });
 
@@ -287,10 +291,20 @@ describe('SignalProvider durable subscriptions', () => {
       expect(await agentA.hasD({ resourceId: 'resource-2', threadId: 'thread-1' }, 'shared')).toBe(true);
       expect(await agentB.hasD({ resourceId: 'resource-2', threadId: 'thread-1' }, 'shared')).toBe(false);
 
-      // Row-id operations cannot reach another agent's rows.
+      // Row-id operations cannot reach another agent's or provider's rows.
       expect(await agentB.setEnabledD(a1.id, false)).toBeNull();
+      expect(await otherProvider.setEnabledD(a1.id, false)).toBeNull();
+      expect(await otherProvider.withStore(scope => scope.deleteSubscription({ id: a1.id }))).toBe(false);
+      expect(
+        await otherProvider.withStore(scope =>
+          scope.claimSubscription({ id: a1.id, owner: 'o', ttlMs: 1_000, cadenceMs: 1_000 }),
+        ),
+      ).toBeNull();
       expect(await agentB.withStore(scope => scope.getSubscriptionById({ id: a1.id }))).toBeNull();
       expect(await otherProvider.withStore(scope => scope.getSubscriptionById({ id: a1.id }))).toBeNull();
+      expect(await agentA.withStore(scope => scope.getSubscriptionById({ id: a1.id }))).toMatchObject({
+        enabled: true,
+      });
 
       expect(await agentA.unsubscribeAllD(target)).toBe(1);
       expect(await agentB.hasD(target, 'shared')).toBe(true);

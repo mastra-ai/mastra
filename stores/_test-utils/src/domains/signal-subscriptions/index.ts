@@ -5,7 +5,7 @@ import type {
   SignalSubscriptionRecord,
   SignalSubscriptionsStorage,
 } from '@mastra/core/storage';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   SIGNAL_AGENT,
@@ -23,13 +23,19 @@ export interface SignalSubscriptionsConformanceOptions {
   /**
    * Create an initialized domain store. Every call must return an independent
    * instance (its own client/connection) backed by the same database, so the
-   * suite can race two replicas against each other.
+   * suite can race two replicas against each other. A process-local store
+   * returns the same instance every time.
    */
   createStore: () => Promise<SignalSubscriptionsStorage>;
   /** Release anything `createStore` opened. */
   closeStore?: (store: SignalSubscriptionsStorage) => Promise<void>;
   /** Short lease used to exercise database-time expiry. Defaults to 300ms. */
   ttlMs?: number;
+  /**
+   * Whether expiry is decided by a database clock independent of the test
+   * process clock. Defaults to `true`; process-local stores pass `false`.
+   */
+  databaseClock?: boolean;
 }
 
 const CADENCE = 60_000;
@@ -54,6 +60,7 @@ export function createSignalSubscriptionsConformanceTests({
   createStore,
   closeStore,
   ttlMs = 300,
+  databaseClock = true,
 }: SignalSubscriptionsConformanceOptions) {
   const TTL = ttlMs;
   const expire = () => sleep(TTL + 150);
@@ -61,7 +68,7 @@ export function createSignalSubscriptionsConformanceTests({
   describe(`${storeName} signal-subscriptions conformance`, () => {
     let store: SignalSubscriptionsStorage;
     let replica: SignalSubscriptionsStorage;
-    const ref = (id: string) => ({ agentId: SIGNAL_AGENT, id });
+    const ref = (id: string, providerId: string = SIGNAL_PROVIDER) => ({ agentId: SIGNAL_AGENT, providerId, id });
 
     beforeAll(async () => {
       store = await createStore();
@@ -91,7 +98,9 @@ export function createSignalSubscriptionsConformanceTests({
         for (const variant of variants) ids.add((await replica.upsertSubscription(variant)).id);
         expect(ids.size).toBe(6);
         expect((await replica.upsertSubscription(createSampleSignalIdentity())).id).toBe(base.id);
-        expect(await store.getSubscriptionById({ agentId: 'agent-b', id: base.id })).toBeNull();
+        expect(
+          await store.getSubscriptionById({ agentId: 'agent-b', providerId: base.providerId, id: base.id }),
+        ).toBeNull();
         expect((await replica.getSubscriptionByIdentity(createSampleSignalIdentity()))?.id).toBe(base.id);
         expect(await store.countSubscriptions({ agentId: SIGNAL_AGENT })).toBe(5);
         expect(await store.countSubscriptions({ agentId: 'agent-b' })).toBe(1);
@@ -160,7 +169,9 @@ export function createSignalSubscriptionsConformanceTests({
         expect(updated?.lastDeliveredAt?.getTime()).toBe(polledAt.getTime());
         expect((await store.updateSubscription({ ...ref(id), patch: { cursor: null } }))?.cursor).toBeUndefined();
         expect(await store.updateSubscription({ ...ref('missing'), patch: {} })).toBeNull();
-        expect(await store.updateSubscription({ agentId: 'agent-b', id, patch: {} })).toBeNull();
+        expect(
+          await store.updateSubscription({ agentId: 'agent-b', providerId: SIGNAL_PROVIDER, id, patch: {} }),
+        ).toBeNull();
       });
 
       it('enables and disables rows and hides disabled rows from resource lookup', async () => {
@@ -172,6 +183,53 @@ export function createSignalSubscriptionsConformanceTests({
         expect((await store.getSubscriptionById(ref(id)))?.enabled).toBe(false);
         expect((await store.setSubscriptionEnabled({ ...ref(id), enabled: true }))?.enabled).toBe(true);
         expect(await store.setSubscriptionEnabled({ ...ref('missing'), enabled: true })).toBeNull();
+      });
+    });
+
+    describe('row references', () => {
+      it('matches a row id only within its agent and provider', async () => {
+        const row = await store.upsertSubscription(createSampleSignalIdentity());
+        const otherProvider = { agentId: row.agentId, providerId: 'other-provider', id: row.id };
+        expect(await replica.getSubscriptionById(otherProvider)).toBeNull();
+        expect(await replica.updateSubscription({ ...otherProvider, patch: { metadata: { x: 1 } } })).toBeNull();
+        expect(await replica.setSubscriptionEnabled({ ...otherProvider, enabled: false })).toBeNull();
+        expect(
+          await replica.claimSubscription({
+            ...otherProvider,
+            owner: 'o',
+            ttlMs: LONG,
+            cadenceMs: CADENCE,
+            force: true,
+          }),
+        ).toBeNull();
+        expect(
+          await replica.beginSubscriptionOperation({ ...otherProvider, kind: 'unsubscribe', owner: 'op', ttlMs: LONG }),
+        ).toBeNull();
+        expect(await replica.deleteSubscription(otherProvider)).toBe(false);
+        expect(await replica.getSubscriptionById(ref(row.id))).toMatchObject({ enabled: true, metadata: {} });
+        expect((await replica.getSubscriptionById(ref(row.id)))?.claimOwner).toBeUndefined();
+        expect((await replica.getSubscriptionById(ref(row.id)))?.operationOwner).toBeUndefined();
+      });
+
+      it('rejects a caller-supplied id already used by another subscription', async () => {
+        const first = await store.upsertSubscription({ ...createSampleSignalIdentity(), id: 'dup0001' });
+        await expect(
+          replica.upsertSubscription({ ...createSampleSignalIdentity({ externalResourceId: 'ext-2' }), id: 'dup0001' }),
+        ).rejects.toThrow();
+        await expect(
+          replica.insertSubscribingSubscription({
+            ...createSampleSignalIdentity({ agentId: 'agent-b' }),
+            id: 'dup0001',
+            owner: 'op',
+            ttlMs: LONG,
+          }),
+        ).rejects.toThrow();
+        // The existing identity keeps its row; a supplied id is ignored on conflict.
+        expect((await replica.upsertSubscription({ ...createSampleSignalIdentity(), id: 'other01' })).id).toBe(
+          first.id,
+        );
+        expect(await replica.countSubscriptions({ agentId: SIGNAL_AGENT })).toBe(1);
+        expect(await replica.countSubscriptions({ agentId: 'agent-b' })).toBe(0);
       });
     });
 
@@ -276,7 +334,6 @@ export function createSignalSubscriptionsConformanceTests({
         expect(await store.isEmpty()).toBe(true);
         const states = [
           () => store.upsertSubscription(createSampleSignalIdentity()),
-          () => store.claimDelivery({ subscriptionId: 's', deliveryId: 'd', owner: 'o', ttlMs: TTL }),
           () => store.claimCoordinationLock({ key: 'lock', owner: 'o', ttlMs: TTL }),
           () => store.claimDocumentOwner(createSampleDocumentOwner('doc')),
         ];
@@ -286,6 +343,14 @@ export function createSignalSubscriptionsConformanceTests({
           await store.dangerouslyClearAll();
           expect(await replica.isEmpty()).toBe(true);
         }
+      });
+
+      it('never writes a delivery record without its subscription', async () => {
+        expect(await store.claimDelivery({ subscriptionId: 'gone', deliveryId: 'd', owner: 'o', ttlMs: TTL })).toBe(
+          'missing',
+        );
+        expect(await replica.getDelivery({ subscriptionId: 'gone', deliveryId: 'd' })).toBeNull();
+        expect(await replica.isEmpty()).toBe(true);
       });
     });
 
@@ -326,6 +391,23 @@ export function createSignalSubscriptionsConformanceTests({
           ),
         );
         expect(results.filter(Boolean)).toHaveLength(1);
+      });
+
+      it.runIf(databaseClock)('decides claim expiry by the database clock, not the caller clock', async () => {
+        const { id } = await store.upsertSubscription(createSampleSignalIdentity());
+        expect(
+          await store.claimSubscription({ ...ref(id), owner: 'a', ttlMs: LONG, cadenceMs: CADENCE }),
+        ).not.toBeNull();
+        vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10 * LONG });
+        try {
+          // A caller clock far past the lease must not make the live claim look expired.
+          expect(
+            await replica.claimSubscription({ ...ref(id), owner: 'b', ttlMs: LONG, cadenceMs: CADENCE, force: true }),
+          ).toBeNull();
+          expect(await replica.validateSubscriptionClaimIfEnabled({ ...ref(id), owner: 'a' })).toBe(true);
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it('reserves the cadence so a staggered tick after release loses', async () => {
@@ -425,6 +507,20 @@ export function createSignalSubscriptionsConformanceTests({
     });
 
     describe('membership operations', () => {
+      it('lets exactly one of several racing staged subscribes for one identity win', async () => {
+        const results = await Promise.all(
+          Array.from({ length: 6 }, (_, index) =>
+            (index % 2 ? replica : store).insertSubscribingSubscription({
+              ...createSampleSignalIdentity(),
+              owner: `op-${index}`,
+              ttlMs: LONG,
+            }),
+          ),
+        );
+        expect(results.filter(Boolean)).toHaveLength(1);
+        expect(await replica.countSubscriptions({ agentId: SIGNAL_AGENT })).toBe(1);
+      });
+
       it('stages a subscribe and commits it only for the live operation owner', async () => {
         const inserted = await store.insertSubscribingSubscription({
           ...createSampleSignalIdentity(),
@@ -534,6 +630,25 @@ export function createSignalSubscriptionsConformanceTests({
         expect(await replica.claimDocumentOwner({ ...doc, threadId: 'elsewhere' })).toBeNull();
       });
 
+      it('allows at most one owner per document, whatever the key or agent', async () => {
+        const owner = await store.claimDocumentOwner(doc);
+        expect(owner).not.toBeNull();
+        expect(await replica.claimDocumentOwner({ ...doc, key: 'doc-1-alias' })).toBeNull();
+        expect(await replica.claimDocumentOwner({ ...doc, key: 'doc-1-alias', agentId: 'agent-b' })).toBeNull();
+        expect((await replica.listDocumentOwners({ providerId: 'github' })).owners.map(o => o.key)).toEqual([doc.key]);
+        // Another document of the same provider is unaffected.
+        expect(await replica.claimDocumentOwner({ ...doc, key: 'doc-x', threadId: 'thread-x' })).not.toBeNull();
+      });
+
+      it('lets exactly one of two keys racing for the same document win', async () => {
+        const results = await Promise.all([
+          store.claimDocumentOwner({ ...doc, key: 'race-a' }),
+          replica.claimDocumentOwner({ ...doc, key: 'race-b', agentId: 'agent-b' }),
+        ]);
+        expect(results.filter(result => result !== null)).toHaveLength(1);
+        expect((await replica.listDocumentOwners({ providerId: 'github' })).total).toBe(1);
+      });
+
       it('rejects every mutation of an owned document without the matching fence', async () => {
         const owner = (await store.claimDocumentOwner(doc))!;
         const fence: SignalSubscriptionDocumentFence = { key: doc.key, fencingToken: owner.fencingToken };
@@ -546,7 +661,7 @@ export function createSignalSubscriptionsConformanceTests({
           { key: doc.key, fencingToken: 'stale-token' },
           { key: otherDoc.key, fencingToken: otherDoc.fencingToken },
         ];
-        const r = ref(row.id);
+        const r = ref(row.id, row.providerId);
         for (const candidate of bad) {
           const reject = (promise: Promise<unknown>) =>
             expect(promise).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
@@ -591,13 +706,14 @@ export function createSignalSubscriptionsConformanceTests({
         const owner = (await store.claimDocumentOwner(doc))!;
         const fence = { key: doc.key, fencingToken: owner.fencingToken };
         await expect(
-          replica.updateSubscription({ ...ref(unowned.id), patch: { metadata: {} } }, fence),
+          replica.updateSubscription({ ...ref(unowned.id, unowned.providerId), patch: { metadata: {} } }, fence),
         ).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
         await expect(replica.upsertSubscription(createSampleSignalIdentity(), fence)).rejects.toBeInstanceOf(
           SignalSubscriptionFenceError,
         );
         expect(
-          (await replica.updateSubscription({ ...ref(unowned.id), patch: { metadata: { a: 1 } } }))?.metadata,
+          (await replica.updateSubscription({ ...ref(unowned.id, unowned.providerId), patch: { metadata: { a: 1 } } }))
+            ?.metadata,
         ).toEqual({ a: 1 });
       });
 
@@ -619,7 +735,7 @@ export function createSignalSubscriptionsConformanceTests({
         const row = await store.upsertSubscription(ownedIdentity, fence);
         const release = { key: doc.key, agentId: doc.agentId, providerId: doc.providerId };
         expect(await replica.releaseDocumentOwner({ ...release, fencingToken: owner.fencingToken })).toBe(false);
-        await store.deleteSubscription(ref(row.id), fence);
+        await store.deleteSubscription(ref(row.id, row.providerId), fence);
         expect(await replica.releaseDocumentOwner({ ...release, fencingToken: 'stale' })).toBe(false);
         expect(
           await replica.releaseDocumentOwner({ ...release, agentId: 'agent-b', fencingToken: owner.fencingToken }),

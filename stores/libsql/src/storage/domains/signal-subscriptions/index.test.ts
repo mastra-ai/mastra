@@ -117,12 +117,18 @@ describe('SignalSubscriptionsLibSQL', () => {
     });
     await store.claimSubscription({
       agentId: 'agent-a',
+      providerId: created.providerId,
       id: created.id,
       owner: 'o',
       ttlMs: 60_000,
       cadenceMs: CADENCE,
     });
-    await store.updateSubscription({ agentId: 'agent-a', id: created.id, patch: { cursor: { page: 2 } } });
+    await store.updateSubscription({
+      agentId: 'agent-a',
+      providerId: created.providerId,
+      id: created.id,
+      patch: { cursor: { page: 2 } },
+    });
 
     const merged = await replica.upsertSubscription({ ...identity(), metadata: { nested: { y: 2 }, b: true } });
     expect(merged).toMatchObject({
@@ -149,7 +155,9 @@ describe('SignalSubscriptionsLibSQL', () => {
     ]) {
       expect((await store.upsertSubscription(variant)).id).not.toBe(created.id);
     }
-    expect(await store.getSubscriptionById({ agentId: 'agent-b', id: created.id })).toBeNull();
+    expect(
+      await store.getSubscriptionById({ agentId: 'agent-b', providerId: created.providerId, id: created.id }),
+    ).toBeNull();
     expect(await store.countSubscriptions({ agentId: 'agent-a' })).toBe(5);
   });
 
@@ -195,7 +203,7 @@ describe('SignalSubscriptionsLibSQL', () => {
 
   it('lets exactly one replica claim a due row and preserves the reserved cadence after release', async () => {
     const { id } = await store.upsertSubscription(identity());
-    const ref = { agentId: 'agent-a', id };
+    const ref = { agentId: 'agent-a', providerId: 'webhook-signals', id };
     const results = await Promise.all(
       [store, replica, store, replica].map((s, i) =>
         s.claimSubscription({ ...ref, owner: `r${i}`, ttlMs: TTL, cadenceMs: CADENCE }),
@@ -213,7 +221,7 @@ describe('SignalSubscriptionsLibSQL', () => {
 
   it('forces past the cadence but never a live owner, and reserves the next cadence', async () => {
     const { id } = await store.upsertSubscription(identity());
-    const ref = { agentId: 'agent-a', id };
+    const ref = { agentId: 'agent-a', providerId: 'webhook-signals', id };
     await store.claimSubscription({ ...ref, owner: 'a', ttlMs: 60_000, cadenceMs: CADENCE });
     expect(
       await replica.claimSubscription({ ...ref, owner: 'b', ttlMs: TTL, cadenceMs: CADENCE, force: true }),
@@ -229,7 +237,7 @@ describe('SignalSubscriptionsLibSQL', () => {
 
   it('takes over an expired claim using database time and preserves nextPollAt', async () => {
     const { id } = await store.upsertSubscription(identity());
-    const ref = { agentId: 'agent-a', id };
+    const ref = { agentId: 'agent-a', providerId: 'webhook-signals', id };
     const first = await store.claimSubscription({ ...ref, owner: 'a', ttlMs: TTL, cadenceMs: CADENCE });
     expect(await replica.claimSubscription({ ...ref, owner: 'b', ttlMs: TTL, cadenceMs: CADENCE })).toBeNull();
     await sleep(TTL + 50);
@@ -242,7 +250,7 @@ describe('SignalSubscriptionsLibSQL', () => {
 
   it('keeps work exclusive across heartbeats and fails renewal once disabled or operation-staged', async () => {
     const { id } = await store.upsertSubscription(identity());
-    const ref = { agentId: 'agent-a', id };
+    const ref = { agentId: 'agent-a', providerId: 'webhook-signals', id };
     await store.claimSubscription({ ...ref, owner: 'a', ttlMs: TTL, cadenceMs: CADENCE });
     for (let beat = 0; beat < 3; beat++) {
       await sleep(TTL / 2);
@@ -265,7 +273,7 @@ describe('SignalSubscriptionsLibSQL', () => {
     const inserted = await store.insertSubscribingSubscription({ ...identity(), owner: 'op', ttlMs: 60_000 });
     expect(inserted).toMatchObject({ enabled: false, operationKind: 'subscribe', operationOwner: 'op' });
     expect(await replica.insertSubscribingSubscription({ ...identity(), owner: 'op2', ttlMs: TTL })).toBeNull();
-    const ref = { agentId: 'agent-a', id: inserted!.id };
+    const ref = { agentId: 'agent-a', providerId: inserted!.providerId, id: inserted!.id };
     expect(await replica.claimSubscription({ ...ref, owner: 'p', ttlMs: TTL, cadenceMs: CADENCE })).toBeNull();
     expect(await replica.commitSubscribe({ ...ref, owner: 'op2' })).toBeNull();
     expect((await store.commitSubscribe({ ...ref, owner: 'op' }))?.enabled).toBe(true);
@@ -320,7 +328,7 @@ describe('SignalSubscriptionsLibSQL', () => {
     );
     const row = await store.upsertSubscription(ownedIdentity, fence);
     const generic = await store.upsertSubscription(identity());
-    const ref = { agentId: 'agent-a', id: row.id };
+    const ref = { agentId: 'agent-a', providerId: row.providerId, id: row.id };
     await expect(store.updateSubscription({ ...ref, patch: {} })).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
     await expect(store.setSubscriptionEnabled({ ...ref, enabled: false })).rejects.toBeInstanceOf(
       SignalSubscriptionFenceError,
@@ -330,7 +338,10 @@ describe('SignalSubscriptionsLibSQL', () => {
       SignalSubscriptionFenceError,
     );
     await expect(
-      store.updateSubscription({ agentId: 'agent-a', id: generic.id, patch: {} }, fence),
+      store.updateSubscription(
+        { agentId: 'agent-a', providerId: generic.providerId, id: generic.id, patch: {} },
+        fence,
+      ),
     ).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
     expect(await store.countSubscriptions({ agentId: 'agent-a' })).toBe(2);
 
@@ -414,16 +425,15 @@ describe('SignalSubscriptionsLibSQL', () => {
       'claimed',
     );
 
-    expect(await store.deleteSubscription({ agentId: 'agent-a', id })).toBe(true);
+    expect(await store.deleteSubscription({ agentId: 'agent-a', providerId: 'webhook-signals', id })).toBe(true);
     expect(await store.getDelivery(ref)).toBeNull();
     expect(await store.isEmpty()).toBe(true);
   });
 
-  it('reports isEmpty across subscriptions, deliveries, locks, and owners', async () => {
+  it('reports isEmpty across subscriptions, locks, and owners, and never writes an orphan delivery', async () => {
     expect(await store.isEmpty()).toBe(true);
-    await store.claimDelivery({ subscriptionId: 's', deliveryId: 'd', owner: 'o', ttlMs: TTL });
-    expect(await store.isEmpty()).toBe(false);
-    await store.dangerouslyClearAll();
+    expect(await store.claimDelivery({ subscriptionId: 's', deliveryId: 'd', owner: 'o', ttlMs: TTL })).toBe('missing');
+    expect(await store.isEmpty()).toBe(true);
     await store.claimCoordinationLock({ key: 'k', owner: 'o', ttlMs: TTL });
     expect(await store.isEmpty()).toBe(false);
     await store.dangerouslyClearAll();

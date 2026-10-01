@@ -60,7 +60,9 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       expect(await store.getSubscriptionByIdentity(identity({ agentId: 'agent-b' }))).toMatchObject({
         agentId: 'agent-b',
       });
-      expect(await store.getSubscriptionById({ agentId: 'agent-b', id: base.id })).toBeNull();
+      expect(
+        await store.getSubscriptionById({ agentId: 'agent-b', providerId: base.providerId, id: base.id }),
+      ).toBeNull();
       expect(await store.listSubscriptions({ agentId: 'agent-a' })).toMatchObject({ total: 5 });
     });
 
@@ -71,8 +73,20 @@ describe('InMemorySignalSubscriptionsStorage', () => {
         deliveryOptions: { ifIdle: true },
       });
       expect(created.enabled).toBe(true);
-      await store.claimSubscription({ agentId: 'agent-a', id: created.id, owner: 'o', ttlMs: TTL, cadenceMs: CADENCE });
-      await store.updateSubscription({ agentId: 'agent-a', id: created.id, patch: { cursor: { page: 2 } } });
+      await store.claimSubscription({
+        agentId: 'agent-a',
+        providerId: created.providerId,
+        id: created.id,
+        owner: 'o',
+        ttlMs: TTL,
+        cadenceMs: CADENCE,
+      });
+      await store.updateSubscription({
+        agentId: 'agent-a',
+        providerId: created.providerId,
+        id: created.id,
+        patch: { cursor: { page: 2 } },
+      });
 
       now += 10;
       const merged = await store.upsertSubscription({ ...identity(), id: 'ignored', metadata: { b: 2, c: 3 } });
@@ -98,6 +112,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       const row = await store.upsertSubscription(identity());
       await store.beginSubscriptionOperation({
         agentId: 'agent-a',
+        providerId: row.providerId,
         id: row.id,
         kind: 'unsubscribe',
         owner: 'op',
@@ -110,13 +125,16 @@ describe('InMemorySignalSubscriptionsStorage', () => {
     it('returns clones that do not alias stored rows', async () => {
       const row = await store.upsertSubscription({ ...identity(), metadata: { a: 1 } });
       row.metadata.a = 2;
-      expect((await store.getSubscriptionById({ agentId: 'agent-a', id: row.id }))?.metadata).toEqual({ a: 1 });
+      expect(
+        (await store.getSubscriptionById({ agentId: 'agent-a', providerId: row.providerId, id: row.id }))?.metadata,
+      ).toEqual({ a: 1 });
     });
 
     it('updates patches and enabled state, returning null for missing rows', async () => {
       const row = await store.upsertSubscription({ ...identity(), metadata: { a: 1 } });
       const patched = await store.updateSubscription({
         agentId: 'agent-a',
+        providerId: row.providerId,
         id: row.id,
         patch: {
           metadata: { b: 1 },
@@ -133,13 +151,34 @@ describe('InMemorySignalSubscriptionsStorage', () => {
         lastDeliveredAt: new Date(6),
         deliveryOptions: { ifIdle: false },
       });
-      const cleared = await store.updateSubscription({ agentId: 'agent-a', id: row.id, patch: { cursor: null } });
+      const cleared = await store.updateSubscription({
+        agentId: 'agent-a',
+        providerId: row.providerId,
+        id: row.id,
+        patch: { cursor: null },
+      });
       expect(cleared?.cursor).toBeUndefined();
-      expect((await store.setSubscriptionEnabled({ agentId: 'agent-a', id: row.id, enabled: false }))?.enabled).toBe(
-        false,
-      );
-      expect(await store.updateSubscription({ agentId: 'agent-a', id: 'missing', patch: {} })).toBeNull();
-      expect(await store.setSubscriptionEnabled({ agentId: 'agent-a', id: 'missing', enabled: true })).toBeNull();
+      expect(
+        (
+          await store.setSubscriptionEnabled({
+            agentId: 'agent-a',
+            providerId: row.providerId,
+            id: row.id,
+            enabled: false,
+          })
+        )?.enabled,
+      ).toBe(false);
+      expect(
+        await store.updateSubscription({ agentId: 'agent-a', providerId: 'webhook-signals', id: 'missing', patch: {} }),
+      ).toBeNull();
+      expect(
+        await store.setSubscriptionEnabled({
+          agentId: 'agent-a',
+          providerId: 'webhook-signals',
+          id: 'missing',
+          enabled: true,
+        }),
+      ).toBeNull();
     });
   });
 
@@ -226,8 +265,8 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       await store.claimDelivery({ subscriptionId: b.id, deliveryId: 'd1', owner: 'o', ttlMs: TTL });
       await store.completeDelivery({ subscriptionId: b.id, deliveryId: 'd1', owner: 'o' });
 
-      expect(await store.deleteSubscription({ agentId: 'agent-a', id: a.id })).toBe(true);
-      expect(await store.deleteSubscription({ agentId: 'agent-a', id: a.id })).toBe(false);
+      expect(await store.deleteSubscription({ agentId: 'agent-a', providerId: a.providerId, id: a.id })).toBe(true);
+      expect(await store.deleteSubscription({ agentId: 'agent-a', providerId: a.providerId, id: a.id })).toBe(false);
       expect(await store.getDelivery({ subscriptionId: a.id, deliveryId: 'd1' })).toBeNull();
 
       expect(await store.deleteSubscriptions({ agentId: 'agent-a', threadId: 'thread-1' })).toBe(1);
@@ -242,9 +281,11 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       expect(await store.isEmpty()).toBe(false);
       await store.dangerouslyClearAll();
 
-      await store.claimDelivery({ subscriptionId: row.id, deliveryId: 'd', owner: 'o', ttlMs: TTL });
-      expect(await store.isEmpty()).toBe(false);
-      await store.dangerouslyClearAll();
+      // A delivery can't outlive its subscription, so a claim without one leaves the store empty.
+      expect(await store.claimDelivery({ subscriptionId: row.id, deliveryId: 'd', owner: 'o', ttlMs: TTL })).toBe(
+        'missing',
+      );
+      expect(await store.isEmpty()).toBe(true);
 
       await store.claimCoordinationLock({ key: 'k', owner: 'o', ttlMs: TTL });
       expect(await store.isEmpty()).toBe(false);
@@ -260,7 +301,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
 
   describe('poll claims', () => {
     let id: string;
-    const ref = () => ({ agentId: 'agent-a', id });
+    const ref = () => ({ agentId: 'agent-a', providerId: 'webhook-signals', id });
     const claim = (owner: string, extra: { force?: boolean } = {}) =>
       store.claimSubscription({ ...ref(), owner, ttlMs: TTL, cadenceMs: CADENCE, ...extra });
 
@@ -367,15 +408,22 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       const row = await store.insertSubscribingSubscription({ ...identity(), owner: 'op', ttlMs: TTL });
       expect(row).toMatchObject({ enabled: false, operationKind: 'subscribe', operationOwner: 'op' });
       expect(await store.insertSubscribingSubscription({ ...identity(), owner: 'op2', ttlMs: TTL })).toBeNull();
-      expect(await store.commitSubscribe({ agentId: 'agent-a', id: row!.id, owner: 'other' })).toBeNull();
-      const committed = await store.commitSubscribe({ agentId: 'agent-a', id: row!.id, owner: 'op' });
+      expect(
+        await store.commitSubscribe({ agentId: 'agent-a', providerId: row!.providerId, id: row!.id, owner: 'other' }),
+      ).toBeNull();
+      const committed = await store.commitSubscribe({
+        agentId: 'agent-a',
+        providerId: row!.providerId,
+        id: row!.id,
+        owner: 'op',
+      });
       expect(committed).toMatchObject({ enabled: true });
       expect(committed?.operationOwner).toBeUndefined();
     });
 
     it('renews, rejects concurrent operations, and allows takeover only after expiry', async () => {
       const row = await store.upsertSubscription(identity());
-      const ref = { agentId: 'agent-a', id: row.id };
+      const ref = { agentId: 'agent-a', providerId: row.providerId, id: row.id };
       expect(
         await store.beginSubscriptionOperation({ ...ref, kind: 'unsubscribe', owner: 'a', ttlMs: TTL }),
       ).not.toBeNull();
@@ -401,7 +449,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
 
     it('rejects a subscribe operation on an active row while a poll claim is live', async () => {
       const row = await store.upsertSubscription(identity());
-      const ref = { agentId: 'agent-a', id: row.id };
+      const ref = { agentId: 'agent-a', providerId: row.providerId, id: row.id };
       await store.claimSubscription({ ...ref, owner: 'poller', ttlMs: TTL, cadenceMs: CADENCE });
       expect(await store.beginSubscriptionOperation({ ...ref, kind: 'subscribe', owner: 'op', ttlMs: TTL })).toBeNull();
       await store.releaseSubscriptionClaim({ ...ref, owner: 'poller' });
@@ -412,7 +460,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
 
     it('commits unsubscribe only for a disabled row with a matching live operation', async () => {
       const row = await store.upsertSubscription(identity());
-      const ref = { agentId: 'agent-a', id: row.id };
+      const ref = { agentId: 'agent-a', providerId: row.providerId, id: row.id };
       await store.claimDelivery({ subscriptionId: row.id, deliveryId: 'd', owner: 'o', ttlMs: TTL });
       await store.beginSubscriptionOperation({ ...ref, kind: 'unsubscribe', owner: 'op', ttlMs: TTL });
       expect(await store.commitUnsubscribe({ ...ref, owner: 'op' })).toBe(false); // still enabled
@@ -483,7 +531,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       await reject(store.insertSubscribingSubscription({ ...owned(), owner: 'op', ttlMs: TTL }));
 
       const row = await store.upsertSubscription(owned(), fence);
-      const ref = { agentId: 'agent-a', id: row.id };
+      const ref = { agentId: 'agent-a', providerId: row.providerId, id: row.id };
       await reject(store.updateSubscription({ ...ref, patch: { metadata: {} } }));
       await reject(store.updateSubscription({ ...ref, patch: { metadata: {} } }, wrongDocument));
       await reject(store.setSubscriptionEnabled({ ...ref, enabled: false }, stale));
@@ -503,11 +551,18 @@ describe('InMemorySignalSubscriptionsStorage', () => {
 
     it('lets unowned generic rows omit the fence and rejects a fence on them', async () => {
       const row = await store.upsertSubscription(identity());
-      expect(await store.setSubscriptionEnabled({ agentId: 'agent-a', id: row.id, enabled: false })).not.toBeNull();
+      expect(
+        await store.setSubscriptionEnabled({
+          agentId: 'agent-a',
+          providerId: row.providerId,
+          id: row.id,
+          enabled: false,
+        }),
+      ).not.toBeNull();
       const owner = (await store.claimDocumentOwner(doc))!;
       await expect(
         store.updateSubscription(
-          { agentId: 'agent-a', id: row.id, patch: {} },
+          { agentId: 'agent-a', providerId: row.providerId, id: row.id, patch: {} },
           { key: doc.key, fencingToken: owner.fencingToken },
         ),
       ).rejects.toBeInstanceOf(SignalSubscriptionFenceError);
@@ -535,7 +590,7 @@ describe('InMemorySignalSubscriptionsStorage', () => {
       const row = await store.upsertSubscription(owned(), staleFence);
 
       expect(await store.releaseDocumentOwner({ ...doc, fencingToken: first.fencingToken })).toBe(false);
-      await store.deleteSubscription({ agentId: 'agent-a', id: row.id }, staleFence);
+      await store.deleteSubscription({ agentId: 'agent-a', providerId: row.providerId, id: row.id }, staleFence);
       expect(await store.releaseDocumentOwner({ ...doc, fencingToken: 'wrong' })).toBe(false);
       expect(await store.releaseDocumentOwner({ ...doc, agentId: 'agent-b', fencingToken: first.fencingToken })).toBe(
         false,
@@ -580,7 +635,12 @@ describe('InMemorySignalSubscriptionsStorage', () => {
   });
 
   describe('delivery ledger', () => {
-    const ref = { subscriptionId: 'sub-1', deliveryId: 'delivery-1' };
+    let ref: { subscriptionId: string; deliveryId: string };
+
+    beforeEach(async () => {
+      const row = await store.upsertSubscription(identity());
+      ref = { subscriptionId: row.id, deliveryId: 'delivery-1' };
+    });
 
     it('moves through claimed, in-progress, and delivered states', async () => {
       const results = await Promise.all([

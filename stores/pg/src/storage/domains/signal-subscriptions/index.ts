@@ -302,7 +302,10 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
   }
 
   /** True when `fence` authorizes mutating rows of `identity`'s document. */
-  #identityFenceSql(identity: SignalSubscriptionIdentity, fence: SignalSubscriptionDocumentFence | undefined): Statement {
+  #identityFenceSql(
+    identity: SignalSubscriptionIdentity,
+    fence: SignalSubscriptionDocumentFence | undefined,
+  ): Statement {
     if (!fence) {
       return {
         sql: `NOT EXISTS (SELECT 1 FROM ${this.#C} o WHERE o."kind" = 'owner' AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?)`,
@@ -311,7 +314,14 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     }
     return {
       sql: `EXISTS (SELECT 1 FROM ${this.#C} o WHERE o."kind" = 'owner' AND o."key" = ? AND o."fencingToken" = ? AND o."agentId" = ? AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?)`,
-      args: [fence.key, fence.fencingToken, identity.agentId, identity.providerId, identity.resourceId, identity.threadId],
+      args: [
+        fence.key,
+        fence.fencingToken,
+        identity.agentId,
+        identity.providerId,
+        identity.resourceId,
+        identity.threadId,
+      ],
     };
   }
 
@@ -399,14 +409,14 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     mutate: (tx: TxClient, row: SignalSubscriptionRecord) => Promise<T>,
   ): Promise<T | null> {
     const [scope] = await this.#rows(
-      `SELECT "providerId", "resourceId", "threadId" FROM ${this.#S} WHERE "agentId" = ? AND "id" = ?`,
-      [ref.agentId, ref.id],
+      `SELECT "providerId", "resourceId", "threadId" FROM ${this.#S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ?`,
+      [ref.agentId, ref.providerId, ref.id],
     );
     if (!scope) return null;
     return this.#withDocuments([scope as DocumentScope], async tx => {
       const [current] = await this.#rows(
-        `SELECT * FROM ${this.#S} WHERE "agentId" = ? AND "id" = ? FOR UPDATE`,
-        [ref.agentId, ref.id],
+        `SELECT * FROM ${this.#S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? FOR UPDATE`,
+        [ref.agentId, ref.providerId, ref.id],
         tx,
       );
       if (!current) return null;
@@ -506,8 +516,9 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
 
   async getSubscriptionById(args: SignalSubscriptionRowRef): Promise<SignalSubscriptionRecord | null> {
     return this.#run('GET_BY_ID', async () => {
-      const [row] = await this.#rows(`SELECT * FROM ${this.#S} WHERE "agentId" = ? AND "id" = ?`, [
+      const [row] = await this.#rows(`SELECT * FROM ${this.#S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ?`, [
         args.agentId,
+        args.providerId,
         args.id,
       ]);
       return row ? toRecord(row) : null;
@@ -644,24 +655,27 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
       let documents = await listDocuments();
       for (;;) {
         const locked = new Set(documents.map(documentKey));
-        const result = await this.#withDocuments<{ deleted: number } | { retry: DocumentScope[] }>(documents, async tx => {
-          // A matched row is deletable when its document is unowned or one of
-          // the supplied fences proves ownership; any other match rejects all.
-          const guards = [this.#rowFenceSql(undefined, 'r'), ...fences.map(fence => this.#rowFenceSql(fence, 'r'))];
-          const matched = await this.#rows(
-            `SELECT r.*, (${guards.map(g => g.sql).join(' OR ')}) AS "__deletable" FROM ${this.#S} r WHERE ${where.sql} FOR UPDATE`,
-            [...guards.flatMap(g => g.args), ...where.args],
-            tx,
-          );
-          const unlocked = matched.filter(row => !locked.has(documentKey(row as DocumentScope)));
-          if (unlocked.length > 0) return { retry: unlocked as DocumentScope[] };
-          const rejected = matched.find(row => row.__deletable !== true);
-          if (rejected) throw fenceError(toRecord(rejected), undefined);
-          const ids = matched.map(row => String(row.id));
-          if (ids.length === 0) return { deleted: 0 };
-          await this.#query(`DELETE FROM ${this.#D} WHERE "subscriptionId" = ANY(?::text[])`, [ids], tx);
-          return { deleted: await this.#affected(`DELETE FROM ${this.#S} WHERE "id" = ANY(?::text[])`, [ids], tx) };
-        });
+        const result = await this.#withDocuments<{ deleted: number } | { retry: DocumentScope[] }>(
+          documents,
+          async tx => {
+            // A matched row is deletable when its document is unowned or one of
+            // the supplied fences proves ownership; any other match rejects all.
+            const guards = [this.#rowFenceSql(undefined, 'r'), ...fences.map(fence => this.#rowFenceSql(fence, 'r'))];
+            const matched = await this.#rows(
+              `SELECT r.*, (${guards.map(g => g.sql).join(' OR ')}) AS "__deletable" FROM ${this.#S} r WHERE ${where.sql} FOR UPDATE`,
+              [...guards.flatMap(g => g.args), ...where.args],
+              tx,
+            );
+            const unlocked = matched.filter(row => !locked.has(documentKey(row as DocumentScope)));
+            if (unlocked.length > 0) return { retry: unlocked as DocumentScope[] };
+            const rejected = matched.find(row => row.__deletable !== true);
+            if (rejected) throw fenceError(toRecord(rejected), undefined);
+            const ids = matched.map(row => String(row.id));
+            if (ids.length === 0) return { deleted: 0 };
+            await this.#query(`DELETE FROM ${this.#D} WHERE "subscriptionId" = ANY(?::text[])`, [ids], tx);
+            return { deleted: await this.#affected(`DELETE FROM ${this.#S} WHERE "id" = ANY(?::text[])`, [ids], tx) };
+          },
+        );
         if ('deleted' in result) return result.deleted;
         documents = [...documents, ...result.retry];
       }
@@ -679,7 +693,11 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     return this.#run('INSERT_SUBSCRIBING', async () => {
       const insert = this.#insertSql(input, { owner: input.owner, ttlMs: input.ttlMs });
       const row = await this.#fencedInsert(input, fence, tx =>
-        this.#rows(`${insert.sql} ON CONFLICT DO NOTHING RETURNING *`, insert.args, tx),
+        this.#rows(
+          `${insert.sql} ON CONFLICT ("agentId", "providerId", "resourceId", "threadId", "externalResourceId") DO NOTHING RETURNING *`,
+          insert.args,
+          tx,
+        ),
       );
       return row ? toRecord(row) : null;
     });
@@ -706,12 +724,14 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     );
   }
 
-  async renewSubscriptionOperation(args: SignalSubscriptionRowRef & { owner: string; ttlMs: number }): Promise<boolean> {
+  async renewSubscriptionOperation(
+    args: SignalSubscriptionRowRef & { owner: string; ttlMs: number },
+  ): Promise<boolean> {
     return this.#run('RENEW_OPERATION', async () => {
       const affected = await this.#affected(
         `UPDATE ${this.#S} SET "operationExpiresAt" = ${NOW} + ?::bigint
-         WHERE "agentId" = ? AND "id" = ? AND "operationOwner" = ? AND "operationExpiresAt" > ${NOW}`,
-        [args.ttlMs, args.agentId, args.id, args.owner],
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "operationOwner" = ? AND "operationExpiresAt" > ${NOW}`,
+        [args.ttlMs, args.agentId, args.providerId, args.id, args.owner],
       );
       return affected === 1;
     });
@@ -791,12 +811,12 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
          SET "claimOwner" = ?,
              "claimExpiresAt" = ${NOW} + ?::bigint,
              "nextPollAt" = CASE WHEN ?::boolean OR "claimOwner" IS NULL THEN ${NOW} + ?::bigint ELSE "nextPollAt" END
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = true
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = true
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})
            AND ("claimOwner" IS NULL OR "claimExpiresAt" <= ${NOW})
            AND (?::boolean OR "claimOwner" IS NOT NULL OR "nextPollAt" IS NULL OR "nextPollAt" <= ${NOW})
          RETURNING *`,
-        [args.owner, args.ttlMs, force, args.cadenceMs, args.agentId, args.id, force],
+        [args.owner, args.ttlMs, force, args.cadenceMs, args.agentId, args.providerId, args.id, force],
       );
       return row ? toRecord(row) : null;
     });
@@ -808,9 +828,9 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     return this.#run('RENEW_CLAIM', async () => {
       const affected = await this.#affected(
         `UPDATE ${this.#S} SET "claimExpiresAt" = ${NOW} + ?::bigint
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = true AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = true AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})`,
-        [args.ttlMs, args.agentId, args.id, args.owner],
+        [args.ttlMs, args.agentId, args.providerId, args.id, args.owner],
       );
       return affected === 1;
     });
@@ -820,9 +840,9 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     return this.#run('VALIDATE_CLAIM', async () => {
       const [row] = await this.#rows(
         `SELECT COUNT(*) AS "count" FROM ${this.#S}
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = true AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = true AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})`,
-        [args.agentId, args.id, args.owner],
+        [args.agentId, args.providerId, args.id, args.owner],
       );
       return Number(row?.count) === 1;
     });
@@ -831,8 +851,8 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
   async releaseSubscriptionClaim(args: SignalSubscriptionRowRef & { owner: string }): Promise<boolean> {
     return this.#run('RELEASE_CLAIM', async () => {
       const affected = await this.#affected(
-        `UPDATE ${this.#S} SET "claimOwner" = NULL, "claimExpiresAt" = NULL WHERE "agentId" = ? AND "id" = ? AND "claimOwner" = ?`,
-        [args.agentId, args.id, args.owner],
+        `UPDATE ${this.#S} SET "claimOwner" = NULL, "claimExpiresAt" = NULL WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "claimOwner" = ?`,
+        [args.agentId, args.providerId, args.id, args.owner],
       );
       return affected === 1;
     });
@@ -853,9 +873,23 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
       this.#withDocuments([args], async tx => {
         await this.#query(
           `INSERT INTO ${this.#C} ("kind", "key", "agentId", "providerId", "resourceId", "threadId", "fencingToken", "createdAt")
-           VALUES ('owner', ?, ?, ?, ?, ?, ?, ${NOW})
+           SELECT 'owner', ?, ?, ?, ?, ?, ?, ${NOW}
+           WHERE NOT EXISTS (
+             SELECT 1 FROM ${this.#C} o
+             WHERE o."kind" = 'owner' AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?
+           )
            ON CONFLICT ("kind", "key") DO NOTHING`,
-          [args.key, args.agentId, args.providerId, args.resourceId, args.threadId, crypto.randomUUID()],
+          [
+            args.key,
+            args.agentId,
+            args.providerId,
+            args.resourceId,
+            args.threadId,
+            crypto.randomUUID(),
+            args.providerId,
+            args.resourceId,
+            args.threadId,
+          ],
           tx,
         );
         const [row] = await this.#rows(`SELECT * FROM ${this.#C} WHERE "kind" = 'owner' AND "key" = ?`, [args.key], tx);
@@ -976,18 +1010,21 @@ export class SignalSubscriptionsPG extends SignalSubscriptionsStorage {
     return this.#run('CLAIM_DELIVERY', async () => {
       const claimed = await this.#rows(
         `INSERT INTO ${this.#D} AS d ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
-         VALUES (?, ?, 'pending', ?, ${NOW} + ?::bigint, ${NOW})
+         SELECT s."id", ?::text, 'pending', ?::text, ${NOW} + ?::bigint, ${NOW}
+         FROM ${this.#S} s WHERE s."id" = ?
+         FOR KEY SHARE OF s
          ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = EXCLUDED."owner", "expiresAt" = EXCLUDED."expiresAt"
          WHERE d."status" = 'pending' AND d."expiresAt" <= ${NOW}
          RETURNING "owner"`,
-        [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs],
+        [args.deliveryId, args.owner, args.ttlMs, args.subscriptionId],
       );
       if (claimed.length === 1) return 'claimed';
       const [existing] = await this.#rows(
         `SELECT "status" FROM ${this.#D} WHERE "subscriptionId" = ? AND "deliveryId" = ?`,
         [args.subscriptionId, args.deliveryId],
       );
-      return existing?.status === 'delivered' ? 'delivered' : 'in-progress';
+      if (!existing) return 'missing';
+      return existing.status === 'delivered' ? 'delivered' : 'in-progress';
     });
   }
 

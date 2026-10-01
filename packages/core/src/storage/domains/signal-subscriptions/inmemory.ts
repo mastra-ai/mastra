@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   ClaimSignalSubscriptionDeliveryResult,
   ClaimSignalSubscriptionInput,
@@ -104,9 +105,9 @@ export class InMemorySignalSubscriptionsStorage extends SignalSubscriptionsStora
   // Helpers
   // ---------------------------------------------------------------------------
 
-  #findById({ agentId, id }: SignalSubscriptionRowRef): SignalSubscriptionRecord | undefined {
+  #findById({ agentId, providerId, id }: SignalSubscriptionRowRef): SignalSubscriptionRecord | undefined {
     for (const row of this.#subscriptions.values()) {
-      if (row.id === id && row.agentId === agentId) return row;
+      if (row.id === id && row.agentId === agentId && row.providerId === providerId) return row;
     }
     return undefined;
   }
@@ -192,6 +193,15 @@ export class InMemorySignalSubscriptionsStorage extends SignalSubscriptionsStora
     now: number,
     operation?: { kind: SignalSubscriptionOperationKind; owner: string; ttlMs: number },
   ): SignalSubscriptionRecord {
+    if (input.id !== undefined && [...this.#subscriptions.values()].some(existing => existing.id === input.id)) {
+      throw new MastraError({
+        id: 'STORAGE_SIGNAL_SUBSCRIPTIONS_DUPLICATE_ID',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Signal subscription id "${input.id}" is already used by another subscription`,
+        details: { id: input.id },
+      });
+    }
     const row: SignalSubscriptionRecord = {
       id: input.id ?? crypto.randomUUID(),
       agentId: input.agentId,
@@ -469,6 +479,7 @@ export class InMemorySignalSubscriptionsStorage extends SignalSubscriptionsStora
         existing.threadId === args.threadId;
       return same ? clone(existing) : null;
     }
+    if (this.#ownerForDocument(args)) return null;
     const owner: SignalSubscriptionDocumentOwner = {
       key: args.key,
       agentId: args.agentId,
@@ -559,6 +570,7 @@ export class InMemorySignalSubscriptionsStorage extends SignalSubscriptionsStora
   async claimDelivery(
     args: SignalSubscriptionDeliveryRef & { owner: string; ttlMs: number },
   ): Promise<ClaimSignalSubscriptionDeliveryResult> {
+    if (![...this.#subscriptions.values()].some(row => row.id === args.subscriptionId)) return 'missing';
     const now = this.#now();
     const key = deliveryKey(args);
     const existing = this.#deliveries.get(key);

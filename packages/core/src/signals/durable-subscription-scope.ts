@@ -30,11 +30,10 @@ type Lease = { owner: string; ttlMs: number };
  *
  * Every subscription and document-owner operation is bound to the connected
  * agent's id and the provider's id, so a provider can never read or write
- * another agent's or provider's rows. Methods keep the names of the domain
+ * another agent's or provider's rows, even by row id. Methods keep the names of the domain
  * methods they forward to; claim, operation, lock, and delivery helpers take
- * an explicit `owner`. The scope stops working once its callback settles.
+ * an explicit `owner`. Once its callback settles, every method rejects.
  *
- * @internal
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface DurableSubscriptionScope {
@@ -147,53 +146,48 @@ export function createDurableSubscriptionScope(
     use();
     return { agentId: owner.agentId(), providerId };
   };
-  const row = <A extends RowRef>(args: A): A & { agentId: string } => {
-    use();
-    return { ...args, agentId: owner.agentId() };
-  };
+  const row = <A extends RowRef>(args: A): A & { agentId: string; providerId: string } => ({ ...args, ...ids() });
 
   const scope: DurableSubscriptionScope = {
     durability: store.durability,
 
-    upsertSubscription: (input, fence) => use().upsertSubscription({ ...input, ...ids() }, fence),
-    getSubscriptionById: async args => {
-      const found = await use().getSubscriptionById(row(args));
-      return found?.providerId === providerId ? found : null;
-    },
-    getSubscriptionByIdentity: identity => use().getSubscriptionByIdentity({ ...identity, ...ids() }),
-    listSubscriptions: (args = {}) => use().listSubscriptions({ ...args, ...ids() }),
-    listSubscriptionsForResource: args => use().listSubscriptionsForResource({ ...args, ...ids() }),
-    countSubscriptions: (filters = {}) => use().countSubscriptions({ ...filters, ...ids() }),
-    updateSubscription: (args, fence) => use().updateSubscription(row(args), fence),
-    setSubscriptionEnabled: (args, fence) => use().setSubscriptionEnabled(row(args), fence),
-    deleteSubscription: (args, fence) => use().deleteSubscription(row(args), fence),
-    deleteSubscriptions: (filters = {}, fences) => use().deleteSubscriptions({ ...filters, ...ids() }, fences),
+    upsertSubscription: async (input, fence) => use().upsertSubscription({ ...input, ...ids() }, fence),
+    getSubscriptionById: async args => use().getSubscriptionById(row(args)),
+    getSubscriptionByIdentity: async identity => use().getSubscriptionByIdentity({ ...identity, ...ids() }),
+    listSubscriptions: async (args = {}) => use().listSubscriptions({ ...args, ...ids() }),
+    listSubscriptionsForResource: async args => use().listSubscriptionsForResource({ ...args, ...ids() }),
+    countSubscriptions: async (filters = {}) => use().countSubscriptions({ ...filters, ...ids() }),
+    updateSubscription: async (args, fence) => use().updateSubscription(row(args), fence),
+    setSubscriptionEnabled: async (args, fence) => use().setSubscriptionEnabled(row(args), fence),
+    deleteSubscription: async (args, fence) => use().deleteSubscription(row(args), fence),
+    deleteSubscriptions: async (filters = {}, fences) => use().deleteSubscriptions({ ...filters, ...ids() }, fences),
 
-    insertSubscribingSubscription: (input, fence) => use().insertSubscribingSubscription({ ...input, ...ids() }, fence),
-    beginSubscriptionOperation: (args, fence) => use().beginSubscriptionOperation(row(args), fence),
-    renewSubscriptionOperation: args => use().renewSubscriptionOperation(row(args)),
-    commitSubscribe: (args, fence) => use().commitSubscribe(row(args), fence),
-    commitUnsubscribe: (args, fence) => use().commitUnsubscribe(row(args), fence),
-    abortSubscriptionOperation: (args, fence) => use().abortSubscriptionOperation(row(args), fence),
+    insertSubscribingSubscription: async (input, fence) =>
+      use().insertSubscribingSubscription({ ...input, ...ids() }, fence),
+    beginSubscriptionOperation: async (args, fence) => use().beginSubscriptionOperation(row(args), fence),
+    renewSubscriptionOperation: async args => use().renewSubscriptionOperation(row(args)),
+    commitSubscribe: async (args, fence) => use().commitSubscribe(row(args), fence),
+    commitUnsubscribe: async (args, fence) => use().commitUnsubscribe(row(args), fence),
+    abortSubscriptionOperation: async (args, fence) => use().abortSubscriptionOperation(row(args), fence),
 
-    claimSubscription: args => use().claimSubscription(row(args)),
-    renewSubscriptionClaimIfEnabled: args => use().renewSubscriptionClaimIfEnabled(row(args)),
-    validateSubscriptionClaimIfEnabled: args => use().validateSubscriptionClaimIfEnabled(row(args)),
-    releaseSubscriptionClaim: args => use().releaseSubscriptionClaim(row(args)),
+    claimSubscription: async args => use().claimSubscription(row(args)),
+    renewSubscriptionClaimIfEnabled: async args => use().renewSubscriptionClaimIfEnabled(row(args)),
+    validateSubscriptionClaimIfEnabled: async args => use().validateSubscriptionClaimIfEnabled(row(args)),
+    releaseSubscriptionClaim: async args => use().releaseSubscriptionClaim(row(args)),
 
-    claimDocumentOwner: args => use().claimDocumentOwner({ ...args, ...ids() }),
-    releaseDocumentOwner: args => use().releaseDocumentOwner({ ...args, ...ids() }),
-    listDocumentOwners: (args = {}) => use().listDocumentOwners({ ...args, ...ids() }),
+    claimDocumentOwner: async args => use().claimDocumentOwner({ ...args, ...ids() }),
+    releaseDocumentOwner: async args => use().releaseDocumentOwner({ ...args, ...ids() }),
+    listDocumentOwners: async (args = {}) => use().listDocumentOwners({ ...args, ...ids() }),
 
-    claimCoordinationLock: args => use().claimCoordinationLock(args),
-    renewCoordinationLock: args => use().renewCoordinationLock(args),
-    releaseCoordinationLock: args => use().releaseCoordinationLock(args),
+    claimCoordinationLock: async args => use().claimCoordinationLock(args),
+    renewCoordinationLock: async args => use().renewCoordinationLock(args),
+    releaseCoordinationLock: async args => use().releaseCoordinationLock(args),
 
-    claimDelivery: args => use().claimDelivery(args),
-    renewDeliveryClaim: args => use().renewDeliveryClaim(args),
-    completeDelivery: args => use().completeDelivery(args),
-    releaseDelivery: args => use().releaseDelivery(args),
-    getDelivery: args => use().getDelivery(args),
+    claimDelivery: async args => use().claimDelivery(args),
+    renewDeliveryClaim: async args => use().renewDeliveryClaim(args),
+    completeDelivery: async args => use().completeDelivery(args),
+    releaseDelivery: async args => use().releaseDelivery(args),
+    getDelivery: async args => use().getDelivery(args),
   };
 
   return {

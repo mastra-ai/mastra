@@ -32,12 +32,7 @@ import type {
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import type {
-  SqliteClient as Client,
-  SqliteInValue as InValue,
-  SqliteResultSet,
-  SqliteValue,
-} from '../../db/client';
+import type { SqliteClient as Client, SqliteInValue as InValue, SqliteResultSet, SqliteValue } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
 
 const S = `"${TABLE_SIGNAL_SUBSCRIPTIONS}"`;
@@ -101,7 +96,14 @@ function identityFenceSql(
   }
   return {
     sql: `EXISTS (SELECT 1 FROM ${C} o WHERE o."kind" = 'owner' AND o."key" = ? AND o."fencingToken" = ? AND o."agentId" = ? AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?)`,
-    args: [fence.key, fence.fencingToken, identity.agentId, identity.providerId, identity.resourceId, identity.threadId],
+    args: [
+      fence.key,
+      fence.fencingToken,
+      identity.agentId,
+      identity.providerId,
+      identity.resourceId,
+      identity.threadId,
+    ],
   };
 }
 
@@ -134,7 +136,9 @@ function filterSql(filters: SignalSubscriptionFilters, row?: string): { sql: str
 
 function pageSql(limit: number | undefined, offset: number | undefined): { sql: string; args: InValue[] } {
   if (limit !== undefined) {
-    return offset !== undefined ? { sql: 'LIMIT ? OFFSET ?', args: [limit, offset] } : { sql: 'LIMIT ?', args: [limit] };
+    return offset !== undefined
+      ? { sql: 'LIMIT ? OFFSET ?', args: [limit, offset] }
+      : { sql: 'LIMIT ?', args: [limit] };
   }
   // SQLite rejects OFFSET without LIMIT; -1 means "no limit".
   return offset !== undefined ? { sql: 'LIMIT -1 OFFSET ?', args: [offset] } : { sql: '', args: [] };
@@ -285,8 +289,8 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
   #fenceProbe(ref: SignalSubscriptionRowRef, fence: SignalSubscriptionDocumentFence | undefined) {
     const fenceSql = rowFenceSql(fence);
     return {
-      sql: `SELECT *, ${fenceSql.sql} AS "fenceOk" FROM ${S} WHERE "agentId" = ? AND "id" = ?`,
-      args: [...fenceSql.args, ref.agentId, ref.id],
+      sql: `SELECT *, ${fenceSql.sql} AS "fenceOk" FROM ${S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ?`,
+      args: [...fenceSql.args, ref.agentId, ref.providerId, ref.id],
     };
   }
 
@@ -318,7 +322,11 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
   }
 
   async #getRow(ref: SignalSubscriptionRowRef): Promise<SignalSubscriptionRecord | null> {
-    const result = await this.#read(`SELECT * FROM ${S} WHERE "agentId" = ? AND "id" = ?`, [ref.agentId, ref.id]);
+    const result = await this.#read(`SELECT * FROM ${S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ?`, [
+      ref.agentId,
+      ref.providerId,
+      ref.id,
+    ]);
     const row = result.rows[0];
     return row ? toRecord(row) : null;
   }
@@ -496,8 +504,8 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
         fence,
         guard => [
           {
-            sql: `UPDATE ${S} SET ${sets.join(', ')} WHERE "agentId" = ? AND "id" = ? AND ${guard.sql} RETURNING *`,
-            args: [...values, args.agentId, args.id, ...guard.args],
+            sql: `UPDATE ${S} SET ${sets.join(', ')} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql} RETURNING *`,
+            args: [...values, args.agentId, args.providerId, args.id, ...guard.args],
           },
         ],
         'update signal subscription',
@@ -516,8 +524,8 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
         fence,
         guard => [
           {
-            sql: `UPDATE ${S} SET "enabled" = ?, "updatedAt" = ${NOW} WHERE "agentId" = ? AND "id" = ? AND ${guard.sql} RETURNING *`,
-            args: [args.enabled ? 1 : 0, args.agentId, args.id, ...guard.args],
+            sql: `UPDATE ${S} SET "enabled" = ?, "updatedAt" = ${NOW} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql} RETURNING *`,
+            args: [args.enabled ? 1 : 0, args.agentId, args.providerId, args.id, ...guard.args],
           },
         ],
         'set signal subscription enabled',
@@ -533,12 +541,12 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
         fence,
         guard => [
           {
-            sql: `DELETE FROM ${D} WHERE "subscriptionId" IN (SELECT "id" FROM ${S} WHERE "agentId" = ? AND "id" = ? AND ${guard.sql})`,
-            args: [args.agentId, args.id, ...guard.args],
+            sql: `DELETE FROM ${D} WHERE "subscriptionId" IN (SELECT "id" FROM ${S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql})`,
+            args: [args.agentId, args.providerId, args.id, ...guard.args],
           },
           {
-            sql: `DELETE FROM ${S} WHERE "agentId" = ? AND "id" = ? AND ${guard.sql}`,
-            args: [args.agentId, args.id, ...guard.args],
+            sql: `DELETE FROM ${S} WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql}`,
+            args: [args.agentId, args.providerId, args.id, ...guard.args],
           },
         ],
         'delete signal subscription',
@@ -595,7 +603,10 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
       const [check, inserted] = await this.#batch(
         [
           { sql: `SELECT ${fenceSql.sql} AS "ok"`, args: fenceSql.args },
-          { sql: `${insert.sql} ON CONFLICT DO NOTHING RETURNING *`, args: insert.args },
+          {
+            sql: `${insert.sql} ON CONFLICT ("agentId", "providerId", "resourceId", "threadId", "externalResourceId") DO NOTHING RETURNING *`,
+            args: insert.args,
+          },
         ],
         'insert subscribing signal subscription',
       );
@@ -616,11 +627,21 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
           {
             sql: `UPDATE ${S}
                   SET "operationKind" = ?, "operationOwner" = ?, "operationExpiresAt" = ${NOW} + ?, "updatedAt" = ${NOW}
-                  WHERE "agentId" = ? AND "id" = ? AND ${guard.sql}
+                  WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql}
                     AND ("operationOwner" IS NULL OR "operationOwner" = ? OR "operationExpiresAt" <= ${NOW})
                     AND NOT (? = 'subscribe' AND "enabled" = 1 AND "claimOwner" IS NOT NULL AND "claimExpiresAt" > ${NOW})
                   RETURNING *`,
-            args: [args.kind, args.owner, args.ttlMs, args.agentId, args.id, ...guard.args, args.owner, args.kind],
+            args: [
+              args.kind,
+              args.owner,
+              args.ttlMs,
+              args.agentId,
+              args.providerId,
+              args.id,
+              ...guard.args,
+              args.owner,
+              args.kind,
+            ],
           },
         ],
         'begin signal subscription operation',
@@ -629,12 +650,14 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     });
   }
 
-  async renewSubscriptionOperation(args: SignalSubscriptionRowRef & { owner: string; ttlMs: number }): Promise<boolean> {
+  async renewSubscriptionOperation(
+    args: SignalSubscriptionRowRef & { owner: string; ttlMs: number },
+  ): Promise<boolean> {
     return this.#run('RENEW_OPERATION', async () => {
       const result = await this.#write(
         `UPDATE ${S} SET "operationExpiresAt" = ${NOW} + ?
-         WHERE "agentId" = ? AND "id" = ? AND "operationOwner" = ? AND "operationExpiresAt" > ${NOW}`,
-        [args.ttlMs, args.agentId, args.id, args.owner],
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "operationOwner" = ? AND "operationExpiresAt" > ${NOW}`,
+        [args.ttlMs, args.agentId, args.providerId, args.id, args.owner],
         'renew signal subscription operation',
       );
       return result.rowsAffected === 1;
@@ -653,10 +676,10 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
           {
             sql: `UPDATE ${S}
                   SET "enabled" = 1, "operationKind" = NULL, "operationOwner" = NULL, "operationExpiresAt" = NULL, "updatedAt" = ${NOW}
-                  WHERE "agentId" = ? AND "id" = ? AND ${guard.sql}
+                  WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql}
                     AND "operationKind" = 'subscribe' AND "operationOwner" = ? AND "operationExpiresAt" > ${NOW}
                   RETURNING *`,
-            args: [args.agentId, args.id, ...guard.args, args.owner],
+            args: [args.agentId, args.providerId, args.id, ...guard.args, args.owner],
           },
         ],
         'commit signal subscription subscribe',
@@ -676,23 +699,25 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
         guard => {
           const committable = {
             sql: `SELECT "id" FROM ${S}
-                  WHERE "agentId" = ? AND "id" = ? AND ${guard.sql}
+                  WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql}
                     AND "enabled" = 0 AND "operationKind" = 'unsubscribe' AND "operationOwner" = ?
                     AND "operationExpiresAt" > ${NOW}
                     AND ("claimOwner" IS NULL OR "claimExpiresAt" <= ${NOW})`,
-            args: [args.agentId, args.id, ...guard.args, args.owner],
+            args: [args.agentId, args.providerId, args.id, ...guard.args, args.owner],
           };
+          // Row first: each statement re-reads the clock, so deliveries are
+          // only removed once the row delete has actually committed.
           return [
-            {
-              sql: `DELETE FROM ${D} WHERE "subscriptionId" IN (${committable.sql})`,
-              args: committable.args,
-            },
             { sql: `DELETE FROM ${S} WHERE "id" IN (${committable.sql})`, args: committable.args },
+            {
+              sql: `DELETE FROM ${D} WHERE "subscriptionId" = ? AND NOT EXISTS (SELECT 1 FROM ${S} WHERE "id" = ?)`,
+              args: [args.id, args.id],
+            },
           ];
         },
         'commit signal subscription unsubscribe',
       );
-      return outcome?.results[1]?.rowsAffected === 1;
+      return outcome?.results[0]?.rowsAffected === 1;
     });
   }
 
@@ -708,8 +733,8 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
           {
             sql: `UPDATE ${S}
                   SET "operationKind" = NULL, "operationOwner" = NULL, "operationExpiresAt" = NULL, "updatedAt" = ${NOW}
-                  WHERE "agentId" = ? AND "id" = ? AND ${guard.sql} AND "operationOwner" = ?`,
-            args: [args.agentId, args.id, ...guard.args, args.owner],
+                  WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND ${guard.sql} AND "operationOwner" = ?`,
+            args: [args.agentId, args.providerId, args.id, ...guard.args, args.owner],
           },
         ],
         'abort signal subscription operation',
@@ -730,12 +755,12 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
          SET "claimOwner" = ?,
              "claimExpiresAt" = ${NOW} + ?,
              "nextPollAt" = CASE WHEN ? = 1 OR "claimOwner" IS NULL THEN ${NOW} + ? ELSE "nextPollAt" END
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = 1
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = 1
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})
            AND ("claimOwner" IS NULL OR "claimExpiresAt" <= ${NOW})
            AND (? = 1 OR "claimOwner" IS NOT NULL OR "nextPollAt" IS NULL OR "nextPollAt" <= ${NOW})
          RETURNING *`,
-        [args.owner, args.ttlMs, force, args.cadenceMs, args.agentId, args.id, force],
+        [args.owner, args.ttlMs, force, args.cadenceMs, args.agentId, args.providerId, args.id, force],
         'claim signal subscription',
       );
       const row = result.rows[0];
@@ -749,9 +774,9 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     return this.#run('RENEW_CLAIM', async () => {
       const result = await this.#write(
         `UPDATE ${S} SET "claimExpiresAt" = ${NOW} + ?
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = 1 AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = 1 AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})`,
-        [args.ttlMs, args.agentId, args.id, args.owner],
+        [args.ttlMs, args.agentId, args.providerId, args.id, args.owner],
         'renew signal subscription claim',
       );
       return result.rowsAffected === 1;
@@ -762,9 +787,9 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     return this.#run('VALIDATE_CLAIM', async () => {
       const result = await this.#read(
         `SELECT COUNT(*) AS "count" FROM ${S}
-         WHERE "agentId" = ? AND "id" = ? AND "enabled" = 1 AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
+         WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "enabled" = 1 AND "claimOwner" = ? AND "claimExpiresAt" > ${NOW}
            AND ("operationOwner" IS NULL OR "operationExpiresAt" <= ${NOW})`,
-        [args.agentId, args.id, args.owner],
+        [args.agentId, args.providerId, args.id, args.owner],
       );
       return Number(result.rows[0]?.count) === 1;
     });
@@ -773,8 +798,8 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
   async releaseSubscriptionClaim(args: SignalSubscriptionRowRef & { owner: string }): Promise<boolean> {
     return this.#run('RELEASE_CLAIM', async () => {
       const result = await this.#write(
-        `UPDATE ${S} SET "claimOwner" = NULL, "claimExpiresAt" = NULL WHERE "agentId" = ? AND "id" = ? AND "claimOwner" = ?`,
-        [args.agentId, args.id, args.owner],
+        `UPDATE ${S} SET "claimOwner" = NULL, "claimExpiresAt" = NULL WHERE "agentId" = ? AND "providerId" = ? AND "id" = ? AND "claimOwner" = ?`,
+        [args.agentId, args.providerId, args.id, args.owner],
         'release signal subscription claim',
       );
       return result.rowsAffected === 1;
@@ -795,9 +820,23 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     return this.#run('CLAIM_DOCUMENT_OWNER', async () => {
       await this.#write(
         `INSERT INTO ${C} ("kind", "key", "agentId", "providerId", "resourceId", "threadId", "fencingToken", "createdAt")
-         VALUES ('owner', ?, ?, ?, ?, ?, ?, ${NOW})
+         SELECT 'owner', ?, ?, ?, ?, ?, ?, ${NOW}
+         WHERE NOT EXISTS (
+           SELECT 1 FROM ${C} o
+           WHERE o."kind" = 'owner' AND o."providerId" = ? AND o."resourceId" = ? AND o."threadId" = ?
+         )
          ON CONFLICT ("kind", "key") DO NOTHING`,
-        [args.key, args.agentId, args.providerId, args.resourceId, args.threadId, crypto.randomUUID()],
+        [
+          args.key,
+          args.agentId,
+          args.providerId,
+          args.resourceId,
+          args.threadId,
+          crypto.randomUUID(),
+          args.providerId,
+          args.resourceId,
+          args.threadId,
+        ],
         'claim signal subscription document owner',
       );
       const result = await this.#read(`SELECT * FROM ${C} WHERE "kind" = 'owner' AND "key" = ?`, [args.key]);
@@ -916,19 +955,22 @@ export class SignalSubscriptionsLibSQL extends SignalSubscriptionsStorage {
     return this.#run('CLAIM_DELIVERY', async () => {
       const result = await this.#write(
         `INSERT INTO ${D} ("subscriptionId", "deliveryId", "status", "owner", "expiresAt", "createdAt")
-         VALUES (?, ?, 'pending', ?, ${NOW} + ?, ${NOW})
+         SELECT ?, ?, 'pending', ?, ${NOW} + ?, ${NOW}
+         WHERE EXISTS (SELECT 1 FROM ${S} WHERE "id" = ?)
          ON CONFLICT ("subscriptionId", "deliveryId") DO UPDATE SET "owner" = excluded."owner", "expiresAt" = excluded."expiresAt"
          WHERE ${D}."status" = 'pending' AND ${D}."expiresAt" <= ${NOW}
          RETURNING "owner"`,
-        [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs],
+        [args.subscriptionId, args.deliveryId, args.owner, args.ttlMs, args.subscriptionId],
         'claim signal subscription delivery',
       );
       if (result.rows.length === 1) return 'claimed';
-      const existing = await this.#read(
-        `SELECT "status" FROM ${D} WHERE "subscriptionId" = ? AND "deliveryId" = ?`,
-        [args.subscriptionId, args.deliveryId],
-      );
-      return existing.rows[0]?.status === 'delivered' ? 'delivered' : 'in-progress';
+      const existing = await this.#read(`SELECT "status" FROM ${D} WHERE "subscriptionId" = ? AND "deliveryId" = ?`, [
+        args.subscriptionId,
+        args.deliveryId,
+      ]);
+      const status = existing.rows[0]?.status;
+      if (status === undefined) return 'missing';
+      return status === 'delivered' ? 'delivered' : 'in-progress';
     });
   }
 

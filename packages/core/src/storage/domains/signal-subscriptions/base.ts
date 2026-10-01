@@ -98,7 +98,11 @@ export type SignalSubscriptionDocumentOwner = {
 };
 
 export type UpsertSignalSubscriptionInput = SignalSubscriptionIdentity & {
-  /** Row id for a new row. Ignored when the identity already exists. Generated when omitted. */
+  /**
+   * Row id for a new row. Ignored when the identity already exists. Generated
+   * when omitted. Ids are unique across the domain: an id already used by
+   * another subscription rejects.
+   */
   id?: string;
   /** Shallow-merged into existing metadata. */
   metadata?: Record<string, unknown>;
@@ -140,7 +144,8 @@ export type SignalSubscriptionPatch = {
   lastDeliveredAt?: Date;
 };
 
-export type SignalSubscriptionRowRef = { agentId: string; id: string };
+/** A subscription row by id, matched only within its agent and provider. */
+export type SignalSubscriptionRowRef = { agentId: string; providerId: string; id: string };
 
 export type ClaimSignalSubscriptionInput = SignalSubscriptionRowRef & {
   owner: string;
@@ -167,7 +172,8 @@ export type ListSignalSubscriptionDocumentOwnersResult = {
 
 export type SignalSubscriptionDeliveryRef = { subscriptionId: string; deliveryId: string };
 
-export type ClaimSignalSubscriptionDeliveryResult = 'claimed' | 'in-progress' | 'delivered';
+/** `'missing'` when the subscription does not exist; no ledger row is written. */
+export type ClaimSignalSubscriptionDeliveryResult = 'claimed' | 'in-progress' | 'delivered' | 'missing';
 
 /** Thrown when a mutation of an owned document's row lacks a valid fence. */
 export class SignalSubscriptionFenceError extends MastraError {
@@ -201,8 +207,9 @@ export class SignalSubscriptionFenceError extends MastraError {
  *   it; release clears ownership but preserves `nextPollAt`.
  * - Delivery claims are `'claimed'` for new or expired keys, `'in-progress'`
  *   for any live pending key (including the same owner), and `'delivered'`
- *   once completed. Delivered identities are kept until their subscription is
- *   deleted.
+ *   once completed, and `'missing'` when the subscription does not exist.
+ *   Delivered identities are kept until their subscription is deleted, so the
+ *   ledger never outlives its subscription.
  * - Rows of an owned document can only be mutated with that owner's fence.
  */
 export abstract class SignalSubscriptionsStorage extends StorageDomain {
@@ -354,7 +361,8 @@ export abstract class SignalSubscriptionsStorage extends StorageDomain {
   /**
    * Become the permanent owner of `key`. Returns the existing record when the
    * same agent+provider+resource+thread already owns it, `null` when someone
-   * else does.
+   * else owns `key` or another key already owns the provider+resource+thread
+   * document. A document has at most one owner.
    */
   abstract claimDocumentOwner(args: {
     key: string;

@@ -443,14 +443,14 @@ export abstract class SignalProvider<TId extends string = string> {
    */
   protected async unsubscribeDurable(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
     this.#requireAgentId();
-    return this.withDurableSubscriptionStore(async scope => {
-      const existing = await scope.getSubscriptionByIdentity({
-        resourceId: target.resourceId,
-        threadId: target.threadId,
-        externalResourceId,
-      });
-      return existing ? scope.deleteSubscription({ id: existing.id }) : false;
-    });
+    return this.withDurableSubscriptionStore(
+      async scope =>
+        (await scope.deleteSubscriptions({
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+          externalResourceId,
+        })) > 0,
+    );
   }
 
   /** Every enabled durable subscription of this agent and provider, across all threads. */
