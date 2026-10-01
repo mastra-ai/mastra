@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Textarea } from './textarea';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -55,9 +56,14 @@ export const Sizes: Story = {
 export const Error: Story = {
   args: {
     placeholder: 'Invalid input...',
-    'aria-invalid': true,
-    className: 'w-75',
   },
+  render: args => (
+    <Field invalid className="w-75">
+      <FieldLabel>Description</FieldLabel>
+      <Textarea {...args} />
+      <FieldError>Enter a description.</FieldError>
+    </Field>
+  ),
 };
 
 export const Disabled: Story = {
