@@ -59,13 +59,13 @@ export function ScorerEditSidebar({
 
           <Field invalid={Boolean(errors.name)}>
             <FieldLabel required>Name</FieldLabel>
-            <Input placeholder="My Scorer" {...register('name')} />
+            <Input placeholder="My Scorer" required {...register('name')} />
             <FieldError>{errors.name?.message}</FieldError>
           </Field>
 
           <Field invalid={Boolean(errors.description)}>
             <FieldLabel required>Description</FieldLabel>
-            <Textarea placeholder="Describe what this scorer does" {...register('description')} />
+            <Textarea placeholder="Describe what this scorer does" required {...register('description')} />
             <FieldError>{errors.description?.message}</FieldError>
           </Field>
 
@@ -99,7 +99,7 @@ export function ScorerEditSidebar({
           </Field>
 
           <Fieldset className="flex flex-col gap-1.5">
-            <FieldsetLegend className="text-foreground">Score Range</FieldsetLegend>
+            <FieldsetLegend>Score Range</FieldsetLegend>
             <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
@@ -141,7 +141,7 @@ export function ScorerEditSidebar({
                     className="flex flex-col gap-1.5"
                     render={<RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange} />}
                   >
-                    <FieldsetLegend className="text-foreground">Default Sampling</FieldsetLegend>
+                    <FieldsetLegend>Default Sampling</FieldsetLegend>
                     <FieldItem>
                       <RadioGroupItem value="none" />
                       <FieldLabel>None</FieldLabel>
