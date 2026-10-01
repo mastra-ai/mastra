@@ -22,9 +22,67 @@ function getDraft(schema: Schema | boolean): SchemaDraft {
   return '7';
 }
 
+const schemaMapKeywords = ['properties', 'patternProperties', 'dependentSchemas', '$defs', 'definitions'] as const;
+const schemaKeywords = [
+  'additionalProperties',
+  'contains',
+  'contentSchema',
+  'else',
+  'if',
+  'items',
+  'not',
+  'propertyNames',
+  'then',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+] as const;
+const schemaArrayKeywords = ['allOf', 'anyOf', 'oneOf', 'prefixItems'] as const;
+
+function removeFormats(schema: Record<string, unknown>): void {
+  delete schema.format;
+
+  for (const keyword of schemaMapKeywords) {
+    const schemaMap = schema[keyword];
+    if (!schemaMap || typeof schemaMap !== 'object' || Array.isArray(schemaMap)) continue;
+    for (const child of Object.values(schemaMap)) {
+      if (child && typeof child === 'object' && !Array.isArray(child)) removeFormats(child as Record<string, unknown>);
+    }
+  }
+
+  for (const keyword of schemaKeywords) {
+    const child = schema[keyword];
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        if (item && typeof item === 'object') removeFormats(item as Record<string, unknown>);
+      }
+    } else if (child && typeof child === 'object') {
+      removeFormats(child as Record<string, unknown>);
+    }
+  }
+
+  for (const keyword of schemaArrayKeywords) {
+    const schemas = schema[keyword];
+    if (!Array.isArray(schemas)) continue;
+    for (const child of schemas) {
+      if (child && typeof child === 'object') removeFormats(child as Record<string, unknown>);
+    }
+  }
+
+  const dependencies = schema.dependencies;
+  if (dependencies && typeof dependencies === 'object' && !Array.isArray(dependencies)) {
+    for (const child of Object.values(dependencies)) {
+      if (child && typeof child === 'object' && !Array.isArray(child)) {
+        removeFormats(child as Record<string, unknown>);
+      }
+    }
+  }
+}
+
 function withoutFormats(schema: Schema | boolean): Schema | boolean {
   if (typeof schema === 'boolean') return schema;
-  return JSON.parse(JSON.stringify(schema, (key, value) => (key === 'format' ? undefined : value))) as Schema;
+  const clonedSchema = JSON.parse(JSON.stringify(schema)) as Schema;
+  removeFormats(clonedSchema as Record<string, unknown>);
+  return clonedSchema;
 }
 
 function toValidationError(error: OutputUnit): ValidationError {
