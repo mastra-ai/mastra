@@ -1,10 +1,16 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
 import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-object';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsTitle,
+} from '@mastra/playground-ui/new/settings';
 import { PlayIcon } from 'lucide-react';
 import type { ZodType } from 'zod';
+import { submitOnEnter } from '../utils/submit-on-enter';
 import { RequestContextPopover } from '@/domains/run-options/components/request-context-popover';
 
 export interface ToolRequestProps {
@@ -25,22 +31,26 @@ export function ToolRequest({
   const hasInputFields = !isEmptyZodObject(zodInputSchema);
 
   return (
-    <SectionCard
-      title="Request"
-      description="Fill in the input and run the tool."
-      action={<RequestContextPopover entityType={requestContextEntityType} entityId={requestContextEntityId} />}
-    >
-      <DynamicForm
-        isSubmitLoading={isRunning}
-        schema={zodInputSchema}
-        onSubmit={onRun}
-        submitButtonLabel="Run"
-        submitButtonIcon={<PlayIcon />}
-        submitButtonVariant="primary"
-        className="space-y-4"
+    <SettingsGroup>
+      <SettingsHeader
+        action={<RequestContextPopover entityType={requestContextEntityType} entityId={requestContextEntityId} />}
       >
-        {!hasInputFields && <Notice variant="info">No input is required to run this tool.</Notice>}
-      </DynamicForm>
-    </SectionCard>
+        <SettingsTitle>Request</SettingsTitle>
+        <SettingsDescription>Fill in the input and run the tool.</SettingsDescription>
+      </SettingsHeader>
+      <SettingsContainer className="p-4" onKeyDown={submitOnEnter}>
+        <DynamicForm
+          isSubmitLoading={isRunning}
+          schema={zodInputSchema}
+          onSubmit={onRun}
+          submitButtonLabel="Run"
+          submitButtonIcon={<PlayIcon />}
+          submitButtonVariant="primary"
+          className="space-y-4"
+        >
+          {!hasInputFields && <SettingsDescription>This tool takes no input. Run it as is.</SettingsDescription>}
+        </DynamicForm>
+      </SettingsContainer>
+    </SettingsGroup>
   );
 }

@@ -192,7 +192,7 @@ test.describe('Admin Role', () => {
         .click();
 
       // Should be on tool details page
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
 
     test('admin can see tool execution panel', async ({ page }) => {

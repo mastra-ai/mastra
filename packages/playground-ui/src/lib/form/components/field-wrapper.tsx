@@ -10,9 +10,10 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
 
   return (
     // Stack the label over the control so inline controls (select, date) fill the row like inputs do.
+    // The label is a block so a wrapping label keeps its required asterisk at the end of the text.
     <div className="flex flex-col gap-1 pb-4 last:pb-0">
       {!isDisabled && (
-        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="self-start">
+        <FieldBlock.Label name={id} htmlFor={id} required={field.required} className="block self-start">
           {label}
         </FieldBlock.Label>
       )}

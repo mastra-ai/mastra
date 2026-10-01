@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { ToolUsedBy } from '../tool-used-by';
+import { ToolUsedBySection } from '../tool-drawer/tool-used-by-section';
 import { agentsWithoutTools, agentsWithRefundUser } from './fixtures/tool-agents';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -11,21 +11,21 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 const renderUsedBy = (currentAgentId?: string) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ToolUsedBy toolId="refundUser" currentAgentId={currentAgentId} />
+      <ToolUsedBySection toolId="refundUser" currentAgentId={currentAgentId} />
     </TestLinkProvider>,
   );
 
 const serveAgents = (agents: typeof agentsWithRefundUser) =>
   server.use(http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(agents)));
 
-describe('ToolUsedBy', () => {
+describe('ToolUsedBySection', () => {
   describe('when opened from the global tools page', () => {
     it('lists only the agents that have the tool', async () => {
       serveAgents(agentsWithRefundUser);
       renderUsedBy();
 
-      expect(await screen.findByRole('link', { name: 'Billing Agent' })).not.toBeNull();
-      expect(screen.getByRole('link', { name: 'Support Agent' })).not.toBeNull();
+      expect(await screen.findByText('Billing Agent')).not.toBeNull();
+      expect(screen.getByText('Support Agent')).not.toBeNull();
       expect(screen.queryByText('Chef Agent')).toBeNull();
     });
 
@@ -33,8 +33,8 @@ describe('ToolUsedBy', () => {
       serveAgents(agentsWithRefundUser);
       renderUsedBy();
 
-      const link = await screen.findByRole('link', { name: 'Billing Agent' });
-      expect(link.getAttribute('href')).toBe('/agents/billing-agent');
+      const links = await screen.findAllByRole('link', { name: 'Open' });
+      expect(links.map(link => link.getAttribute('href'))).toEqual(['/agents/billing-agent', '/agents/support-agent']);
     });
   });
 
@@ -43,10 +43,10 @@ describe('ToolUsedBy', () => {
       serveAgents(agentsWithRefundUser);
       renderUsedBy('billing-agent');
 
-      const current = await screen.findByRole('button', { name: /Billing Agent/ });
-      expect(current.hasAttribute('disabled')).toBe(true);
-      expect(screen.getByText('Current')).not.toBeNull();
-      expect(screen.queryByRole('link', { name: 'Billing Agent' })).toBeNull();
+      expect(await screen.findByText('Current')).not.toBeNull();
+      expect(screen.getByText('Billing Agent')).not.toBeNull();
+      // Only the other agent gets an Open link.
+      expect(screen.getAllByRole('link', { name: 'Open' })).toHaveLength(1);
     });
   });
 
@@ -55,7 +55,7 @@ describe('ToolUsedBy', () => {
       serveAgents(agentsWithoutTools);
       renderUsedBy();
 
-      expect(await screen.findByText('No agents use this tool.')).not.toBeNull();
+      expect(await screen.findByText('No agents use this tool yet.')).not.toBeNull();
     });
   });
 
@@ -65,7 +65,7 @@ describe('ToolUsedBy', () => {
       renderUsedBy();
 
       expect(await screen.findByText("Couldn't load the agents that use this tool.")).not.toBeNull();
-      expect(screen.queryByText('No agents use this tool.')).toBeNull();
+      expect(screen.queryByText('No agents use this tool yet.')).toBeNull();
     });
   });
 });

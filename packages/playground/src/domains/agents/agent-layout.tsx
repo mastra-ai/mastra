@@ -17,6 +17,7 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { AgentToolDrawer } from '@/domains/tools/components/tool-drawer/agent-tool-drawer';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 const crumbs = [navCrumb('/agents'), agentCrumb];
@@ -60,6 +61,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       <KeyboardScope>
         <AgentShortcuts agentId={agentId!} />
         <OverviewPanelShortcuts />
+        <AgentToolDrawer agentId={agentId!} />
 
         <PageLayout
           variant="fit"

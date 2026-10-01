@@ -217,7 +217,7 @@ test.describe('Member Role', () => {
         .click();
 
       // Should be on tool details page
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
 
     test('member can see tool execution panel', async ({ page }) => {
@@ -351,7 +351,7 @@ test.describe('Member Role', () => {
 
       // Viewer has no tools:read permission, so might see restricted access
       // The exact behavior depends on implementation
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
   });
 

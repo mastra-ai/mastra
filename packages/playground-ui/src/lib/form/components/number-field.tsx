@@ -15,8 +15,9 @@ export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, error, f
       onChange={e => {
         const value = e.target.value;
         if (value !== '' && !isNaN(Number(value))) {
+          // Store the number as you type, not only on blur, so submitting with Enter sends a number.
           props.onChange({
-            target: { value: value, name: inputProps.name },
+            target: { value: Number(value), name: inputProps.name },
           });
         }
       }}

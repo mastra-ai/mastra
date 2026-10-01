@@ -1,4 +1,10 @@
-import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
+import {
+  SettingsContainer,
+  SettingsDescription,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsTitle,
+} from '@mastra/playground-ui/new/settings';
 import type { ToolRun } from '../utils/tool-run';
 import { ToolResponseBody } from './tool-response-body';
 import { ToolRunStatus } from './tool-run-status';
@@ -10,15 +16,14 @@ export interface ToolResponseProps {
 
 export function ToolResponse({ isRunning, lastRun }: ToolResponseProps) {
   return (
-    <SectionCard
-      title="Response"
-      description="The value the tool returned."
-      action={lastRun && !isRunning ? <ToolRunStatus run={lastRun} /> : undefined}
-      fillHeight
-      // A grid body lets the empty state fill the card's height and center in it.
-      contentClassName="grid"
-    >
-      <ToolResponseBody isRunning={isRunning} lastRun={lastRun} />
-    </SectionCard>
+    <SettingsGroup>
+      <SettingsHeader action={lastRun && !isRunning ? <ToolRunStatus run={lastRun} /> : undefined}>
+        <SettingsTitle>Response</SettingsTitle>
+        <SettingsDescription>The value the tool returned.</SettingsDescription>
+      </SettingsHeader>
+      <SettingsContainer>
+        <ToolResponseBody isRunning={isRunning} lastRun={lastRun} />
+      </SettingsContainer>
+    </SettingsGroup>
   );
 }

@@ -6,26 +6,26 @@ import { useToolRun } from '../hooks/use-tool-run';
 import { ToolRequest } from './tool-request';
 import { ToolResponse } from './tool-response';
 
-interface ToolExecutorProps {
+export interface ToolPlaygroundProps {
   zodInputSchema: ZodType;
   /** Runs the tool and resolves with its output; a rejection is shown as an error response. */
-  handleExecuteTool: ExecuteTool;
+  execute: ExecuteTool;
   requestContextEntityType: RequestContextEntityType;
   requestContextEntityId: string;
 }
 
-/** The Playground: a request form next to the last response. */
-const ToolExecutor = ({
+/** The Playground tab: the request form, then the last response. */
+export function ToolPlayground({
   zodInputSchema,
-  handleExecuteTool,
+  execute,
   requestContextEntityType,
   requestContextEntityId,
-}: ToolExecutorProps) => {
+}: ToolPlaygroundProps) {
   const [requestContext] = useEntityRequestContext(requestContextEntityType, requestContextEntityId);
-  const { runTool, isRunning, lastRun } = useToolRun(handleExecuteTool, requestContext);
+  const { runTool, isRunning, lastRun } = useToolRun(execute, requestContext);
 
   return (
-    <div className="grid content-start items-stretch gap-4 lg:grid-cols-2">
+    <div className="grid content-start gap-6">
       <ToolRequest
         zodInputSchema={zodInputSchema}
         isRunning={isRunning}
@@ -36,6 +36,4 @@ const ToolExecutor = ({
       <ToolResponse isRunning={isRunning} lastRun={lastRun} />
     </div>
   );
-};
-
-export default ToolExecutor;
+}

@@ -24,6 +24,8 @@ export interface ToolsListProps {
   search?: string;
   sort?: ToolsSort;
   onSortChange?: (direction: DataListSort, key: ToolsSortKey) => void;
+  /** The tool open in the drawer, highlighted in the list. */
+  selectedToolId?: string;
 }
 
 const sortAccessors = {
@@ -31,7 +33,15 @@ const sortAccessors = {
   agents: (tool: ToolWithAgents) => tool.agents.length,
 };
 
-export function ToolsList({ tools, agents, isLoading, search = '', sort, onSortChange }: ToolsListProps) {
+export function ToolsList({
+  tools,
+  agents,
+  isLoading,
+  search = '',
+  sort,
+  onSortChange,
+  selectedToolId,
+}: ToolsListProps) {
   const { paths, Link } = useLinkComponent();
 
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
@@ -87,7 +97,13 @@ export function ToolsList({ tools, agents, isLoading, search = '', sort, onSortC
         const agentsCount = tool.agents.length;
 
         return (
-          <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)} LinkComponent={Link} {...getRowProps(index)}>
+          <EntityList.RowLink
+            key={tool.id}
+            to={paths.toolLink(tool.id)}
+            LinkComponent={Link}
+            featured={tool.id === selectedToolId}
+            {...getRowProps(index)}
+          >
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>

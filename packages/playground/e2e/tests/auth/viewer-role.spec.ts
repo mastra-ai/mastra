@@ -217,7 +217,7 @@ test.describe('Viewer Role', () => {
 
       // The tool page might load but viewer may have restricted access
       // Check that the page loads and URL is correct
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
 
       // Page should load - even if viewer doesn't have full tool access,
       // they might see the tool details without execution capability

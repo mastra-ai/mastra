@@ -2,16 +2,18 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MCPToolPanel } from '../MCPToolPanel';
+import { McpToolDrawer } from '../mcp-tool-drawer';
 import { authDisabled, echoTool } from './fixtures/mcp-servers';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const TOOL_URL = `${TEST_BASE_URL}/api/mcp/v2/tools/echo`;
 
-const renderPanel = () => renderWithProviders(<MCPToolPanel serverId="v2" toolId="echo" />);
+// The drawer reads the open tool from `?tool=`, as the MCP server page does.
+const renderPanel = () =>
+  renderWithProviders(<McpToolDrawer serverId="v2" />, { router: { initialEntries: ['/mcps/v2?tool=echo'] } });
 
-/** Execution lives on the Playground tab, apart from the Overview the page opens on. */
+/** Execution lives on the Playground tab, apart from the Overview the drawer opens on. */
 const runTool = async () => {
   fireEvent.click(await screen.findByRole('tab', { name: 'Playground' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Run' }));
@@ -24,7 +26,7 @@ const useBaseHandlers = () => {
   );
 };
 
-describe('MCPToolPanel execution results', () => {
+describe('McpToolDrawer execution results', () => {
   it('renders the completed output of an ordinary tool', async () => {
     useBaseHandlers();
     const onExecute = vi.fn<() => void>();
@@ -34,13 +36,13 @@ describe('MCPToolPanel execution results', () => {
         return HttpResponse.json({ result: { echoed: 'hello' } });
       }),
     );
-    const { container, queryClient } = renderPanel();
+    const { queryClient } = renderPanel();
 
     await runTool();
 
     await waitFor(() => expect(onExecute).toHaveBeenCalledTimes(1));
-    // The result editor tokenises JSON, so assert on the rendered text as a whole.
-    await waitFor(() => expect(container.textContent).toMatch(/"echoed":\s*"hello"/));
+    // The response is highlighted token by token, so assert on the rendered text as a whole.
+    await waitFor(() => expect(document.body.textContent).toMatch(/"echoed":\s*"hello"/));
     await waitForMutationsIdle(queryClient);
   });
 
@@ -55,25 +57,25 @@ describe('MCPToolPanel execution results', () => {
         }),
       ),
     );
-    const { container, queryClient } = renderPanel();
+    const { queryClient } = renderPanel();
 
     await runTool();
 
     // Studio cannot answer the input request, so it explains that instead of presenting the payload as output.
     await waitFor(() => expect(screen.getByText(/asked for more input, which Studio cannot provide/)).not.toBeNull());
     // The suspend payload stays visible in the result panel.
-    expect(container.textContent).toMatch(/"phase":\s*"confirm"/);
+    expect(document.body.textContent).toMatch(/"phase":\s*"confirm"/);
     await waitForMutationsIdle(queryClient);
   });
 
   it('shows other execution failures instead of an empty result', async () => {
     useBaseHandlers();
     server.use(http.post(`${TOOL_URL}/execute`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
-    const { container, queryClient } = renderPanel();
+    const { queryClient } = renderPanel();
 
     await runTool();
 
-    await waitFor(() => expect(container.textContent).toContain('HTTP error! status: 500'));
+    await waitFor(() => expect(document.body.textContent).toContain('HTTP error! status: 500'));
     await waitForMutationsIdle(queryClient);
   });
 });
