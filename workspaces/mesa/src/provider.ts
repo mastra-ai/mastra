@@ -12,24 +12,26 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
   description: 'Versioned Mesa filesystem for workspace files',
   configSchema: {
     type: 'object',
-    required: ['repos'],
+    required: ['authors', 'layout'],
     properties: {
-      apiKey: { type: 'string', description: 'Mesa API key. Falls back to MESA_API_KEY when omitted.' },
-      org: { type: 'string', description: 'Mesa org slug' },
-      repos: {
+      privateKey: { type: 'string', description: 'Mesa private key. Falls back to MESA_PRIVATE_KEY when omitted.' },
+      authors: {
         type: 'array',
-        description: 'Mesa repos to mount',
+        description: 'Commit authors attributed to writes',
         minItems: 1,
         items: {
           type: 'object',
           required: ['name'],
           properties: {
-            name: { type: 'string', description: 'Mesa repo name' },
-            bookmark: { type: 'string', description: 'Bookmark to mount' },
-            changeId: { type: 'string', description: 'Change ID to mount' },
-            readOnly: { type: 'boolean', description: 'Mount this repo as read-only' },
+            name: { type: 'string', description: 'Author name' },
+            email: { type: 'string', description: 'Author email' },
           },
         },
+      },
+      layout: {
+        type: 'object',
+        description:
+          'Mesa mount layout mapping absolute paths to repo declarations, e.g. { "/docs": { "kind": "repo", "name": "docs", "mode": "rw" } }',
       },
       cache: {
         type: 'object',
@@ -46,7 +48,7 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
         },
       },
       ttl: { type: 'number', description: 'Mesa mount token lifetime in seconds' },
-      readOnly: { type: 'boolean', description: 'Mount all repos as read-only', default: false },
+      readOnly: { type: 'boolean', description: 'Mount every layout repo as read-only', default: false },
     },
   },
   createFilesystem: config => new MesaFilesystem(config),

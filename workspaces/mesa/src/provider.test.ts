@@ -10,13 +10,13 @@ describe('mesaFilesystemProvider', () => {
     expect(mesaFilesystemProvider.configSchema).toEqual(
       expect.objectContaining({
         type: 'object',
-        required: ['repos'],
+        required: ['authors', 'layout'],
       }),
     );
   });
 
-  it('requires at least one repo in provider config', () => {
-    expect(mesaFilesystemProvider.configSchema.properties?.repos).toEqual(
+  it('requires at least one author in provider config', () => {
+    expect(mesaFilesystemProvider.configSchema.properties?.authors).toEqual(
       expect.objectContaining({
         type: 'array',
         minItems: 1,
@@ -26,7 +26,8 @@ describe('mesaFilesystemProvider', () => {
 
   it('creates MesaFilesystem instances', () => {
     const filesystem = mesaFilesystemProvider.createFilesystem({
-      repos: [{ name: 'docs', bookmark: 'main' }],
+      authors: [{ name: 'Mastra Agent' }],
+      layout: { '/docs': { kind: 'repo', name: 'docs', mode: 'rw' } },
     });
 
     expect(filesystem).toBeInstanceOf(MesaFilesystem);

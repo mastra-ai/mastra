@@ -15,21 +15,20 @@ import type {
   WorkspaceFilesystem,
   WriteOptions,
 } from '@mastra/core/workspace';
-import { Mesa } from '@mesadev/sdk';
+import { Mesa, repo } from '@mesadev/sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MesaFilesystem } from './index';
 
 interface MesaTestEnv {
-  apiKey: string;
-  org: string;
+  privateKey: string;
   repo: string;
   mesa: Mesa;
 }
 
 let mesaTestEnv: MesaTestEnv | undefined;
-const hasMesaApiKey = Boolean(process.env.MESA_API_KEY);
-const describeWithMesaApiKey = hasMesaApiKey ? describe : describe.skip;
+const hasMesaPrivateKey = Boolean(process.env.MESA_PRIVATE_KEY);
+const describeWithMesaPrivateKey = hasMesaPrivateKey ? describe : describe.skip;
 
 function createTestRepoName(): string {
   return `mastra-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -56,18 +55,16 @@ function isNotFoundError(error: unknown): boolean {
   );
 }
 
-if (hasMesaApiKey) {
+if (hasMesaPrivateKey) {
   beforeAll(async () => {
-    const apiKey = process.env.MESA_API_KEY!;
-    const mesa = new Mesa({ apiKey });
-    const org = await mesa.resolveOrg();
+    const privateKey = process.env.MESA_PRIVATE_KEY!;
+    const mesa = new Mesa({ privateKey });
     const repo = createTestRepoName();
 
     await mesa.repos.create({ name: repo });
 
     mesaTestEnv = {
-      apiKey,
-      org,
+      privateKey,
       repo,
       mesa,
     };
@@ -98,20 +95,16 @@ afterAll(async () => {
 
 function mesaRepoPath(...parts: string[]): string {
   const env = getMesaTestEnv();
-  return path.join('/', env.org, env.repo, ...parts);
+  return path.join('/', env.repo, ...parts);
 }
 
 function createMesaFilesystem(): MesaFilesystem {
   const env = getMesaTestEnv();
 
   return new MesaFilesystem({
-    apiKey: env.apiKey,
-    repos: [
-      {
-        name: env.repo,
-        bookmark: 'main',
-      },
-    ],
+    privateKey: env.privateKey,
+    authors: [{ name: 'Mastra Integration Test' }],
+    layout: { [`/${env.repo}`]: repo(env.repo, { mode: 'rw', at: { bookmark: 'main' } }) },
   });
 }
 
@@ -253,11 +246,10 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 }
 
-describeWithMesaApiKey('MesaFilesystem integration', () => {
+describeWithMesaPrivateKey('MesaFilesystem integration', () => {
   it('creates an isolated Mesa repo for the test run', () => {
     const env = getMesaTestEnv();
 
-    expect(env.org).toBeTruthy();
     expect(env.repo).toMatch(/^mastra-test-/);
   });
 
@@ -308,7 +300,7 @@ describeWithMesaApiKey('MesaFilesystem integration', () => {
   });
 });
 
-if (hasMesaApiKey) {
+if (hasMesaPrivateKey) {
   createFilesystemTestSuite({
     suiteName: 'MesaFilesystem Conformance',
     createFilesystem: async () => {
@@ -334,6 +326,6 @@ if (hasMesaApiKey) {
   });
 } else {
   describe.skip('MesaFilesystem Conformance', () => {
-    it('requires MESA_API_KEY', () => {});
+    it('requires MESA_PRIVATE_KEY', () => {});
   });
 }
