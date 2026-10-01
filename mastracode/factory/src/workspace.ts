@@ -959,13 +959,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               });
             }
           }
-          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
           if (setupError instanceof SetupCommandError) {
             // The command ran and exited non-zero — a config problem, not an
-            // infra one. Remember it so the next start recovers, and tell the
-            // agent what happens next. Infra failures (transport, clone)
-            // rethrow untouched and retry in full.
+            // infra one. Record it before restoring identity so the next start
+            // can recover even if identity restoration fails closed.
             recordFailedSetupCommand(session.id, projectRepository.setupCommand);
+          }
+          await configureGitIdentity(target, workdir, FACTORY_COMMIT_IDENTITY);
+          if (setupError instanceof SetupCommandError) {
+            // Identity is restored. Tell the agent what happens next. Infra
+            // failures (transport, clone) rethrow untouched and retry in full.
             throw new SetupCommandError(
               `${setupError.message}. The sandbox stays usable: this setup command is skipped for the rest of the session — retry your command, then fix the setup command in the repository settings or run it manually.`,
               setupError.code,
