@@ -642,6 +642,29 @@ describe('ThreadViewByTrace', () => {
       expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
+    it('fetches scores only once a Scores tab is opened', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const scoreRequests: string[] = [];
+      server.events.on('request:start', ({ request }) => {
+        if (new URL(request.url).pathname.endsWith('/scores')) scoreRequests.push(request.url);
+      });
+      renderView();
+
+      const row = (await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement;
+      // Give the per-row span queries time to resolve (the old badge query fired right after).
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(scoreRequests).toHaveLength(0);
+
+      fireEvent.click(within(row).getByRole('tab', { name: /Scores/ }));
+      expect(await within(row).findByText('No scores yet')).not.toBeNull();
+      expect(scoreRequests.every(url => url.includes(`/traces/${row.getAttribute('data-trace-id')}/`))).toBe(true);
+      expect(scoreRequests.length).toBeGreaterThan(0);
+      expect(within(row).getByRole('tab', { name: /Scores/ }).textContent).toBe('Scores');
+
+      server.events.removeAllListeners('request:start');
+    });
+
     it('hands the trace and score ids to onOpenScore when a score is selected', async () => {
       installHandlers();
       installFeedbackHandlers();

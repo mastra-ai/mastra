@@ -83,7 +83,7 @@ export function CodeBlock({
       {useSelect && options && (
         <div className="flex items-center border-b border-border-strong/40 px-2 py-1.5">
           <Select value={activeValue} onValueChange={onValueChange}>
-            <SelectTrigger size="sm" variant="ghost">
+            <SelectTrigger size="sm" variant="ghost" className="w-auto">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

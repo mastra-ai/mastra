@@ -141,7 +141,7 @@ export function Combobox(props: ComboboxProps) {
         className={comboboxTriggerClass({
           variant,
           size,
-          className: cn(iconOnlyValue && 'px-2.5', className),
+          className: cn(iconOnlyValue && 'w-auto px-2.5', className),
         })}
       >
         {iconOnly ? (
