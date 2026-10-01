@@ -166,7 +166,6 @@ export function buildTracesDrilldownUrl({
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityName, scope.entityName ?? dashboardFilter.entityName);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId, scope.threadId ?? dashboardFilter.threadId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.resourceId, scope.resourceId ?? dashboardFilter.resourceId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.entityId, dashboardFilter.entityId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.runId, dashboardFilter.runId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, dashboardFilter.sessionId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.requestId, dashboardFilter.requestId);

@@ -372,6 +372,16 @@ describe('planTraceAggregate', () => {
         'op',
       ]);
       expectIssue(
+        { timeRange, measures, having: { op: 'includes', path: 'count', value: 'x' } },
+        'operator_not_allowed',
+        ['having', 'op'],
+      );
+      expectIssue(
+        { timeRange, measures, having: { op: 'notIncludes', path: 'count', value: 'x' } },
+        'operator_not_allowed',
+        ['having', 'op'],
+      );
+      expectIssue(
         { timeRange, measures, having: { op: 'gt', left: { literal: 1 }, right: { literal: 2 } } },
         'invalid_operands',
         ['having'],

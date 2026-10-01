@@ -3,6 +3,17 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+
+// Captures the tenant each prime saw: the stamp can be overwritten later in
+// the gate, so asserting on the final request context alone isn't enough.
+const primedUsers: unknown[] = [];
+const prime = vi.fn(async (context: RequestContext) => {
+  primedUsers.push(context.get('user'));
+});
+vi.mock('../../routes/tenant-credentials.js', () => ({
+  primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
+}));
+
 import {
   createChannelResourceIdResolver,
   createChannelSessionResolver,
@@ -20,6 +31,16 @@ import {
  */
 function handlerCtx(mastra?: unknown) {
   return { mastra: mastra as any, requestContext: new RequestContext() };
+}
+
+function chatOnlyMastra() {
+  return {
+    getStorage: () => ({
+      getStore: vi.fn().mockResolvedValue({
+        listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+      }),
+    }),
+  };
 }
 
 function makeThread({ isDM = false } = {}) {
@@ -48,6 +69,8 @@ const OLD_ENV = { ...process.env };
 afterEach(() => {
   process.env = { ...OLD_ENV };
   vi.restoreAllMocks();
+  prime.mockClear();
+  primedUsers.length = 0;
 });
 
 describe('resolveLinkedSender', () => {
@@ -324,13 +347,138 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects });
 
-    const ctx = handlerCtx();
+    const ctx = handlerCtx(chatOnlyMastra());
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     // The run must carry the linked tenant, or it resolves default credentials.
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
+  });
+
+  it("primes the linked sender's credentials before a fresh mention dispatches", async () => {
+    // A mention after a restart: no Factory session exists yet and nothing has
+    // warmed the credential snapshot, so the gate itself must prime it.
+    const thread = makeThread();
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects });
+
+    const ctx = handlerCtx(chatOnlyMastra());
+    await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
+    expect(primedUsers).toEqual([{ id: 'user-1', organizationId: 'org-1' }]);
+    expect(prime.mock.invocationCallOrder[0]).toBeLessThan(defaultHandler.mock.invocationCallOrder[0]!);
+  });
+
+  it("uses the existing Factory session owner's credentials when another linked user replies", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+      },
+    } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({
+            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+          }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+    const message = makeMessage('T-1');
+
+    const ctx = handlerCtx(mastra);
+    await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalledWith(thread, message);
+    expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+  });
+
+  it("rejects an existing Factory session when the responder is linked to another organization", async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-2', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+      },
+    } as any;
+    const output = vi.fn();
+    const mastra = {
+      getLogger: () => ({ error: output }),
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({
+            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+          }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledExactlyOnceWith(
+      'This thread belongs to a Factory session in another organization.',
+    );
+    expect(output).not.toHaveBeenCalled();
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(prime).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subscribed Factory follow-up when its internal thread cannot be resolved', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const sourceControl = { sessions: { getBySessionId: vi.fn() } } as any;
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects, sourceControl });
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(defaultHandler).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subscribed follow-up without an internal thread when no source control is configured', async () => {
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [] }),
+        }),
+      }),
+    };
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks });
+
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
+
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining('Couldn’t start processing your message.'));
+    expect(defaultHandler).not.toHaveBeenCalled();
   });
 
   it('stamps the tenant for a linked sender even when factory routing is ungated', async () => {
@@ -340,10 +488,17 @@ describe('handler dispatch gating', () => {
     // the sender would run on default credentials with nothing to show for it.
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
+    const mastra = {
+      getStorage: () => ({
+        getStore: vi.fn().mockResolvedValue({
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+        }),
+      }),
+    };
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks });
 
-    const ctx = handlerCtx();
+    const ctx = handlerCtx(mastra);
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
@@ -366,6 +521,7 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(ctx.requestContext.get('user')).toBeUndefined();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(prime).not.toHaveBeenCalled();
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {
@@ -405,7 +561,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks });
 
-    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(chatOnlyMastra()));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
@@ -428,7 +584,14 @@ describe('pre-dispatch error feedback', () => {
     const defaultHandler = vi.fn().mockResolvedValue(undefined);
     const output = vi.fn();
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const mastra = { getLogger: () => ({ error: output }) };
+    const mastra = {
+      getLogger: () => ({ error: output }),
+      getStorage: () => ({
+        getStore: async () => ({
+          listThreads: async () => ({ threads: [{ id: 'thread-1', resourceId: 'channel:slack-thread-1' }] }),
+        }),
+      }),
+    };
     const handlers = createHandlers({ accountLinks: accountLinks as any, projects });
     const run = (overrides?: Record<string, unknown>) =>
       handlers[slot]!(thread, message, defaultHandler, handlerCtx({ ...mastra, ...overrides }));
@@ -1827,7 +1990,12 @@ describe('Slack aside ingest', () => {
 
     // The next real message still belongs to the agent alone: it already shows
     // in the bound transcript, so a comment would say the same thing twice.
-    await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside('ship it'), defaultHandler, handlerCtx());
+    await createHandlers(deps as any).onSubscribedMessage!(
+      thread,
+      makeAside('ship it'),
+      defaultHandler,
+      handlerCtx(chatOnlyMastra()),
+    );
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
   });

@@ -11,7 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
@@ -91,16 +92,16 @@ export function AddItemsToDatasetDialog({
         <DialogHeader>
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <DialogBody>
-            <div className="space-y-2">
-              <Label htmlFor="target-dataset">Target Dataset *</Label>
+            <Field>
+              <FieldLabel required>Target Dataset</FieldLabel>
               <Select
                 value={selectedDatasetId}
                 onValueChange={setSelectedDatasetId}
                 disabled={isAdding || isDatasetsLoading}
               >
-                <SelectTrigger id="target-dataset">
+                <SelectTrigger>
                   <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
                 </SelectTrigger>
                 <SelectContent>
@@ -117,7 +118,7 @@ export function AddItemsToDatasetDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
@@ -143,7 +144,7 @@ export function AddItemsToDatasetDialog({
               {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
             </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

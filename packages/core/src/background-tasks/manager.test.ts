@@ -5,6 +5,7 @@ import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
+import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -2024,6 +2025,113 @@ describe('BackgroundTaskManager', () => {
       });
 
       abortController.abort();
+    });
+
+    it('drops nested output past the wrapper depth limit instead of publishing it unslimmed', () => {
+      const leaf = {
+        type: 'step-start',
+        from: 'AGENT',
+        payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } },
+      };
+      let chunk: unknown = leaf;
+      for (let i = 0; i < 30; i++) chunk = { type: 'tool-output', payload: { output: chunk } };
+      expect(JSON.stringify(slimProgressChunk(chunk)).length).toBeLessThan(5_000);
+    });
+
+    it('publishes data a tool writes itself unchanged, even when it looks like an agent chunk', () => {
+      const userData = {
+        type: 'finish',
+        payload: { messages: { all: ['keep'] }, output: { steps: ['keep'] }, metadata: { request: { body: 'keep' } } },
+      };
+      const chunk = {
+        type: 'tool-output',
+        from: 'USER',
+        runId: 'r1',
+        payload: { output: userData, toolCallId: 'c1', toolName: 'tool' },
+      };
+      expect(slimProgressChunk(chunk)).toBe(chunk);
+      const wrapped = { type: 'workflow-step-output', from: 'WORKFLOW', payload: { output: chunk } };
+      expect(slimProgressChunk(wrapped)).toBe(wrapped);
+    });
+
+    it('publishes nested agent step/finish chunks without request snapshots or repeated args', async () => {
+      const published: any[] = [];
+      const originalPublish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if ((event as any).type === 'task.output') published.push(event);
+        return originalPublish(topic, event);
+      });
+
+      const bigFile = 'x'.repeat(100_000);
+      const wrap = (inner: unknown) => ({
+        type: 'workflow-step-output',
+        runId: 'wf-1',
+        from: 'WORKFLOW',
+        payload: { output: inner },
+      });
+      const executeFn = vi.fn().mockImplementation(async (_args: any, opts: { onProgress?: (chunk: any) => void }) => {
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-start',
+            from: 'AGENT',
+            payload: { messageId: 'm1', request: { body: bigFile }, inputMessages: [bigFile] },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-finish',
+            from: 'AGENT',
+            payload: {
+              messageId: 'm1',
+              stepResult: { reason: 'stop' },
+              output: { text: 'hi', usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile }, modelId: 'gpt-5' },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+            },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'finish',
+            from: 'AGENT',
+            payload: {
+              stepResult: { reason: 'stop' },
+              output: { usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile } },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+              response: { id: 'resp-1', modelId: 'gpt-5' },
+            },
+          }),
+        );
+        await opts.onProgress?.(wrap({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } }));
+        return 'done';
+      });
+
+      await manager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: { file: bigFile }, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await vi.waitFor(() => expect(published).toHaveLength(4));
+
+      for (const event of published) {
+        expect(event.data.args).toBeUndefined();
+        expect(JSON.stringify(event).length).toBeLessThan(2_000);
+      }
+      const [start, stepFinish, finish, progress] = published.map(e => e.data.chunk.payload.output);
+      expect(start).toEqual({ type: 'step-start', from: 'AGENT', payload: { messageId: 'm1' } });
+      expect(stepFinish.payload).toEqual({
+        messageId: 'm1',
+        stepResult: { reason: 'stop' },
+        output: { text: 'hi', usage: { totalTokens: 3 } },
+        metadata: { modelId: 'gpt-5' },
+      });
+      expect(finish.payload).toEqual({
+        stepResult: { reason: 'stop' },
+        output: { usage: { totalTokens: 3 } },
+        metadata: {},
+        response: { id: 'resp-1', modelId: 'gpt-5' },
+      });
+      expect(progress).toEqual({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } });
     });
 
     it('throttles progress output chunks while still emitting completion', async () => {

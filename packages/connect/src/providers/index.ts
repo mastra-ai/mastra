@@ -8,7 +8,10 @@ import { discordProvider } from './discord/index.js';
 import { firefliesProvider } from './fireflies/index.js';
 import { githubProvider } from './github/index.js';
 import { googleCalendarProvider } from './google-calendar/index.js';
+import { googleDocsProvider } from './google-docs/index.js';
+import { googleDriveProvider } from './google-drive/index.js';
 import { googleMailProvider } from './google-mail/index.js';
+import { googleSheetProvider } from './google-sheet/index.js';
 import { hubspotProvider } from './hubspot/index.js';
 import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
@@ -32,7 +35,10 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   firefliesProvider,
   githubProvider,
   googleCalendarProvider,
+  googleDocsProvider,
+  googleDriveProvider,
   googleMailProvider,
+  googleSheetProvider,
   hubspotProvider,
   incidentIoProvider,
   jiraProvider,

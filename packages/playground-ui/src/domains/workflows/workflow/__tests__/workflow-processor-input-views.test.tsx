@@ -119,7 +119,13 @@ describe('Workflow processor input views', () => {
   });
 
   describe('when simple input is invalid', () => {
-    it('associates the shared error message with both processor controls', () => {
+    const describedByText = (control: HTMLElement) =>
+      (control.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map(id => document.getElementById(id)?.textContent ?? '')
+        .join(' ');
+
+    it('marks only the phase invalid and describes it with the phase error', () => {
       render(
         <WorkflowInputData
           schema={z.object({ phase: z.literal('never'), messages: z.array(z.unknown()) })}
@@ -134,12 +140,32 @@ describe('Workflow processor input views', () => {
       const message = screen.getByRole('textbox', { name: 'Test Message' });
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
-      const error = screen.getByRole('alert');
-      expect(error.id).toBe('error-workflow-processor-input');
       expect(phase.getAttribute('aria-invalid')).toBe('true');
-      expect(phase.getAttribute('aria-describedby')).toBe(error.id);
+      expect(describedByText(phase)).toContain(screen.getByRole('alert').textContent);
+      expect(screen.getByRole('alert').textContent).toContain('phase:');
+      expect(message.getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it('marks only the message invalid and describes it with the message error', () => {
+      render(
+        <WorkflowInputData
+          schema={z.object({ phase: z.string(), messages: z.array(z.unknown()).max(0) })}
+          isSubmitLoading={false}
+          submitButtonLabel="Run"
+          onSubmit={vi.fn()}
+          isProcessorWorkflow
+        />,
+      );
+
+      const phase = screen.getByRole('combobox', { name: 'Phase' });
+      const message = screen.getByRole('textbox', { name: 'Test Message' });
+      fireEvent.change(message, { target: { value: 'hello' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
       expect(message.getAttribute('aria-invalid')).toBe('true');
-      expect(message.getAttribute('aria-describedby')).toBe(error.id);
+      expect(describedByText(message)).toContain(screen.getByRole('alert').textContent);
+      expect(screen.getByRole('alert').textContent).toContain('messages:');
+      expect(phase.getAttribute('aria-invalid')).toBeNull();
     });
   });
 

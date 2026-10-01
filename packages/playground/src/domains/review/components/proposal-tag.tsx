@@ -88,7 +88,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-indicator"
+        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

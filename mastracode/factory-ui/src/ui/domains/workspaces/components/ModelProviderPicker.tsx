@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Search } from 'lucide-react';
 import { useState } from 'react';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -17,7 +16,7 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-indicator m-0" role="alert">
+      <Txt as="p" variant="caption" className="text-destructive-foreground m-0" role="alert">
         {connection.catalogError.message}
       </Txt>
     );
@@ -58,20 +57,12 @@ export function ModelProviderPicker({ connection }: { connection: ProviderConnec
       )}
 
       <div className="flex flex-col gap-3">
-        <div className="relative">
-          <Search
-            size={14}
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-          />
-          <Input
-            type="search"
-            placeholder="Search providers to connect with an API key…"
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            aria-label="Search model providers"
-            className="pl-8"
-          />
-        </div>
+        <SearchInput
+          label="Search model providers"
+          placeholder="Search providers to connect with an API key…"
+          value={search}
+          onValueChange={setSearch}
+        />
         {visibleKeyProviders.length > 0 && (
           <div role="group" className="flex max-h-40 flex-wrap gap-2 overflow-y-auto" aria-label="API key providers">
             {visibleKeyProviders.map(provider => (

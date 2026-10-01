@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
+import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -1487,7 +1487,7 @@ describe('FactoryDecisionDispatcher', () => {
       expect(prepareBinding).not.toHaveBeenCalled();
       expect(session.sendSignal).not.toHaveBeenCalled();
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -1632,7 +1632,7 @@ describe('FactoryDecisionDispatcher', () => {
       await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
+        status: 'superseded',
         attempts: 1,
       });
     });
@@ -2219,6 +2219,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');
         await dispatch;
+        await waitForSessionRunAudit(session);
         expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([]);
       } finally {
         vi.useRealTimers();
@@ -2784,7 +2785,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(decision?.attempts).toBe(1);
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
@@ -2807,7 +2808,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(decision?.status).toBe('succeeded');
+    expect(decision?.status).toBe('superseded');
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 

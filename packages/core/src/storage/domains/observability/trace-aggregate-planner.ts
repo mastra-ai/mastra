@@ -366,6 +366,15 @@ function planHaving(
     return undefined;
   }
 
+  if (predicate.op === 'includes' || predicate.op === 'notIncludes') {
+    state.issues.push({
+      code: 'operator_not_allowed',
+      path: [...path, 'op'],
+      message: 'Array containment operators are not supported in having; measures are scalar',
+    });
+    return undefined;
+  }
+
   if (predicate.op === 'in' || predicate.op === 'notIn') {
     if (!('path' in predicate.value)) {
       state.issues.push({

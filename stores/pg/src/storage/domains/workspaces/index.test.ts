@@ -51,4 +51,18 @@ describe('workspace JSONB storage', () => {
       ab: 'updated',
     });
   });
+
+  it('bumps updatedAt when an update re-sends unchanged snapshot fields', async () => {
+    const workspaces = await store.getStore('workspaces');
+    const id = randomUUID();
+    await workspaces.create({ workspace: { id, name: 'my-workspace' } });
+    const before = (await workspaces.getById(id))!;
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    await workspaces.update({ id, name: 'my-workspace' });
+
+    const after = (await workspaces.getById(id))!;
+    expect(await workspaces.countVersions(id)).toBe(1);
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+  });
 });

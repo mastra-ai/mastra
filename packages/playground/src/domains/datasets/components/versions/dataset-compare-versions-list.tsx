@@ -52,7 +52,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
       >
         <BanIcon
           className={cn('h-5 w-5 text-muted-foreground/40', {
-            'text-destructive-indicator': red,
+            'text-destructive-foreground': red,
           })}
         />
       </TooltipTrigger>

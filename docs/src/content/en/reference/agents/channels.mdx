@@ -96,7 +96,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
     description:
-      'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
+      "How the agent picks up context about the current thread. `maxMessages` sets how many platform messages are saved to memory on first mention: the thread's first message plus up to `maxMessages - 1` recent messages, with an omitted-count marker between them when needed (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.",
   },
   {
     name: 'chatOptions',

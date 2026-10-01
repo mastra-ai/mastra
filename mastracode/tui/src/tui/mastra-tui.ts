@@ -4,7 +4,6 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { PACK_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
@@ -45,7 +44,7 @@ import {
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
-import { startGoalWithDefaults } from './commands/goal.js';
+import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -1172,7 +1171,7 @@ export class MastraTUI {
     // PermissionRequest hook fired before the queued agent_start carries the
     // same id as subsequent hooks in this run.
     if (!hookMgr.getRunId()) {
-      hookMgr.setRunId(randomUUID());
+      hookMgr.setRunId(globalThis.crypto.randomUUID());
     }
     hookMgr.runAgentStart().catch(() => {});
   }
@@ -1370,6 +1369,7 @@ export class MastraTUI {
       authStorage: this.state.authStorage,
       processMemoryDiagnostics: this.state.options.processMemoryDiagnostics,
       knowledgeInspector: this.state.options.knowledgeInspector,
+      threadScheduler: this.state.options.threadScheduler,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
       showError: msg => showError(this.state, msg),
@@ -1396,8 +1396,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      startGoal: (objective, cancelMessage) =>
-        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      setGoal: (objective, cancelMessage) => setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      sendGoalReminder: (goal, options) => sendGoalReminder(this.buildCommandContext(), goal, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>

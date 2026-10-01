@@ -962,7 +962,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/tempr',
-          label: 'Tempr',
+          label: 'Tempr Gateway',
         },
         {
           type: 'doc',
