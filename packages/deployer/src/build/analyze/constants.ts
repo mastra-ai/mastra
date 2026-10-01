@@ -8,6 +8,7 @@ export const GLOBAL_EXTERNALS = [
   'libsql',
   '#tools',
   'typescript',
+  'ajv',
   'undici',
   'readable-stream',
   'bufferutil',

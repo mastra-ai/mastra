@@ -1195,7 +1195,7 @@ class AliasDeployer extends Deployer {
           const output = (await Promise.all(outputFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join(
             '\n',
           );
-          expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
+          expect(output).toContain('MASTRA_BROWSER_ALIAS_SHIM');
           expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
