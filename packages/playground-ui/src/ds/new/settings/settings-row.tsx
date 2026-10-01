@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
   label: ReactNode;
   description?: ReactNode;
+  /** @deprecated The row's `Field` names the control it holds; drop `htmlFor` and the control's `id`. */
+  htmlFor?: string;
   children?: ReactNode;
   tone?: 'default' | 'destructive';
   viewOnly?: boolean;
@@ -25,6 +27,7 @@ const factoryRowHeadingClassName = 'flex min-w-0 flex-col gap-0.5';
 export function SettingsRowLayout({
   label,
   description,
+  htmlFor,
   children,
   className,
   layout,
@@ -62,7 +65,11 @@ export function SettingsRowLayout({
       {...props}
     >
       <div className={isSectionLayout ? 'min-w-0' : factoryRowHeadingClassName}>
-        <FieldLabel required={required} className={cn(tone === 'destructive' && 'text-destructive-foreground')}>
+        <FieldLabel
+          htmlFor={htmlFor}
+          required={required}
+          className={cn(tone === 'destructive' && 'text-destructive-foreground')}
+        >
           {label}
         </FieldLabel>
         {description != null && (

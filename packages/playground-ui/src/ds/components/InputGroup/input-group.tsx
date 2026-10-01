@@ -8,7 +8,11 @@ import type { ButtonProps } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import {
+  deprecatedErrorAria,
+  fieldErrorRimWithin,
+  inputSurfaceAndFocusWithinStyle,
+} from '@/ds/primitives/form-element';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
@@ -151,9 +155,11 @@ const inputGroupControlHeightBySize = cn(
 
 export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> & {
   testId?: string;
+  /** @deprecated Wrap the group in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
+  error?: boolean;
 };
 
-function InputGroupInput({ className, testId, type = 'text', ...props }: InputGroupInputProps) {
+function InputGroupInput({ className, testId, error, type = 'text', ...props }: InputGroupInputProps) {
   return (
     <InputPrimitive
       type={type}
@@ -174,6 +180,7 @@ function InputGroupInput({ className, testId, type = 'text', ...props }: InputGr
         '[&::-webkit-search-cancel-button]:appearance-none',
         className,
       )}
+      {...deprecatedErrorAria(error)}
       {...props}
       {...keepOwnAccessibleName(props)}
     />
@@ -182,9 +189,11 @@ function InputGroupInput({ className, testId, type = 'text', ...props }: InputGr
 
 export type InputGroupTextareaProps = React.ComponentProps<'textarea'> & {
   testId?: string;
+  /** @deprecated Wrap the group in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
+  error?: boolean;
 };
 
-function InputGroupTextarea({ className, testId, ...props }: InputGroupTextareaProps) {
+function InputGroupTextarea({ className, testId, error, ...props }: InputGroupTextareaProps) {
   return (
     <TextareaControl
       data-slot="input-group-control"
@@ -197,6 +206,7 @@ function InputGroupTextarea({ className, testId, ...props }: InputGroupTextareaP
         'disabled:cursor-not-allowed',
         className,
       )}
+      {...deprecatedErrorAria(error)}
       {...props}
     />
   );

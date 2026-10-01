@@ -75,6 +75,9 @@ export const comboboxItemClass = cva(menuItemClass, {
 });
 
 export const comboboxStyles = {
+  /** @deprecated A `Field` lays out the combobox and its error. */
+  root: 'flex flex-col gap-1.5',
+
   /** Chevron icon in trigger — decorative icon token shared by every field. */
   chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
@@ -135,4 +138,7 @@ export const comboboxStyles = {
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
+
+  /** @deprecated A `FieldError` colors the error. */
+  error: 'text-caption text-destructive-foreground',
 } as const;

@@ -44,7 +44,9 @@ Added `SearchInput` (`@mastra/playground-ui/components/SearchInput`), a search b
 
 Before, there were three ways to build a field: the `*FieldBlock` components, `FieldBlock` parts with hand-built ids, and `Label` with `htmlFor`. Mistakes in the id wiring left fields without an accessible name, such as hidden labels that were dropped and radio labels pointing at a `div`. Now there is one way to build a field, and it links the label, description and error for you.
 
-**Removed**
+**Deprecated**
+
+These still work as before, so existing code keeps building. They will be removed in a later release:
 
 - `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `SearchInput`, which keeps `SearchFieldBlock`'s immediate updates, or `ListSearch` for a list filter. `ListSearch` calls `onSearch` 300 ms after typing stops, and needs `shortcutDisabled` on a second search box on the same page.
 - `FieldBlock.ErrorMsg` for a message that belongs to no single control, such as a server error under a form: `FieldError` throws outside a `Field`, so wrap it in `<Field invalid>`.
@@ -52,4 +54,7 @@ Before, there were three ways to build a field: the `*FieldBlock` components, `F
 - The `error` prop on `Input`, `Textarea`, `InputGroupInput` and `InputGroupTextarea`: use `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`.
 - The `error` and `name` props on `Combobox`, and the `root` and `error` keys of `comboboxStyles`: wrap the combobox in `<Field invalid>` with a `FieldError`.
 - The `htmlFor` prop on `SettingsRow`: pass the control as a child without an `id`, and the row's label names it.
+
+**Changed**
+
 - `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. `FieldName` and `FieldDescription` take `label`, `labelIsHidden` and the props of their input. `FieldType` takes `label`, `labelIsHidden`, `placeholder`, `size`, `disabled` and `className`.

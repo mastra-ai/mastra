@@ -57,6 +57,9 @@ export const fieldErrorRim =
   'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =
   'has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)]';
+export function deprecatedErrorAria(error: boolean | undefined): { 'aria-invalid'?: true } {
+  return error ? { 'aria-invalid': true } : {};
+}
 export const fieldTriggerErrorBorder =
   'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
 export const fieldTriggerStyle =

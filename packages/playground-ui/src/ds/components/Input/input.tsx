@@ -6,6 +6,7 @@ import * as React from 'react';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
+  deprecatedErrorAria,
   fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
@@ -56,13 +57,16 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
+    error?: boolean;
   };
 
-function Input({ className, size, testId, variant, ...props }: InputProps) {
+function Input({ className, size, testId, variant, error, ...props }: InputProps) {
   return (
     <InputPrimitive
       className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
       data-testid={testId}
+      {...deprecatedErrorAria(error)}
       {...props}
       {...keepOwnAccessibleName(props)}
     />

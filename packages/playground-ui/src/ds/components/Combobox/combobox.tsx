@@ -6,8 +6,11 @@ import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
+import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
+import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -46,6 +49,10 @@ type ComboboxSharedProps = {
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
+  /** @deprecated Wrap the combobox in `<Field invalid>` with a `FieldError`. */
+  error?: string;
+  /** @deprecated Only keyed the `error` message id; a `Field` links its error without one. */
+  name?: string;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -105,10 +112,16 @@ export function Combobox(props: ComboboxProps) {
     iconOnlyValue = false,
     allowCustomValue = false,
     onInputValueChange,
+    error,
+    name,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
   const field = useFieldAriaIds();
+  const generatedName = React.useId();
+  const errorName = name ?? generatedName;
+  const describedBy =
+    [ariaDescribedBy, error ? fieldErrorId(errorName) : undefined].filter(Boolean).join(' ') || undefined;
   const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
@@ -136,7 +149,8 @@ export function Combobox(props: ComboboxProps) {
         id={id}
         aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
         {...keepOwnAccessibleName({ 'aria-label': ariaLabel })}
-        aria-describedby={ariaDescribedBy}
+        {...deprecatedErrorAria(Boolean(error))}
+        aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({
           variant,
@@ -244,7 +258,7 @@ export function Combobox(props: ComboboxProps) {
     </>
   );
 
-  return multiple ? (
+  const root = multiple ? (
     <BaseCombobox.Root
       multiple
       autoHighlight
@@ -280,5 +294,14 @@ export function Combobox(props: ComboboxProps) {
     >
       {comboboxContent}
     </BaseCombobox.Root>
+  );
+
+  if (!error) return root;
+
+  return (
+    <div className={comboboxStyles.root}>
+      {root}
+      <FieldBlock.ErrorMsg name={errorName}>{error}</FieldBlock.ErrorMsg>
+    </div>
   );
 }
