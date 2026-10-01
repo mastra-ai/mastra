@@ -126,6 +126,23 @@ const TRACE_SELECT = `
   r.environment AS environment,
   ${TRACE_STATUS_SQL} AS status`;
 
+/** Candidate columns carried through the page-mode window sort (no payload blobs). */
+const TRACE_PAGE_COLUMNS = [
+  'traceId',
+  'rootSpanId',
+  'name',
+  'entityId',
+  'parentSpanId',
+  'threadId',
+  'resourceId',
+  'startedAt',
+  'endedAt',
+  'entityName',
+  'entityType',
+  'environment',
+  'status',
+];
+
 class ParameterBuilder {
   readonly params: QueryParams = {};
   #next = 1;
@@ -536,14 +553,16 @@ LIMIT ${limit}`,
     const pageEnd = parameters.add((plan.page + 1) * plan.perPage, 'UInt64');
     // One pass over `candidates`: CTEs are inlined, so separate page and total
     // subqueries would re-run the root dedupe and relation scans for each. The
-    // first row doubles as the metadata row (carrying `total`) when the
-    // requested page is past the end.
+    // window sorts every candidate, so it only carries narrow columns; the
+    // metadata/input payloads of the page rows are fetched afterwards
+    // (compileClickHouseTraceRootPayloads). The first row doubles as the
+    // metadata row (carrying `total`) when the requested page is past the end.
     const onPage = `__row_position > ${offset} AND __row_position <= ${pageEnd}`;
     return {
       query: `${candidates},
 page_rows AS (
   SELECT
-    *,
+    ${TRACE_PAGE_COLUMNS.join(',\n    ')},
     row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position,
     count() OVER () AS total
   FROM candidates
@@ -572,6 +591,29 @@ FROM candidates
 ${pageCondition}
 ORDER BY ${orderField} ${direction}, traceId ASC
 LIMIT ${limit}`,
+    query_params: parameters.params,
+  };
+}
+
+/**
+ * Fetches the metadata/input payloads for page-mode rows. Looks rows up by the
+ * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
+ * granules are read. Root rows are immutable per (traceId, spanId), so this
+ * second read returns the same payload the candidate row came from.
+ */
+export function compileClickHouseTraceRootPayloads(
+  keys: Array<{ traceId: string; rootSpanId: string; startedAt: string }>,
+): CompiledClickHouseTraceQuery {
+  const parameters = new ParameterBuilder();
+  const tuples = keys.map(
+    key =>
+      `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')})`,
+  );
+  return {
+    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input
+FROM ${TABLE_TRACE_ROOTS}
+WHERE (startedAt, traceId, spanId) IN (${tuples.join(', ')})
+LIMIT 1 BY traceId, spanId`,
     query_params: parameters.params,
   };
 }
@@ -830,8 +872,24 @@ export async function queryTraces(
       compileClickHouseTraceQuery(plan, deltaHead),
     );
     const total = Number(rows.at(-1)?.total ?? 0);
-    const traces = rows
-      .filter(row => Number(row.__metadata) === 0)
+    const pageRows = rows.filter(row => Number(row.__metadata) === 0);
+    const payloads = new Map<string, Record<string, unknown>>();
+    if (pageRows.length > 0) {
+      const payloadRows = await runWithClickHouseTraceQueryTimeout(
+        client,
+        { timeoutMs: remaining() },
+        compileClickHouseTraceRootPayloads(
+          pageRows.map(row => ({
+            traceId: String(row.traceId),
+            rootSpanId: String(row.rootSpanId),
+            startedAt: asIsoTimestamp(row.startedAt),
+          })),
+        ),
+      );
+      for (const payload of payloadRows) payloads.set(`${payload.traceId}\u0000${payload.rootSpanId}`, payload);
+    }
+    const traces = pageRows
+      .map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }))
       .map(row => ({
         traceId: String(row.traceId),
         rootSpanId: String(row.rootSpanId),

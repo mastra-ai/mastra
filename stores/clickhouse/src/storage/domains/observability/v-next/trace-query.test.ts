@@ -640,6 +640,11 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('page_rows AS');
     expect(compiled.query).toContain('ORDER BY endedAt ASC, traceId ASC');
     expect(compiled.query).toContain('count() OVER () AS total');
+    // The window sort carries no payload blobs.
+    const pageRows = /page_rows AS \(([\s\S]*?)\n\)/.exec(compiled.query)?.[1];
+    expect(pageRows).toBeDefined();
+    expect(pageRows).not.toContain('metadata');
+    expect(pageRows).not.toContain('input');
     expect(compiled.query).toContain(
       'if(__row_position > {trace_query_3:UInt64} AND __row_position <= {trace_query_4:UInt64}, 0, 1) AS __metadata',
     );
@@ -818,19 +823,29 @@ describe('ClickHouse advanced trace query', () => {
   });
 
   it('returns exact list-compatible pagination metadata from one shared-snapshot query', async () => {
-    const json = vi.fn().mockResolvedValue([
-      { ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: '3', __metadata: 0 },
-      { total: '3', __metadata: 1 },
-    ]);
-    const query = vi.fn().mockResolvedValue({ json });
+    const { metadata, input, ...narrowRow } = traceRow('trace-c', '2026-01-01T10:00:00.000Z');
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        json: async () => [
+          { ...narrowRow, total: '3', __metadata: 0 },
+          { total: '3', __metadata: 1 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        json: async () => [{ traceId: 'trace-c', rootSpanId: 'root-trace-c', metadata, input }],
+      });
     const response = await queryTraces(
       { query } as unknown as ClickHouseClient,
       plan({ pagination: { page: 1, perPage: 2 } }),
       15_000,
     );
 
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query).toHaveBeenCalledWith(
+    // Page rows and total come from one shared-snapshot query; the second call
+    // only fetches the page rows' payloads by sort key.
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         clickhouse_settings: expect.objectContaining({
           max_execution_time: 15,
@@ -838,10 +853,17 @@ describe('ClickHouse advanced trace query', () => {
         }),
       }),
     );
+    expect(query.mock.calls[1]![0].query).toContain('WHERE (startedAt, traceId, spanId) IN (');
+    expect(Object.values(query.mock.calls[1]![0].query_params)).toEqual([
+      '2026-01-01 10:00:00.000',
+      'trace-c',
+      'root-trace-c',
+    ]);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c' }],
+      traces: [{ traceId: 'trace-c', metadata: { customer: { id: 'customer-1' }, count: 2 } }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
+    expect(response.traces?.[0]?.inputPreview).toBeTruthy();
     expect(response).not.toHaveProperty('page');
   });
 

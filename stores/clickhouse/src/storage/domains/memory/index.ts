@@ -1405,7 +1405,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         // Add a small delay to ensure timestamp difference
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        const now = new Date().toISOString().replace('Z', '');
+        const now = Date.now();
 
         // Insert a newer version of each thread; threads is a ReplacingMergeTree
         // and every read takes the newest row by updatedAt.
@@ -1420,7 +1420,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
               title: existingThread.title,
               metadata: serializeMetadata(existingThread.metadata),
               createdAt: existingThread.createdAt,
-              updatedAt: now,
+              // Strictly newer than the version read, so the bump always wins.
+              updatedAt: new Date(Math.max(now, new Date(existingThread.updatedAt).getTime() + 1))
+                .toISOString()
+                .replace('Z', ''),
             })),
             clickhouse_settings: {
               date_time_input_format: 'best_effort',

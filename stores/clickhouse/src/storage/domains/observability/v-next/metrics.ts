@@ -685,8 +685,8 @@ export async function getMetricPercentiles(
   const whereClause = toWhereClause(combined);
 
   for (const p of args.percentiles) {
-    if (p < 0 || p > 1) {
-      throw new Error(`Percentile value must be between 0 and 1, got ${p}`);
+    if (!Number.isFinite(p) || p < 0 || p > 1) {
+      throw new Error(`Percentile value must be a finite number between 0 and 1, got ${p}`);
     }
   }
   if (args.percentiles.length === 0) return { series: [] };
