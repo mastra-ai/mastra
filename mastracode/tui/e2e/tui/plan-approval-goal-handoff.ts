@@ -8,6 +8,9 @@ import type { McE2eScenario } from './types.js';
 let holdNextResponse = false;
 let releaseResume: () => void;
 
+const EXPECTED_OBJECTIVE =
+  '# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.';
+
 function readGoalObjective(dbPath: string): string {
   return execFileSync(
     'sqlite3',
@@ -22,7 +25,7 @@ function readGoalObjective(dbPath: string): string {
 export const planApprovalGoalHandoffScenario: McE2eScenario = {
   name: 'plan-approval-goal-handoff',
   description: 'Use AIMock submit_plan and select Use as /goal through the real TUI.',
-  testName: 'renders resumed plan output before starting the approved plan as a goal',
+  testName: 'sets the approved plan as the goal and delivers its reminder into the resumed run',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-goal-handoff.json',
   prepare({ appDataDir }) {
@@ -91,30 +94,38 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Resumed plan output before goal startup\./i, terminal, 10_000);
-    if (readGoalObjective(dbPath) || /Goal \(3 max attempts, judge:/.test(terminal.serialize().view)) {
-      throw new Error('Goal started before the resumed plan run finished');
+    await runtime.waitForScreenText(/Resumed plan output after approval\./i, terminal, 10_000);
+    // The plan replaces the goal before the approved run continues, so the
+    // judge evaluates that run against the plan.
+    if (readGoalObjective(dbPath) !== EXPECTED_OBJECTIVE) {
+      throw new Error('The approved plan was not set as the goal before the resumed run continued');
     }
     releaseResume();
 
     await runtime.waitForScreenText(/✓\s+Set as goal/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Plan goal handoff e2e goal run started\./i, terminal, 15_000);
-    const expectedObjective =
-      '# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.';
-    if (readGoalObjective(dbPath) !== expectedObjective) {
-      throw new Error('The started goal did not preserve the complete approved plan');
-    }
-
+    await runtime.waitForScreenText(/Goal \(3 max attempts, judge:/i, terminal, 15_000);
     await runtime.waitForScreenText(/Goal\s+●\s+done/i, terminal, 15_000);
+    // Give a stray second goal run time to surface before checking for one.
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    if (/Unexpected second goal run\.|Goal\s+◌\s+waiting/i.test(terminal.serialize().view)) {
+      throw new Error('A second goal run started after the plan goal was judged done');
+    }
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    if (requests.length < 2) {
-      throw new Error(
-        `Expected plan goal handoff scenario to make at least 2 AIMock requests, received ${requests.length}`,
-      );
+    const bodies = requests.map(request => JSON.stringify(request));
+    const judgeRequests = bodies.filter(body => body.includes('Goal: # E2E Goal Plan'));
+    if (judgeRequests.length !== 1) {
+      throw new Error(`Expected the plan goal to be judged once, judged ${judgeRequests.length} times`);
     }
-    const body = JSON.stringify(requests);
+    // write_file, submit_plan, and the resumed run: no extra goal run.
+    const agentRequests = bodies.filter(
+      body => !body.includes('Goal: # E2E Goal Plan') && !body.includes('generate a short title'),
+    );
+    if (agentRequests.length !== 3) {
+      throw new Error(`Expected 3 agent requests, received ${agentRequests.length}`);
+    }
+    const body = bodies.join('\n');
     if (!body.includes('call_plan_goal_e2e_submit')) {
       throw new Error('Expected AIMock requests to include the submit_plan tool call id');
     }
