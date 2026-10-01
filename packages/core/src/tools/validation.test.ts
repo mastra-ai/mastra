@@ -2483,6 +2483,19 @@ describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', ()
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('- title:');
   });
+
+  it('does not report a valid nullable null when another field fails', () => {
+    const schema = z.object({
+      parent: z.string().nullable(),
+      count: z.number(),
+    });
+
+    const result = validateToolInput(schema, { parent: null, count: 'x' }, 'test-tool');
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count:');
+    expect(result.error?.message).not.toContain('- parent:');
+  });
 });
 
 describe('validateRequestContext', () => {

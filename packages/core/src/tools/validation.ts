@@ -589,17 +589,20 @@ export function validateToolInput<T = unknown>(
     }
   }
 
-  // All attempts failed - report issues from the null-stripped retry. First-pass
-  // issues include nulls on optional fields that stripping already resolved,
-  // which would hide the real failure from the model (GitHub #24539).
-  const errorMessages = retryValidation.issues
+  // All attempts failed. When nulls caused first-pass failures, report the
+  // path-stripped retry's issues: first-pass issues include nulls on optional
+  // fields that stripping already resolved, hiding the real failure (GitHub #24539).
+  // Otherwise the retry stripped every null (including valid .nullable() values),
+  // so the first-pass issues are the accurate ones.
+  const finalIssues = failingNullPaths.size > 0 ? retryValidation.issues : validation.issues;
+  const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: buildFormattedErrors<T>(retryValidation.issues),
+    validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
   return { error };
