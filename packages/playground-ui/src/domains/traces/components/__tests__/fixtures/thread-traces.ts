@@ -8,10 +8,11 @@ type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
 
+// Newest first, as the thread view requests them.
 export function queryPageFromList(list: ListTracesLightResponse): TraceQueryKeysetTraceResponse {
   return {
     traces: [...list.spans]
-      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
       .map(span => ({
         traceId: span.traceId,
         rootSpanId: span.spanId,
