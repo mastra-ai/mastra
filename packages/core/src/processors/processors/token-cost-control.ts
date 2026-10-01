@@ -35,6 +35,7 @@ export type CostWindow = '1h' | '6h' | '24h' | '7d' | '30d' | '365d';
 export interface TokenCostControlUsage {
   estimatedCost: number | null;
   costUnit: string | null;
+  incomplete: boolean;
 }
 
 /**
@@ -356,26 +357,37 @@ export class TokenCostControl implements Processor<'token-cost-control', TokenCo
 
   private async queryCost(scopeFilter: Record<string, string>): Promise<TokenCostControlUsage> {
     if (!this.observabilityStorage) {
-      return { estimatedCost: null, costUnit: null };
+      return { estimatedCost: null, costUnit: null, incomplete: false };
     }
     try {
       const filters = this.buildFilters(scopeFilter);
 
-      const result = await this.observabilityStorage.getMetricAggregate({
-        name: TOKEN_TOTAL_METRIC_NAMES,
-        aggregation: 'sum',
-        filters,
-      });
+      const [result, incompleteResult] = await Promise.all([
+        this.observabilityStorage.getMetricAggregate({
+          name: TOKEN_TOTAL_METRIC_NAMES,
+          aggregation: 'sum',
+          filters,
+        }),
+        this.observabilityStorage.getMetricAggregate({
+          name: TOKEN_TOTAL_METRIC_NAMES,
+          aggregation: 'count',
+          filters: {
+            ...filters,
+            labels: { usageIncomplete: 'true' },
+          },
+        }),
+      ]);
 
       const totalCost = result.estimatedCost ?? 0;
 
       return {
         estimatedCost: totalCost > 0 ? totalCost : null,
         costUnit: result.costUnit ?? null,
+        incomplete: (incompleteResult.value ?? 0) > 0,
       };
     } catch (error) {
       this.logger?.warn('TokenCostControl: cost query failed; allowing step (fail-open)', { error });
-      return { estimatedCost: null, costUnit: null };
+      return { estimatedCost: null, costUnit: null, incomplete: false };
     }
   }
 
@@ -477,6 +489,13 @@ export class TokenCostControl implements Processor<'token-cost-control', TokenCo
 
     if (usage.estimatedCost === null) return;
     const cost = usage.estimatedCost;
+    if (usage.incomplete && cost < maxCost) {
+      this.logger?.warn('TokenCostControl: incomplete token usage detected; allowing step (fail-open)', {
+        scope: this.scope,
+        scopeKey,
+      });
+      return;
+    }
 
     // Hard limit
     if (cost >= maxCost) {

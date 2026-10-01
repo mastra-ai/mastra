@@ -1,3 +1,4 @@
+import type { LanguageModelUsage } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
 
@@ -26,7 +27,7 @@ export interface StepRecord {
   text?: string;
   toolCalls?: unknown[];
   toolResults?: unknown[];
-  usage?: unknown;
+  usage?: LanguageModelUsage;
   finishReason?: string;
 }
 

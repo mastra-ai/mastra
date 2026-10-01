@@ -110,14 +110,15 @@ function emitUsageMetrics(
     }
   }
 
+  const labels = attrs.usageIncomplete ? { usageIncomplete: 'true' } : undefined;
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
     if (!costContext) {
-      metrics.emit(name, value);
+      metrics.emit(name, value, labels);
       return;
     }
 
-    metrics.emit(name, value, undefined, { costContext });
+    metrics.emit(name, value, labels, { costContext });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {
