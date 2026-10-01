@@ -24,13 +24,13 @@ async function fillScorerFields(
   },
 ) {
   if (options.name !== undefined) {
-    const nameInput = page.locator('#input-name');
+    const nameInput = page.getByRole('textbox', { name: /^Name/ });
     await nameInput.clear();
     await nameInput.fill(options.name);
   }
 
   if (options.description !== undefined) {
-    const descInput = page.locator('#input-description');
+    const descInput = page.getByRole('textbox', { name: /^Description/ });
     await descInput.clear();
     await descInput.fill(options.description);
   }
@@ -98,7 +98,7 @@ async function createScorerAndGetId(
 ): Promise<string> {
   await page.goto('/cms/scorers/create');
   // Wait for the create form to be ready
-  await page.locator('#input-name').waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('textbox', { name: /^Name/ }).waitFor({ state: 'visible', timeout: 15000 });
 
   await fillScorerFields(page, {
     name: scorerName,
@@ -125,7 +125,7 @@ async function goToEditPage(page: Page, scorerId: string) {
   await page.goto(`/cms/scorers/${scorerId}/edit`);
   await expect(page).toHaveURL(/\/cms\/scorers\/[a-z0-9-]+\/edit/, { timeout: 15000 });
   // Wait for the form to load (data fetch completes and form renders)
-  await page.locator('#input-name').waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('textbox', { name: /^Name/ }).waitFor({ state: 'visible', timeout: 15000 });
 }
 
 test.afterEach(async () => {
@@ -171,13 +171,13 @@ test.describe('CMS edit scorer page', () => {
 
       await goToEditPage(page, scorerId);
 
-      await expect(page.locator('#input-name')).toHaveValue(scorerName);
-      await expect(page.locator('#input-description')).toHaveValue(description);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
       await expect(page.getByPlaceholder('Min')).toHaveValue('1');
       await expect(page.getByPlaceholder('Max')).toHaveValue('5');
-      await expect(page.locator('#sampling-ratio')).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
       await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.7');
       await expect(page.locator('.cm-content')).toContainText(instructions);
     });
@@ -227,13 +227,13 @@ test.describe('CMS edit scorer page', () => {
       // Navigate back to edit page
       await goToEditPage(page, scorerId);
 
-      await expect(page.locator('#input-name')).toHaveValue(updatedName);
-      await expect(page.locator('#input-description')).toHaveValue(updatedDescription);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName);
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(updatedDescription);
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
       await expect(page.getByPlaceholder('Min')).toHaveValue('2');
       await expect(page.getByPlaceholder('Max')).toHaveValue('8');
-      await expect(page.locator('#sampling-ratio')).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
       await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.3');
       await expect(page.locator('.cm-content')).toContainText(updatedInstructions);
     });
@@ -261,11 +261,11 @@ test.describe('CMS edit scorer page', () => {
       await goToEditPage(page, scorerId);
 
       // Changed fields should be updated
-      await expect(page.locator('#input-description')).toHaveValue('Partially updated description');
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue('Partially updated description');
       await expect(page.getByPlaceholder('Max')).toHaveValue('20');
 
       // Unchanged fields should remain the same
-      await expect(page.locator('#input-name')).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
       await expect(page.getByPlaceholder('Min')).toHaveValue('0');
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
@@ -294,7 +294,7 @@ test.describe('CMS edit scorer page', () => {
       // Reload the page
       await page.reload();
 
-      await expect(page.locator('#input-name')).toHaveValue(updatedName, { timeout: 10000 });
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName, { timeout: 10000 });
       await expect(page.locator('.cm-content')).toContainText(updatedInstructions, { timeout: 10000 });
     });
   });
@@ -313,7 +313,7 @@ test.describe('CMS edit scorer page', () => {
       await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
       await goToEditPage(page, scorerId);
-      await expect(page.locator('#input-name')).toHaveValue(updatedName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName);
       await expectCurrentBreadcrumb(page, updatedName);
     });
 
@@ -329,7 +329,7 @@ test.describe('CMS edit scorer page', () => {
       await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
       await goToEditPage(page, scorerId);
-      await expect(page.locator('#input-description')).toHaveValue('A newly added description');
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue('A newly added description');
     });
 
     test('updating score range persists correctly', async ({ page }) => {
@@ -360,7 +360,7 @@ test.describe('CMS edit scorer page', () => {
       await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
       await goToEditPage(page, scorerId);
-      await expect(page.locator('#sampling-ratio')).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
       await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.6');
     });
 
@@ -379,7 +379,7 @@ test.describe('CMS edit scorer page', () => {
       await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
 
       await goToEditPage(page, scorerId);
-      await expect(page.locator('#sampling-none')).toBeChecked();
+      await expect(page.getByRole('radio', { name: 'None' })).toBeChecked();
       await expect(page.getByPlaceholder('Rate (0-1)')).not.toBeVisible();
     });
 
@@ -407,7 +407,7 @@ test.describe('CMS edit scorer page', () => {
 
       await goToEditPage(page, scorerId);
 
-      const nameInput = page.locator('#input-name');
+      const nameInput = page.getByRole('textbox', { name: /^Name/ });
       await nameInput.clear();
 
       await page.getByRole('button', { name: 'Publish' }).click();
@@ -421,7 +421,7 @@ test.describe('CMS edit scorer page', () => {
 
       await goToEditPage(page, scorerId);
 
-      const nameInput = page.locator('#input-name');
+      const nameInput = page.getByRole('textbox', { name: /^Name/ });
       await nameInput.clear();
 
       await page.getByRole('button', { name: 'Publish' }).click();
@@ -489,8 +489,8 @@ test.describe('CMS edit scorer page', () => {
       await expect(page.getByText(/Failed to publish scorer/i)).toBeVisible({ timeout: 15000 });
 
       // Form data should still be present
-      await expect(page.locator('#input-name')).toHaveValue(updatedName);
-      await expect(page.locator('#input-description')).toHaveValue(updatedDescription);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName);
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(updatedDescription);
     });
   });
 
@@ -503,7 +503,7 @@ test.describe('CMS edit scorer page', () => {
       await goToEditPage(page, scorerId);
 
       // Verify initial data
-      await expect(page.locator('#input-name')).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
 
       // Navigate away
       await page.goto('/cms/scorers/create');
@@ -512,8 +512,8 @@ test.describe('CMS edit scorer page', () => {
       // Navigate back to edit page
       await goToEditPage(page, scorerId);
 
-      await expect(page.locator('#input-name')).toHaveValue(scorerName);
-      await expect(page.locator('#input-description')).toHaveValue(description);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
+      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
     });
 
     test('form reflects latest server data after re-navigation', async ({ page }) => {
@@ -536,7 +536,7 @@ test.describe('CMS edit scorer page', () => {
 
       // Navigate back to edit - should show second update, not first
       await goToEditPage(page, scorerId);
-      await expect(page.locator('#input-name')).toHaveValue(secondUpdate);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(secondUpdate);
     });
   });
 });

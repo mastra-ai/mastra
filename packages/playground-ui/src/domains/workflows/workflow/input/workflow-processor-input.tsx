@@ -1,10 +1,10 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
 import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
 import type { ProcessorDraft } from './processor-input';
-import { FieldBlock, fieldErrorId, TextareaFieldBlock } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
+import { Textarea } from '@/ds/components/Textarea';
 import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
@@ -20,6 +20,22 @@ type WorkflowProcessorInputProps = Omit<WorkflowInputDataProps, 'defaultValues'>
   onChange: (draft: ProcessorDraft) => void;
 };
 
+type ProcessorErrors = { phase: string[]; message: string[] };
+
+const NO_ERRORS: ProcessorErrors = { phase: [], message: [] };
+
+function ErrorLines({ errors }: { errors: string[] }) {
+  return (
+    <span className="space-y-1">
+      {errors.map(error => (
+        <span key={error} className="block">
+          {error}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export const WorkflowProcessorInput = ({
   schema,
   value,
@@ -34,16 +50,19 @@ export const WorkflowProcessorInput = ({
   submitButtonVariant,
   submitButtonFullWidth,
 }: WorkflowProcessorInputProps) => {
-  const messageName = useId();
-  const phaseId = useId();
-  const [errors, setErrors] = useState<string[]>([]);
+  const [errors, setErrors] = useState<ProcessorErrors>(NO_ERRORS);
 
   const handleSubmit = () => {
-    setErrors([]);
+    setErrors(NO_ERRORS);
 
     const result = schema.safeParse(value);
     if (!result.success) {
-      setErrors(result.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`));
+      const nextErrors: ProcessorErrors = { phase: [], message: [] };
+      for (const issue of result.error.issues) {
+        const fieldErrors = issue.path[0] === 'phase' ? nextErrors.phase : nextErrors.message;
+        fieldErrors.push(`${issue.path.join('.')}: ${issue.message}`);
+      }
+      setErrors(nextErrors);
       return;
     }
     onSubmit(result.data);
@@ -51,24 +70,17 @@ export const WorkflowProcessorInput = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="space-y-2">
-        <FieldBlock.Label name={phaseId} htmlFor={phaseId}>
-          Phase
-        </FieldBlock.Label>
+      <Field invalid={errors.phase.length > 0}>
+        <FieldLabel>Phase</FieldLabel>
         <Select
           value={value.phase}
           onValueChange={phase => {
-            setErrors([]);
+            setErrors(NO_ERRORS);
             onChange(withPhaseRole({ ...value, phase }));
           }}
           disabled={isSubmitLoading}
         >
-          <SelectTrigger
-            id={phaseId}
-            className="w-full"
-            aria-invalid={errors.length > 0 ? true : undefined}
-            aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
-          >
+          <SelectTrigger className="w-full">
             <SelectValue placeholder="Select phase" />
           </SelectTrigger>
           <SelectContent>
@@ -79,37 +91,26 @@ export const WorkflowProcessorInput = ({
             ))}
           </SelectContent>
         </Select>
-        <Txt variant="meta" tone="muted">
+        <FieldDescription>
           {PROCESSOR_PHASES.find(phaseOption => phaseOption.value === value.phase)?.label}
-        </Txt>
-      </div>
+        </FieldDescription>
+        <FieldError>{errors.phase.length > 0 && <ErrorLines errors={errors.phase} />}</FieldError>
+      </Field>
 
-      <TextareaFieldBlock
-        name={messageName}
-        label="Test Message"
-        value={getProcessorMessage(value)}
-        onChange={event => {
-          setErrors([]);
-          onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
-        }}
-        placeholder="Enter a test message..."
-        rows={4}
-        disabled={isSubmitLoading}
-        aria-invalid={errors.length > 0 ? true : undefined}
-        aria-describedby={errors.length > 0 ? fieldErrorId('workflow-processor-input') : undefined}
-      />
-
-      {errors.length > 0 && (
-        <FieldBlock.ErrorMsg name="workflow-processor-input">
-          <span className="space-y-1">
-            {errors.map(error => (
-              <span key={error} className="block">
-                {error}
-              </span>
-            ))}
-          </span>
-        </FieldBlock.ErrorMsg>
-      )}
+      <Field invalid={errors.message.length > 0}>
+        <FieldLabel>Test Message</FieldLabel>
+        <Textarea
+          value={getProcessorMessage(value)}
+          onChange={event => {
+            setErrors(NO_ERRORS);
+            onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
+          }}
+          placeholder="Enter a test message..."
+          rows={4}
+          disabled={isSubmitLoading}
+        />
+        <FieldError>{errors.message.length > 0 && <ErrorLines errors={errors.message} />}</FieldError>
+      </Field>
 
       {children}
 

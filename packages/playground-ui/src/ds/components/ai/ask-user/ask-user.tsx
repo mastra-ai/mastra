@@ -1,9 +1,11 @@
 import { Check, MessageCircleQuestion } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
+import type { FieldLabelProps } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Txt } from '@/ds/components/Txt';
@@ -57,7 +59,7 @@ export const AskUserQuestion = ({ className, ...props }: ComponentProps<typeof T
   <Txt as="p" variant="subheading" tone="ink" {...props} className={cn('mb-3', className)} />
 );
 
-export interface AskUserOptionRowProps extends Omit<ComponentProps<'label'>, 'children'> {
+export interface AskUserOptionRowProps extends Omit<FieldLabelProps, 'children'> {
   control: ReactNode;
   label: string;
   description?: string;
@@ -72,28 +74,29 @@ export const AskUserOptionRow = ({
   className,
   ...props
 }: AskUserOptionRowProps) => (
-  <label
-    // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
-    aria-disabled={disabled || undefined}
-    className={cn(
-      'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2',
-      disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-      className,
-    )}
-    {...props}
-  >
-    {control}
-    <span className="grid gap-0.5">
-      <Txt as="span" variant="body" tone="ink">
-        {label}
-      </Txt>
-      {description ? (
-        <Txt as="span" variant="caption" tone="muted">
-          {description}
+  <FieldItem disabled={disabled} className="contents">
+    <FieldLabel
+      // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
+      aria-disabled={disabled || undefined}
+      className={cn(
+        'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
+        className,
+      )}
+      {...props}
+    >
+      {control}
+      <span className="grid gap-0.5">
+        <Txt as="span" variant="body" tone="ink">
+          {label}
         </Txt>
-      ) : null}
-    </span>
-  </label>
+        {description ? (
+          <Txt as="span" variant="caption" tone="muted">
+            {description}
+          </Txt>
+        ) : null}
+      </span>
+    </FieldLabel>
+  </FieldItem>
 );
 
 export type AskUserSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
@@ -158,7 +161,6 @@ const AskUserInput = ({
   footer,
   ...props
 }: AskUserInputProps) => {
-  const fieldId = useId();
   const [text, setText] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -191,25 +193,24 @@ const AskUserInput = ({
       <AskUserContainer data-testid="ask-user" {...props}>
         <AskUserLabel />
         <AskUserBody>
-          <AskUserQuestion as="label" htmlFor={fieldId} className="mb-2 block">
-            {payload.question}
-          </AskUserQuestion>
-          <div className="flex items-center gap-2">
-            <Input
-              id={fieldId}
-              value={text}
-              onChange={event => setText(event.target.value)}
-              onKeyDown={handleTextKeyDown}
-              placeholder="Type your answer..."
-              disabled={isSubmitting}
-              size="sm"
-            />
-            <AskUserSubmit
-              className="shrink-0 whitespace-nowrap"
-              disabled={isSubmitting || !text.trim()}
-              onClick={submitText}
-            />
-          </div>
+          <Field>
+            <FieldLabel className="text-subheading">{payload.question}</FieldLabel>
+            <div className="flex items-center gap-2">
+              <Input
+                value={text}
+                onChange={event => setText(event.target.value)}
+                onKeyDown={handleTextKeyDown}
+                placeholder="Type your answer..."
+                disabled={isSubmitting}
+                size="sm"
+              />
+              <AskUserSubmit
+                className="shrink-0 whitespace-nowrap"
+                disabled={isSubmitting || !text.trim()}
+                onClick={submitText}
+              />
+            </div>
+          </Field>
           {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
           {footer}
         </AskUserBody>
@@ -223,9 +224,9 @@ const AskUserInput = ({
     <AskUserContainer data-testid="ask-user" {...props}>
       <AskUserLabel />
       <AskUserBody>
-        <AskUserQuestion id={fieldId}>{payload.question}</AskUserQuestion>
         {isMulti ? (
-          <div role="group" aria-labelledby={fieldId} className="grid gap-2">
+          <Fieldset className="gap-2">
+            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
             {options.map(option => (
               <AskUserOptionRow
                 key={option.label}
@@ -255,18 +256,23 @@ const AskUserInput = ({
             >
               Submit answer
             </AskUserSubmit>
-          </div>
+          </Fieldset>
         ) : (
-          <RadioGroup
-            aria-labelledby={fieldId}
-            disabled={isSubmitting}
-            value={selected[0] ?? null}
-            onValueChange={value => {
-              const label = String(value);
-              setSelected([label]);
-              onSubmit(label);
-            }}
+          <Fieldset
+            className="gap-2"
+            render={
+              <RadioGroup
+                disabled={isSubmitting}
+                value={selected[0] ?? null}
+                onValueChange={value => {
+                  const label = String(value);
+                  setSelected([label]);
+                  onSubmit(label);
+                }}
+              />
+            }
           >
+            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
             {options.map(option => (
               <AskUserOptionRow
                 key={option.label}
@@ -276,7 +282,7 @@ const AskUserInput = ({
                 control={<RadioGroupItem className="mt-0.5" value={option.label} />}
               />
             ))}
-          </RadioGroup>
+          </Fieldset>
         )}
         {isSubmitting ? <AskUserPending className="mt-3 block" /> : null}
         {footer}

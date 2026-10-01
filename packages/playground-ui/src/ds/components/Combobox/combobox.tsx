@@ -5,11 +5,13 @@ import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combo
 import type { ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
+import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
 import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -37,9 +39,7 @@ type ComboboxSharedProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
-  error?: string;
   id?: string;
-  name?: string;
   'aria-label'?: string;
   'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
@@ -49,6 +49,10 @@ type ComboboxSharedProps = {
   allowCustomValue?: boolean;
   /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
   onInputValueChange?: (value: string) => void;
+  /** @deprecated Wrap the combobox in `<Field invalid>` with a `FieldError`. */
+  error?: string;
+  /** @deprecated Only keyed the `error` message id; a `Field` links its error without one. */
+  name?: string;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -100,9 +104,7 @@ export function Combobox(props: ComboboxProps) {
     open,
     onOpenChange,
     container,
-    error,
     id,
-    name,
     'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedBy,
     align = 'start',
@@ -110,9 +112,12 @@ export function Combobox(props: ComboboxProps) {
     iconOnlyValue = false,
     allowCustomValue = false,
     onInputValueChange,
+    error,
+    name,
   } = props;
   const multiple = isMultipleCombobox(props);
   const clearLabel = multiple ? props.clearLabel : undefined;
+  const field = useFieldAriaIds();
   const generatedName = React.useId();
   const errorName = name ?? generatedName;
   const describedBy =
@@ -142,14 +147,14 @@ export function Combobox(props: ComboboxProps) {
     <>
       <BaseCombobox.Trigger
         id={id}
-        aria-label={ariaLabel ?? (id ? undefined : multiple ? 'Select options' : 'Select option')}
-        aria-invalid={error ? true : undefined}
+        aria-label={ariaLabel ?? (id || field ? undefined : multiple ? 'Select options' : 'Select option')}
+        {...keepOwnAccessibleName({ 'aria-label': ariaLabel })}
+        {...deprecatedErrorAria(Boolean(error))}
         aria-describedby={describedBy}
         data-shape={iconOnly ? 'icon' : undefined}
         className={comboboxTriggerClass({
           variant,
           size,
-          error: Boolean(error),
           className: cn(iconOnlyValue && 'w-auto px-2.5', className),
         })}
       >
@@ -291,9 +296,6 @@ export function Combobox(props: ComboboxProps) {
     </BaseCombobox.Root>
   );
 
-  // Without an error there is nothing to stack, so the trigger is the root: a wrapper
-  // here would hide the trigger from a parent that styles its own children — a
-  // ButtonsGroup seam, an InputGroup control, a flex row.
   if (!error) return root;
 
   return (
