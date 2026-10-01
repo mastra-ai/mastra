@@ -406,6 +406,58 @@ describe('Session active-run input authorization', () => {
       await finish(ctx, [alice]);
     });
 
+    it('rejects a denied submit_plan approval before any mode switch', async () => {
+      const ctx = await setup();
+      const { alice } = await startAliceRun(ctx);
+      ctx.session.suspensions.register({
+        toolCallId: 'call-1',
+        runId: 'alice-run',
+        toolName: 'submit_plan',
+        threadId: ctx.session.thread.getId()!,
+        resourceId: SESSION_RESOURCE,
+      });
+      const modeBefore = ctx.session.mode.get();
+      const modeSwitch = vi.spyOn(ctx.session.mode, 'switch');
+      const resume = vi.spyOn(ctx.agent, 'resumeStream');
+
+      await expect(
+        ctx.session.respondToToolSuspension({
+          toolCallId: 'call-1',
+          resumeData: { action: 'approved' },
+          requestContext: mappedCaller('bob'),
+        }),
+      ).rejects.toMatchObject(mismatch);
+      expect(modeSwitch).not.toHaveBeenCalled();
+      expect(ctx.session.mode.get()).toBe(modeBefore);
+      expect(ctx.session.suspensions.get({ toolCallId: 'call-1' })).toBeDefined();
+      expect(resume).not.toHaveBeenCalled();
+      expect(ctx.authorize).toHaveBeenCalledTimes(1);
+      await finish(ctx, [alice]);
+    });
+
+    it('lets an approved caller through respondToToolSuspension with the policy called once', async () => {
+      const ctx = await setup();
+      const { alice } = await startAliceRun(ctx);
+      ctx.session.suspensions.register({
+        toolCallId: 'call-1',
+        runId: 'alice-run',
+        toolName: 'ask',
+        threadId: ctx.session.thread.getId()!,
+        resourceId: SESSION_RESOURCE,
+      });
+      const resumeToolCall = vi.spyOn(ctx.session, 'resumeToolCall').mockResolvedValue(undefined as never);
+
+      await ctx.session.respondToToolSuspension({
+        toolCallId: 'call-1',
+        resumeData: 'x',
+        requestContext: mappedCaller('carol'),
+      });
+      expect(resumeToolCall).toHaveBeenCalledOnce();
+      expect(resumeToolCall.mock.calls[0]![0].requestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe(SESSION_RESOURCE);
+      expect(ctx.authorize).toHaveBeenCalledTimes(1);
+      await finish(ctx, [alice]);
+    });
+
     it('lets an approved caller through approveToolCall with the policy called once', async () => {
       const ctx = await setup();
       const { alice } = await startAliceRun(ctx);
