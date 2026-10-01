@@ -1336,7 +1336,7 @@ export class SessionSuspensions {
    * suspension (or undefined when there are zero or several).
    */
   resolveToolCallId(toolCallId?: string): string | undefined {
-    if (toolCallId) {
+    if (toolCallId !== undefined) {
       return this.#pending.has(toolCallId) ? toolCallId : undefined;
     }
     if (this.#pending.size === 1) {
@@ -1406,6 +1406,15 @@ export interface ApprovalDecision {
   /** Optional context explaining why a tool approval was declined. */
   declineContext?: { reason?: string; message?: string };
 }
+
+/**
+ * Whether a tool approval/suspension response was claimed by a pending target.
+ * `accepted: true` only means the command was taken, not that the resumed tool
+ * later succeeded.
+ */
+export type SessionCommandResult =
+  | { accepted: true }
+  | { accepted: false; reason: 'not_pending' | 'stale_tool_call' | 'aborting' | 'no_pending_suspension' };
 
 /**
  * A user's response to a parked approval. `always_allow_category` approves the
@@ -1527,9 +1536,9 @@ export class SessionApproval {
   }: ApprovalResponse & {
     toolCallId: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
-  }): void {
+  }): SessionCommandResult {
     const gate = this.#gates.get(toolCallId);
-    if (!gate) return;
+    if (!gate) return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
 
     if (decision === 'always_allow_category') {
       onAlwaysAllow?.(gate.toolName, gate.threadId);
@@ -1541,6 +1550,7 @@ export class SessionApproval {
       requestContext,
       declineContext,
     });
+    return { accepted: true };
   }
 
   /**
@@ -3711,7 +3721,7 @@ export class Session<TState = unknown> {
     toolCallId: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
-  }): void {
+  }): SessionCommandResult {
     // An abort tears down only this thread's gates, so only a response to one of
     // them is ignored. A gate parked on a detached thread must still accept its
     // own response — the abort flag is session-wide and would otherwise strand
@@ -3720,9 +3730,9 @@ export class Session<TState = unknown> {
       this.run.isAbortRequested() &&
       this.approval.isArmed({ toolCallId, threadId: this.thread.getId() ?? undefined })
     ) {
-      return;
+      return { accepted: false, reason: 'aborting' };
     }
-    this.approval.respond({
+    const result = this.approval.respond({
       decision,
       toolCallId,
       requestContext,
@@ -3734,6 +3744,7 @@ export class Session<TState = unknown> {
     });
     // The gate is gone; drop its display-state entry so the UI stops rendering it.
     this.displayState.clearPendingApprovals([toolCallId]);
+    return result;
   }
 
   /**
@@ -3751,6 +3762,18 @@ export class Session<TState = unknown> {
     } = {},
   ): void {
     this.displayState.clearPendingApprovals(this.approval.cancel(filter));
+  }
+
+  /**
+   * Whether a suspended run on the current thread is waiting on an approval for
+   * `toolCallId`. Lets callers reject stale answers before scheduling the resume.
+   */
+  async hasPersistedToolApproval(toolCallId: string): Promise<boolean> {
+    const threadId = this.thread.getId();
+    if (!threadId) return false;
+    const resourceId = this.identity.getResourceId();
+    const { runs } = await this.machinery.getAgent().listSuspendedRuns({ threadId, resourceId });
+    return runs.some(run => run.toolCalls.some(call => call.requiresApproval && call.toolCallId === toolCallId));
   }
 
   /**
@@ -4484,6 +4507,40 @@ export class Session<TState = unknown> {
     });
   }
 
+  /** Tool call ids whose response has been claimed and is still being applied. */
+  #claimedToolResponses = new Set<string>();
+
+  /**
+   * Claim the right to answer `toolCallId` so concurrent requests cannot both be
+   * acknowledged for the same pending target. Synchronous, so a caller that
+   * claims and then starts the response without awaiting in between is atomic.
+   * Pair with {@link releaseToolResponse} once the response settles.
+   */
+  claimToolResponse(toolCallId: string): boolean {
+    if (this.#claimedToolResponses.has(toolCallId)) return false;
+    this.#claimedToolResponses.add(toolCallId);
+    return true;
+  }
+
+  /** Release a claim taken with {@link claimToolResponse}. */
+  releaseToolResponse(toolCallId: string): void {
+    this.#claimedToolResponses.delete(toolCallId);
+  }
+
+  /**
+   * Claim the parked suspension a {@link respondToToolSuspension} call would
+   * resume. Returns the resolved tool call id, or a rejection when nothing is
+   * pending or another response already claimed it.
+   */
+  claimToolSuspension(
+    toolCallId?: string,
+  ): { accepted: true; toolCallId: string } | Extract<SessionCommandResult, { accepted: false }> {
+    const resolved = this.suspensions.resolveToolCallId(toolCallId);
+    if (!resolved) return { accepted: false, reason: 'no_pending_suspension' };
+    if (!this.claimToolResponse(resolved)) return { accepted: false, reason: 'not_pending' };
+    return { accepted: true, toolCallId: resolved };
+  }
+
   /**
    * Respond to a pending tool suspension. Provides resume data so the suspended
    * tool can continue. `toolCallId` selects which suspended tool to resume —
@@ -4695,18 +4752,27 @@ export class Session<TState = unknown> {
     resolveOnToolEnd?: boolean;
   }): { promise: Promise<void>; cancel: () => void } {
     let unsubscribe: (() => void) | undefined;
-    const promise = new Promise<void>(resolve => {
+    // A teardown can drop the subscription before any terminal event arrives;
+    // settle then too so the caller's tool-response claim is released.
+    const lifecycleWait = new AbortController();
+    const cancel = () => {
+      unsubscribe?.();
+      lifecycleWait.abort();
+    };
+    const boundary = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
         const isTerminal = event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error';
         const completedResumedTool = resolveOnToolEnd && event.type === 'tool_end' && event.toolCallId === toolCallId;
-        if (isTerminal || completedResumedTool) {
-          unsubscribe?.();
-          resolve();
-        }
+        if (isTerminal || completedResumedTool) resolve();
       });
     });
+    const promise = Promise.race([
+      boundary,
+      this.stream.waitForTeardown(lifecycleWait.signal),
+      this.run.waitForTeardown(lifecycleWait.signal),
+    ]).finally(cancel);
 
-    return { promise, cancel: () => unsubscribe?.() };
+    return { promise, cancel };
   }
 
   /**

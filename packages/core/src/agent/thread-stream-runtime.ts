@@ -9,6 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
+import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
@@ -177,35 +178,7 @@ function sanitizeBroadcastPart(part: unknown): unknown {
     return part;
   }
 
-  if (typed.type === 'step-start') {
-    if (!('request' in payload) && !('inputMessages' in payload)) return part;
-    const { request: _request, inputMessages: _inputMessages, ...rest } = payload;
-    return { ...typed, payload: rest };
-  }
-
-  if (typed.type === 'step-finish' || typed.type === 'finish') {
-    let changed = false;
-    const next: Record<string, unknown> = { ...payload };
-    const metadata = payload.metadata;
-    if (metadata && typeof metadata === 'object' && 'request' in metadata) {
-      const { request: _request, ...restMetadata } = metadata as Record<string, unknown>;
-      next.metadata = restMetadata;
-      changed = true;
-    }
-    const output = payload.output;
-    if (output && typeof output === 'object' && 'steps' in output) {
-      const { steps: _steps, ...restOutput } = output as Record<string, unknown>;
-      next.output = restOutput;
-      changed = true;
-    }
-    if ('messages' in payload) {
-      delete next.messages;
-      changed = true;
-    }
-    return changed ? { ...typed, payload: next } : part;
-  }
-
-  return part;
+  return stripModelSnapshots(part);
 }
 
 /**
@@ -4474,7 +4447,10 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
+    // An aborted run stays active until it terminalizes, but its lifecycle already
+    // ended for earlier subscribers. Seeding it here would replay that run.
+    const currentRecord =
+      currentRunId && !state.abortedRunIds.has(currentRunId) ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);

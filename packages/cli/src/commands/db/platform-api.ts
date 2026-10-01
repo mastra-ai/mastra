@@ -1,7 +1,7 @@
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, extractApiErrorDetail, platformFetch, throwApiError } from '../auth/client.js';
 
-export type DatabaseKind = 'turso' | 'neon' | 'mongodb' | 'redis';
+export type DatabaseKind = 'turso' | 'neon' | 'postgres' | 'mongodb' | 'redis';
 export type DatabaseStatus = 'provisioning' | 'ready' | 'failed' | 'deleting' | 'deleted';
 
 export interface ProjectDatabase {
@@ -44,9 +44,14 @@ export interface DatabaseConnection {
  * managed by the platform). Mirrors `deriveEnvVars` in the platform's
  * project-databases service.
  */
+// Neon is listed before postgres so callers that iterate this map to pick a
+// `--kind` for a shared env var name (DATABASE_URL) keep recommending `neon`
+// — postgres is a VPC-only opt-in, and orgs that don't have it enabled would
+// hit a catalog rejection if remediation text pointed there by default.
 export const DB_ENV_VAR_NAMES: Record<DatabaseKind, string[]> = {
   turso: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'],
   neon: ['DATABASE_URL'],
+  postgres: ['DATABASE_URL'],
   mongodb: [],
   redis: ['REDIS_URL'],
 };

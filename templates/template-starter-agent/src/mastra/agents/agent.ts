@@ -1,7 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { askUserTool, webFetchTool, webSearchTool } from '@mastra/core/tools';
 import { LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
@@ -63,11 +62,11 @@ const localFilesNote = usePlatformFilesystem
   ? ''
   : `\n\nFor local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.`;
 
-const baseAgent = new Agent({
+export const agent = new Agent({
   id: 'agent',
   name: 'Starter Agent',
   description:
-    'A durable general-purpose assistant that can research, manage tasks, work with workspace files, run approved commands, create recurring schedules, and use your connected platform integrations as tools.',
+    'A general-purpose assistant that can research, manage tasks, work with workspace files, run approved commands, create recurring schedules, and use your connected platform integrations as tools.',
   metadata: {
     suggestedPrompts: [
       "What's the weather in Austin this weekend?",
@@ -89,7 +88,7 @@ Tools named \`<integration>_<action>\` (for example \`linear_list_issues\`, \`no
 
 Ask concise questions when something is unclear or a good question could surface a useful insight.${localFilesNote}
 `,
-  model: 'mastra/openai/gpt-5.6-terra',
+  model: 'mastra/openai/gpt-5-mini',
   defaultOptions: {
     maxSteps: 100,
     autoResumeSuspendedTools: true,
@@ -98,7 +97,7 @@ Ask concise questions when something is unclear or a good question could surface
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'mastra/openai/gpt-5-mini',
+        model: 'mastra/openai/gpt-5-nano',
       },
     },
   }),
@@ -113,11 +112,3 @@ Ask concise questions when something is unclear or a good question could surface
   }),
   signals: [new TaskSignalProvider()],
 });
-
-/**
- * Durable wrapper: the agentic loop runs inside a workflow, chunks flow
- * through PubSub, and events are recorded in the Redis-backed cache configured
- * on the Mastra instance — so streams survive client disconnects and process
- * restarts, and orphaned runs are re-driven on boot via recovery.
- */
-export const agent = createDurableAgent({ agent: baseAgent });

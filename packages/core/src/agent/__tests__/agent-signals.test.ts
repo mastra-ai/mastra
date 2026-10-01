@@ -1033,6 +1033,85 @@ describe('Agent signals', () => {
     }
   });
 
+  it('does not seed a replacement subscriber with an aborted run that has not terminalized (#24174)', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'aborted-seed-agent' } as Agent<any, any, any, any>;
+    const threadId = 'aborted-seed-thread';
+    const resourceId = 'aborted-seed-user';
+    const memory = { thread: threadId, resource: resourceId };
+
+    const registerRun = (runId: string, parts: any[]) => {
+      runtime.prepareRunOptions({ runId, memory } as any);
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      let streamController!: ReadableStreamDefaultController<any>;
+      const fullStream = new ReadableStream({
+        start(controller) {
+          streamController = controller;
+          for (const part of parts) controller.enqueue(part);
+        },
+      });
+      runtime.registerRun(
+        agent,
+        { runId, status: 'running', fullStream, _waitUntilFinished: () => finished } as any,
+        {
+          memory,
+        } as any,
+      );
+      return (closingParts: any[]) => {
+        for (const part of closingParts) streamController.enqueue(part);
+        streamController.close();
+        finish();
+      };
+    };
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    let secondSubscription: Awaited<ReturnType<typeof runtime.subscribeToThread>> | undefined;
+
+    try {
+      const firstPart = firstIterator.next();
+      const endRun1 = registerRun('aborted-seed-run-1', [{ type: 'start', runId: 'aborted-seed-run-1' }]);
+      expect((await withTimeout(firstPart, 'first subscriber never saw run 1')).value).toMatchObject({
+        runId: 'aborted-seed-run-1',
+      });
+
+      // The consumer detaches before the abort, so no subscriber clears run 1's active entry.
+      firstSubscription.unsubscribe();
+      expect(runtime.abortRun('aborted-seed-run-1')).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(runtime.getActiveThreadRunId({ threadId, resourceId })).toBe('aborted-seed-run-1');
+
+      // A replacement subscription opened while run 1 is aborted but not yet terminalized.
+      secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+      const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+      const secondRun = readNextRun(secondIterator);
+
+      // Run 1 then emits its abort chunk and closes.
+      endRun1([{ type: 'abort', runId: 'aborted-seed-run-1', payload: {} }]);
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      registerRun('aborted-seed-run-2', [
+        { type: 'start', runId: 'aborted-seed-run-2' },
+        { type: 'text-delta', runId: 'aborted-seed-run-2', payload: { id: 't', text: 'follow-up' } },
+        {
+          type: 'finish',
+          runId: 'aborted-seed-run-2',
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ])([]);
+
+      // The replacement subscriber sees only the follow-up, never a replay of the aborted run.
+      const received = await withTimeout(secondRun, 'replacement subscriber never received the follow-up run');
+      expect(received.value).toMatchObject({ runId: 'aborted-seed-run-2', text: 'follow-up' });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription?.unsubscribe();
+    }
+  });
+
   it('keeps request context associated with the exact queued stream record', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const agent = { id: 'request-context-stream-agent' } as Agent<any, any, any, any>;
