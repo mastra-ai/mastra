@@ -354,6 +354,7 @@ export default function Workspace() {
               activeFilePath={selectedFile}
               onActiveFileChange={setSelectedFile}
               readOnlyPaths={readOnlyPaths}
+              skillCount={skillsData ? skills.length : undefined}
               searchFiles={canSearchFiles}
               searchSkills={canSearchSkills}
               onCreateDirectory={path =>

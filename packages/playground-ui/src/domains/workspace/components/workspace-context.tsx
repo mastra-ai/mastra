@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { ancestorsOf } from '../path';
 import { WorkspaceContext } from './use-workspace-context';
 import type { WorkspaceCreateDirectoryHandler, WorkspaceDeleteHandler } from './use-workspace-context';
 
@@ -20,6 +21,10 @@ export interface WorkspaceProviderProps {
   searchFiles?: boolean;
   /** Include skill search. Defaults to true. */
   searchSkills?: boolean;
+  /** Shown as `N Files` in the aside title. */
+  fileCount?: number;
+  /** Shown as `N Skills` in the aside title. */
+  skillCount?: number;
   children: ReactNode;
 }
 
@@ -32,10 +37,21 @@ export function WorkspaceProvider({
   readOnlyPaths,
   searchFiles = true,
   searchSkills = true,
+  fileCount,
+  skillCount,
   children,
 }: WorkspaceProviderProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [query, setQuery] = useState('');
+  const [openFolders, setOpenFolders] = useState<ReadonlySet<string>>(() => new Set(ancestorsOf(activeFilePath ?? '')));
+  const [prevActive, setPrevActive] = useState(activeFilePath);
+
+  // Reveal a newly active file by opening its parents; folders the user opened stay open.
+  if (activeFilePath !== prevActive) {
+    setPrevActive(activeFilePath);
+    const missing = ancestorsOf(activeFilePath ?? '').filter(folder => !openFolders.has(folder));
+    if (missing.length > 0) setOpenFolders(new Set([...openFolders, ...missing]));
+  }
 
   const readOnlyKey = readOnlyPaths?.join('\n') ?? '';
 
@@ -60,6 +76,17 @@ export function WorkspaceProvider({
       },
       searchFiles,
       searchSkills,
+      fileCount,
+      skillCount,
+      openFolders,
+      setFolderOpen: (path: string, open: boolean) =>
+        setOpenFolders(current => {
+          if (current.has(path) === open) return current;
+          const next = new Set(current);
+          if (open) next.add(path);
+          else next.delete(path);
+          return next;
+        }),
     }),
     [
       workspaceId,
@@ -72,6 +99,9 @@ export function WorkspaceProvider({
       readOnlyKey,
       searchFiles,
       searchSkills,
+      fileCount,
+      skillCount,
+      openFolders,
     ],
   );
 

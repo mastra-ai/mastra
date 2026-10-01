@@ -25,8 +25,19 @@ export const srcListing: WorkspaceFsListResponse = {
   entries: [{ name: 'index.ts', type: 'file', size: 18 }],
 };
 
+export const docsListing: WorkspaceFsListResponse = {
+  path: 'docs',
+  entries: [{ name: 'guides', type: 'directory' }],
+};
+
+export const guidesListing: WorkspaceFsListResponse = {
+  path: 'docs/guides',
+  entries: [{ name: 'intro.md', type: 'file', size: 12 }],
+};
+
 export const fileContents: Record<string, string> = {
   'README.md': '# Hello workspace',
+  'docs/guides/intro.md': '# Intro',
   'src/index.ts': 'const answer = 42;',
   'skills/review/SKILL.md': '---\nname: review\ndescription: Reviews code\n---\n# Review skill',
   'logo.png': 'iVBORw0KGgo=',
@@ -75,3 +86,16 @@ export const readHandler = () =>
       ? HttpResponse.json(readResponse(path))
       : HttpResponse.json({ error: 'not found' }, { status: 404 });
   });
+
+export const mountedRootListing: WorkspaceFsListResponse = {
+  path: '.',
+  entries: [
+    {
+      name: 'data',
+      type: 'directory',
+      mount: { provider: 's3', displayName: 'Data bucket', description: 'Raw exports' },
+    },
+    { name: 'broken', type: 'directory', mount: { provider: 'gcs', status: 'error', error: 'Bucket not found' } },
+    { name: 'src', type: 'directory' },
+  ],
+};

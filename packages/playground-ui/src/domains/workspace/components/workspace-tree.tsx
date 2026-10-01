@@ -1,10 +1,12 @@
-import type { WorkspaceFileEntry } from '@mastra/client-js';
+import type { WorkspaceFsListResponse } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { FolderPlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
 import { ROOT_PATH, joinPath, parentOf } from '../path';
+import { MountIcon } from './mount-icon';
+import type { WorkspaceMount } from './mount-icon';
 import { useWorkspaceContext } from './use-workspace-context';
 import type { WorkspaceEntryRef } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
@@ -48,14 +50,20 @@ function Entries({
   parent,
   onRequestDelete,
 }: {
-  entries: WorkspaceFileEntry[];
+  entries: WorkspaceFsListResponse['entries'];
   parent: string;
   onRequestDelete: RequestDelete;
 }) {
   return entries.map(entry => {
     const path = joinPath(parent, entry.name);
     return entry.type === 'directory' ? (
-      <FolderNode key={entry.name} name={entry.name} path={path} onRequestDelete={onRequestDelete} />
+      <FolderNode
+        key={entry.name}
+        name={entry.name}
+        path={path}
+        mount={entry.mount}
+        onRequestDelete={onRequestDelete}
+      />
     ) : (
       <FileNode key={entry.name} name={entry.name} size={entry.size} path={path} onRequestDelete={onRequestDelete} />
     );
@@ -94,9 +102,9 @@ interface NodeProps {
   onRequestDelete: RequestDelete;
 }
 
-function FolderNode({ name, path, onRequestDelete }: NodeProps) {
-  const { workspaceId, onDelete, onCreateDirectory, isReadOnly } = useWorkspaceContext();
-  const [open, setOpen] = useState(false);
+function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?: WorkspaceMount }) {
+  const { workspaceId, onDelete, onCreateDirectory, isReadOnly, openFolders, setFolderOpen } = useWorkspaceContext();
+  const open = openFolders.has(path);
   // Shares the query with FolderChildren; only used to flag the first load next to the name.
   const { isLoading } = useWorkspaceDirectory(workspaceId, path, { enabled: open });
   const [creating, setCreating] = useState(false);
@@ -104,7 +112,7 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
   const canCreate = onCreateDirectory && !isReadOnly(path);
 
   return (
-    <Tree.Folder id={path} open={open} onOpenChange={setOpen}>
+    <Tree.Folder id={path} open={open} onOpenChange={next => setFolderOpen(path, next)}>
       <Tree.FolderTrigger
         actions={
           canDelete || canCreate ? (
@@ -116,7 +124,7 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
                   tooltip={`New folder in ${name}`}
                   onClick={event => {
                     event.stopPropagation();
-                    setOpen(true);
+                    setFolderOpen(path, true);
                     setCreating(true);
                   }}
                   onKeyDown={event => event.stopPropagation()}
@@ -132,9 +140,35 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
         }
       >
         <Tree.Icon>
-          <FolderIcon />
+          {mount ? (
+            <span
+              role="img"
+              aria-label={`Mount: ${mount.displayName ?? mount.provider}`}
+              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(' — ')}
+              className="flex"
+            >
+              <MountIcon mount={mount} />
+            </span>
+          ) : (
+            <FolderIcon />
+          )}
         </Tree.Icon>
         <Tree.Label>{name}</Tree.Label>
+        {mount?.status === 'error' ? (
+          <span
+            role="img"
+            aria-label={`Mount error: ${mount.error ?? 'unavailable'}`}
+            title={mount.error}
+            className="flex shrink-0"
+          >
+            <CircleAlertIcon className="text-destructive size-3" />
+          </span>
+        ) : null}
+        {mount && isReadOnly(path) ? (
+          <span role="img" aria-label="Read-only" title="Read-only" className="flex shrink-0">
+            <LockIcon className="size-3 text-muted-foreground" />
+          </span>
+        ) : null}
         {open && isLoading ? (
           <span className="flex shrink-0 animate-in delay-200 fill-mode-backwards fade-in">
             <Spinner size="sm" aria-label={`Loading ${name}`} className="size-3 text-muted-foreground" />
@@ -192,11 +226,18 @@ function FolderChildren({
 }
 
 function FileNode({ name, size, path, onRequestDelete }: NodeProps & { size?: number }) {
-  const { onDelete, isReadOnly } = useWorkspaceContext();
+  const { onDelete, isReadOnly, activeFilePath } = useWorkspaceContext();
   const canDelete = onDelete && !isReadOnly(path);
+  const isActive = path === activeFilePath;
+  const ref = useRef<HTMLLIElement>(null);
+
+  // Parents load lazily, so the active row may only appear after the selection changed.
+  useEffect(() => {
+    if (isActive) ref.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [isActive]);
 
   return (
-    <Tree.File id={path}>
+    <Tree.File ref={ref} id={path}>
       <Tree.Icon>
         <FileIcon />
       </Tree.Icon>

@@ -19,6 +19,10 @@ export interface WorkspaceTreeViewProps {
   searchFiles?: boolean;
   /** Include skill search. Defaults to true. The search action hides when both are false. */
   searchSkills?: boolean;
+  /** Total files, shown as `N Files` in the aside title. Omit to show a plain `Files`. */
+  fileCount?: number;
+  /** Total skills, shown as `N Skills` next to the files. Omit to hide. */
+  skillCount?: number;
   /** Extra icon buttons rendered in the aside header, after search and new folder. */
   asideActions?: ReactNode;
   /** Custom preview for a file; return `undefined` to keep the built-in rendering. */

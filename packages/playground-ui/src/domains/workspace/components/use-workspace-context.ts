@@ -25,6 +25,11 @@ export interface WorkspaceContextValue {
   isReadOnly: (path: string) => boolean;
   searchFiles: boolean;
   searchSkills: boolean;
+  fileCount?: number;
+  skillCount?: number;
+  /** Expanded folders; the active file's parents are added whenever it changes. */
+  openFolders: ReadonlySet<string>;
+  setFolderOpen: (path: string, open: boolean) => void;
 }
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);

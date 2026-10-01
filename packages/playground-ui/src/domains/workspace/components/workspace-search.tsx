@@ -32,12 +32,24 @@ export function WorkspaceSearchToggle() {
 /** The search input while searching, the aside title otherwise. */
 export function WorkspaceSearch() {
   const { isSearching } = useWorkspaceContext();
+  return isSearching ? <SearchInput /> : <AsideTitle />;
+}
 
-  return isSearching ? (
-    <SearchInput />
-  ) : (
-    <Txt as="span" variant="label" tone="muted">
-      Files
+const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+function AsideTitle() {
+  const { fileCount, skillCount } = useWorkspaceContext();
+  return (
+    <Txt as="span" variant="label" tone="muted" className="flex min-w-0 items-center gap-1.5 truncate">
+      <span>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</span>
+      {skillCount === undefined ? null : (
+        <>
+          <Txt as="span" variant="label" tone="faint" aria-hidden>
+            ·
+          </Txt>
+          <span>{countLabel(skillCount, 'Skill')}</span>
+        </>
+      )}
     </Txt>
   );
 }

@@ -11,7 +11,10 @@ import {
   BASE_URL,
   WORKSPACE_ID,
   WORKSPACE_URL,
+  docsListing,
+  mountedRootListing,
   fileSearchResponse,
+  guidesListing,
   listHandler,
   readHandler,
   readResponse,
@@ -150,6 +153,111 @@ describe('WorkspaceTreeView', () => {
       const folder = screen.getByRole('treeitem', { name: /^src/ });
       expect(await within(folder).findByRole('status', { name: 'Loading src' })).toBeTruthy();
       expect(screen.queryByTestId('workspace-folder-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when a folder is a mount', () => {
+    it('labels it with the mount name', async () => {
+      server.use(listHandler({ '.': mountedRootListing }));
+      renderView();
+      expect(await screen.findByRole('img', { name: 'Mount: Data bucket' })).toBeTruthy();
+      expect(screen.queryByRole('img', { name: /Mount: .*src/ })).toBeNull();
+    });
+  });
+
+  describe('when a mount is read-only', () => {
+    it('shows a lock', async () => {
+      server.use(listHandler({ '.': mountedRootListing }));
+      renderView({ readOnlyPaths: ['data'] });
+      expect(await screen.findByRole('img', { name: 'Read-only' })).toBeTruthy();
+    });
+  });
+
+  describe('when a mount errored', () => {
+    it('shows the error', async () => {
+      server.use(listHandler({ '.': mountedRootListing }));
+      renderView();
+      expect(await screen.findByRole('img', { name: 'Mount error: Bucket not found' })).toBeTruthy();
+    });
+  });
+
+  describe('when counts are provided', () => {
+    it('shows them in the aside title', async () => {
+      server.use(listHandler({ '.': rootListing }));
+
+      renderView({ fileCount: 12, skillCount: 3 });
+
+      expect(await screen.findByText('12 Files')).toBeTruthy();
+      expect(screen.getByText('3 Skills')).toBeTruthy();
+    });
+
+    it('uses the singular for one item', async () => {
+      server.use(listHandler({ '.': rootListing }));
+
+      renderView({ fileCount: 1, skillCount: 1 });
+
+      expect(await screen.findByText('1 File')).toBeTruthy();
+      expect(screen.getByText('1 Skill')).toBeTruthy();
+    });
+  });
+
+  describe('when no counts are provided', () => {
+    it('shows a plain Files title', async () => {
+      server.use(listHandler({ '.': rootListing }));
+
+      renderView();
+
+      expect(await screen.findByText('Files')).toBeTruthy();
+      expect(screen.queryByText(/Skill/)).toBeNull();
+    });
+  });
+
+  describe('when the active file is nested', () => {
+    it('expands its parent folders and selects it', async () => {
+      const paths = spyListedPaths({
+        '.': rootListing,
+        docs: docsListing,
+        'docs/guides': guidesListing,
+        src: srcListing,
+      });
+      server.use(readHandler());
+
+      renderView({ initialFile: 'docs/guides/intro.md' });
+
+      const file = await screen.findByRole('treeitem', { name: /^intro\.md/ });
+      expect(file.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('treeitem', { name: /^docs/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByRole('treeitem', { name: /^guides/ }).getAttribute('aria-expanded')).toBe('true');
+      expect([...paths].sort()).toEqual(['.', 'docs', 'docs/guides']);
+    });
+  });
+
+  describe('when the active file changes to another nested file', () => {
+    it('expands the new parents and keeps opened folders open', async () => {
+      server.use(
+        listHandler({ '.': rootListing, docs: docsListing, 'docs/guides': guidesListing, src: srcListing }),
+        readHandler(),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const view = (activeFilePath?: string) => (
+        <MastraReactProvider baseUrl={BASE_URL}>
+          <QueryClientProvider client={queryClient}>
+            <WorkspaceTreeView
+              workspaceId={WORKSPACE_ID}
+              activeFilePath={activeFilePath}
+              onActiveFileChange={vi.fn()}
+            />
+          </QueryClientProvider>
+        </MastraReactProvider>
+      );
+      const { rerender } = render(view());
+      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      await screen.findByRole('treeitem', { name: /^index\.ts/ });
+
+      rerender(view('docs/guides/intro.md'));
+
+      expect(await screen.findByRole('treeitem', { name: /^intro\.md/ })).toBeTruthy();
+      expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('true');
     });
   });
 
