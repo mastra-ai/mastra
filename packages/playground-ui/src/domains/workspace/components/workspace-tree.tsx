@@ -136,11 +136,9 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
         </Tree.Icon>
         <Tree.Label>{name}</Tree.Label>
         {open && isLoading ? (
-          <Spinner
-            size="sm"
-            aria-label={`Loading ${name}`}
-            className="size-3 shrink-0 animate-in text-muted-foreground delay-200 fill-mode-backwards fade-in"
-          />
+          <span className="flex shrink-0 animate-in delay-200 fill-mode-backwards fade-in">
+            <Spinner size="sm" aria-label={`Loading ${name}`} className="size-3 text-muted-foreground" />
+          </span>
         ) : null}
       </Tree.FolderTrigger>
       <Tree.FolderContent>
