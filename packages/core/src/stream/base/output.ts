@@ -1067,11 +1067,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
 
               if (self.#finishUsageIsTotal) {
-                self.#usageCount = {
-                  inputTokens: undefined,
-                  outputTokens: undefined,
-                  totalTokens: undefined,
-                };
+                self.#usageCount.inputTokens = undefined;
+                self.#usageCount.outputTokens = undefined;
+                self.#usageCount.totalTokens = undefined;
                 self.#usageCountMissing.clear();
               }
               this.populateUsageCount(chunk.payload.output.usage as Partial<LanguageModelUsage>);

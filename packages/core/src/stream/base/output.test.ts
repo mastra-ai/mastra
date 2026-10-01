@@ -958,6 +958,40 @@ describe('MastraModelOutput', () => {
       expect((await output.totalUsage)?.raw).toEqual(rawUsage);
     });
 
+    it('preserves step detail and raw usage when finish usage is the authoritative total', async () => {
+      const runId = 'test-run';
+      const rawUsage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            reasoningTokens: 3,
+            cachedInputTokens: 4,
+            raw: rawUsage,
+          }),
+          createFinishChunk(runId, undefined, { inputTokens: 2, outputTokens: 2, totalTokens: 4 }),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        finishUsageIsTotal: true,
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      await expect(output.usage).resolves.toEqual({
+        inputTokens: 2,
+        outputTokens: 2,
+        totalTokens: 4,
+        reasoningTokens: 3,
+        cachedInputTokens: 4,
+        raw: rawUsage,
+      });
+    });
+
     it('should call onFinish with the suspended payload shape when the stream suspends', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });
