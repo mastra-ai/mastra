@@ -109,7 +109,7 @@ test.describe('Admin Role', () => {
       );
       await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=simpleMcpTool$/,
       );
     });
   });
