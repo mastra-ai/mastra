@@ -24,7 +24,7 @@ The Factory system prompt identifies the **Target repository**. Before the first
 3. Compare the issue's requested file paths and project context with the target repository and checkout. A matching remote alone is not sufficient if the issue clearly targets a different repository or project.
 4. If the target is missing, the remote/root does not match, or the issue's paths contradict the checkout, stop without editing or creating a PR and report the expected target and observed remote/root.
 
-Repeat this check immediately before `gh pr create`; do not rely on an earlier check because the active directory or checkout may have changed.
+Repeat this check immediately before the final plan handoff; do not rely on an earlier check because the active directory or checkout may have changed. This planning skill does not create or update a pull request.
 
 ## Phase 1: Verify the Understanding
 
