@@ -252,6 +252,29 @@ export const evaluateInputSchema = z.object({
 export type EvaluateInput = z.output<typeof evaluateInputSchema>;
 
 // =============================================================================
+// WebMCP (1)
+// =============================================================================
+
+/**
+ * browser_webmcp - List or call tools exposed by the current page via WebMCP.
+ *
+ * Supports both the W3C `navigator.modelContext` draft and in-page MCP
+ * servers over the MCP-B Tab transport. Tools come from the current page, so
+ * they are only available while that page is loaded.
+ */
+export const webmcpInputSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('list').describe('List WebMCP tools exposed by the current page.'),
+  }),
+  z.object({
+    action: z.literal('call').describe('Call a WebMCP tool by name on the current page.'),
+    toolName: z.string().min(1).describe('The exact tool name from a previous `list` call.'),
+    args: z.unknown().optional().describe('Arguments passed to the tool (JSON-serializable).'),
+  }),
+]);
+export type WebmcpInput = z.output<typeof webmcpInputSchema>;
+
+// =============================================================================
 // All Schemas
 // =============================================================================
 
@@ -276,4 +299,6 @@ export const browserSchemas = {
   screenshot: screenshotInputSchema,
   // Escape hatch
   evaluate: evaluateInputSchema,
+  // WebMCP
+  webmcp: webmcpInputSchema,
 } as const;

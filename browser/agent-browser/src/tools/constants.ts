@@ -23,6 +23,8 @@ export const BROWSER_TOOLS = {
   SCREENSHOT: 'browser_screenshot',
   // Escape hatch
   EVALUATE: 'browser_evaluate',
+  // WebMCP
+  WEBMCP: 'browser_webmcp',
 } as const;
 
 export type BrowserToolName = (typeof BROWSER_TOOLS)[keyof typeof BROWSER_TOOLS];

@@ -232,11 +232,13 @@ describe('AgentBrowser', () => {
   });
 
   describe('getTools', () => {
-    it('returns provider tools without recording tools by default', () => {
+    it('returns provider tools (including browser_webmcp by default) without recording tools', () => {
       const tools = browser.getTools();
 
-      expect(Object.keys(tools)).toHaveLength(16);
+      // 16 standard provider tools + browser_webmcp (WebMCP is on by default).
+      expect(Object.keys(tools)).toHaveLength(17);
       expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
+      expect(tools[BROWSER_TOOLS.WEBMCP]).toBeDefined();
       expect(tools.browser_record).toBeUndefined();
       expect(tools.browser_record_caption).toBeUndefined();
     });
@@ -248,7 +250,8 @@ describe('AgentBrowser', () => {
       expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
       expect(tools.browser_record).toBeDefined();
       expect(tools.browser_record_caption).toBeDefined();
-      expect(Object.keys(tools)).toHaveLength(18);
+      // 16 standard + 2 recording + browser_webmcp.
+      expect(Object.keys(tools)).toHaveLength(19);
     });
   });
 

@@ -3,6 +3,7 @@ import {
   ScreencastStreamImpl,
   DEFAULT_THREAD_ID,
   createBrowserRecordingTools,
+  createError,
   resolveLaunchViewport,
 } from '@mastra/core/browser';
 import type {
@@ -40,9 +41,11 @@ import type {
 } from './schemas';
 import { AgentBrowserThreadManager } from './thread-manager';
 import type { CreateAgentBrowserThreadManager } from './thread-manager';
-import { createAgentBrowserTools } from './tools';
-import type { BrowserConfig } from './types';
+import { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
+import { createWebmcpTool } from './tools/webmcp';
+import type { BrowserConfig, WebmcpOptions, WebmcpProtocol } from './types';
 import { getBrowserPid } from './utils';
+import { buildWebMcpInitScript } from './webmcp-bridge';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
@@ -66,6 +69,10 @@ export class AgentBrowser extends MastraBrowser {
   private pidLookups = new Set<Promise<void>>();
   private readonly pendingCloseReasons = new Map<string, 'agent' | 'user' | 'process_restart' | 'error'>();
   private readonly activeUrlChangeSources = new Map<string, { url: string; source: 'agent' | 'user' }>();
+  /** Contexts that already have the WebMCP init script installed. */
+  private readonly webMcpInstalledContexts = new WeakSet<object>();
+  /** Resolved WebMCP settings — null when the feature is disabled. */
+  private readonly webMcpSettings: { protocols: WebmcpProtocol[]; allowedOrigins: string[] | null } | null;
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -74,6 +81,7 @@ export class AgentBrowser extends MastraBrowser {
   constructor(config: AgentBrowserConfig = {}) {
     super(config);
     this.browserConfig = config;
+    this.webMcpSettings = resolveWebMcpSettings(config.webmcp);
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
@@ -103,6 +111,9 @@ export class AgentBrowser extends MastraBrowser {
         // `isRemoteThreadBrowser`.
         this.setupCloseListenerForThread(manager, threadId, this.isRemoteThreadBrowser());
       },
+      // Awaited before any page navigates (including restored tabs) so the
+      // WebMCP init script applies to every document in the context.
+      onBrowserLaunched: (manager: BrowserManager) => this.installWebMcpBridge(manager),
     };
     const createTm =
       config.createThreadManager ??
@@ -208,6 +219,9 @@ export class AgentBrowser extends MastraBrowser {
 
     // Register the shared manager with ThreadManager
     this.threadManager.setSharedManager(this.sharedManager);
+
+    // Install the WebMCP bridge on the shared context, before any page scripts run.
+    await this.installWebMcpBridge(this.sharedManager);
 
     // Set up close listeners to detect external browser closure.
     // A resolved `cdpUrl` means we connected to an existing (remote/container)
@@ -346,12 +360,16 @@ export class AgentBrowser extends MastraBrowser {
 
   /**
    * Get the browser tools for this provider.
-   * Returns 16 flat tools for browser automation.
+   * Returns 16 flat tools for browser automation, plus `browser_webmcp`
+   * unless WebMCP is disabled, plus the recording tools when configured.
    */
   getTools(): Record<string, Tool<any, any>> {
     const tools = createAgentBrowserTools(this);
     if (this.browserConfig.recording) {
       Object.assign(tools, createBrowserRecordingTools(this, this.browserConfig.recording));
+    }
+    if (this.webMcpSettings) {
+      Object.assign(tools, { [BROWSER_TOOLS.WEBMCP]: createWebmcpTool(this) });
     }
 
     const exclude = this.browserConfig.excludeTools;
@@ -1514,7 +1532,142 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   // ---------------------------------------------------------------------------
-  // 17. browser_close - Close browser
+  // 17. browser_webmcp - WebMCP tool discovery and invocation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Install the WebMCP in-page bridge on a browser context, once per context.
+   * Called (and awaited) from onBrowserLaunched / doLaunch so the bridge is in
+   * place before any document loads, including restored tabs.
+   */
+  private async installWebMcpBridge(manager: BrowserManager): Promise<void> {
+    if (!this.webMcpSettings) return;
+    try {
+      const context = manager.getContext();
+      if (!context) return;
+      if (this.webMcpInstalledContexts.has(context as unknown as object)) return;
+      this.webMcpInstalledContexts.add(context as unknown as object);
+      await context.addInitScript({ content: buildWebMcpInitScript(this.webMcpSettings.protocols) });
+    } catch (error) {
+      this.logger?.warn('[AgentBrowser] Failed to install WebMCP bridge', { error });
+    }
+  }
+
+  private originIsAllowed(url: string): boolean {
+    // Feature disabled entirely — callers must check `webMcpSettings` first,
+    // but return false here as a safety net.
+    if (!this.webMcpSettings) return false;
+    const allowed = this.webMcpSettings.allowedOrigins;
+    if (!allowed || allowed.length === 0) return true;
+    let origin: string;
+    try {
+      const parsed = new URL(url);
+      // Node's URL reports `origin: 'null'` for file: URLs, but pages see
+      // `file://` — normalize so allowlist entries documented as `file://` work.
+      origin = parsed.protocol === 'file:' ? 'file://' : parsed.origin;
+    } catch {
+      return false;
+    }
+    // `about:blank` and `data:` URLs have no origin an allowlist entry could match.
+    if (origin === 'null' || origin === 'about:blank') return false;
+    return allowed.includes(origin);
+  }
+
+  async listWebMcpTools(threadId?: string): Promise<
+    | {
+        success: true;
+        origin: string;
+        tools: Array<{
+          name: string;
+          source: 'w3c' | 'mcpb';
+          description: string | null;
+          inputSchema: unknown;
+        }>;
+        hint: string;
+      }
+    | BrowserToolError
+  > {
+    if (!this.webMcpSettings) {
+      return createError(
+        'browser_error',
+        'WebMCP is not enabled on this AgentBrowser.',
+        'Remove `webmcp: { enabled: false }` from the AgentBrowser config to enable WebMCP tool discovery.',
+      );
+    }
+    try {
+      const page = await this.getPage(threadId);
+      const url = page.url();
+      if (!this.originIsAllowed(url)) {
+        return createError(
+          'browser_error',
+          `WebMCP tools from "${safeOrigin(url)}" are not allowed by configuration.`,
+          'Navigate to an allowed origin, or add this origin to webmcp.allowedOrigins.',
+        );
+      }
+      const tools = await page.evaluate(async () => {
+        const bridge = (globalThis as unknown as { __mastraWebMcp?: { list: () => Promise<unknown> } }).__mastraWebMcp;
+        return bridge ? await bridge.list() : [];
+      });
+      const list = Array.isArray(tools)
+        ? (tools as Array<{ name: string; source: 'w3c' | 'mcpb'; description: string | null; inputSchema: unknown }>)
+        : [];
+      return {
+        success: true,
+        origin: safeOrigin(url),
+        tools: list,
+        hint:
+          list.length === 0
+            ? 'No WebMCP tools are registered on the current page. Navigate to a page that exposes them, or use the standard browser tools.'
+            : 'Call browser_webmcp with action="call" and the exact tool name to invoke a tool.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'WebMCP list');
+    }
+  }
+
+  async callWebMcpTool(
+    input: { toolName: string; args?: unknown },
+    threadId?: string,
+  ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
+    if (!this.webMcpSettings) {
+      return createError(
+        'browser_error',
+        'WebMCP is not enabled on this AgentBrowser.',
+        'Remove `webmcp: { enabled: false }` from the AgentBrowser config to enable WebMCP tool discovery.',
+      );
+    }
+    try {
+      const page = await this.getPage(threadId);
+      const url = page.url();
+      if (!this.originIsAllowed(url)) {
+        return createError(
+          'browser_error',
+          `WebMCP tools from "${safeOrigin(url)}" are not allowed by configuration.`,
+          'Navigate to an allowed origin, or add this origin to webmcp.allowedOrigins.',
+        );
+      }
+      const result = await page.evaluate(
+        async ({ name, args }) => {
+          const bridge = (
+            globalThis as unknown as { __mastraWebMcp?: { call: (name: string, args: unknown) => Promise<unknown> } }
+          ).__mastraWebMcp;
+          if (!bridge) throw new Error('WebMCP bridge is not installed on this page');
+          return await bridge.call(name, args);
+        },
+        { name: input.toolName, args: input.args },
+      );
+      return {
+        success: true,
+        result,
+        hint: 'WebMCP tool executed. Call browser_snapshot if the page may have changed.',
+      };
+    } catch (error) {
+      return this.createErrorFromException(error, 'WebMCP call');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 18. browser_close - Close browser
   // ---------------------------------------------------------------------------
 
   async closeBrowser(): Promise<{ success: true; hint: string } | BrowserToolError> {
@@ -1715,6 +1868,30 @@ export class AgentBrowser extends MastraBrowser {
       windowsVirtualKeyCode: event.windowsVirtualKeyCode,
     });
   }
+}
+
+function safeOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Resolve the WebMCP configuration into a normalized settings object.
+ * WebMCP is enabled by default; the user turns it off with `enabled: false`.
+ * An omitted (or empty) `protocols` array enables every supported protocol,
+ * mirroring how `allowedOrigins` treats omitted/empty as "no restriction".
+ */
+function resolveWebMcpSettings(
+  opts: WebmcpOptions | undefined,
+): { protocols: WebmcpProtocol[]; allowedOrigins: string[] | null } | null {
+  if (opts?.enabled === false) return null;
+  return {
+    protocols: opts?.protocols?.length ? [...new Set(opts.protocols)] : ['mcpb', 'w3c'],
+    allowedOrigins: opts?.allowedOrigins ?? null,
+  };
 }
 
 export default AgentBrowser;

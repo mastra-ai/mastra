@@ -24,6 +24,7 @@ import { createSnapshotTool } from './snapshot';
 import { createTabsTool } from './tabs';
 import { createTypeTool } from './type';
 import { createWaitTool } from './wait';
+import { createWebmcpTool } from './webmcp';
 
 export { BROWSER_TOOLS, type BrowserToolName } from './constants';
 

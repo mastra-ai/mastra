@@ -104,6 +104,13 @@ then interact with elements using their refs (e.g., @e5).`,
       'Tool names to exclude from the browser toolset. Use this to disable specific tools for models that do not support certain capabilities, such as vision.',
     isOptional: true,
   },
+  {
+    name: 'webmcp',
+    type: 'WebmcpOptions',
+    description:
+      "Beta WebMCP settings. WebMCP is enabled by default; AgentBrowser injects an in-page bridge and adds a browser_webmcp tool. Pass { enabled: false } to turn it off. `protocols` restricts which surfaces the bridge listens for ('mcpb' for in-page MCP servers over the @mcp-b/transports Tab transport, 'w3c' for the navigator.modelContext draft); omit it to listen for all protocols. `allowedOrigins` restricts which page origins can expose callable tools; omit it to allow any origin.",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -112,6 +119,8 @@ then interact with elements using their refs (e.g., @e5).`,
 `AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
 
 When `recording` is configured, `AgentBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser#record-browser-sessions).
+
+`AgentBrowser` also adds the Beta `browser_webmcp` tool by default; pass `webmcp: { enabled: false }` to turn it off. See [WebMCP](/integrations/browsers/agent-browser#webmcp).
 
 ### Core tools
 
