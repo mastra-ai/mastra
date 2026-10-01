@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SettingsContainer, SettingsRow } from './index';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { Input } from '@/ds/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
@@ -62,7 +61,7 @@ export const Controls: Story = {
       </SettingsRow>
       <SettingsRow label="Region" description="Select, sized by the row">
         <Select defaultValue="eu">
-          <SelectTrigger aria-label="Region">
+          <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -71,11 +70,11 @@ export const Controls: Story = {
           </SelectContent>
         </Select>
       </SettingsRow>
-      <SettingsRow label="Max steps" htmlFor="row-max-steps" description="Inputs set their own width">
-        <Input id="row-max-steps" className="w-40" defaultValue="5" />
+      <SettingsRow label="Max steps" description="Inputs set their own width">
+        <Input className="w-40" defaultValue="5" />
       </SettingsRow>
       <SettingsRow label="Notifications" description="Notify when a run finishes">
-        <Switch aria-label="Notifications" defaultChecked />
+        <Switch defaultChecked />
       </SettingsRow>
     </>
   ),
@@ -131,14 +130,8 @@ export const Destructive: Story = {
 
 export const Validation: Story = {
   render: () => (
-    <SettingsRow label="Model" htmlFor="row-model" required errorMsg="Choose the model this agent runs on.">
-      <Input
-        id="row-model"
-        className="w-56"
-        placeholder="openai/gpt-5.2"
-        error
-        aria-describedby={fieldErrorId('row-model')}
-      />
+    <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
+      <Input className="w-56" placeholder="openai/gpt-5.2" />
     </SettingsRow>
   ),
 };

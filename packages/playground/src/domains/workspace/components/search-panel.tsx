@@ -1,11 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { inputSurfaceAndFocusStyle } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
 
@@ -80,45 +84,39 @@ export function SearchWorkspacePanel({
 
   return (
     <div className="rounded-lg bg-muted">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="p-4">
-        <div className="flex items-center gap-3">
-          {/* Query Input */}
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-              placeholder="Search workspace files..."
-              className="pl-9"
-            />
-          </div>
+      <Form onSubmit={handleSearch} className="p-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+          <SearchInput
+            label="Search workspace files"
+            className="flex-1"
+            placeholder="Search workspace files..."
+            value={query}
+            onValueChange={setQuery}
+          />
 
-          {/* Top K */}
-          <div className="flex items-center gap-1.5">
-            <Txt as="span" variant="caption" tone="muted">
-              Top
-            </Txt>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="w-14 border-border bg-background text-center"
-              title="Number of results"
-            />
-          </div>
+          <Field className="contents">
+            <div className="flex items-center gap-1.5">
+              <FieldLabel size="smaller">Top</FieldLabel>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
+                className="w-14 border-border bg-background text-center"
+                title="Number of results"
+              />
+            </div>
+            <FieldError className="col-span-full row-start-2" />
+          </Field>
 
-          {/* Search Button */}
           <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>
 
-        {/* Mode Selection */}
         {availableModes.length > 0 && (
-          <div className="mt-3 flex gap-2">
+          <div className="flex gap-2">
             {availableModes.map(m => {
               const config = modeConfig[m];
               const isActive = mode === m;
@@ -136,9 +134,8 @@ export function SearchWorkspacePanel({
             })}
           </div>
         )}
-      </form>
+      </Form>
 
-      {/* Results */}
       {searchResults && (
         <div className="border-t border-border">
           <div className="flex items-center justify-between px-4 py-2 text-caption">
@@ -242,55 +239,44 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
   return (
     <div className="space-y-4">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="space-y-3">
+      <Form onSubmit={handleSearch}>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search across skills..."
-              className={cn(
-                inputSurfaceAndFocusStyle,
-                'w-full rounded-lg py-2 pr-4 pl-10 text-body placeholder:text-muted-foreground',
-              )}
-            />
-          </div>
+          <SearchInput
+            label="Search skills"
+            className="flex-1"
+            placeholder="Search across skills..."
+            value={query}
+            onValueChange={setQuery}
+          />
           <Button type="submit" disabled={!query.trim() || isSearching}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>
 
         <div className="flex items-center gap-4 text-body">
-          <label className="flex items-center gap-2 text-caption text-muted-foreground">
-            <span>Results:</span>
-            <select
-              value={topK}
-              onChange={e => setTopK(Number(e.target.value))}
-              className={cn(raisedSurfaceStyle, 'rounded px-2 py-1 text-foreground')}
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-            </select>
-          </label>
+          <Field orientation="horizontal">
+            <FieldLabel size="smaller">Results:</FieldLabel>
+            <Select value={String(topK)} onValueChange={value => setTopK(Number(value))}>
+              <SelectTrigger size="sm" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[3, 5, 10, 20].map(value => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <label className="flex cursor-pointer items-center gap-2 text-caption text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={includeReferences}
-              onChange={e => setIncludeReferences(e.target.checked)}
-              className="rounded border-border bg-card"
-            />
-            <span>Include references</span>
-          </label>
+          <Field orientation="horizontal">
+            <Checkbox checked={includeReferences} onCheckedChange={checked => setIncludeReferences(checked === true)} />
+            <FieldLabel size="smaller">Include references</FieldLabel>
+          </Field>
         </div>
-      </form>
+      </Form>
 
-      {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
           <Txt as="h3" variant="subheading" tone="ink">

@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -123,7 +124,7 @@ export const SkillBuilderStarter = () => {
           What skill do you want to build?
         </Txt>
 
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <div
             className="starter-prompt rounded-2xl border border-border bg-background transition-colors duration-normal ease-out-custom focus-within:border-muted-foreground"
             style={{ viewTransitionName: 'skill-chat-composer' }}
@@ -161,7 +162,7 @@ export const SkillBuilderStarter = () => {
               </Button>
             </div>
           </div>
-        </form>
+        </Form>
 
         <div className="flex flex-wrap justify-center gap-2">
           {EXAMPLES.map((example, i) => {

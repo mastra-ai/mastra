@@ -97,15 +97,10 @@ function RootStateProbe() {
   );
 }
 
-const renderView = ({
-  anchorTraceId,
-  traceIds = TRACE_IDS,
-  className,
-}: { anchorTraceId?: string; traceIds?: string[]; className?: string } = {}) =>
+const renderView = ({ traceIds = TRACE_IDS, className }: { traceIds?: string[]; className?: string } = {}) =>
   renderUI(
-    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} className={className}>
+    <ThreadTrace traceIds={traceIds} className={className}>
       <ThreadTrace.List data-testid="thread-trace-list">
-        <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTrace.Messages>
@@ -154,20 +149,6 @@ describe('ThreadTrace', () => {
       expect(container.firstElementChild?.className).toContain('custom-root');
       expect(container.firstElementChild?.className).toContain('grid');
       expect(screen.getByTestId('thread-trace-list')).toBeTruthy();
-      expect(screen.getByTestId('sentinel')).toBeTruthy();
-    });
-
-    it('scrolls the anchor row into view once and starts it expanded', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      renderView({ anchorTraceId: 'trace-b' });
-      await screen.findByText('Chef agent follow-up');
-
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
-      // trace-b is expanded from the start so its timeline is not clamped; trace-a is.
-      await screen.findByRole('button', { name: 'Show more' });
-      expect(within(getRow('trace-a')).getByRole('button', { name: 'Show more' })).toBeTruthy();
-      expect(within(getRow('trace-b')).queryByRole('button', { name: 'Show more' })).toBeNull();
     });
   });
 

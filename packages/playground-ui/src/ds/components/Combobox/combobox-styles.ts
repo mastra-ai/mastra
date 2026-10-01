@@ -3,7 +3,7 @@ import { buttonVariants, isIconButtonSize } from '../Button/Button';
 import type { ButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -38,12 +38,10 @@ function normalizeComboboxVariant(variant: ComboboxVariant): ComboboxVisualVaria
 export function comboboxTriggerClass({
   variant,
   size,
-  error,
   className,
 }: {
   variant: ComboboxVariant;
   size: ButtonSize;
-  error?: boolean;
   className?: string;
 }): string {
   const visualVariant = normalizeComboboxVariant(variant);
@@ -58,8 +56,7 @@ export function comboboxTriggerClass({
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
-    error &&
-      'border-destructive-indicator hover:border-destructive-indicator focus-visible:border-destructive-indicator',
+    fieldTriggerErrorBorder,
     className,
   );
 }
@@ -78,7 +75,7 @@ export const comboboxItemClass = cva(menuItemClass, {
 });
 
 export const comboboxStyles = {
-  /** Root wrapper */
+  /** @deprecated A `Field` lays out the combobox and its error. */
   root: 'flex flex-col gap-1.5',
 
   /** Chevron icon in trigger — decorative icon token shared by every field. */
@@ -142,6 +139,6 @@ export const comboboxStyles = {
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
 
-  /** Error message */
+  /** @deprecated A `FieldError` colors the error. */
   error: 'text-caption text-destructive-foreground',
 } as const;

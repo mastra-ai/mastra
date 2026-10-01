@@ -4,6 +4,7 @@ import { Sun } from 'lucide-react';
 import { createRef } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { Field, FieldLabel } from '../Field';
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
 
 // Base UI synthesizes a PointerEvent on click, which jsdom does not implement.
@@ -111,6 +112,26 @@ describe('SegmentedControl', () => {
       );
 
       expect(screen.getByRole('radio', { name: 'Light' }).textContent).toBe('');
+    });
+  });
+
+  describe('when placed in a labelled Field, such as a SettingsRow', () => {
+    it('keeps the group and item names instead of taking the row label', () => {
+      render(
+        <Field>
+          <FieldLabel>Notifications</FieldLabel>
+          <SegmentedControl aria-label="Delivery" value="sound" onValueChange={() => {}}>
+            <SegmentedControlItem value="sound">Sound</SegmentedControlItem>
+            <SegmentedControlItem value="badge" aria-label="Badge only">
+              <Sun />
+            </SegmentedControlItem>
+          </SegmentedControl>
+        </Field>,
+      );
+
+      expect(screen.getByRole('radiogroup', { name: 'Delivery' })).toBeDefined();
+      expect(screen.getByRole('radio', { name: 'Sound' })).toBeDefined();
+      expect(screen.getByRole('radio', { name: 'Badge only' })).toBeDefined();
     });
   });
 
