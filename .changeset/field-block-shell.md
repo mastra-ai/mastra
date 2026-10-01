@@ -17,7 +17,7 @@ Added `Field` components for building form fields: `Field`, `FieldLabel`, `Field
 </Field>
 ```
 
-This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`: the row is centred, and when the label comes first the control sits at the far end, so a settings toggle needs no extra classes. Use `orientation="responsive"` to stack it on small screens. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
+This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. For a control that is not built on Base UI, such as a custom popover trigger, spread `useFieldControlAria()` on it to get the same label, description and invalid wiring. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`: the row is centred, and when the label comes first the control sits at the far end, so a settings toggle needs no extra classes. Use `orientation="responsive"` to stack it on small screens. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
 
 A control that has its own `aria-label` keeps that name inside a `Field`, the same way `aria-label` wins over a native `<label>`. Use it when one row label covers several controls, such as two selects in a `SettingsRow`:
 
@@ -28,7 +28,7 @@ A control that has its own `aria-label` keeps that name inside a `Field`, the sa
 </SettingsRow>
 ```
 
-Labels are styled by the `Field`: a label beside a `Checkbox`, `Switch` or radio shows a pointer cursor, and a disabled one shows it can't be clicked, so no `cursor-*` or color classes are needed. For compact rows, use `<FieldLabel size="smaller">`.
+Labels are styled by the `Field`: a label beside a `Checkbox`, `Switch` or radio shows a pointer cursor, so no `cursor-*` or color classes are needed. To disable a field, put `disabled` on the `Field`, `FieldItem` or `Fieldset` rather than on the control: the control is disabled through it, and only then does the label show it can't be clicked. For compact rows, use `<FieldLabel size="smaller">`.
 
 Added `Form` (`@mastra/playground-ui/components/Form`), built on Base UI Form, with one standard gap between fields. Put a `<FieldError />` with no children in a field that uses `required`, `type="email"`, `min` or `max`: when a user submits an invalid value, the form stops, focuses that field and shows the browser's message there.
 
@@ -38,9 +38,10 @@ Before, there were three ways to build a field: the `*FieldBlock` components, `F
 
 **Removed**
 
-- `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `ListSearch`.
+- `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `ListSearch`. It calls `onSearch` 300 ms after typing stops, so pass `debounceMs={0}` to keep `SearchFieldBlock`'s immediate updates, and `shortcutDisabled` on a second search box on the same page.
+- `FieldBlock.ErrorMsg` for a message that belongs to no single control, such as a server error under a form: `FieldError` throws outside a `Field`, so wrap it in `<Field invalid>`.
 - `Label` (`@mastra/playground-ui/components/Label`): use `FieldLabel` inside a `Field`.
 - The `error` prop on `Input`, `Textarea`, `InputGroupInput` and `InputGroupTextarea`: use `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`.
-- The `error` and `name` props on `Combobox`: wrap it in `<Field invalid>` with a `FieldError`.
+- The `error` and `name` props on `Combobox`, and the `root` and `error` keys of `comboboxStyles`: wrap the combobox in `<Field invalid>` with a `FieldError`.
 - The `htmlFor` prop on `SettingsRow`: pass the control as a child without an `id`, and the row's label names it.
-- `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. They take `label`, `labelIsHidden` and the props of their control.
+- `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. `FieldName` and `FieldDescription` take `label`, `labelIsHidden` and the props of their input. `FieldType` takes `label`, `labelIsHidden`, `placeholder`, `size`, `disabled` and `className`.
