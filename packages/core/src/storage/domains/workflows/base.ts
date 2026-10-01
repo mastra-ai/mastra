@@ -2,7 +2,6 @@ import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type {
   ClaimRunOwnershipInput,
   ClaimRunOwnershipResult,
-  ReleaseRunOwnershipInput,
   RenewRunOwnershipInput,
   RenewRunOwnershipResult,
   RunFence,
@@ -24,8 +23,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Whether this adapter implements run ownership: the claim/renew/release
-   * operations below, and rejecting writes whose `fence` is no longer the
-   * run's current claim, atomically with the write itself.
+   * operations below, and rejecting writes whose fence is no longer the run's
+   * current claim, atomically with the write itself. A write's fence is its
+   * `fence` argument, otherwise the one `resolveRunFence()` returns for the
+   * run it writes.
    *
    * Adapters that return true must pass the run-fencing conformance suite.
    */
@@ -42,17 +43,21 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
-  /** Extend the lease. Succeeds only while `ownerId` and `generation` still hold the run. */
+  /**
+   * Extend the lease. Succeeds only while `ownerId` and `generation` still
+   * hold the run and the claim has not been released.
+   */
   async renewRunOwnership(_args: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
   /**
-   * Give up a claim. Keeps the generation so later claims stay monotonic,
-   * unless `remove` deletes the record. Returns false if the claim was no
-   * longer current.
+   * Give up a claim by clearing its lease, so the run can be claimed without
+   * `force`. The record keeps its generation and owner: claims stay
+   * monotonic, and the released owner's late writes are still accepted until
+   * the run is claimed again. Returns false if the claim was no longer current.
    */
-  async releaseRunOwnership(_args: ReleaseRunOwnershipInput): Promise<boolean> {
+  async releaseRunOwnership(_args: RunFence): Promise<boolean> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 

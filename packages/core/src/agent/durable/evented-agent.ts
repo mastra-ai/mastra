@@ -155,7 +155,8 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     // Captured now: a later resume() replaces the registry's fence before this
     // segment's background promise settles.
-    const executionFence = globalRunRegistry.get(runId)?.executionFence;
+    const entry = globalRunRegistry.get(runId);
+    const executionFence = entry?.executionFence;
     const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)));
     try {
       const workflow = this.getWorkflow();
@@ -183,12 +184,13 @@ export class EventedAgent<
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        ...(this.resolveWorkflowEngine() === 'default' ? { pubsub: this.pubsubInternal } : {}),
+        ...(this.resolveWorkflowEngine() === 'default'
+          ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) }
+          : {}),
       });
       // Fire and forget - don't await the run, so stream() returns immediately.
       // Pass the caller's requestContext (so config selectors pick the same observability
       // instance the root spans were created with) and parent the run under the AGENT_RUN span.
-      const entry = globalRunRegistry.get(runId);
       run
         .start({
           inputData: workflowInput,

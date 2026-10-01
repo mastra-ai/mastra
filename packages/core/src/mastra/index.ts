@@ -72,6 +72,7 @@ import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inm
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
+import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import { trackFeatureUsage } from '../telemetry/feature-telemetry';
@@ -6944,7 +6945,9 @@ export class Mastra<
     // instance share one start instead of racing worker.init()/start().
     // Cleared on settle so a dispatch after stopWorkers() can start again.
     if (!this.#executionWorkersStartPromise) {
-      this.#executionWorkersStartPromise = this.#startExecutionWorkers().finally(() => {
+      // Lazy startup can be triggered from inside a durable run. The workers'
+      // timers and subscriptions outlive it and must not carry its write fence.
+      this.#executionWorkersStartPromise = runOutsideRunFenceScope(() => this.#startExecutionWorkers()).finally(() => {
         this.#executionWorkersStartPromise = undefined;
       });
     }

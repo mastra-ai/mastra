@@ -25,13 +25,14 @@ import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
-import { InMemoryStore } from '../../../storage';
+import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import {
+  DurableExecutionFenceError,
   EXECUTION_CONFLICT_ERROR_ID,
   ExecutionFence,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
@@ -210,6 +211,7 @@ function foreignOwnership(backend: OwnershipBackend, storage: InMemoryStore, pub
   }
   const workflows = storage.stores.workflows!;
   return {
+    /** Claim the run and raise its memory to the claim, as recover() in another process does. */
     async takeOver(fence: ExecutionFence, owner: string) {
       const claimed = await workflows.claimRunOwnership({
         runId: fence.runId,
@@ -218,6 +220,12 @@ function foreignOwnership(backend: OwnershipBackend, storage: InMemoryStore, pub
         force: true,
       });
       expect(claimed.acquired).toBe(true);
+      const raised = await storage.stores.memory!.raiseRunFence({
+        runId: fence.runId,
+        generation: claimed.record!.generation,
+        ownerId: owner,
+      });
+      expect(raised).toBe(true);
     },
     async hold(_agentId: string, runId: string, owner: string) {
       expect((await workflows.claimRunOwnership({ runId, ownerId: owner, leaseMs: TTL })).acquired).toBe(true);
@@ -305,7 +313,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
-      const memory = new MockMemory();
+      const memory = new MockMemory({ storage });
       const model = gatedModel('stale answer from the superseded execution');
       const baseAgent = new Agent({
         id: 'fence-agent',
@@ -386,6 +394,76 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await stream.stop();
       result.cleanup();
     });
+
+    it.skipIf(backend === 'lease')(
+      'storage rejects a write that passed its ownership checks before a takeover, and the execution aborts',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('stale answer from the superseded execution');
+        model.release();
+        const durableAgent = buildAgent({ model: model.model, storage, memory });
+
+        // Hold the execution's assistant-message write after every ownership check before it passed.
+        let releaseWrite!: () => void;
+        const writeGate = new Promise<void>(resolve => {
+          releaseWrite = resolve;
+        });
+        let signalWriteHeld!: () => void;
+        const writeHeld = new Promise<void>(resolve => {
+          signalWriteHeld = resolve;
+        });
+        const memoryStore = storage.stores.memory!;
+        const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+        const outcomes: unknown[] = [];
+        vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async args => {
+          if (args.messages.some(message => message.role === 'assistant')) {
+            signalWriteHeld();
+            await writeGate;
+          }
+          try {
+            const saved = await saveMessages(args);
+            outcomes.push('saved');
+            return saved;
+          } catch (error) {
+            outcomes.push(error);
+            throw error;
+          }
+        });
+
+        const result = await durableAgent.stream('What is the answer?', {
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const { runId } = result;
+        const stream = collect(result.fullStream);
+        const events: string[] = [];
+        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+          events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
+        });
+
+        await writeHeld;
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        expect(fence.isLost()).toBe(false);
+        const { signal } = globalRunRegistry.get(runId)!.abortController!;
+
+        await foreignOwnership(backend, storage, durableAgent.pubsub).takeOver(fence, 'foreign-recoverer');
+        releaseWrite();
+        await fence.whenSettled;
+
+        expect(outcomes.at(-1)).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+        expect(fence.isLost()).toBe(true);
+        expect(signal.aborted).toBe(true);
+        expect(signal.reason).toBeInstanceOf(DurableExecutionFenceError);
+        expect(await fence.settle(async () => {})).toBe('superseded');
+        expect(await assistantText(memory)).not.toContain('stale answer');
+        expect(events).not.toContain('finish');
+        expect(events).not.toContain('error');
+        expect(model.calls()).toBe(1);
+
+        await stream.stop();
+        result.cleanup();
+      },
+    );
 
     it('recover() takes the run over from a still-live foreign owner and releases the lease when done', async () => {
       const storage = createStorage(backend);

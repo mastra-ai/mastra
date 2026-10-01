@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../logger';
 import type { MemoryConfigInternal } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
+import { isRunFenceConflictError } from '../../storage/run-fencing';
 import type { MessageList } from '../message-list';
 import { noteThreadMessagesSaved } from '../thread-saves';
 
@@ -9,7 +10,7 @@ export interface FlushMessagesOptions {
    * Runs inside the thread's save queue, immediately before unsaved messages
    * are drained. A rejection skips the save, leaves the messages unsaved, and
    * rejects the flush with that error. Storage errors are still logged, not
-   * thrown.
+   * thrown, except a run fence conflict, which rejects the flush like the guard.
    */
   beforePersist?: () => Promise<void>;
 }
@@ -92,6 +93,13 @@ export class SaveQueueManager {
         await this.persistUnsavedMessages(threadId, messageList, memoryConfig);
       })
       .catch(err => {
+        // Storage refused the write because the guarded run lost ownership.
+        // That is the guard failing late, so the caller must see it too.
+        if (beforePersist && isRunFenceConflictError(err)) {
+          guardFailed = true;
+          guardError = err;
+          return;
+        }
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
       })
       .then(() => {

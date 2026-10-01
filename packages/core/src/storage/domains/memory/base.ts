@@ -1,6 +1,6 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
-import type { ReleaseRunOwnershipInput, RunFence } from '../../run-fencing';
+import type { RunFence } from '../../run-fencing';
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type {
   StorageResourceType,
@@ -78,9 +78,14 @@ export abstract class MemoryStorage extends StorageDomain {
   }): Promise<StorageThreadType | null>;
 
   /**
-   * Whether this adapter implements run fencing: `raiseRunFence` and
-   * `releaseRunFence`, and rejecting thread, message and resource writes whose
-   * `fence` is no longer the run's current fence, atomically with the write.
+   * Whether this adapter implements run fencing: `raiseRunFence`, and
+   * rejecting thread, message and resource writes whose fence is no longer the
+   * run's current fence, atomically with the write. A write's fence is its
+   * `fence` argument, otherwise the one `resolveRunFence()` returns.
+   *
+   * Observational memory writes that change observations or reflections are
+   * fenced through `resolveRunFence()` only. Its flags, pending token counts
+   * and record initialization are not fenced.
    *
    * Adapters that return true must pass the run-fencing conformance suite.
    */
@@ -95,15 +100,6 @@ export abstract class MemoryStorage extends StorageDomain {
    * so that writes from older claims are rejected here too.
    */
   async raiseRunFence(_fence: RunFence): Promise<boolean> {
-    throw runFencingNotSupportedError('memory', this.constructor.name);
-  }
-
-  /**
-   * Stop accepting writes for `fence`. Keeps the generation so later raises
-   * stay monotonic, unless `remove` deletes the record. Returns false if the
-   * fence was no longer current.
-   */
-  async releaseRunFence(_args: ReleaseRunOwnershipInput): Promise<boolean> {
     throw runFencingNotSupportedError('memory', this.constructor.name);
   }
 

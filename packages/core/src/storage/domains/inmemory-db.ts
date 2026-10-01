@@ -56,9 +56,9 @@ export class InMemoryDB {
   readonly resources = new Map<string, StorageResourceType>();
   readonly workflows = new Map<string, StorageWorkflowRun>();
   /** Workflows-domain run ownership, keyed by runId. */
-  readonly runOwners = new Map<string, { generation: number; ownerId: string | null; leaseExpiresAt: Date | null }>();
+  readonly runOwners = new Map<string, { generation: number; ownerId: string; leaseExpiresAt: Date | null }>();
   /** Memory-domain run fences, keyed by runId. */
-  readonly runFences = new Map<string, { generation: number; ownerId: string | null }>();
+  readonly runFences = new Map<string, { generation: number; ownerId: string }>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();

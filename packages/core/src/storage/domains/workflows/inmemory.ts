@@ -1,10 +1,9 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import { normalizePerPage } from '../../base';
-import { matchesRunFence, RunFenceConflictError } from '../../run-fencing';
+import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
 import type {
   ClaimRunOwnershipInput,
   ClaimRunOwnershipResult,
-  ReleaseRunOwnershipInput,
   RenewRunOwnershipInput,
   RenewRunOwnershipResult,
   RunFence,
@@ -215,11 +214,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       generation: owner.generation,
       ownerId: owner.ownerId,
       leaseExpiresAt: owner.leaseExpiresAt ? new Date(owner.leaseExpiresAt) : null,
-      live: owner.ownerId !== null && !!owner.leaseExpiresAt && owner.leaseExpiresAt.getTime() > Date.now(),
+      live: !!owner.leaseExpiresAt && owner.leaseExpiresAt.getTime() > Date.now(),
     };
   }
 
-  private assertFence(fence: RunFence | undefined, operation: string): void {
+  private assertFence(explicit: RunFence | undefined, runId: string, operation: string): void {
+    const fence = resolveRunFence(this, explicit, runId);
     if (fence && !matchesRunFence(this.db.runOwners.get(fence.runId), fence)) {
       throw new RunFenceConflictError(fence, operation);
     }
@@ -249,22 +249,17 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
   async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
     const owner = this.db.runOwners.get(fence.runId);
-    if (!owner || !matchesRunFence(owner, fence)) {
+    if (!owner?.leaseExpiresAt || !matchesRunFence(owner, fence)) {
       return { renewed: false, record: this.ownershipRecord(fence.runId) };
     }
     owner.leaseExpiresAt = new Date(Date.now() + leaseMs);
     return { renewed: true, record: this.ownershipRecord(fence.runId)! };
   }
 
-  async releaseRunOwnership({ remove, ...fence }: ReleaseRunOwnershipInput): Promise<boolean> {
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
     const owner = this.db.runOwners.get(fence.runId);
     if (!owner || !matchesRunFence(owner, fence)) return false;
-    if (remove) {
-      this.db.runOwners.delete(fence.runId);
-    } else {
-      owner.ownerId = null;
-      owner.leaseExpiresAt = null;
-    }
+    owner.leaseExpiresAt = null;
     return true;
   }
 
@@ -287,7 +282,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     requestContext: Record<string, any>;
     fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    this.assertFence(fence, 'updateWorkflowResults');
+    this.assertFence(fence, runId, 'updateWorkflowResults');
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -332,7 +327,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
     fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
-    this.assertFence(fence, 'updateWorkflowState');
+    this.assertFence(fence, runId, 'updateWorkflowState');
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -387,7 +382,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     updatedAt?: Date;
     fence?: RunFence;
   }): Promise<void> {
-    this.assertFence(fence, 'persistWorkflowSnapshot');
+    this.assertFence(fence, runId, 'persistWorkflowSnapshot');
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
     const existing = this.db.workflows.get(key);
@@ -566,7 +561,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName: string;
     fence?: RunFence;
   }): Promise<void> {
-    this.assertFence(fence, 'deleteWorkflowRunById');
+    this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
     this.db.workflows.delete(key);
   }

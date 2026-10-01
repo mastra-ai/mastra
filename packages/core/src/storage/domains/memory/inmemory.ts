@@ -1,8 +1,8 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
-import { matchesRunFence, RunFenceConflictError } from '../../run-fencing';
-import type { ReleaseRunOwnershipInput, RunFence } from '../../run-fencing';
+import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
+import type { RunFence } from '../../run-fencing';
 import type {
   StorageMessageType,
   StorageResourceType,
@@ -65,7 +65,8 @@ export class InMemoryMemory extends MemoryStorage {
     return true;
   }
 
-  private assertFence(fence: RunFence | undefined, operation: string): void {
+  private assertFence(explicit: RunFence | undefined, operation: string): void {
+    const fence = resolveRunFence(this, explicit);
     if (fence && !matchesRunFence(this.db.runFences.get(fence.runId), fence)) {
       throw new RunFenceConflictError(fence, operation);
     }
@@ -78,17 +79,6 @@ export class InMemoryMemory extends MemoryStorage {
       return true;
     }
     return matchesRunFence(current, fence);
-  }
-
-  async releaseRunFence({ remove, ...fence }: ReleaseRunOwnershipInput): Promise<boolean> {
-    const current = this.db.runFences.get(fence.runId);
-    if (!current || !matchesRunFence(current, fence)) return false;
-    if (remove) {
-      this.db.runFences.delete(fence.runId);
-    } else {
-      current.ownerId = null;
-    }
-    return true;
   }
 
   async getThreadById({
@@ -945,6 +935,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    this.assertFence(undefined, 'updateActiveObservations');
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -968,6 +959,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    this.assertFence(undefined, 'updateBufferedObservations');
     const { id, chunk } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1005,6 +997,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    this.assertFence(undefined, 'swapBufferedToActive');
     const { id, activationRatio, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1156,6 +1149,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    this.assertFence(undefined, 'createReflectionGeneration');
     const { currentRecord, reflection, tokenCount } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
@@ -1196,6 +1190,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    this.assertFence(undefined, 'updateBufferedReflection');
     const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1211,6 +1206,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    this.assertFence(undefined, 'swapBufferedReflectionToActive');
     const { currentRecord } = input;
     const record = this.findObservationalMemoryRecordById(currentRecord.id);
     if (!record) {

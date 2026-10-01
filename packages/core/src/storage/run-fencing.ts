@@ -6,6 +6,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
  * Writes that carry a fence are applied only while the fence is still the
  * run's current claim; the check and the write happen atomically in storage.
  * A write without a fence behaves exactly as before.
+ *
+ * A write made inside a durable run execution carries that execution's fence
+ * without the caller passing it: adapters resolve it with
+ * {@link resolveRunFence}.
  */
 export interface RunFence {
   runId: string;
@@ -19,10 +23,11 @@ export interface RunFence {
 export interface RunOwnershipRecord {
   runId: string;
   generation: number;
+  /** Id of the execution that made the latest claim. Kept after release. */
+  ownerId: string;
   /** Null once the owner released the run. */
-  ownerId: string | null;
   leaseExpiresAt: Date | null;
-  /** Whether an owner holds an unexpired lease, judged on the store's clock. */
+  /** Whether the owner holds an unexpired lease, judged on the store's clock. */
   live: boolean;
 }
 
@@ -53,17 +58,15 @@ export type RenewRunOwnershipResult =
   | { renewed: true; record: RunOwnershipRecord }
   | { renewed: false; record: RunOwnershipRecord | null };
 
-export interface ReleaseRunOwnershipInput extends RunFence {
-  /** Delete the record instead of clearing the owner. Use once the run is finished. */
-  remove?: boolean;
-}
-
 export const RUN_FENCE_CONFLICT_ERROR_ID = 'STORAGE_RUN_FENCE_CONFLICT';
 export const RUN_FENCING_NOT_SUPPORTED_ERROR_ID = 'STORAGE_RUN_FENCING_NOT_SUPPORTED';
 
 /**
  * Thrown by storage when a fenced write's claim is no longer the run's
  * current claim. Nothing was written.
+ *
+ * Constructing it inside a durable run execution tells that execution it lost
+ * the run, even when the caller of the write swallows the error.
  */
 export class RunFenceConflictError extends MastraError {
   constructor(fence: RunFence, operation: string) {
@@ -75,6 +78,7 @@ export class RunFenceConflictError extends MastraError {
       details: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId, operation },
     });
     this.name = 'RunFenceConflictError';
+    getRunFenceContext()?.current()?.onConflict?.(fence);
   }
 }
 
@@ -100,8 +104,66 @@ export function runFencingNotSupportedError(domain: string, adapter: string): Ma
 
 /** Whether a stored claim matches `fence`. Adapters use this for the check half of a fenced write. */
 export function matchesRunFence(
-  current: { generation: number; ownerId: string | null } | null | undefined,
+  current: { generation: number; ownerId: string } | null | undefined,
   fence: RunFence,
 ): boolean {
   return !!current && current.generation === fence.generation && current.ownerId === fence.ownerId;
+}
+
+/** Supplies the fence for writes made inside a durable run execution. */
+export interface RunFenceScope {
+  /**
+   * The fence a write to `store` carries, or `undefined` when the scope does
+   * not cover the write. Workflows writes pass the run they target; memory
+   * writes omit it.
+   */
+  fenceFor(store: object, runId?: string): RunFence | undefined;
+  /** Storage rejected a write carrying `fence`. */
+  onConflict?(fence: RunFence): void;
+}
+
+/** The async context that carries the current {@link RunFenceScope}. */
+export interface RunFenceContext {
+  current(): RunFenceScope | undefined;
+  run<T>(scope: RunFenceScope | undefined, fn: () => T): T;
+}
+
+// Kept on globalThis so storage adapters resolve the scope the durable runtime
+// installed even when they load a different copy of core (CJS next to ESM).
+const RUN_FENCE_CONTEXT = Symbol.for('mastra.storage.runFenceContext');
+type RunFenceGlobal = typeof globalThis & { [RUN_FENCE_CONTEXT]?: RunFenceContext };
+
+function getRunFenceContext(): RunFenceContext | undefined {
+  return (globalThis as RunFenceGlobal)[RUN_FENCE_CONTEXT];
+}
+
+/**
+ * Install the async context that carries run fence scopes, unless another copy
+ * of core already installed one. Returns the installed context. The durable
+ * agent runtime installs it, which keeps `node:async_hooks` out of storage.
+ *
+ * @internal
+ */
+export function setRunFenceContext(context: RunFenceContext): RunFenceContext {
+  return ((globalThis as RunFenceGlobal)[RUN_FENCE_CONTEXT] ??= context);
+}
+
+/**
+ * Run `fn` outside any run's fence scope. Long-lived work started from inside
+ * a run that does not belong to it (workers, subscriptions, in-process pubsub
+ * delivery) uses this so its writes do not carry the run's fence.
+ */
+export function runOutsideRunFenceScope<T>(fn: () => T): T {
+  const context = getRunFenceContext();
+  return context?.current() ? context.run(undefined, fn) : fn();
+}
+
+/**
+ * The fence a write to `store` must carry: the explicit `fence`, otherwise
+ * the fence of the durable run execution the write happens in. Adapters call
+ * this at the start of every fenced write, passing the domain store itself as
+ * `store` and, for workflows writes, the run the write targets.
+ */
+export function resolveRunFence(store: object, fence: RunFence | undefined, runId?: string): RunFence | undefined {
+  return fence ?? getRunFenceContext()?.current()?.fenceFor(store, runId);
 }

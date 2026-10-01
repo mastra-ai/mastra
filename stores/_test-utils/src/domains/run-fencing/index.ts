@@ -1,6 +1,14 @@
-import type { MastraStorage, MemoryStorage, RunFence, WorkflowsStorage } from '@mastra/core/storage';
-import { isRunFenceConflictError } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  MemoryStorage,
+  RunFence,
+  RunFenceContext,
+  RunFenceScope,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
+import { isRunFenceConflictError, setRunFenceContext } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from '../memory/data';
@@ -28,6 +36,35 @@ const snapshotWithValue = (runId: string, value: string) =>
     waitingPaths: {},
     timestamp: Date.now(),
   }) as unknown as WorkflowRunState;
+
+// Stands in for the durable runtime's scope. If core already installed its
+// context, scopes run through that one, as they do in production.
+const testScopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+let runFenceContext: RunFenceContext | undefined;
+function inRunFenceScope<T>(scope: RunFenceScope, fn: () => T): T {
+  runFenceContext ??= setRunFenceContext({
+    current: () => testScopes.getStore(),
+    run: (s, f) => testScopes.run(s, f),
+  });
+  return runFenceContext.run(scope, fn);
+}
+
+/** A scope that records the lookups adapters make and the conflicts they report. */
+function recordingScope(fenceFor: (store: object, runId?: string) => RunFence | undefined) {
+  const lookups: { store: object; runId?: string }[] = [];
+  const conflicts: RunFence[] = [];
+  return {
+    lookups,
+    conflicts,
+    fenceFor(store: object, runId?: string) {
+      lookups.push(runId === undefined ? { store } : { store, runId });
+      return fenceFor(store, runId);
+    },
+    onConflict(fence: RunFence) {
+      conflicts.push(fence);
+    },
+  };
+}
 
 async function expectFenceConflict(write: Promise<unknown>) {
   const error = await write.then(
@@ -170,25 +207,26 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect(afterTakeover.record).toMatchObject({ generation: 2, ownerId: 'owner-b' });
       });
 
-      it('release keeps the generation, and remove deletes the record', async ctx => {
+      it('release clears the lease and keeps the generation and owner', async ctx => {
         if (!workflows.supportsRunFencing()) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
 
         expect(await workflows.releaseRunOwnership({ ...fenceA, generation: 99 })).toBe(false);
+        expect(await workflows.releaseRunOwnership({ ...fenceA, ownerId: 'someone-else' })).toBe(false);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
         expect(await workflows.getRunOwnership({ runId })).toMatchObject({
           generation: 1,
-          ownerId: null,
+          ownerId: 'owner-a',
           leaseExpiresAt: null,
           live: false,
         });
-        expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
+        expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
+        expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS })).renewed).toBe(false);
 
         const fenceB = await claimed(runId, 'owner-b');
         expect(fenceB.generation).toBe(2);
-        expect(await workflows.releaseRunOwnership({ ...fenceB, remove: true })).toBe(true);
-        expect(await workflows.getRunOwnership({ runId })).toBeNull();
+        expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
       });
     });
 
@@ -258,27 +296,75 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect(await workflows.loadWorkflowSnapshot({ workflowName, runId })).toBeNull();
       });
 
-      it('rejects writes after the claim was released', async ctx => {
+      it("accepts the released owner's writes until the run is claimed again", async ctx => {
         if (!workflows.supportsRunFencing()) return ctx.skip();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
+        await workflows.releaseRunOwnership(fenceA);
+
         await workflows.persistWorkflowSnapshot({
           workflowName,
           runId,
-          snapshot: snapshotWithValue(runId, 'a'),
+          snapshot: snapshotWithValue(runId, 'late-a'),
           fence: fenceA,
         });
-        await workflows.releaseRunOwnership(fenceA);
+        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'late-a' });
 
+        await claimed(runId, 'owner-b');
         await expectFenceConflict(
           workflows.persistWorkflowSnapshot({
             workflowName,
             runId,
-            snapshot: snapshotWithValue(runId, 'late'),
+            snapshot: snapshotWithValue(runId, 'stale'),
             fence: fenceA,
           }),
         );
-        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'a' });
+        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'late-a' });
+      });
+
+      it('fences writes made inside a run fence scope with the fence of the run they write', async ctx => {
+        if (!workflows.supportsRunFencing()) return ctx.skip();
+        const runId = `run-${randomUUID()}`;
+        const otherRunId = `run-${randomUUID()}`;
+        const fenceA = await claimed(runId, 'owner-a');
+        const fenceB = await claimed(runId, 'owner-b', true);
+
+        const scopeA = recordingScope((store, targetRunId) =>
+          store === workflows && targetRunId === runId ? fenceA : undefined,
+        );
+        await inRunFenceScope(scopeA, async () => {
+          await expectFenceConflict(
+            workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWithValue(runId, 'stale') }),
+          );
+          await expectFenceConflict(workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'failed' } }));
+          // The scope does not cover other runs, and an explicit fence wins over the scope's.
+          await workflows.persistWorkflowSnapshot({
+            workflowName,
+            runId: otherRunId,
+            snapshot: snapshotWithValue(otherRunId, 'other'),
+          });
+          await workflows.persistWorkflowSnapshot({
+            workflowName,
+            runId,
+            snapshot: snapshotWithValue(runId, 'b'),
+            fence: fenceB,
+          });
+        });
+
+        expect(scopeA.lookups).toContainEqual({ store: workflows, runId });
+        expect(scopeA.lookups).toContainEqual({ store: workflows, runId: otherRunId });
+        expect(scopeA.conflicts).toEqual([fenceA, fenceA]);
+        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'b' });
+        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId: otherRunId }))?.value).toEqual({
+          writer: 'other',
+        });
+
+        const scopeB = recordingScope(store => (store === workflows ? fenceB : undefined));
+        await inRunFenceScope(scopeB, () =>
+          workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWithValue(runId, 'b2') }),
+        );
+        expect(scopeB.conflicts).toEqual([]);
+        expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'b2' });
       });
 
       it('leaves writes without a fence unchanged', async ctx => {
@@ -418,25 +504,102 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect((await memory.listMessages({ threadId: thread.id })).messages).toHaveLength(0);
     });
 
-    it('rejects writes after the fence was released', async ctx => {
+    it('fences writes made inside a run fence scope with the scope fence for this store', async ctx => {
       if (!memory.supportsRunFencing()) return ctx.skip();
       const runId = `run-${randomUUID()}`;
       const fenceA = fence(runId, 1);
+      const fenceB = fence(runId, 2);
       await memory.raiseRunFence(fenceA);
       const thread = createSampleThread();
       await memory.saveThread({ thread, fence: fenceA });
+      await memory.raiseRunFence(fenceB);
 
-      expect(await memory.releaseRunFence({ ...fenceA, ownerId: 'someone-else' })).toBe(false);
-      expect(await memory.releaseRunFence(fenceA)).toBe(true);
-      await expectFenceConflict(memory.updateThread({ id: thread.id, title: 'late', fence: fenceA }));
-      expect(await memory.raiseRunFence(fenceA)).toBe(false);
+      const scopeA = recordingScope(store => (store === memory ? fenceA : undefined));
+      await inRunFenceScope(scopeA, async () => {
+        await expectFenceConflict(memory.updateThread({ id: thread.id, title: 'stale' }));
+        await expectFenceConflict(
+          memory.saveMessages({
+            messages: [createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId })],
+          }),
+        );
+        await expectFenceConflict(memory.updateResource({ resourceId: thread.resourceId, workingMemory: 'stale' }));
+      });
+      expect(scopeA.lookups.every(lookup => lookup.store === memory)).toBe(true);
+      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA]);
+      expect((await memory.listMessages({ threadId: thread.id })).messages).toHaveLength(0);
 
-      const fenceB = fence(runId, 2);
-      expect(await memory.raiseRunFence(fenceB)).toBe(true);
-      await memory.updateThread({ id: thread.id, title: 'b', fence: fenceB });
-      expect(await memory.releaseRunFence({ ...fenceB, remove: true })).toBe(true);
-      await expectFenceConflict(memory.updateThread({ id: thread.id, title: 'late', fence: fenceB }));
+      // A scope that covers another store leaves this store's writes unfenced.
+      const elsewhere = recordingScope(store => (store === memory ? undefined : fenceA));
+      await inRunFenceScope(elsewhere, () => memory.updateThread({ id: thread.id, title: 'unfenced' }));
+
+      const scopeB = recordingScope(store => (store === memory ? fenceB : undefined));
+      await inRunFenceScope(scopeB, () => memory.updateThread({ id: thread.id, title: 'b' }));
+      expect(scopeB.conflicts).toEqual([]);
       expect((await memory.getThreadById({ threadId: thread.id }))?.title).toBe('b');
+    });
+
+    it('fences observational memory content writes made inside a run fence scope', async ctx => {
+      if (!memory.supportsRunFencing() || !memory.supportsObservationalMemory) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const fenceA = fence(runId, 1);
+      const fenceB = fence(runId, 2);
+      await memory.raiseRunFence(fenceA);
+      const resourceId = `resource-${randomUUID()}`;
+      const record = await memory.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+      });
+      await memory.raiseRunFence(fenceB);
+
+      const scopeA = recordingScope(store => (store === memory ? fenceA : undefined));
+      await inRunFenceScope(scopeA, async () => {
+        await expectFenceConflict(
+          memory.updateActiveObservations({
+            id: record.id,
+            observations: 'stale',
+            tokenCount: 10,
+            lastObservedAt: new Date(),
+          }),
+        );
+        await expectFenceConflict(
+          memory.updateBufferedObservations({
+            id: record.id,
+            chunk: {
+              cycleId: 'stale-cycle',
+              observations: 'stale',
+              tokenCount: 10,
+              messageIds: [],
+              messageTokens: 10,
+              lastObservedAt: new Date(),
+            },
+          }),
+        );
+        await expectFenceConflict(
+          memory.createReflectionGeneration({ currentRecord: record, reflection: 'stale', tokenCount: 10 }),
+        );
+        // Coordination flags are not fenced, so a superseded owner can still clear its own.
+        await memory.setObservingFlag(record.id, true);
+        await memory.setObservingFlag(record.id, false);
+      });
+      expect(scopeA.conflicts).toEqual([fenceA, fenceA, fenceA]);
+      const afterStale = await memory.getObservationalMemory(null, resourceId);
+      expect(afterStale?.id).toBe(record.id);
+      expect(afterStale?.activeObservations).toBe('');
+      expect(afterStale?.bufferedObservationChunks ?? []).toHaveLength(0);
+
+      const scopeB = recordingScope(store => (store === memory ? fenceB : undefined));
+      await inRunFenceScope(scopeB, () =>
+        memory.updateActiveObservations({
+          id: record.id,
+          observations: 'b',
+          tokenCount: 10,
+          lastObservedAt: new Date(),
+        }),
+      );
+      expect(scopeB.conflicts).toEqual([]);
+      expect((await memory.getObservationalMemory(null, resourceId))?.activeObservations).toBe('b');
     });
 
     it('leaves writes without a fence unchanged', async ctx => {

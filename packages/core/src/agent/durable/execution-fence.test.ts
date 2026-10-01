@@ -399,9 +399,13 @@ describe('storage-backed ExecutionFence', () => {
   it('a released claim can be acquired again under the next generation', async () => {
     const { workflowsStore } = await stores();
     const first = await storageClaim(workflowsStore, 'run-1');
-    // Suspended: the run is not finished, so its record is kept.
     await first.settle(async () => {});
-    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ generation: 1, ownerId: null });
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      generation: 1,
+      ownerId: first.executionId,
+      leaseExpiresAt: null,
+      live: false,
+    });
 
     const second = await storageClaim(workflowsStore, 'run-1');
     expect(second.generation).toBe(2);
@@ -418,7 +422,7 @@ describe('storage-backed ExecutionFence', () => {
     await expect(recovered.verify()).resolves.toBeUndefined();
 
     const writes = vi.fn(async () => {});
-    expect(await original.settle(writes, { finished: true })).toBe('superseded');
+    expect(await original.settle(writes)).toBe('superseded');
     expect(writes).not.toHaveBeenCalled();
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
       generation: 2,
@@ -469,25 +473,28 @@ describe('storage-backed ExecutionFence', () => {
     expect(writes).not.toHaveBeenCalled();
   });
 
-  it('settling a finished run removes its owner records; a suspended run keeps them', async () => {
+  it("settling keeps the owner records: the settled claim's late writes land until the run is claimed again", async () => {
     const { workflowsStore, memoryStore } = await stores();
-    const suspended = await storageClaim(workflowsStore, 'run-1');
-    await suspended.coverMemory(memoryStore);
-    expect(await suspended.settle(async () => {})).toBe('owned');
-    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ generation: 1, ownerId: null });
-    // The kept memory record still rejects the settled claim's writes.
-    await expect(
-      memoryStore.saveThread({
-        thread: { id: 't-1', resourceId: 'r-1', title: '', createdAt: new Date(), updatedAt: new Date() },
-        fence: { runId: 'run-1', generation: 1, ownerId: suspended.executionId },
-      }),
-    ).rejects.toSatisfy(isRunFenceConflictError);
+    const settled = await storageClaim(workflowsStore, 'run-1');
+    await settled.coverMemory(memoryStore);
+    expect(await settled.settle(async () => {})).toBe('owned');
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      generation: 1,
+      ownerId: settled.executionId,
+      live: false,
+    });
+    const thread = { id: 't-1', resourceId: 'r-1', title: '', createdAt: new Date(), updatedAt: new Date() };
+    const settledFence = { runId: 'run-1', generation: 1, ownerId: settled.executionId };
+    await expect(memoryStore.saveThread({ thread, fence: settledFence })).resolves.toMatchObject({ id: 't-1' });
 
-    const finished = await storageClaim(workflowsStore, 'run-1');
-    await finished.coverMemory(memoryStore);
-    expect(await finished.settle(async () => {}, { finished: true })).toBe('owned');
-    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toBeNull();
-    expect(await memoryStore.raiseRunFence({ runId: 'run-1', generation: 1, ownerId: 'next' })).toBe(true);
+    const next = await storageClaim(workflowsStore, 'run-1');
+    await next.coverMemory(memoryStore);
+    await expect(memoryStore.saveThread({ thread, fence: settledFence })).rejects.toSatisfy(isRunFenceConflictError);
+    expect(await next.settle(async () => {})).toBe('owned');
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      generation: 2,
+      ownerId: next.executionId,
+    });
   });
 
   it('coverMemory fences memory writes to the claim that raised it', async () => {
@@ -577,7 +584,7 @@ describe('storage-backed ExecutionFence', () => {
     });
     const mastra = { getStorage: () => storage, getAgentById: () => undefined, pubsub: undefined } as any;
     const requestContext = new RequestContext();
-    setExecutionClaim(requestContext, 'run-1', { executionId: 'remote-exec', generation: claimed.record.generation });
+    setExecutionClaim(requestContext, 'run-1', { executionId: 'remote-exec', generation: claimed.record!.generation });
 
     await expect(assertExecutionOwned({ runId: 'run-1', agentId, requestContext, mastra })).resolves.toBeUndefined();
     await workflowsStore.claimRunOwnership({
@@ -608,7 +615,9 @@ describe('execution claim carrier', () => {
       ownerId: 'exec-1',
     });
     // Survives the JSON round trip an evented engine puts it through.
-    const restored = new RequestContext(Object.entries(JSON.parse(JSON.stringify(requestContext.toJSON()))));
+    const restored = new RequestContext<unknown>(
+      Object.entries(JSON.parse(JSON.stringify(requestContext.toJSON())) as Record<string, unknown>),
+    );
     expect(getRunFence(restored, 'run-1', 'memory')).toEqual({ runId: 'run-1', generation: 3, ownerId: 'exec-1' });
 
     requestContext.setRaw('mastra__durableExecutions', { 'run-2': 'legacy-string' });

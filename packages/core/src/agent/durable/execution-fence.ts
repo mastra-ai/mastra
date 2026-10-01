@@ -28,8 +28,9 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
-import { matchesRunFence } from '../../storage/run-fencing';
-import type { RunFence } from '../../storage/run-fencing';
+import { isRunFenceConflictError, matchesRunFence, runOutsideRunFenceScope } from '../../storage/run-fencing';
+import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
+import { runInRunFenceScope } from './run-fence-scope';
 
 export const EXECUTION_LEASE_TTL_MS = 30_000;
 export const EXECUTION_LEASE_RENEW_INTERVAL_MS = 10_000;
@@ -81,10 +82,12 @@ export class DurableExecutionFenceError extends MastraNonRetryableError {
 
 /**
  * Whether `error` (or anything in its cause chain) reports that an execution
- * lost ownership. Matches on `id` so serialized errors from the evented engine
- * and wrappers such as the nested-workflow `MastraNonRetryableError` match too.
+ * lost ownership, including storage rejecting one of its writes. Matches on
+ * `id` so serialized errors from the evented engine and wrappers such as the
+ * nested-workflow `MastraNonRetryableError` match too.
  */
 export function isExecutionFenceError(error: unknown): boolean {
+  if (isRunFenceConflictError(error)) return true;
   let current: unknown = error;
   for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth++) {
     const id = (current as { id?: unknown }).id;
@@ -194,7 +197,7 @@ interface OwnershipBackend {
   renew(claim: DurableExecutionClaim): Promise<boolean>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
-  release(claim: DurableExecutionClaim, remove: boolean): Promise<void>;
+  release(claim: DurableExecutionClaim): Promise<void>;
 }
 
 function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): OwnershipBackend {
@@ -264,23 +267,26 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       );
     },
     // A read, not a renewal: the heartbeat extends the claim, and the fence on
-    // every write rejects a claim that was superseded after this check.
+    // every write rejects a claim that was superseded after this check. Like a
+    // renewal, it fails once the claim was released: storage still accepts the
+    // released claim's late writes, but the execution no longer drives the run.
     async verify(claim, details) {
       const record = await retryOnce(() => store.getRunOwnership({ runId }), details);
-      if (!matchesRunFence(record, fence(claim))) {
+      if (!record?.leaseExpiresAt || !matchesRunFence(record, fence(claim))) {
         throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
       }
     },
     async renew(claim) {
       return (await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS })).renewed;
     },
-    // A missing record was removed by the execution that finished the run.
+    // Release keeps the record, so a missing one means the store lost it:
+    // the holder is unknown.
     async isSuperseded(claim) {
       const record = await store.getRunOwnership({ runId });
       return !record || record.generation !== claim.generation;
     },
-    async release(claim, remove) {
-      await store.releaseRunOwnership({ ...fence(claim), remove });
+    async release(claim) {
+      await store.releaseRunOwnership(fence(claim));
     },
   };
 }
@@ -290,7 +296,12 @@ export type ExecutionSettlement = 'owned' | 'orphaned' | 'superseded';
 const fencesByExecutionId = new Map<string, ExecutionFence>();
 const activeFenceByRunId = new Map<string, ExecutionFence>();
 
-export class ExecutionFence {
+/**
+ * One execution's claim on a durable run. Inside {@link ExecutionFence.run},
+ * it is the {@link RunFenceScope} that fences every write the execution makes
+ * to the run's workflows and memory stores.
+ */
+export class ExecutionFence implements RunFenceScope {
   readonly executionId: string;
   readonly agentId: string;
   readonly runId: string;
@@ -298,7 +309,16 @@ export class ExecutionFence {
   readonly generation?: number;
   readonly #backend: OwnershipBackend;
   readonly #logger?: IMastraLogger;
+  /** The workflows store holding the claim, when ownership lives in storage. */
+  readonly #workflowsStore?: WorkflowsStorage;
   #memoryStore?: MemoryStorage;
+  /**
+   * Whether {@link fenceFor} hands out the fence. An owned settlement disarms
+   * it so the execution's late background writes stay unfenced, as before
+   * fencing existed. A lost execution stays armed: its late writes are rejected.
+   */
+  #armed = true;
+  #lossListeners: Array<(error: DurableExecutionFenceError) => void> = [];
   #lossError?: DurableExecutionFenceError;
   /** Another execution was seen claiming the run after this one lost it. */
   #takenOver = false;
@@ -313,6 +333,7 @@ export class ExecutionFence {
 
   private constructor(args: {
     backend: OwnershipBackend;
+    workflowsStore?: WorkflowsStorage;
     agentId: string;
     runId: string;
     executionId: string;
@@ -321,6 +342,7 @@ export class ExecutionFence {
     logger?: IMastraLogger;
   }) {
     this.#backend = args.backend;
+    this.#workflowsStore = args.workflowsStore;
     this.agentId = args.agentId;
     this.runId = args.runId;
     this.executionId = args.executionId;
@@ -352,8 +374,9 @@ export class ExecutionFence {
     logger?: IMastraLogger;
   }): Promise<ExecutionFence> {
     const { agentId, runId, mode } = args;
-    const backend = supportsRunFencing(args.workflowsStore)
-      ? storageBackend(args.workflowsStore!, runId)
+    const workflowsStore = supportsRunFencing(args.workflowsStore) ? args.workflowsStore : undefined;
+    const backend = workflowsStore
+      ? storageBackend(workflowsStore, runId)
       : leaseBackend(args.leaseProvider, agentId, runId);
     const executionId = crypto.randomUUID();
 
@@ -395,6 +418,7 @@ export class ExecutionFence {
 
     const fence = new ExecutionFence({
       backend,
+      workflowsStore,
       agentId,
       runId,
       executionId,
@@ -426,6 +450,44 @@ export class ExecutionFence {
 
   isLost(): boolean {
     return this.#lossError !== undefined;
+  }
+
+  /**
+   * Call `listener` once when this execution loses the run: a check or
+   * renewal failed, or storage rejected one of its writes. Called right away
+   * when the run is already lost.
+   */
+  onLost(listener: (error: DurableExecutionFenceError) => void): void {
+    if (this.#lossError) listener(this.#lossError);
+    else this.#lossListeners.push(listener);
+  }
+
+  /**
+   * Run `fn` with this fence carried by every write it makes to the run's
+   * workflows and memory stores, including writes from processors, tools and
+   * memory that never see the fence.
+   */
+  run<T>(fn: () => T): T {
+    return runInRunFenceScope(this, fn);
+  }
+
+  /** {@link RunFenceScope.fenceFor}: covers this run's workflows rows and the memory store raised to the claim. */
+  fenceFor(store: object, runId?: string): RunFence | undefined {
+    if (!this.#armed || this.generation === undefined) return undefined;
+    const covered = store === this.#workflowsStore ? runId === this.runId : store === this.#memoryStore;
+    return covered ? { runId: this.runId, generation: this.generation, ownerId: this.executionId } : undefined;
+  }
+
+  /**
+   * {@link RunFenceScope.onConflict}: storage rejected one of this execution's
+   * writes, even if the writer swallowed the error. Settlement still asks the
+   * workflows record whether another execution took the run.
+   */
+  onConflict(fence: RunFence): void {
+    if (fence.runId !== this.runId || fence.generation !== this.generation || fence.ownerId !== this.executionId) {
+      return;
+    }
+    this.#markLost(new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, this.#details()));
   }
 
   /**
@@ -479,9 +541,10 @@ export class ExecutionFence {
    * execution still owns the run. Later calls resolve to the first settlement
    * without running their `whileOwned`.
    *
-   * Pass `finished` when the run reached a non-suspended terminal status: an
-   * owned execution then deletes the run's owner records instead of only
-   * clearing the owner.
+   * Release keeps the owner record, so a write the execution makes after
+   * settling is still rejected once a newer claim exists. An owned execution
+   * stops fencing its writes after settling, leaving late background work to
+   * land as it did before fencing.
    *
    * - `owned`: ownership verified; `whileOwned` ran.
    * - `orphaned`: ownership could not be verified, but nobody else claimed
@@ -489,19 +552,20 @@ export class ExecutionFence {
    * - `superseded`: another execution holds the run (or its holder is
    *   unknown); nothing may be written on its topic or rows.
    */
-  settle(whileOwned: () => Promise<void>, options?: { finished?: boolean }): Promise<ExecutionSettlement> {
+  settle(whileOwned: () => Promise<void>): Promise<ExecutionSettlement> {
     if (this.#settlement) return this.#settlement.catch(() => this.#settledAs!);
-    this.#settlement = this.#settle(whileOwned, options?.finished === true);
+    this.#settlement = this.#settle(whileOwned);
     return this.#settlement;
   }
 
-  async #settle(whileOwned: () => Promise<void>, finished: boolean): Promise<ExecutionSettlement> {
+  async #settle(whileOwned: () => Promise<void>): Promise<ExecutionSettlement> {
     this.stopHeartbeat();
     this.#settledAs = await this.#classifySettlement();
     try {
-      if (this.#settledAs === 'owned') await whileOwned();
+      if (this.#settledAs === 'owned') await this.run(whileOwned);
     } finally {
-      if (this.#settledAs !== 'superseded') await this.#release(finished && this.#settledAs === 'owned');
+      if (this.#settledAs !== 'superseded') await this.#release();
+      if (this.#settledAs === 'owned') this.#armed = false;
       if (fencesByExecutionId.get(this.executionId) === this) fencesByExecutionId.delete(this.executionId);
       if (activeFenceByRunId.get(this.runId) === this) activeFenceByRunId.delete(this.runId);
       this.#resolveSettled();
@@ -509,29 +573,9 @@ export class ExecutionFence {
     return this.#settledAs;
   }
 
-  /**
-   * Release memory before workflows: if deleting the memory record fails, the
-   * workflows record keeps its generation so the run's next claim still
-   * raises memory past the leftover record.
-   */
-  async #release(remove: boolean): Promise<void> {
-    const claim = this.claim;
-    let removeWorkflows = remove;
-    if (this.#memoryStore) {
-      try {
-        await this.#memoryStore.releaseRunFence({
-          runId: this.runId,
-          generation: this.generation!,
-          ownerId: this.executionId,
-          remove,
-        });
-      } catch (error) {
-        removeWorkflows = false;
-        this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the memory claim: ${error}`);
-      }
-    }
+  async #release(): Promise<void> {
     try {
-      await this.#backend.release(claim, removeWorkflows);
+      await this.#backend.release(this.claim);
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
     }
@@ -563,6 +607,15 @@ export class ExecutionFence {
     this.#lossError = error;
     this.stopHeartbeat();
     this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: ${error.message}`);
+    const listeners = this.#lossListeners;
+    this.#lossListeners = [];
+    for (const listener of listeners) {
+      try {
+        listener(error);
+      } catch (listenerError) {
+        this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: loss listener failed: ${listenerError}`);
+      }
+    }
   }
 
   async #noteTakeover(): Promise<void> {
@@ -575,10 +628,8 @@ export class ExecutionFence {
 
   /**
    * Keep the claim alive between write checks. A `false` renewal marks the
-   * fence lost without aborting the run: aborting would publish on the run's
-   * shared topic, which the new owner's consumers read. The next check
-   * surfaces the loss instead. Backend errors are tolerated until the local
-   * lease deadline.
+   * fence lost, which notifies {@link onLost} listeners. Backend errors are
+   * tolerated until the local lease deadline.
    */
   #startHeartbeat(): void {
     this.#heartbeat = setInterval(() => {
@@ -613,6 +664,27 @@ export class ExecutionFence {
     }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
     this.#heartbeat.unref?.();
   }
+}
+
+/**
+ * `pubsub` as seen by the execution holding `fence`. Once the execution
+ * loses the run, its publishes are dropped: the run's topics are shared with
+ * the new owner's consumers. Every call runs outside the run's fence scope,
+ * so connections and subscriptions opened lazily here never carry the run's
+ * fence into deliveries for other runs.
+ */
+export function fencePubSub(pubsub: PubSub, fence: ExecutionFence): PubSub {
+  return new Proxy(pubsub, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      if (property === 'publish') {
+        return (...args: unknown[]) =>
+          fence.isLost() ? Promise.resolve() : runOutsideRunFenceScope(() => value.apply(target, args));
+      }
+      return (...args: unknown[]) => runOutsideRunFenceScope(() => value.apply(target, args));
+    },
+  });
 }
 
 /**

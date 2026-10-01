@@ -12,6 +12,7 @@ import { RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
+import { runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -32,6 +33,7 @@ import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import {
   ExecutionFence,
+  fencePubSub,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
   setExecutionClaim,
@@ -1748,14 +1750,6 @@ export class DurableAgent<
   // ===========================================================================
 
   /**
-   * Get the PubSub instance for use by subclasses.
-   * @internal
-   */
-  protected get pubsubInternal(): PubSub {
-    return this.pubsub;
-  }
-
-  /**
    * Get the run registry for use by subclasses.
    * @internal
    */
@@ -1870,7 +1864,11 @@ export class DurableAgent<
     )?.memoryInfo;
     const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
 
-    const run = await workflow.createRun({ runId, resourceId, pubsub: this.pubsub });
+    const run = await workflow.createRun({
+      runId,
+      resourceId,
+      pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
+    });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     const result = await run.start({
       inputData: workflowInput,
@@ -1951,7 +1949,7 @@ export class DurableAgent<
   protected async emitError(runId: string, error: Error): Promise<void> {
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
-    await emitErrorEvent(this.pubsub, runId, error);
+    await runOutsideRunFenceScope(() => emitErrorEvent(this.pubsub, runId, error));
   }
 
   /**
@@ -2004,6 +2002,32 @@ export class DurableAgent<
   }
 
   /**
+   * The pubsub a run's workflow publishes on, bound to its execution.
+   *
+   * Once the execution loses the run, `abortController` is aborted so the LLM
+   * stream and tool calls stop, and the execution's publishes are dropped:
+   * the run's topics are shared with the new owner's consumers, which must not
+   * see this execution's chunks or the `finish` its abort produces.
+   *
+   * The evented engine publishes on `mastra.pubsub` instead of this pubsub, so
+   * nothing could drop that `finish`. Its runs are not aborted and fail at
+   * their next ownership check.
+   *
+   * @internal
+   */
+  protected fenceRunPubSub(
+    executionFence: ExecutionFence | undefined,
+    abortController: AbortController | undefined,
+    pubsub: PubSub = this.pubsub,
+  ): PubSub {
+    if (!executionFence || this.resolveWorkflowEngine() !== 'default') return pubsub;
+    executionFence.onLost(error => {
+      if (abortController && !abortController.signal.aborted) abortController.abort(error);
+    });
+    return fencePubSub(pubsub, executionFence);
+  }
+
+  /**
    * End an execution segment: publish the error of a failed segment and delete
    * the snapshots of a run that reached a non-suspended terminal status.
    *
@@ -2044,7 +2068,7 @@ export class DurableAgent<
     };
 
     if (!fence) return writeTerminalState();
-    const settlement = await fence.settle(writeTerminalState, { finished });
+    const settlement = await fence.settle(writeTerminalState);
     // `wrote` is false when the fence could not verify ownership, or when it
     // was already settled by this segment's normal completion and a later step
     // (for example goal bookkeeping) failed.
@@ -2279,7 +2303,7 @@ export class DurableAgent<
       });
     } catch (error) {
       // The run never started: drop its owner record rather than leave it behind.
-      await executionFence.settle(async () => {}, { finished: true });
+      await executionFence.settle(async () => {});
       throw error;
     }
 
@@ -2404,32 +2428,34 @@ export class DurableAgent<
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
-    const workflowExecution = ready
-      .then(async () => {
-        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-        // Only the initial stream() path emits 'start'; resume() does not.
-        await emitChunkEvent(this.pubsub, runId, {
-          type: 'start',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { id: workflowInput.agentId, messageId },
-        });
-        if (this.__getGoalConfig()) {
-          await beginGoalActivity({
-            mastra: this.#mastra,
-            agentId: workflowInput.agentId,
-            threadId,
+    const workflowExecution = executionFence.run(() =>
+      ready
+        .then(async () => {
+          // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+          // Only the initial stream() path emits 'start'; resume() does not.
+          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
+            type: 'start',
             runId,
-            requestContext: globalRunRegistry.get(runId)?.requestContext,
+            from: ChunkFrom.AGENT,
+            payload: { id: workflowInput.agentId, messageId },
           });
-        }
-        try {
-          return await this.executeWorkflow(runId, workflowInput);
-        } finally {
-          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
-        }
-      })
-      .catch(error => this.settleExecution(runId, executionFence, { error }));
+          if (this.__getGoalConfig()) {
+            await beginGoalActivity({
+              mastra: this.#mastra,
+              agentId: workflowInput.agentId,
+              threadId,
+              runId,
+              requestContext: globalRunRegistry.get(runId)?.requestContext,
+            });
+          }
+          try {
+            return await this.executeWorkflow(runId, workflowInput);
+          } finally {
+            await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+          }
+        })
+        .catch(error => this.settleExecution(runId, executionFence, { error })),
+    );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
@@ -2862,45 +2888,51 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
 
-    const workflowExecution = ready
-      .then(async () => {
-        // The prior segment was settled above (before the event-offset
-        // capture), so the snapshot is already persisted as 'suspended'.
-        // Evented engine: make sure the workflow event workers are running
-        // before resume — a resume in a fresh process (or after shutdown())
-        // would otherwise publish events nobody consumes and hang.
-        await this.ensureEngineWorkersStarted();
-        const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
-        if (this.__getGoalConfig()) {
-          await beginGoalActivity({
-            mastra: this.#mastra,
-            agentId: this.id,
-            threadId: memoryInfo?.threadId,
+    const workflowExecution = executionFence.run(() =>
+      ready
+        .then(async () => {
+          // The prior segment was settled above (before the event-offset
+          // capture), so the snapshot is already persisted as 'suspended'.
+          // Evented engine: make sure the workflow event workers are running
+          // before resume — a resume in a fresh process (or after shutdown())
+          // would otherwise publish events nobody consumes and hang.
+          await this.ensureEngineWorkersStarted();
+          const run = await workflow.createRun({
             runId,
-            requestContext,
+            resourceId: memoryInfo?.resourceId,
+            pubsub: this.fenceRunPubSub(executionFence, abortController),
           });
-        }
-        let result;
-        try {
-          result = await run.resume({
-            resumeData,
-            label: resolvedOptions.toolCallId,
-            requestContext,
-            actor: resolvedOptions.actor,
-            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+          if (this.__getGoalConfig()) {
+            await beginGoalActivity({
+              mastra: this.#mastra,
+              agentId: this.id,
+              threadId: memoryInfo?.threadId,
+              runId,
+              requestContext,
+            });
+          }
+          let result;
+          try {
+            result = await run.resume({
+              resumeData,
+              label: resolvedOptions.toolCallId,
+              requestContext,
+              actor: resolvedOptions.actor,
+              ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+            });
+          } finally {
+            await stopGoalActivity({ agentId: this.id, runId });
+          }
+          await this.settleExecution(runId, executionFence, {
+            status: result?.status,
+            error:
+              result?.status === 'failed'
+                ? new Error((result as any).error?.message || 'Workflow resume failed')
+                : undefined,
           });
-        } finally {
-          await stopGoalActivity({ agentId: this.id, runId });
-        }
-        await this.settleExecution(runId, executionFence, {
-          status: result?.status,
-          error:
-            result?.status === 'failed'
-              ? new Error((result as any).error?.message || 'Workflow resume failed')
-              : undefined,
-        });
-      })
-      .catch(error => this.settleExecution(runId, executionFence, { error }));
+        })
+        .catch(error => this.settleExecution(runId, executionFence, { error })),
+    );
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
@@ -3185,7 +3217,11 @@ export class DurableAgent<
     });
     const { output, cleanup: createdStreamCleanup, ready } = stream;
     streamCleanup = createdStreamCleanup;
-    const recoveryPubsub = this.#createRecoveryFencedPubSub(recoveryLease);
+    const recoveryPubsub = this.fenceRunPubSub(
+      executionFence,
+      abortController,
+      this.#createRecoveryFencedPubSub(recoveryLease),
+    );
 
     // 5. Re-drive the workflow from the persisted snapshot in the background
     //     and delete snapshot rows on non-suspended terminals (same contract
@@ -3193,67 +3229,66 @@ export class DurableAgent<
     //     observers on the pubsub topic see the failure. Callers who await
     //     the returned `workflowExecution` (e.g. `recoverActiveRuns()`) see
     //     the raw rejection so they can classify the run as failed.
-    const workflowExecution = this.#raceRecoveryLease(ready, recoveryLease)
-      .then(async () => {
-        recoveryLease.assertOwned();
-        await this.ensureEngineWorkersStarted();
-        const run = await this.#raceRecoveryLease(
-          workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
-          recoveryLease,
-        );
-        recoveryLease.assertOwned();
-        const result = await this.#raceRecoveryLease(
-          run.restart({
-            requestContext,
-            ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
-          } as any),
-          recoveryLease,
-        );
-        recoveryLease.assertOwned();
-        if (finishPublishedBeforeCrash && result?.status === 'success') {
-          // The run's result is map-final-output's saved output, passed through
-          // execute-scorers unchanged: the same payload the lost FINISH carried.
-          const { output: finalOutput, stepResult } = result.result;
-          await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+    const workflowExecution = executionFence.run(() =>
+      this.#raceRecoveryLease(ready, recoveryLease)
+        .then(async () => {
           recoveryLease.assertOwned();
-        }
-        // Snapshot cleanup runs for every non-suspended terminal (success or
-        // failed) so storage stays bounded — mirrors the start()/resume()
-        // contract — but only while this recovery still owns the run.
-        const finished = !!result?.status && result.status !== 'suspended';
-        await executionFence.settle(
-          async () => {
+          await this.ensureEngineWorkersStarted();
+          const run = await this.#raceRecoveryLease(
+            workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
+            recoveryLease,
+          );
+          recoveryLease.assertOwned();
+          const result = await this.#raceRecoveryLease(
+            run.restart({
+              requestContext,
+              ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
+            } as any),
+            recoveryLease,
+          );
+          recoveryLease.assertOwned();
+          if (finishPublishedBeforeCrash && result?.status === 'success') {
+            // The run's result is map-final-output's saved output, passed through
+            // execute-scorers unchanged: the same payload the lost FINISH carried.
+            const { output: finalOutput, stepResult } = result.result;
+            await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
+            recoveryLease.assertOwned();
+          }
+          // Snapshot cleanup runs for every non-suspended terminal (success or
+          // failed) so storage stays bounded — mirrors the start()/resume()
+          // contract — but only while this recovery still owns the run.
+          const finished = !!result?.status && result.status !== 'suspended';
+          await executionFence.settle(async () => {
             if (finished) {
               await this.deleteRunSnapshots(runId);
               recoveryLease.assertOwned();
             }
-          },
-          { finished },
-        );
-        if (result?.status === 'failed') {
-          throw new Error((result as any).error?.message || 'Workflow recover failed');
-        }
-      })
-      .catch(async error => {
-        // Settles a recovery that failed before the run finished; otherwise
-        // returns the settlement reached above.
-        const settlement = await executionFence.settle(async () => {});
-        const leaseLossError = recoveryLease.getLossError();
-        if (leaseLossError) {
-          await threadRegistration?.rollback({ releaseLease: false });
-          performCleanup();
-        }
-        const recoveryError = leaseLossError ?? error;
-        // Once another execution took the run over, its subscribers share this
-        // run's topic: stay silent.
-        const reported = settlement !== 'superseded' && (await this.#reportRecoveryFailure(runId, recoveryError));
-        if (!reported && !leaseLossError) {
-          await threadRegistration?.rollback();
-          performCleanup();
-        }
-        throw recoveryError;
-      })
-      .finally(() => recoveryLease.release());
+          });
+          if (result?.status === 'failed') {
+            throw new Error((result as any).error?.message || 'Workflow recover failed');
+          }
+        })
+        .catch(async error => {
+          // Settles a recovery that failed before the run finished; otherwise
+          // returns the settlement reached above.
+          const settlement = await executionFence.settle(async () => {});
+          const leaseLossError = recoveryLease.getLossError();
+          if (leaseLossError) {
+            await threadRegistration?.rollback({ releaseLease: false });
+            performCleanup();
+          }
+          const recoveryError = leaseLossError ?? error;
+          // Once another execution took the run over, its subscribers share this
+          // run's topic: stay silent.
+          const reported = settlement !== 'superseded' && (await this.#reportRecoveryFailure(runId, recoveryError));
+          if (!reported && !leaseLossError) {
+            await threadRegistration?.rollback();
+            performCleanup();
+          }
+          throw recoveryError;
+        })
+        .finally(() => recoveryLease.release()),
+    );
     const trackedRecoverEntry = globalRunRegistry.get(runId);
     if (trackedRecoverEntry) {
       trackedRecoverEntry.workflowExecution = workflowExecution;
@@ -3421,7 +3456,7 @@ export class DurableAgent<
       });
     } catch (error) {
       // The run never started: drop its owner record rather than leave it behind.
-      await executionFence.settle(async () => {}, { finished: true });
+      await executionFence.settle(async () => {});
       throw error;
     }
 
@@ -3522,32 +3557,34 @@ export class DurableAgent<
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
-    const workflowExecution = ready
-      .then(async () => {
-        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
-        // Only the initial generate()/stream() path emits 'start'; resume() does not.
-        await emitChunkEvent(this.pubsub, runId, {
-          type: 'start',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: { id: workflowInput.agentId, messageId },
-        });
-        if (this.__getGoalConfig()) {
-          await beginGoalActivity({
-            mastra: this.#mastra,
-            agentId: workflowInput.agentId,
-            threadId,
+    const workflowExecution = executionFence.run(() =>
+      ready
+        .then(async () => {
+          // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+          // Only the initial generate()/stream() path emits 'start'; resume() does not.
+          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
+            type: 'start',
             runId,
-            requestContext: globalRunRegistry.get(runId)?.requestContext,
+            from: ChunkFrom.AGENT,
+            payload: { id: workflowInput.agentId, messageId },
           });
-        }
-        try {
-          return await this.executeWorkflow(runId, workflowInput);
-        } finally {
-          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
-        }
-      })
-      .catch(error => this.settleExecution(runId, executionFence, { error }));
+          if (this.__getGoalConfig()) {
+            await beginGoalActivity({
+              mastra: this.#mastra,
+              agentId: workflowInput.agentId,
+              threadId,
+              runId,
+              requestContext: globalRunRegistry.get(runId)?.requestContext,
+            });
+          }
+          try {
+            return await this.executeWorkflow(runId, workflowInput);
+          } finally {
+            await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+          }
+        })
+        .catch(error => this.settleExecution(runId, executionFence, { error })),
+    );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
