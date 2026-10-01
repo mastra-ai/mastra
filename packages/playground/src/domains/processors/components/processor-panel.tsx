@@ -210,8 +210,10 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'success' : 'destructive'}>
+                  {result.success ? 'Success' : 'Failed'}
+                </Badge>
+                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="mt-2 rounded-md border border-warning-edge bg-warning-subtle p-3">
