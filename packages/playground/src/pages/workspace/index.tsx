@@ -20,6 +20,7 @@ import { AddSkillDialog } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { WorkspaceNotices } from '@/domains/workspace/components/workspace-notices';
 import { useInstallSkill, useRemoveSkill, useUpdateSkills } from '@/domains/workspace/hooks';
 import {
   useWorkspaceInfo,
@@ -345,9 +346,16 @@ export default function Workspace() {
       }
     >
       <h1 className="sr-only">Workspaces</h1>
-      <div className="grid min-h-0 grid-rows-1">
+      <div className="flex min-h-0 flex-col">
         {hasFilesystem && effectiveWorkspaceId && (
-          <div className="min-h-0">
+          <WorkspaceNotices
+            workspaceId={effectiveWorkspaceId}
+            showInitWarning={canSearchFiles && !isLoadingInfo && workspaceInfo?.status !== 'ready'}
+            skills={hasSkills && skillsData ? skills : undefined}
+          />
+        )}
+        {hasFilesystem && effectiveWorkspaceId && (
+          <div className="min-h-0 flex-1">
             <WorkspaceTreeView
               key={effectiveWorkspaceId}
               workspaceId={effectiveWorkspaceId}
@@ -392,7 +400,7 @@ export default function Workspace() {
         )}
 
         {!hasFilesystem && !isLoadingInfo && (
-          <div className="min-h-0">
+          <div className="min-h-0 flex-1">
             <EmptyState
               variant="fill"
               titleSlot="No filesystem or skills configured"
