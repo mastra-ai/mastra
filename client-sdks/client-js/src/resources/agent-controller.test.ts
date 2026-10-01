@@ -97,6 +97,42 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
+  it('steers with file attachments and attachments alias', async () => {
+    mockJson({ ok: true });
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    await client.getAgentController('code').session('user-1').steer({ content: 'focus with file', files });
+    let [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'focus with file', files });
+
+    mockJson({ ok: true });
+    await client
+      .getAgentController('code')
+      .session('user-1')
+      .steer({ content: 'focus with alias', attachments: files });
+    [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'focus with alias', files });
+  });
+
+  it('queues follow-up with file attachments and attachments alias', async () => {
+    mockJson({ ok: true });
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    await client.getAgentController('code').session('user-1').followUp({ content: 'later with file', files });
+    let [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'later with file', files });
+
+    mockJson({ ok: true });
+    await client
+      .getAgentController('code')
+      .session('user-1')
+      .followUp({ content: 'later with alias', attachments: files });
+    [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'later with alias', files });
+  });
+
   it('sends requestContext in the body for run-triggering methods', async () => {
     const session = client.getAgentController('code').session('user-1');
     const requestContext = { userId: 'u-42', tier: 'pro' };

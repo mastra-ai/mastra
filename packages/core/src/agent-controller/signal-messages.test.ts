@@ -1448,6 +1448,94 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
   });
 
+  it('forwards file attachments in steering input', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const steered = session.steer({
+      content: 'steer with file',
+      files: [
+        {
+          data: 'data:text/plain;base64,Y3JpdGljYWwgZXJyb3I=',
+          mediaType: 'text/plain',
+          filename: 'error.log',
+        },
+      ],
+    });
+    releases.shift()?.();
+    await steered;
+    await waitFor(() => prompts.length === 2);
+
+    const serializedPrompts = JSON.stringify(prompts[1]);
+    expect(serializedPrompts).toContain('steer with file');
+    expect(serializedPrompts).toContain('[File: error.log]');
+    expect(serializedPrompts).toContain('critical error');
+  });
+
+  it('forwards file attachments in followUp while idle', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const followUp = session.followUp({
+      content: 'idle follow up with file',
+      files: [
+        {
+          data: 'data:text/plain;base64,aGVsbG8gd29ybGQ=',
+          mediaType: 'text/plain',
+          filename: 'hello.txt',
+        },
+      ],
+    });
+
+    await waitFor(() => releases.length === 1);
+    releases.shift()?.();
+    await followUp;
+
+    await waitFor(() => prompts.length === 1);
+    const serializedPrompts = JSON.stringify(prompts[0]);
+    expect(serializedPrompts).toContain('idle follow up with file');
+    expect(serializedPrompts).toContain('[File: hello.txt]');
+    expect(serializedPrompts).toContain('hello world');
+  });
+
+  it('queues file attachments in followUp while running and delivers on next turn', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start first run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+
+    await session.followUp({
+      content: 'queued follow up with file',
+      files: [
+        {
+          data: 'data:text/plain;base64,cXVldWVkIGRhdGE=',
+          mediaType: 'text/plain',
+          filename: 'queued.txt',
+        },
+      ],
+    });
+
+    releases.shift()?.();
+    await first.accepted;
+    await waitFor(() => prompts.length === 2);
+
+    const serializedPrompts = JSON.stringify(prompts[1]);
+    expect(serializedPrompts).toContain('queued follow up with file');
+    expect(serializedPrompts).toContain('[File: queued.txt]');
+    expect(serializedPrompts).toContain('queued data');
+  });
+
   it('emits echoed file user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);

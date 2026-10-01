@@ -1349,6 +1349,10 @@ export class SessionSuspensions {
 export interface FollowUp {
   /** The message text to send. */
   content: string;
+  /** Optional file attachments (e.g. logs or images). */
+  files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  /** Optional file attachments alias. */
+  attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
   /** Optional request context to apply when the queued message is sent. */
   requestContext?: RequestContext;
 }
@@ -3815,13 +3819,16 @@ export class Session<TState = unknown> {
   private createMessageInput({
     content,
     files,
+    attachments,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
   }): AgentSignalContents {
-    if (!files?.length) return content;
+    const resolvedFiles = files ?? attachments;
+    if (!resolvedFiles?.length) return content;
 
-    const fileParts = files.map(f => {
+    const fileParts = resolvedFiles.map(f => {
       const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
       if (isText) {
         let textContent = f.data;
@@ -4295,6 +4302,7 @@ export class Session<TState = unknown> {
   async sendMessage({
     content,
     files,
+    attachments,
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
@@ -4302,15 +4310,17 @@ export class Session<TState = unknown> {
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
+    const resolvedFiles = files ?? attachments;
     const wasActive = this.stream.isActive();
     const signal = this.sendSignal(
       {
-        content: this.createMessageInput({ content, files }),
+        content: this.createMessageInput({ content, files: resolvedFiles }),
         tracingContext,
         tracingOptions,
         requestContext: requestContextInput,
@@ -4333,23 +4343,26 @@ export class Session<TState = unknown> {
   async queueMessage({
     content,
     files,
+    attachments,
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
+    const resolvedFiles = files ?? attachments;
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
       tracingContext,
       tracingOptions,
     });
-    const messageInput = this.createMessageInput({ content, files });
+    const messageInput = this.createMessageInput({ content, files: resolvedFiles });
     const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
     const result = this.machinery
       .getAgent()
@@ -4363,9 +4376,24 @@ export class Session<TState = unknown> {
   }
 
   /** Abort the current run and send steering input without clearing queued follow-ups. */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+  async steer({
+    content,
+    files,
+    attachments,
+    requestContext,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const resolvedFiles = files ?? attachments;
     this.abort();
-    await this.sendMessage({ content, requestContext });
+    await this.sendMessage({
+      content,
+      ...(resolvedFiles !== undefined ? { files: resolvedFiles } : {}),
+      requestContext,
+    });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
@@ -4403,8 +4431,25 @@ export class Session<TState = unknown> {
   }
 
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
+  async followUp({
+    content,
+    files,
+    attachments,
+    requestContext,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    attachments?: Array<{ data: string; mediaType: string; filename?: string }>;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const resolvedFiles = files ?? attachments;
+    if (!this.run.isRunning()) {
+      return this.sendMessage({
+        content,
+        ...(resolvedFiles !== undefined ? { files: resolvedFiles } : {}),
+        requestContext,
+      });
+    }
     const threadId = this.thread.getId();
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
@@ -4423,7 +4468,7 @@ export class Session<TState = unknown> {
       this.#preparingFollowUps.delete(operation);
       await agent.queueMessage(
         {
-          contents: this.createMessageInput({ content }),
+          contents: this.createMessageInput({ content, files: resolvedFiles }),
           providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
         },
         {

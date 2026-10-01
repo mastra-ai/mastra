@@ -272,6 +272,22 @@ export interface AgentControllerRequestOptions {
   requestContext?: RequestContext | Record<string, any>;
 }
 
+/** A file attachment payload forwarded to the agent controller. */
+export interface AgentControllerFileAttachment {
+  data: string;
+  mediaType: string;
+  filename?: string;
+}
+
+/** Structured message input that supports file attachments. */
+export type AgentControllerMessageInput =
+  | string
+  | {
+      content: string;
+      files?: AgentControllerFileAttachment[];
+      attachments?: AgentControllerFileAttachment[];
+    };
+
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
   /** Called for each event received over the stream. */
@@ -602,11 +618,11 @@ export class AgentControllerSession extends BaseResource {
    * `sendMessage({ content: 'What is in this image?', files })`.
    * Pass `options.requestContext` to merge custom context into the run's request context.
    */
-  async sendMessage(
-    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
-  ): Promise<void> {
-    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
+  async sendMessage(message: AgentControllerMessageInput, options?: AgentControllerRequestOptions): Promise<void> {
+    const { content, files } =
+      typeof message === 'string'
+        ? { content: message, files: undefined }
+        : { content: message.content, files: message.files ?? message.attachments };
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/messages`), {
       method: 'POST',
@@ -662,12 +678,24 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** Inject a message into the in-flight run without starting a new turn. */
-  async steer(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  /**
+   * Inject a message into the in-flight run without starting a new turn.
+   * Pass a structured message to attach files:
+   * `steer({ content: 'Use this file instead', files })`.
+   */
+  async steer(message: AgentControllerMessageInput, options?: AgentControllerRequestOptions): Promise<void> {
+    const { content, files } =
+      typeof message === 'string'
+        ? { content: message, files: undefined }
+        : { content: message.content, files: message.files ?? message.attachments };
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/steer`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -801,12 +829,22 @@ export class AgentControllerSession extends BaseResource {
   /**
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.
+   * Pass a structured message to attach files:
+   * `followUp({ content: 'Review this log later', files })`.
    */
-  async followUp(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  async followUp(message: AgentControllerMessageInput, options?: AgentControllerRequestOptions): Promise<void> {
+    const { content, files } =
+      typeof message === 'string'
+        ? { content: message, files: undefined }
+        : { content: message.content, files: message.files ?? message.attachments };
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/follow-up`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 

@@ -456,6 +456,42 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'change course', requestContext });
     });
 
+    it('forwards files to session.steer', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'change course with file',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'change course with file', files, requestContext: undefined });
+    });
+
+    it('forwards attachments alias to session.steer', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const attachments = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'change course with attachments',
+        attachments,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({
+        content: 'change course with attachments',
+        files: attachments,
+        requestContext: undefined,
+      });
+    });
+
     it('forwards requestContext to session.followUp', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
@@ -470,6 +506,54 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+    });
+
+    it('forwards files to session.followUp', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'follow up with file',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'follow up with file', files, requestContext: undefined });
+    });
+
+    it('forwards attachments alias to session.followUp', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const attachments = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'follow up with attachments',
+        attachments,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({
+        content: 'follow up with attachments',
+        files: attachments,
+        requestContext: undefined,
+      });
+    });
+
+    it('rejects oversized file attachments in steer and follow-up body schemas', () => {
+      const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+
+      for (const route of [STEER_AGENT_CONTROLLER_SESSION_ROUTE, FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE]) {
+        expect(route.bodySchema!.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+        expect(route.bodySchema!.safeParse({ message: 'hi', attachments: [okFile] }).success).toBe(true);
+        expect(route.bodySchema!.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+        expect(route.bodySchema!.safeParse({ message: 'hi', attachments: [oversized] }).success).toBe(false);
+      }
     });
 
     it('forwards requestContext to session.respondToToolApproval', async () => {
