@@ -46,26 +46,23 @@ export interface AgentBrowserConfigExtensions {
   excludeTools?: BrowserToolName[];
 
   /**
-   * Alpha: configure WebMCP tool discovery and invocation.
+   * Beta: configure WebMCP tool discovery and invocation.
    *
-   * WebMCP is enabled by default. AgentBrowser injects an in-page bridge
-   * that captures tools exposed by the current page and adds a
-   * `browser_webmcp` tool for the agent. To turn it off, pass
-   * `{ enabled: false }`.
+   * WebMCP is opt-in: pass `{ enabled: true }` to have AgentBrowser inject
+   * an in-page bridge that captures tools exposed by the current page and
+   * add a `browser_webmcp` tool for the agent. Without it, no bridge is
+   * injected and the tool is not added.
    *
    * @example
    * ```ts
-   * // Default: enabled, listening for every supported protocol
-   * new AgentBrowser()
+   * // Enable, listening for every supported protocol
+   * new AgentBrowser({ webmcp: { enabled: true } })
    *
    * // Only the W3C navigator.modelContext draft
-   * new AgentBrowser({ webmcp: { protocols: ['w3c'] } })
+   * new AgentBrowser({ webmcp: { enabled: true, protocols: ['w3c'] } })
    *
    * // Lock down to specific origins
-   * new AgentBrowser({ webmcp: { allowedOrigins: ['https://shop.example.com'] } })
-   *
-   * // Opt out
-   * new AgentBrowser({ webmcp: { enabled: false } })
+   * new AgentBrowser({ webmcp: { enabled: true, allowedOrigins: ['https://shop.example.com'] } })
    * ```
    */
   webmcp?: WebmcpOptions;
@@ -85,13 +82,13 @@ export interface AgentBrowserConfigExtensions {
 export type WebmcpProtocol = 'mcpb' | 'w3c';
 
 /**
- * Alpha configuration for WebMCP tool discovery.
+ * Beta configuration for WebMCP tool discovery. Opt-in via `enabled: true`.
  */
 export interface WebmcpOptions {
   /**
-   * Turn WebMCP support off entirely. When `false`, no in-page bridge is
-   * injected and the `browser_webmcp` tool is not added to the agent.
-   * Defaults to `true`.
+   * Turn WebMCP support on. Must be `true` for the in-page bridge to be
+   * injected and the `browser_webmcp` tool to be added to the agent.
+   * Defaults to `false`.
    */
   enabled?: boolean;
   /**

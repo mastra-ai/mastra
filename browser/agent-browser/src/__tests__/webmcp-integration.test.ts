@@ -152,7 +152,7 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
     let browser: AgentBrowser;
 
     beforeAll(async () => {
-      browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared' });
+      browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared', webmcp: { enabled: true } });
       await browser.ensureReady();
       await browser.goto({ url });
     }, 30_000);
@@ -221,7 +221,11 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
 
   describe('configuration against a real page', () => {
     it("protocols: ['w3c'] exposes the shim but never talks to the page MCP server", async () => {
-      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { protocols: ['w3c'] } });
+      const browser = new AgentBrowser({
+        headless: true,
+        scope: 'shared',
+        webmcp: { enabled: true, protocols: ['w3c'] },
+      });
       try {
         await browser.ensureReady();
         await browser.goto({ url });
@@ -234,7 +238,11 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
     }, 30_000);
 
     it("protocols: ['mcpb'] does not install navigator.modelContext", async () => {
-      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { protocols: ['mcpb'] } });
+      const browser = new AgentBrowser({
+        headless: true,
+        scope: 'shared',
+        webmcp: { enabled: true, protocols: ['mcpb'] },
+      });
       try {
         await browser.ensureReady();
         // The page's registerTool call throws without the shim; assert before load.
@@ -250,7 +258,7 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       const browser = new AgentBrowser({
         headless: true,
         scope: 'shared',
-        webmcp: { allowedOrigins: ['https://allowed.example'] },
+        webmcp: { enabled: true, allowedOrigins: ['https://allowed.example'] },
       });
       try {
         await browser.ensureReady();
@@ -266,7 +274,7 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
 
   describe('full agent loop with the real toolset', () => {
     it('an Agent discovers and calls page tools through browser_webmcp', async () => {
-      const browser = new AgentBrowser({ headless: true, scope: 'shared' });
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
 
       const script: Array<{ toolName: string; input: Record<string, unknown> } | { text: string }> = [
         { toolName: 'browser_goto', input: { url: '__URL__' } },

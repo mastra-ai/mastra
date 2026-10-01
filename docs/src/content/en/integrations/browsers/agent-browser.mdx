@@ -85,10 +85,10 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 AgentBrowser can call tools that web pages expose through WebMCP, so a site can offer first-class actions (checkout, create order, assign ticket) directly to an agent instead of making it click through the DOM.
 
-WebMCP is on by default. AgentBrowser injects a small in-page bridge before any page script runs and adds a `browser_webmcp` tool to the agent:
+WebMCP is opt-in. With `enabled: true`, AgentBrowser injects a small in-page bridge before any page script runs and adds a `browser_webmcp` tool to the agent:
 
 ```typescript
-const browser = new AgentBrowser()
+const browser = new AgentBrowser({ webmcp: { enabled: true } })
 ```
 
 The agent then uses one tool with two actions:
@@ -100,7 +100,7 @@ The agent then uses one tool with two actions:
 
 ### Protocols
 
-Two WebMCP surfaces exist today, and both are enabled by default:
+Two WebMCP surfaces exist today, and both are listened for when WebMCP is enabled:
 
 - **W3C `navigator.modelContext`** draft (`'w3c'`): pages call `navigator.modelContext.registerTool({...})` or `unregisterTool(name)`. The bridge provides a polyfill with the draft's semantics (duplicate names throw, call arguments are validated against the tool's `inputSchema`) and mirrors registrations into a native implementation when the browser ships one. Pages built on the `@mcp-b/webmcp-polyfill` package register through this same API.
 - **MCP-B Tab transport** (`'mcpb'`): pages that run an MCP server in-page with `McpServer` + `TabServerTransport` from `@mcp-b/transports`. The bridge connects as a real MCP client over `window.postMessage` — handshake, `initialize`, `tools/list`, and `tools/call` — so the page's own server executes the tool and validates its arguments.
@@ -108,8 +108,8 @@ Two WebMCP surfaces exist today, and both are enabled by default:
 Pass `webmcp.protocols` to restrict which surfaces the in-page bridge installs. Omitting it (or passing an empty array) enables all protocols:
 
 ```typescript
-new AgentBrowser({ webmcp: { protocols: ['mcpb'] } }) // MCP-B Tab transport only
-new AgentBrowser({ webmcp: { protocols: ['w3c'] } }) // W3C draft only
+new AgentBrowser({ webmcp: { enabled: true, protocols: ['mcpb'] } }) // MCP-B Tab transport only
+new AgentBrowser({ webmcp: { enabled: true, protocols: ['w3c'] } }) // W3C draft only
 ```
 
 When a page exposes the same tool name under both surfaces, the W3C registration takes precedence. Tool results from MCP-B servers are unwrapped for the agent: `structuredContent` is returned when present, and a single text content block is parsed as JSON when possible.
@@ -121,20 +121,13 @@ Pass `webmcp.allowedOrigins` to restrict which page origins the agent can call t
 ```typescript
 new AgentBrowser({
   webmcp: {
+    enabled: true,
     allowedOrigins: ['https://shop.example.com', 'https://admin.example.com'],
   },
 })
 ```
 
 If the active page's origin is not in the list, both `list` and `call` return an error without evaluating anything in the page.
-
-### Turning it off
-
-Pass `enabled: false` to skip the in-page bridge and leave `browser_webmcp` out of the agent's toolset:
-
-```typescript
-new AgentBrowser({ webmcp: { enabled: false } })
-```
 
 ## Recording
 

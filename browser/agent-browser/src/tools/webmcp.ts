@@ -2,9 +2,9 @@
  * browser_webmcp - Discover and call WebMCP tools exposed by the current page.
  *
  * Supports both the W3C `navigator.modelContext` draft and in-page MCP
- * servers over the MCP-B Tab transport, scoped by `webmcp.protocols`. Added to the
- * toolset by default; removed when the AgentBrowser is constructed with
- * `webmcp: { enabled: false }`.
+ * servers over the MCP-B Tab transport, scoped by `webmcp.protocols`. Only
+ * added to the toolset when the AgentBrowser is constructed with
+ * `webmcp: { enabled: true }`.
  */
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from '../agent-browser';

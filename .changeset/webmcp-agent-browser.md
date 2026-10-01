@@ -2,7 +2,7 @@
 "@mastra/agent-browser": minor
 ---
 
-Add WebMCP support (beta): AgentBrowser can discover and call tools that pages expose through WebMCP. WebMCP is on by default — AgentBrowser injects an in-page bridge before any page script runs and adds a `browser_webmcp` tool with two actions.
+Add WebMCP support (beta): AgentBrowser can discover and call tools that pages expose through WebMCP. The feature is opt-in — pass `webmcp: { enabled: true }` and AgentBrowser injects an in-page bridge before any page script runs and adds a `browser_webmcp` tool with two actions.
 
 Both supported protocols are auto-detected per page:
 
@@ -12,19 +12,17 @@ Both supported protocols are auto-detected per page:
 ```typescript
 import { AgentBrowser } from '@mastra/agent-browser'
 
-// Default: WebMCP on, listening for all protocols.
-const browser = new AgentBrowser()
+// Opt in, listening for all protocols.
+const browser = new AgentBrowser({ webmcp: { enabled: true } })
 
 // Restrict protocols or origins.
 new AgentBrowser({
   webmcp: {
+    enabled: true,
     protocols: ['mcpb'], // 'mcpb' | 'w3c'; omit to listen for all
     allowedOrigins: ['https://shop.example.com'],
   },
 })
-
-// Opt out.
-new AgentBrowser({ webmcp: { enabled: false } })
 ```
 
 The agent uses `action: "list"` to see what the current page exposes and `action: "call"` with `{ toolName, args }` to invoke one. Pages that use neither surface are unaffected.

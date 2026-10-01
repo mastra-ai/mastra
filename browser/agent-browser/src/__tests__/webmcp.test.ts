@@ -37,13 +37,18 @@ import { AgentBrowser } from '../agent-browser';
 import { BROWSER_TOOLS } from '../tools/constants';
 
 describe('WebMCP: tool registration gating', () => {
-  it('exposes browser_webmcp by default (no webmcp config)', () => {
+  it('hides browser_webmcp by default (no webmcp config)', () => {
     const browser = new AgentBrowser({ scope: 'shared' });
-    expect(Object.keys(browser.getTools())).toContain(BROWSER_TOOLS.WEBMCP);
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
   });
 
-  it('exposes browser_webmcp when webmcp is an empty object', () => {
+  it('hides browser_webmcp when webmcp is an empty object (enabled not set)', () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
+  });
+
+  it('exposes browser_webmcp when webmcp.enabled is true', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     expect(Object.keys(browser.getTools())).toContain(BROWSER_TOOLS.WEBMCP);
   });
 
@@ -55,6 +60,7 @@ describe('WebMCP: tool registration gating', () => {
   it('respects excludeTools for browser_webmcp', () => {
     const browser = new AgentBrowser({
       scope: 'shared',
+      webmcp: { enabled: true },
       excludeTools: [BROWSER_TOOLS.WEBMCP],
     });
     expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
@@ -66,8 +72,8 @@ describe('WebMCP: bridge installation', () => {
     vi.clearAllMocks();
   });
 
-  it('installs the init script by default', async () => {
-    const browser = new AgentBrowser({ scope: 'shared' });
+  it('installs the init script when webmcp is enabled', async () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     await browser.launch();
     expect(mockContext.addInitScript).toHaveBeenCalledTimes(1);
     const callArgs = mockContext.addInitScript.mock.calls[0]?.[0];
@@ -77,15 +83,15 @@ describe('WebMCP: bridge installation', () => {
     await browser.close();
   });
 
-  it('does not install the init script when webmcp.enabled is false', async () => {
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
+  it('does not install the init script by default', async () => {
+    const browser = new AgentBrowser({ scope: 'shared' });
     await browser.launch();
     expect(mockContext.addInitScript).not.toHaveBeenCalled();
     await browser.close();
   });
 
   it('defaults the injected protocols to all supported protocols', async () => {
-    const browser = new AgentBrowser({ scope: 'shared' });
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     await browser.launch();
     const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
     expect(content).toMatch(/PROTOCOLS = \["mcpb","w3c"\]/);
@@ -93,7 +99,7 @@ describe('WebMCP: bridge installation', () => {
   });
 
   it('treats an empty protocols array like unset (all protocols)', async () => {
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: { protocols: [] } });
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: [] } });
     await browser.launch();
     const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
     expect(content).toMatch(/PROTOCOLS = \["mcpb","w3c"\]/);
@@ -101,7 +107,7 @@ describe('WebMCP: bridge installation', () => {
   });
 
   it('passes protocols=[w3c] through to the bridge', async () => {
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: { protocols: ['w3c'] } });
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: ['w3c'] } });
     await browser.launch();
     const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
     expect(content).toMatch(/PROTOCOLS = \["w3c"\]/);
@@ -109,7 +115,7 @@ describe('WebMCP: bridge installation', () => {
   });
 
   it('passes protocols=[mcpb] through to the bridge', async () => {
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: { protocols: ['mcpb'] } });
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, protocols: ['mcpb'] } });
     await browser.launch();
     const content = mockContext.addInitScript.mock.calls[0]?.[0]?.content as string;
     expect(content).toMatch(/PROTOCOLS = \["mcpb"\]/);
@@ -123,7 +129,7 @@ describe('WebMCP: list', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockPage.url.mockReturnValue('https://example.com/');
-    browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     await browser.launch();
   });
 
@@ -172,7 +178,7 @@ describe('WebMCP: call', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockPage.url.mockReturnValue('https://example.com/');
-    browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     await browser.launch();
   });
 
@@ -204,7 +210,7 @@ describe('WebMCP: origin allowlist', () => {
   it('allows any origin when allowedOrigins is unset', async () => {
     mockPage.url.mockReturnValue('https://any-site.test/path');
     mockPage.evaluate.mockResolvedValue([]);
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
     await browser.launch();
     const result = await browser.listWebMcpTools();
     expect(result.success).toBe(true);
@@ -216,7 +222,7 @@ describe('WebMCP: origin allowlist', () => {
     mockPage.evaluate.mockResolvedValue([]);
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { allowedOrigins: ['https://example.com'] },
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
     });
     await browser.launch();
     const result = await browser.listWebMcpTools();
@@ -228,7 +234,7 @@ describe('WebMCP: origin allowlist', () => {
     mockPage.url.mockReturnValue('https://untrusted.example/path');
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { allowedOrigins: ['https://example.com'] },
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
     });
     await browser.launch();
     const result = await browser.listWebMcpTools();
@@ -241,7 +247,7 @@ describe('WebMCP: origin allowlist', () => {
     mockPage.url.mockReturnValue('about:blank');
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { allowedOrigins: ['https://example.com'] },
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
     });
     await browser.launch();
     const result = await browser.listWebMcpTools();
@@ -254,7 +260,7 @@ describe('WebMCP: origin allowlist', () => {
     mockPage.evaluate.mockResolvedValue([]);
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { allowedOrigins: ['file://'] },
+      webmcp: { enabled: true, allowedOrigins: ['file://'] },
     });
     await browser.launch();
     const result = await browser.listWebMcpTools();
@@ -266,7 +272,7 @@ describe('WebMCP: origin allowlist', () => {
     mockPage.url.mockReturnValue('https://untrusted.example/');
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { allowedOrigins: ['https://example.com'] },
+      webmcp: { enabled: true, allowedOrigins: ['https://example.com'] },
     });
     await browser.launch();
     const result = await browser.callWebMcpTool({ toolName: 'foo' });

@@ -361,7 +361,7 @@ export class AgentBrowser extends MastraBrowser {
   /**
    * Get the browser tools for this provider.
    * Returns 16 flat tools for browser automation, plus `browser_webmcp`
-   * unless WebMCP is disabled, plus the recording tools when configured.
+   * when WebMCP is enabled, plus the recording tools when configured.
    */
   getTools(): Record<string, Tool<any, any>> {
     const tools = createAgentBrowserTools(this);
@@ -1591,7 +1591,7 @@ export class AgentBrowser extends MastraBrowser {
       return createError(
         'browser_error',
         'WebMCP is not enabled on this AgentBrowser.',
-        'Remove `webmcp: { enabled: false }` from the AgentBrowser config to enable WebMCP tool discovery.',
+        'Pass `webmcp: { enabled: true }` in the AgentBrowser config to enable WebMCP tool discovery.',
       );
     }
     try {
@@ -1633,7 +1633,7 @@ export class AgentBrowser extends MastraBrowser {
       return createError(
         'browser_error',
         'WebMCP is not enabled on this AgentBrowser.',
-        'Remove `webmcp: { enabled: false }` from the AgentBrowser config to enable WebMCP tool discovery.',
+        'Pass `webmcp: { enabled: true }` in the AgentBrowser config to enable WebMCP tool discovery.',
       );
     }
     try {
@@ -1880,17 +1880,18 @@ function safeOrigin(url: string): string {
 
 /**
  * Resolve the WebMCP configuration into a normalized settings object.
- * WebMCP is enabled by default; the user turns it off with `enabled: false`.
- * An omitted (or empty) `protocols` array enables every supported protocol,
- * mirroring how `allowedOrigins` treats omitted/empty as "no restriction".
+ * WebMCP is opt-in (beta): it only runs with `webmcp: { enabled: true }`.
+ * When enabled, an omitted (or empty) `protocols` array enables every
+ * supported protocol, mirroring how `allowedOrigins` treats omitted/empty
+ * as "no restriction".
  */
 function resolveWebMcpSettings(
   opts: WebmcpOptions | undefined,
 ): { protocols: WebmcpProtocol[]; allowedOrigins: string[] | null } | null {
-  if (opts?.enabled === false) return null;
+  if (opts?.enabled !== true) return null;
   return {
-    protocols: opts?.protocols?.length ? [...new Set(opts.protocols)] : ['mcpb', 'w3c'],
-    allowedOrigins: opts?.allowedOrigins ?? null,
+    protocols: opts.protocols?.length ? [...new Set(opts.protocols)] : ['mcpb', 'w3c'],
+    allowedOrigins: opts.allowedOrigins ?? null,
   };
 }
 
