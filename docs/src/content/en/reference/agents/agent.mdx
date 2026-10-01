@@ -1024,6 +1024,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Default options used when calling `stream()` and `generate()`.',
   },
   {
+    name: 'wakeOptions',
+    type: 'AgentExecutionOptions | ({ resourceId: string, threadId: string, requestContext?: RequestContext, tracingContext?: TracingContext, tracingOptions?: TracingOptions }) => AgentExecutionOptions | undefined | Promise<AgentExecutionOptions | undefined>',
+    isOptional: true,
+    description:
+      "Options for the run that starts when a signal or notification wakes an idle thread. Called only when a run actually starts. Explicit `ifIdle.streamOptions` take precedence. If the returned options have no `requestContext`, the sender's `requestContext` is used. When the sender passes a `tracingContext`, the woken run is traced as its child.",
+  },
+  {
     name: 'defaultGenerateOptionsLegacy',
     type: 'AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>',
     isOptional: true,

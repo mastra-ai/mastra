@@ -1417,6 +1417,23 @@ export class AgentController<TState = {}> {
     // Done before workspace/browser propagation so that addAgent — which may
     // resolve agent.getWorkspace() — does not prematurely invoke a workspace
     // factory before the per-session request context is available.
+    // A signal that wakes an idle thread (notification, schedule, peer message)
+    // runs as the session that owns the resource, so it gets that session's
+    // model, tools, and request context.
+    agent.__setDefaultWakeOptions?.(
+      async ({ resourceId, threadId, requestContext, tracingContext, tracingOptions }) => {
+        const session = await this.getSessionByResource(resourceId);
+        if (!session) return undefined;
+        return this.buildAgentMessageStreamOptions({
+          session,
+          requestContext,
+          tracingContext,
+          tracingOptions,
+          threadId,
+        }) as any;
+      },
+    );
+
     const mastra = this.getMastra();
     if (mastra && agent.getMastraInstance() !== mastra) {
       mastra.addAgent(agent);

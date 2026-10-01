@@ -701,7 +701,6 @@ describe('AgentController signal messages', () => {
         threadId,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
-            requestContext: expect.any(RequestContext),
             tracingContext,
             tracingOptions,
           }),
