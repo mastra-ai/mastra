@@ -394,6 +394,14 @@ export default function Workspace() {
                   </>
                 ) : undefined
               }
+              emptyActions={
+                canManageSkills ? (
+                  <Button variant="ghost" onClick={() => setShowAddSkillDialog(true)}>
+                    <Wand2 />
+                    Add skill
+                  </Button>
+                ) : undefined
+              }
               onDelete={handleDelete}
             />
           </div>

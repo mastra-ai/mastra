@@ -408,6 +408,14 @@ describe('WorkspaceTreeView', () => {
       expect(screen.queryByText('This path no longer exists.')).toBeNull();
       expect(screen.queryByText('Select a file')).toBeNull();
     });
+
+    it('offers the empty actions next to New folder', async () => {
+      server.use(http.get(`${WORKSPACE_URL}/fs/list`, () => HttpResponse.json({ error: 'nope' }, { status: 404 })));
+      renderView({ onCreateDirectory: vi.fn(), emptyActions: <button type="button">Add skill</button> });
+
+      expect(await screen.findByRole('button', { name: 'Add skill' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /New folder/ })).toBeTruthy();
+    });
   });
 
   describe('when the active file is an image', () => {

@@ -17,18 +17,21 @@ import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { PanelGroup } from '@/lib/resize/panel-group';
 import { PanelSeparator } from '@/lib/resize/separator';
 
-export type WorkspaceRootProps = WorkspaceProviderProps;
+export interface WorkspaceRootProps extends WorkspaceProviderProps {
+  /** Extra actions shown next to "New folder" when the workspace is empty. */
+  emptyActions?: ReactNode;
+}
 
-export function WorkspaceRoot({ children, ...props }: WorkspaceRootProps) {
+export function WorkspaceRoot({ children, emptyActions, ...props }: WorkspaceRootProps) {
   return (
     <WorkspaceProvider {...props}>
-      <WorkspaceRootBody>{children}</WorkspaceRootBody>
+      <WorkspaceRootBody emptyActions={emptyActions}>{children}</WorkspaceRootBody>
     </WorkspaceProvider>
   );
 }
 
 /** An empty workspace (or one whose root folder doesn't exist yet) gets a single empty state instead of two panes. */
-function WorkspaceRootBody({ children }: { children: ReactNode }) {
+function WorkspaceRootBody({ children, emptyActions }: { children: ReactNode; emptyActions?: ReactNode }) {
   const { workspaceId } = useWorkspaceContext();
   const { data, error } = useWorkspaceDirectory(workspaceId, ROOT_PATH);
   const isEmpty = data ? data.length === 0 : is404NotFoundError(error);
@@ -39,7 +42,12 @@ function WorkspaceRootBody({ children }: { children: ReactNode }) {
         variant="fill"
         titleSlot="This workspace is empty"
         descriptionSlot="Files written by your agents will show up here."
-        actionSlot={<WorkspaceCreateDirectory labeled />}
+        actionSlot={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <WorkspaceCreateDirectory labeled />
+            {emptyActions}
+          </div>
+        }
       />
     );
   }

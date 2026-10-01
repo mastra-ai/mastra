@@ -25,6 +25,8 @@ export interface WorkspaceTreeViewProps {
   skillCount?: number;
   /** Extra icon buttons rendered in the aside header, after search and new folder. */
   asideActions?: ReactNode;
+  /** Extra labeled actions shown next to "New folder" when the workspace is empty. */
+  emptyActions?: ReactNode;
   /** Custom preview for a file; return `undefined` to keep the built-in rendering. */
   renderPreview?: WorkspacePreviewFactory;
 }
