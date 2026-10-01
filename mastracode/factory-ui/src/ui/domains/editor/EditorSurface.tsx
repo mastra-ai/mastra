@@ -1013,6 +1013,13 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     readOnly={activeIsExternal}
                     settings={settings}
                     onChange={next => actions.updateDraft(activePath, next, baseline)}
+                    highlightLines={
+                      buffers.pendingSelection && buffers.pendingSelection.path === activePath
+                        ? { start: buffers.pendingSelection.startLine, end: buffers.pendingSelection.endLine }
+                        : null
+                    }
+                    onSelectionChange={handleSelection}
+                    onCursorLineChange={setCursorLine}
                   />
                 ) : (
                   <PierreFileSurface

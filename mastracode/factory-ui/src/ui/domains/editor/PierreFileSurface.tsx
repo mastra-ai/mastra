@@ -21,6 +21,7 @@ import { EDITOR_THEME } from './editor-themes';
 import { LspHoverCard } from './LspHoverCard';
 import type { CollabBinding } from './use-editor-collab';
 import { candidatesForPrefix, currentPrefix } from './pierre-autocomplete';
+import { useSurfaceSelection } from './use-surface-selection';
 
 export interface LineRange {
   start: number;
@@ -304,7 +305,6 @@ export function PierreFileSurface({
   const onRenameRef = useRef(onRename);
   const onFindReferencesRef = useRef(onFindReferences);
   const onFormatRef = useRef(onFormat);
-  const onSelectionChangeRef = useRef(onSelectionChange);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -315,18 +315,7 @@ export function PierreFileSurface({
     onRenameRef.current = onRename;
     onFindReferencesRef.current = onFindReferences;
     onFormatRef.current = onFormat;
-    onSelectionChangeRef.current = onSelectionChange;
-  }, [
-    onChange,
-    onSaveShortcut,
-    onCursorLineChange,
-    onContextMenu,
-    onGotoDefinition,
-    onRename,
-    onFindReferences,
-    onFormat,
-    onSelectionChange,
-  ]);
+  }, [onChange, onSaveShortcut, onCursorLineChange, onContextMenu, onGotoDefinition, onRename, onFindReferences, onFormat]);
 
   // The surface is UNCONTROLLED while editing: `initialContent` tracks the
   // buffer draft and changes on every keystroke (onChange → updateDraft →
@@ -492,94 +481,16 @@ export function PierreFileSurface({
     return () => node.removeEventListener('contextmenu', handler);
   }, []);
 
-  // Selection tracking for the send-to-agent bar + cursor-line breadcrumbs.
-  // Pierre has no selection-change callback, so listen to the document's
-  // `selectionchange` (fires for the shadow contenteditable too) and read the
-  // editor's view state. Dedupe so a payload only fires when it changes.
-  //
-  // Emission is deferred until the selection SETTLES: never mid pointer-drag,
-  // and only after a short pause for keyboard selection. The send bar
-  // autofocuses its textarea on mount — emitting while the user is still
-  // extending the selection would yank focus out of the contenteditable and
-  // break the drag / shift-arrow sequence.
-  const lastSelectionRef = useRef<string>('null');
-  useEffect(() => {
-    let timer: number | null = null;
-    let dragging = false;
-    const emit = () => {
-      const editor = editorRef.current;
-      const node = containerRef.current;
-      if (!editor || !node) return;
-      // Only track while the selection lives inside this surface — the
-      // shadow host retargets `document.activeElement` to an ancestor of the
-      // container, so containment is checkable from the light DOM.
-      const active = document.activeElement;
-      if (!active || !node.contains(active)) return;
-      const selection = editor.getViewState()?.selections?.[0];
-      if (!selection) return;
-      const selectionFn = onSelectionChangeRef.current;
-      if (!selectionFn) return;
-      const state = editor.getEditState();
-      const doc = state?.document;
-      if (!doc) return;
-      const anchorOffset = doc.offsetAt(selection.start);
-      const headOffset = doc.offsetAt(selection.end);
-      let payload: { startLine: number; endLine: number; snippet: string } | null = null;
-      if (anchorOffset !== headOffset) {
-        const from = Math.min(anchorOffset, headOffset);
-        const to = Math.max(anchorOffset, headOffset);
-        const startLine = Math.min(selection.start.line, selection.end.line) + 1;
-        const endLine = Math.max(selection.start.line, selection.end.line) + 1;
-        payload = { startLine, endLine, snippet: doc.getText().slice(from, to) };
-      }
-      const key = JSON.stringify(payload);
-      if (key === lastSelectionRef.current) return;
-      lastSelectionRef.current = key;
-      selectionFn(payload);
-    };
-    const schedule = () => {
-      if (timer != null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = null;
-        if (!dragging) emit();
-      }, 300);
-    };
-    const handler = () => {
-      const editor = editorRef.current;
-      const node = containerRef.current;
-      if (!editor || !node) return;
-      const active = document.activeElement;
-      if (!active || !node.contains(active)) return;
-      const selection = editor.getViewState()?.selections?.[0];
-      if (!selection) return;
-      // Cursor-line breadcrumbs stay immediate; only the bar payload settles.
-      const line = selection.end.line + 1;
-      if (cursorLineRef.current !== line) {
-        cursorLineRef.current = line;
-        onCursorLineRef.current?.(line);
-      }
-      schedule();
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button === 0) dragging = true;
-    };
-    const onPointerUp = () => {
-      if (!dragging) return;
-      dragging = false;
-      schedule();
-    };
-    const node = containerRef.current;
-    document.addEventListener('selectionchange', handler);
-    node?.addEventListener('pointerdown', onPointerDown);
-    // The drag can end anywhere on the page, so pointerup lives on document.
-    document.addEventListener('pointerup', onPointerUp);
-    return () => {
-      if (timer != null) window.clearTimeout(timer);
-      document.removeEventListener('selectionchange', handler);
-      node?.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('pointerup', onPointerUp);
-    };
-  }, []);
+  // Selection tracking for the send-to-agent bar + cursor-line breadcrumbs —
+  // shared with the diff surface; see use-surface-selection.ts for the
+  // settle/drag semantics.
+  useSurfaceSelection({
+    containerRef,
+    getEditor: () => editorRef.current,
+    onSelectionChange,
+    onCursorLineChange,
+    externalSelection: highlightLines,
+  });
 
   // Accept a completion: replace the current prefix with the picked word and
   // let Pierre's undo timeline record it as a normal edit.
