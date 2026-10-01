@@ -79,22 +79,52 @@ function getHighlighter(): Promise<HighlighterCore> {
   return highlighterPromise;
 }
 
-export async function highlight(code: string, language: string): Promise<ThemedToken[][] | null> {
+/** Tokenizing is synchronous and regex-heavy; past this size a single block would lock the page. */
+const MAX_HIGHLIGHT_LENGTH = 200_000;
+const CACHE_SIZE = 200;
+
+const cache = new Map<string, ThemedToken[][]>();
+let queue: Promise<unknown> = Promise.resolve();
+
+const nextTask = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+/**
+ * Highlights run one at a time, each in its own task: a document with dozens of fenced
+ * blocks would otherwise tokenize them all back to back the moment the highlighter
+ * loads, freezing the page for as long as that takes.
+ */
+export function highlight(code: string, language: string): Promise<ThemedToken[][] | null> {
   const lang = langAliases[language?.toLowerCase()];
-  if (!lang) return null;
+  if (!lang || code.length > MAX_HIGHLIGHT_LENGTH) return Promise.resolve(null);
 
-  const highlighter = await getHighlighter();
+  const key = `${lang}\u0000${code}`;
+  const cached = cache.get(key);
+  if (cached) return Promise.resolve(cached);
 
-  const { tokens } = highlighter.codeToTokens(code, {
-    lang,
-    defaultColor: false,
-    themes: {
-      light: 'github-light',
-      dark: 'github-dark',
-    },
+  const run = queue.then(async () => {
+    const highlighter = await getHighlighter();
+    await nextTask();
+
+    const hit = cache.get(key);
+    if (hit) return hit;
+
+    const { tokens } = highlighter.codeToTokens(code, {
+      lang,
+      defaultColor: false,
+      themes: {
+        light: 'github-light',
+        dark: 'github-dark',
+      },
+    });
+
+    const oldest = cache.keys().next().value;
+    if (cache.size >= CACHE_SIZE && oldest !== undefined) cache.delete(oldest);
+    cache.set(key, tokens);
+    return tokens;
   });
 
-  return tokens;
+  queue = run.catch(() => {});
+  return run;
 }
 
 export function languageForPath(path: string | undefined): string | undefined {
