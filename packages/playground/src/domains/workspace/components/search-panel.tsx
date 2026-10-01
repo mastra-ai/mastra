@@ -3,13 +3,13 @@ import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { inputSurfaceAndFocusStyle } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
+import { Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
 
@@ -86,15 +86,13 @@ export function SearchWorkspacePanel({
     <div className="rounded-lg bg-muted">
       <Form onSubmit={handleSearch} className="p-4">
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-              placeholder="Search workspace files..."
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            label="Search workspace files"
+            className="flex-1"
+            placeholder="Search workspace files..."
+            value={query}
+            onValueChange={setQuery}
+          />
 
           <Field className="contents">
             <div className="flex items-center gap-1.5">
@@ -243,19 +241,13 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
     <div className="space-y-4">
       <Form onSubmit={handleSearch}>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search across skills..."
-              className={cn(
-                inputSurfaceAndFocusStyle,
-                'w-full rounded-lg py-2 pr-4 pl-10 text-body placeholder:text-muted-foreground',
-              )}
-            />
-          </div>
+          <SearchInput
+            label="Search skills"
+            className="flex-1"
+            placeholder="Search across skills..."
+            value={query}
+            onValueChange={setQuery}
+          />
           <Button type="submit" disabled={!query.trim() || isSearching}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>

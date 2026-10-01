@@ -9,9 +9,7 @@ import {
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
-  SearchIcon,
   WrenchIcon,
-  XIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -30,9 +28,8 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -414,26 +411,14 @@ export function TraceDataPanelView({
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
                   <DataPanel.Header className="gap-2 border-b border-border">
-                    <Field className="w-full">
-                      <FieldLabel className="sr-only">Search spans</FieldLabel>
-                      <InputGroup size="sm">
-                        <InputGroupAddon>
-                          <SearchIcon />
-                        </InputGroupAddon>
-                        <InputGroupInput
-                          placeholder="Search spans..."
-                          value={query}
-                          onChange={e => setQuery(e.target.value)}
-                        />
-                        {query && (
-                          <InputGroupAddon align="inline-end">
-                            <InputGroupButton aria-label="Clear search" onClick={() => setQuery('')}>
-                              <XIcon />
-                            </InputGroupButton>
-                          </InputGroupAddon>
-                        )}
-                      </InputGroup>
-                    </Field>
+                    <SearchInput
+                      label="Search spans"
+                      placeholder="Search spans..."
+                      size="sm"
+                      value={query}
+                      onValueChange={setQuery}
+                      className="w-full"
+                    />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
                         variant={isTimeline ? 'default' : 'primary'}

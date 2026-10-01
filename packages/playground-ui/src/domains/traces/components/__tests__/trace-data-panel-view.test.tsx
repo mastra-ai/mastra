@@ -854,7 +854,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(
       tree
         .closest('[data-slot="buttons-group"]')
-        ?.parentElement?.contains(screen.getByRole('textbox', { name: 'Search spans' })),
+        ?.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' })),
     ).toBe(true);
 
     fireEvent.click(timeline);
@@ -1035,7 +1035,7 @@ describe('TraceDataPanelView — side column views', () => {
 });
 
 describe('TraceDataPanelView — span search', () => {
-  const searchField = () => screen.getByRole('textbox', { name: /search spans/i }) as HTMLInputElement;
+  const searchField = () => screen.getByRole('searchbox', { name: /search spans/i }) as HTMLInputElement;
 
   const typeSearch = (value: string) => {
     fireEvent.change(searchField(), { target: { value } });
@@ -1058,7 +1058,7 @@ describe('TraceDataPanelView — span search', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 
     expect(screen.getByText(/no spans found for this trace/i)).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: /search spans/i })).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: /search spans/i })).toBeNull();
   });
 
   const renderDeep = (props: Partial<TraceDataPanelViewProps> = {}) =>

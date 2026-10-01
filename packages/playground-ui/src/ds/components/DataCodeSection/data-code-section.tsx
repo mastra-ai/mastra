@@ -1,6 +1,6 @@
 import { Chunk } from '@codemirror/merge';
 import { Text } from '@codemirror/state';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon, XIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -8,8 +8,7 @@ import { Code } from '@/ds/components/Code/code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -112,11 +111,6 @@ export function DataCodeSection({
   const [expandedOpen, setExpandedOpen] = useState(false);
   const [expandedSearchQuery, setExpandedSearchQuery] = useState('');
   const [expandedMultiline, setExpandedMultiline] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!searchMinimized) searchInputRef.current?.focus();
-  }, [searchMinimized]);
 
   const hasMultilineText = useMemo(() => {
     try {
@@ -150,31 +144,15 @@ export function DataCodeSection({
                 <SearchIcon />
               </Button>
             ) : (
-              <Field>
-                <FieldLabel className="sr-only">Search code</FieldLabel>
-                <InputGroup size="sm">
-                  <InputGroupAddon>
-                    <SearchIcon aria-hidden />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    ref={searchInputRef}
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      aria-label="Clear search"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSearchMinimized(true);
-                      }}
-                    >
-                      <XIcon />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-              </Field>
+              <SearchInput
+                label="Search code"
+                placeholder="Search..."
+                size="sm"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                onClose={() => setSearchMinimized(true)}
+                autoFocus
+              />
             ))}
           <ButtonsGroup size="sm">
             <CopyButton content={codeStr || 'No content'} />
@@ -223,26 +201,13 @@ export function DataCodeSection({
               </DialogTitle>
               <div className="flex shrink-0 items-center gap-2">
                 {!expandedMultiline && (
-                  <Field>
-                    <FieldLabel className="sr-only">Search code</FieldLabel>
-                    <InputGroup size="sm">
-                      <InputGroupAddon>
-                        <SearchIcon aria-hidden />
-                      </InputGroupAddon>
-                      <InputGroupInput
-                        placeholder="Search..."
-                        value={expandedSearchQuery}
-                        onChange={e => setExpandedSearchQuery(e.target.value)}
-                      />
-                      {expandedSearchQuery ? (
-                        <InputGroupAddon align="inline-end">
-                          <InputGroupButton aria-label="Clear search" onClick={() => setExpandedSearchQuery('')}>
-                            <XIcon />
-                          </InputGroupButton>
-                        </InputGroupAddon>
-                      ) : null}
-                    </InputGroup>
-                  </Field>
+                  <SearchInput
+                    label="Search code"
+                    placeholder="Search..."
+                    size="sm"
+                    value={expandedSearchQuery}
+                    onValueChange={setExpandedSearchQuery}
+                  />
                 )}
                 <ButtonsGroup size="sm">
                   <CopyButton content={codeStr || 'No content'} />
