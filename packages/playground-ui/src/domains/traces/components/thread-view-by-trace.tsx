@@ -1,5 +1,5 @@
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
@@ -18,7 +18,8 @@ import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
 
-const THREAD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+// `queryTraces` requires a time range and rejects ranges over 31 days; the legacy endpoint is left unbounded.
+const THREAD_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -28,43 +29,43 @@ export interface ThreadViewByTraceProps {
   withFeedback: boolean;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
-  /** Trace to expand and scroll to on mount (first page only). */
-  anchorTraceId?: string;
   /** Opens a score from a trace's Scores tab; the app owns routing. */
   onOpenScore: (traceId: string, scoreId: string) => void;
+  /** Turns loaded per page: the latest ones on open, then older ones as the reader scrolls up. */
+  pageSize?: number;
 }
 
 /**
- * A memory thread rendered as its traces: one row per agent turn (oldest first), with the
- * reconstructed messages on the left and the span tree on the right. Clicking a span opens
- * its detail panel on the side so the conversation stays readable.
+ * A memory thread rendered as its traces, like a chat: one row per agent turn (oldest at the top),
+ * opened on the latest turns, with older turns loaded as the reader scrolls up. Each row shows the
+ * reconstructed messages on the left and the span tree on the right. Clicking a span opens its
+ * detail panel on the side so the conversation stays readable.
  */
 export function ThreadViewByTrace({
   threadId,
   withQueryTrace,
   withFeedback,
   onSelectedSpanChange,
-  anchorTraceId,
   onOpenScore,
+  pageSize = 10,
 }: ThreadViewByTraceProps) {
-  const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(
-    () => ({ threadId, startedAt: { start: new Date(Date.now() - THREAD_WINDOW_MS) } }),
-    [threadId],
-  );
-  const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
+  const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
+  const { rows, isLoading, error, hasNextPage, isFetchingNextPage, fetchNextPage } = useTracesListSource({
     initialAutoRefetch: false,
     withQueryTrace,
     legacyFilters,
+    limit: pageSize,
     query: now => ({
       timeRange: {
         from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
         to: now.toISOString(),
       },
       where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },
-      orderBy: [{ field: 'startedAt', direction: 'asc' }],
+      orderBy: [{ field: 'startedAt', direction: 'desc' }],
     }),
   });
-  const traceIds = rows.map(trace => trace.traceId);
+  // Pages come newest first; the conversation reads oldest first.
+  const traceIds = rows.map(trace => trace.traceId).reverse();
 
   if (error) {
     return (
@@ -87,52 +88,20 @@ export function ThreadViewByTrace({
   }
 
   return (
-    <LoadedThreadViewByTrace
+    <ThreadTrace
       key={threadId}
       traceIds={traceIds}
-      setEndOfListElement={setEndOfListElement}
-      withFeedback={withFeedback}
       onSelectedSpanChange={onSelectedSpanChange}
-      anchorTraceId={anchorTraceId}
-      onOpenScore={onOpenScore}
-    />
-  );
-}
-
-interface LoadedThreadViewByTraceProps {
-  traceIds: string[];
-  setEndOfListElement: (node: HTMLDivElement | null) => void;
-  withFeedback: boolean;
-  onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
-  anchorTraceId?: string;
-  onOpenScore: (traceId: string, scoreId: string) => void;
-}
-
-/** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
-function LoadedThreadViewByTrace({
-  traceIds,
-  setEndOfListElement,
-  withFeedback,
-  onSelectedSpanChange,
-  anchorTraceId: requestedAnchorTraceId,
-  onOpenScore,
-}: LoadedThreadViewByTraceProps) {
-  // "Open full thread" lands here with the originating trace: that row starts expanded and
-  // scrolls into view when it mounts. Best effort on the first page only: resolved once at mount,
-  // so a row that arrives on a later page is left alone.
-  const [anchorTraceId] = useState(() =>
-    requestedAnchorTraceId && traceIds.includes(requestedAnchorTraceId) ? requestedAnchorTraceId : null,
-  );
-
-  return (
-    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} onSelectedSpanChange={onSelectedSpanChange}>
+      onLoadOlder={() => {
+        if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+      }}
+    >
       <ThreadTrace.List data-testid="thread-view-by-trace">
         {traceIds.map(traceId => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
             <ThreadTraceRowContent withFeedback={withFeedback} onOpenScore={onOpenScore} />
           </ThreadTrace.Row>
         ))}
-        <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
       </ThreadTrace.List>
       <ThreadTrace.SpanPanel />
     </ThreadTrace>
