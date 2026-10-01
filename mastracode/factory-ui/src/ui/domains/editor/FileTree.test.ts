@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EditorTreeEntry, ScmStatus } from '../../../api/types';
-import { buildGitStatus } from './FileTree';
+import { buildGitStatus, entriesToPaths } from './FileTree';
 
 const scm = (overrides: Partial<ScmStatus>): ScmStatus => ({
   workspacePath: 'ws',
@@ -9,6 +9,20 @@ const scm = (overrides: Partial<ScmStatus>): ScmStatus => ({
   staged: [],
   unstaged: [],
   ...overrides,
+});
+
+describe('entriesToPaths', () => {
+  it('dedupes colliding entries — Pierre throws on duplicate paths', () => {
+    // Regression: `git ls-files --ignored --directory` lists `.husky/_/` AND its
+    // contents when the dir has its own .gitignore, so the backend once emitted
+    // the dir twice and crashed the tree with "Duplicate path".
+    const entries: EditorTreeEntry[] = [
+      { name: '_', path: '.husky/_', type: 'directory', ignored: true },
+      { name: '_', path: '.husky/_', type: 'directory' },
+      { name: 'pre-commit', path: '.husky/pre-commit', type: 'file' },
+    ];
+    expect(entriesToPaths(entries)).toEqual(['.husky/_/', '.husky/pre-commit']);
+  });
 });
 
 describe('buildGitStatus', () => {

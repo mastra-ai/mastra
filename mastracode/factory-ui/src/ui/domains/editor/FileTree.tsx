@@ -17,15 +17,16 @@ interface FileTreeProps {
 
 /**
  * Convert flat `/web/workspace/tree` entries into Pierre's path format:
- * directories end with `/`, files do not. Sorted directories-first,
- * then lexically — Pierre expects presorted or sorts internally.
+ * directories end with `/`, files do not. Deduped — Pierre's PathStoreBuilder
+ * throws on duplicate paths, which would take down the whole editor route, so
+ * never trust the backend list to be collision-free.
  */
-function entriesToPaths(entries: EditorTreeEntry[]): readonly string[] {
-  const out: string[] = [];
+export function entriesToPaths(entries: EditorTreeEntry[]): readonly string[] {
+  const out = new Set<string>();
   for (const entry of entries) {
-    out.push(entry.type === 'directory' && !entry.path.endsWith('/') ? `${entry.path}/` : entry.path);
+    out.add(entry.type === 'directory' && !entry.path.endsWith('/') ? `${entry.path}/` : entry.path);
   }
-  return out;
+  return [...out];
 }
 
 /** Map a git porcelain status char (M, A, D, R, C, U, ?) to Pierre's GitStatus. */

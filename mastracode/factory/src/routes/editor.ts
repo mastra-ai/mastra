@@ -287,6 +287,12 @@ git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | hea
     }
     rels.push({ rel, type: 'file' });
   }
+  // `--directory` usually collapses a fully-ignored dir to one `dir/` line, but
+  // when the dir carries its own .gitignore (e.g. `.husky/_`) git lists BOTH the
+  // dir and its contents. Track emitted ignored dirs (git output is sorted, so a
+  // dir precedes its contents) and drop anything nested inside one — otherwise
+  // the nested files re-synthesise the dir into `dirs` and we emit it twice.
+  const ignoredDirs = new Set<string>();
   for (const line of ignored) {
     const isDir = line.endsWith('/');
     const rel = isDir ? line.slice(0, -1) : line;
@@ -295,12 +301,24 @@ git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | hea
     // Keep ignored entries that ARE a skip dir (show node_modules/ dimmed),
     // but never anything nested inside one.
     if (parts.slice(0, -1).some(part => TREE_SKIP_DIRS.has(part))) continue;
+    let insideIgnoredDir = false;
+    for (let index = 1; index < parts.length; index++) {
+      if (ignoredDirs.has(parts.slice(0, index).join('/'))) {
+        insideIgnoredDir = true;
+        break;
+      }
+    }
+    if (insideIgnoredDir) continue;
+    if (isDir) ignoredDirs.add(rel);
     for (let index = 1; index < parts.length; index++) {
       dirs.add(parts.slice(0, index).join('/'));
     }
     rels.push({ rel, type: isDir ? 'directory' : 'file', ignored: true });
   }
-  for (const dir of dirs) rels.push({ rel: dir, type: 'directory' });
+  // Ignored dirs were already pushed above — don't emit them a second time.
+  for (const dir of dirs) {
+    if (!ignoredDirs.has(dir)) rels.push({ rel: dir, type: 'directory' });
+  }
   return { rels, truncated };
 }
 
