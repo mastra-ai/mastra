@@ -74,6 +74,11 @@ function getHighlighter(): Promise<HighlighterCore> {
         engine: createJavaScriptRegexEngine(),
       });
     })();
+    // A failed chunk load (e.g. stale hashes after a deploy) must not disable
+    // highlighting for the rest of the session: let the next call try again.
+    highlighterPromise.catch(() => {
+      highlighterPromise = null;
+    });
   }
 
   return highlighterPromise;
