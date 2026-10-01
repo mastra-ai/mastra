@@ -1,4 +1,4 @@
-import type { ObservationModelContext, ResolvedActivationTTL } from './types';
+import type { ObservationModelContext, ParsedActivationTTLMap, ResolvedActivationTTL } from './types';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -26,12 +26,45 @@ function getOpenAIPromptCacheRetention(
     : undefined;
 }
 
+export function isActivationTTLMap(
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
+): activateAfterIdle is ParsedActivationTTLMap {
+  return typeof activateAfterIdle === 'object' && activateAfterIdle !== null;
+}
+
+/** The configured TTL for marker payloads. Per-provider maps are omitted; markers only carry scalar values. */
+export function getMarkerActivationTTL(
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
+): ResolvedActivationTTL | undefined {
+  return isActivationTTLMap(activateAfterIdle) ? undefined : activateAfterIdle;
+}
+
+/** The provider key a model matches in a per-provider map: its provider before the first `.`, lowercased. */
+export function getActivationTTLProviderKey(provider?: string): string | undefined {
+  const key = normalize(provider).split('.')[0];
+  return key || undefined;
+}
+
 export function resolveActivationTTL(
-  activateAfterIdle: ResolvedActivationTTL | undefined,
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
   modelContext?: ObservationModelContext,
 ): number | undefined {
-  if (activateAfterIdle !== 'auto') {
-    return activateAfterIdle;
+  let ttl: ResolvedActivationTTL | false | undefined = activateAfterIdle as ResolvedActivationTTL | undefined;
+
+  if (isActivationTTLMap(activateAfterIdle)) {
+    const providerKey = getActivationTTLProviderKey(modelContext?.provider);
+    ttl =
+      providerKey !== undefined && Object.hasOwn(activateAfterIdle.providers, providerKey)
+        ? activateAfterIdle.providers[providerKey]
+        : activateAfterIdle.default;
+  }
+
+  if (ttl === undefined || ttl === false) {
+    return undefined;
+  }
+
+  if (ttl !== 'auto') {
+    return ttl;
   }
 
   return resolveAutoActivationTTL(modelContext);

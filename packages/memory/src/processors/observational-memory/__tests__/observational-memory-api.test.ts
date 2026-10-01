@@ -24,7 +24,7 @@ import { skillResultRedactor } from '../hooks';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 import { ObserverRunner } from '../observer-runner';
-import type { ContinuationHintsConfig, ObserveHooks } from '../types';
+import type { ActivationTTL, ContinuationHintsConfig, ObserveHooks } from '../types';
 
 // =============================================================================
 // Helpers
@@ -248,7 +248,7 @@ function createOM(
     observationFailurePolicy?: 'abort' | 'continue';
     reflectionMaxRetries?: number;
     reflectionFailurePolicy?: 'abort' | 'continue';
-    activateAfterIdle?: number | string;
+    activateAfterIdle?: ActivationTTL;
     hooks?: ObserveHooks;
     hookExecution?: 'non-blocking' | 'await';
   },
@@ -2087,6 +2087,204 @@ describe('activate()', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    describe('per-provider map', () => {
+      const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+      const openaiModel = { provider: 'openai.responses', modelId: 'gpt-5.4' };
+
+      async function activateAfterIdleFor({
+        activateAfterIdle,
+        observationActivateAfterIdle,
+        idleMs,
+        currentModel,
+      }: {
+        activateAfterIdle?: ActivationTTL;
+        observationActivateAfterIdle?: ActivationTTL;
+        idleMs: number;
+        currentModel?: { provider: string; modelId: string };
+      }) {
+        vi.useFakeTimers();
+        try {
+          const now = new Date('2026-04-14T12:00:00.000Z');
+          vi.setSystemTime(now);
+
+          const om = new ObservationalMemory({
+            storage,
+            scope: 'thread',
+            activateAfterIdle,
+            observation: {
+              model: createMockObserverModel(),
+              messageTokens: 50_000,
+              bufferTokens: 5_000,
+              activateAfterIdle: observationActivateAfterIdle,
+            },
+            reflection: {
+              model: createMockReflectorModel(),
+              observationTokens: 50_000,
+            },
+          });
+          const assistantPartTime = now.getTime() - idleMs;
+          const messages: MastraDBMessage[] = [
+            {
+              ...createTestMessage('Earlier question', 'user', 'map-user-1', new Date(assistantPartTime - 1000)),
+              threadId,
+            },
+            {
+              ...createTestMessage('Earlier answer', 'assistant', 'map-assistant-1', new Date(assistantPartTime)),
+              threadId,
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Earlier answer', createdAt: assistantPartTime }],
+              } as MastraMessageContentV2,
+            },
+            { ...createTestMessage('Latest user follow-up', 'user', 'map-user-2', now), threadId },
+          ];
+
+          await storage.saveMessages({ messages });
+          const { record } = await om.getStatus({ threadId, messages });
+          await storage.updateBufferedObservations({
+            id: record!.id,
+            chunk: {
+              observations: '- Buffered observation',
+              tokenCount: 80,
+              messageIds: ['map-user-1', 'map-assistant-1'],
+              cycleId: 'map-cycle-1',
+              messageTokens: 200,
+              lastObservedAt: new Date(assistantPartTime),
+            },
+          });
+
+          const capturedParts: any[] = [];
+          const writer = { custom: async (part: any) => void capturedParts.push(part) };
+          const result = await om.activate({
+            threadId,
+            checkThreshold: true,
+            messages,
+            writer: writer as any,
+            currentModel,
+          });
+          return { activated: result.activated, capturedParts };
+        } finally {
+          vi.useRealTimers();
+        }
+      }
+
+      const anthropicHour = { default: 'auto', anthropic: '1h' } as const;
+
+      it('waits for the anthropic entry instead of the auto 5m ttl', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('activates once the anthropic entry expires and emits the resolved number in the marker', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 61 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(true);
+        const activation = result.capturedParts.find(part => part.type === 'data-om-activation');
+        expect(activation?.data).toMatchObject({ triggeredBy: 'ttl', ttlExpiredMs: 61 * 60_000 });
+        expect(activation?.data.config.activateAfterIdle).toBe(3_600_000);
+      });
+
+      it('uses default for providers without an entry', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          idleMs: 10 * 60_000,
+          currentModel: openaiModel,
+        });
+
+        expect(result.activated).toBe(true);
+        const activation = result.capturedParts.find(part => part.type === 'data-om-activation');
+        expect(activation?.data).toMatchObject({ triggeredBy: 'ttl', config: { activateAfterIdle: 300_000 } });
+      });
+
+      it('matches provider keys case-insensitively', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: { default: 'auto', Anthropic: '1h' },
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('lets observation.activateAfterIdle replace the top-level map without merging', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          observationActivateAfterIdle: { default: '2m' },
+          idleMs: 10 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(true);
+      });
+
+      it('omits the map from buffering markers', async () => {
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: anthropicHour,
+          observation: { model: createMockObserverModel(), messageTokens: 500, bufferTokens: 0.2 },
+          reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+        });
+        await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+        const capturedParts: any[] = [];
+        const writer = { custom: async (part: any) => void capturedParts.push(part) };
+        await om.buffer({ threadId, writer: writer as any });
+
+        const markersWithConfig = capturedParts.filter(part => part.data?.config);
+        expect(markersWithConfig.length).toBeGreaterThan(0);
+        for (const marker of markersWithConfig) {
+          expect(marker.data.config.activateAfterIdle).toBeUndefined();
+        }
+      });
+
+      it.each([
+        [{ anthropic: 'nope' }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: { ttl: '1h' } }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: null }, 'activateAfterIdle.anthropic'],
+        [{ anthropic: ['1h'] }, 'activateAfterIdle.anthropic'],
+        [['1h'], 'not an array'],
+        [{}, 'at least one provider'],
+        [{ anthropic: undefined }, 'at least one provider'],
+        [{ Anthropic: '1h', anthropic: '5m' }, 'case-insensitive'],
+        [{ 'anthropic.messages': '1h' }, 'instead of "anthropic.messages"'],
+        [{ 'openrouter/anthropic': '1h' }, 'not a valid provider key'],
+      ])('rejects %j', (activateAfterIdle, message) => {
+        expect(() => createOM(storage, { activateAfterIdle: activateAfterIdle as any })).toThrow(message);
+      });
+
+      it('names the nested path in observation errors', () => {
+        expect(
+          () =>
+            new ObservationalMemory({
+              storage,
+              scope: 'thread',
+              observation: {
+                model: createMockObserverModel(),
+                messageTokens: 50_000,
+                activateAfterIdle: { anthropic: 'nope' },
+              },
+              reflection: { model: createMockReflectorModel(), observationTokens: 50_000 },
+            }),
+        ).toThrow('observation.activateAfterIdle.anthropic');
+      });
+
+      it('keeps scalar error messages unchanged', () => {
+        expect(() => createOM(storage, { activateAfterIdle: 'nope' })).toThrow(
+          'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+        );
+      });
     });
   });
 });
