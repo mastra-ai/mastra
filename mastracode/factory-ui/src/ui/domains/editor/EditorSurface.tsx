@@ -1040,7 +1040,11 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     selectLines={jump && jump.path === activePath ? jump.range : null}
                     diagnostics={activeIsExternal ? null : diagnostics}
                     blame={blameLines}
-                    codeLenses={activeIsExternal ? undefined : codeLenses}
+                    /* Code lens is intentionally undefined for Pierre until the
+                     * annotation gutter inflation is addressed with a compact
+                     * inline-widget renderer. Blame already self-gates (null
+                     * when the user hasn't toggled the blame tab on). */
+                    codeLenses={undefined}
                     onCodeLensAction={handleLensAction}
                     onCursorLineChange={setCursorLine}
                     onChange={next => actions.updateDraft(activePath, next, baseline)}

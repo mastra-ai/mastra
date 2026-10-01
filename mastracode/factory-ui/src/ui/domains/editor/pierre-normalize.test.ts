@@ -1,8 +1,22 @@
+/**
+ * Pierre bundles all 10 of its themes (pierre-light, pierre-dark + the soft /
+ * vibrant / protanopia-deuteranopia / tritanopia variants) and registers them
+ * via `@pierre/theming/collections/pierre.js`. `@pierre/diffs` auto-loads that
+ * collection in its shared highlighter.
+ *
+ * The regression this test guards: at one point PierreFileSurface.tsx was
+ * calling `registerCustomTheme('pierre-light', …)` for all 10 names. Pierre
+ * threw `DuplicateThemeError` on every call, logged
+ * `SharedHighlight.registerCustomTheme: theme name already registered`, and
+ * the editor shipped with no syntax highlighting. Removing those calls fixed
+ * it. If anyone adds them back, this test fails loudly because the second
+ * resolveTheme after a self-registration will throw.
+ */
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { registerCustomTheme, resolveTheme, getSharedHighlighter } from '@pierre/diffs';
+import { getSharedHighlighter, resolveTheme } from '@pierre/diffs';
 
-const PIERRE_THEMES = [
+const PIERRE_THEME_NAMES = [
   'pierre-light',
   'pierre-dark',
   'pierre-light-soft',
@@ -15,41 +29,13 @@ const PIERRE_THEMES = [
   'pierre-dark-tritanopia',
 ] as const;
 
-const loaders: Record<string, () => Promise<unknown>> = {
-  'pierre-light': () => import('@pierre/theme/pierre-light'),
-  'pierre-dark': () => import('@pierre/theme/pierre-dark'),
-  'pierre-light-soft': () => import('@pierre/theme/pierre-light-soft'),
-  'pierre-dark-soft': () => import('@pierre/theme/pierre-dark-soft'),
-  'pierre-light-vibrant': () => import('@pierre/theme/pierre-light-vibrant'),
-  'pierre-dark-vibrant': () => import('@pierre/theme/pierre-dark-vibrant'),
-  'pierre-light-protanopia-deuteranopia': () =>
-    import('@pierre/theme/pierre-light-protanopia-deuteranopia'),
-  'pierre-dark-protanopia-deuteranopia': () =>
-    import('@pierre/theme/pierre-dark-protanopia-deuteranopia'),
-  'pierre-light-tritanopia': () => import('@pierre/theme/pierre-light-tritanopia'),
-  'pierre-dark-tritanopia': () => import('@pierre/theme/pierre-dark-tritanopia'),
-};
-
-// Matches the shape PierreFileSurface.tsx now uses in production: hand Pierre
-// the whole module and let its `createTheme` do unwrapDefault + normalizeTheme.
-for (const name of PIERRE_THEMES) {
-  registerCustomTheme(name, (() => loaders[name]!()) as never);
-}
-
-describe('EXACT production theme wiring (module-return loader)', () => {
-  it.each(PIERRE_THEMES)('resolves "%s" without throwing', async themeName => {
-    let err: unknown;
-    try {
-      await resolveTheme(themeName);
-    } catch (e) {
-      err = e;
-    }
-    // eslint-disable-next-line no-console
-    if (err) console.log(`[probe] FAIL ${themeName} -> ${(err as Error).message}`);
-    expect(err).toBeUndefined();
+describe('Pierre bundles its themes — no custom registration required', () => {
+  it.each(PIERRE_THEME_NAMES)('resolves "%s" without us registering it', async name => {
+    const theme = await resolveTheme(name);
+    expect(theme).toBeTruthy();
   });
 
-  it('highlights TypeScript with pierre-light and returns multiple colours', async () => {
+  it('produces coloured tokens for TypeScript using the bundled pierre-light', async () => {
     const highlighter = await getSharedHighlighter({
       themes: ['pierre-light'] as unknown as never,
       langs: ['typescript'] as unknown as never,
@@ -58,9 +44,7 @@ describe('EXACT production theme wiring (module-return loader)', () => {
       "const x: number = 42;\nfunction foo(): string { return 'hi'; }",
       { lang: 'typescript', theme: 'pierre-light' as unknown as never },
     );
-    const colours = [...new Set(result.tokens.flat().map(t => t.color).filter(Boolean))];
-    // eslint-disable-next-line no-console
-    console.log('[probe] TS token colours:', colours);
-    expect(colours.length).toBeGreaterThan(2);
+    const colours = new Set(result.tokens.flat().map(t => t.color).filter(Boolean));
+    expect(colours.size).toBeGreaterThan(2);
   });
 });

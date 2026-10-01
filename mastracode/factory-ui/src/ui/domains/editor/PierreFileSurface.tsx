@@ -1,6 +1,5 @@
 import { File, EditProvider } from '@pierre/diffs/react';
 import type { FileContents, FileOptions, LineAnnotation } from '@pierre/diffs/react';
-import { preloadHighlighter, registerCustomTheme } from '@pierre/diffs';
 import {
   Editor,
   type EditorChange,
@@ -73,92 +72,17 @@ interface PierreFileSurfaceProps {
 const createEditor: EditorFactory<SurfaceAnnotation, undefined> = (type, options, editStateKey) =>
   new Editor(type, options, editStateKey);
 
-// Register every Pierre theme up front as a lazy Shiki loader. Registration
-// costs nothing — the actual theme JSON only loads when the highlighter is
-// asked to resolve that name. Without this step, Shiki can't find any
-// `pierre-*` theme and silently falls back to plain text.
-const PIERRE_THEMES = [
-  'pierre-light',
-  'pierre-dark',
-  'pierre-light-soft',
-  'pierre-dark-soft',
-  'pierre-light-vibrant',
-  'pierre-dark-vibrant',
-  'pierre-light-protanopia-deuteranopia',
-  'pierre-dark-protanopia-deuteranopia',
-  'pierre-light-tritanopia',
-  'pierre-dark-tritanopia',
-] as const;
-
-let themesRegistered = false;
-function ensureThemesRegistered(): void {
-  if (themesRegistered) return;
-  themesRegistered = true;
-  // Vite pattern for per-name dynamic import — one chunk per theme so unused
-  // variants stay out of the initial bundle.
-  const loaders: Record<string, () => Promise<{ default: unknown }>> = {
-    'pierre-light': () => import('@pierre/theme/pierre-light'),
-    'pierre-dark': () => import('@pierre/theme/pierre-dark'),
-    'pierre-light-soft': () => import('@pierre/theme/pierre-light-soft'),
-    'pierre-dark-soft': () => import('@pierre/theme/pierre-dark-soft'),
-    'pierre-light-vibrant': () => import('@pierre/theme/pierre-light-vibrant'),
-    'pierre-dark-vibrant': () => import('@pierre/theme/pierre-dark-vibrant'),
-    'pierre-light-protanopia-deuteranopia': () =>
-      import('@pierre/theme/pierre-light-protanopia-deuteranopia'),
-    'pierre-dark-protanopia-deuteranopia': () =>
-      import('@pierre/theme/pierre-dark-protanopia-deuteranopia'),
-    'pierre-light-tritanopia': () => import('@pierre/theme/pierre-light-tritanopia'),
-    'pierre-dark-tritanopia': () => import('@pierre/theme/pierre-dark-tritanopia'),
-  };
-  for (const name of PIERRE_THEMES) {
-    // Pierre's `registerCustomTheme` internally wraps loaders with
-    // `createTheme` from `@pierre/theming`, which pipes the loader's result
-    // through `unwrapDefault(...)` and `normalizeTheme(...)` before caching.
-    // So the correct thing to hand it is the module object as-returned by
-    // Vite's dynamic import — Pierre will unwrap `.default` and normalize
-    // the raw VS Code / TextMate JSON itself. Doing normalization on our
-    // side (previous code) double-normalizes and mutates the object shape
-    // Pierre expects at cache time, which manifested in-browser as themes
-    // registered but never producing coloured spans in the shadow DOM.
-    registerCustomTheme(name, (() => loaders[name]!()) as never);
-  }
-}
-ensureThemesRegistered();
-
-// Preload the shared highlighter with the languages we're most likely to
-// render + the default theme pair. Additional languages/themes resolve lazily
-// as files are opened or themes are swapped. Without a preloaded highlighter
-// (or a worker pool provider) Pierre falls back to plain text on first render.
-const PRELOADED_LANGS = [
-  'typescript',
-  'tsx',
-  'javascript',
-  'jsx',
-  'json',
-  'markdown',
-  'css',
-  'html',
-  'yaml',
-  'shellscript',
-  'python',
-  'rust',
-  'go',
-  'sql',
-] as const;
-
-let highlighterPreloadPromise: Promise<unknown> | null = null;
-function ensureHighlighterPreloaded(): void {
-  if (highlighterPreloadPromise) return;
-  highlighterPreloadPromise = preloadHighlighter({
-    langs: PRELOADED_LANGS as unknown as never,
-    themes: ['pierre-light', 'pierre-dark'] as unknown as never,
-  }).catch(error => {
-    // Swallow — File will retry the highlight lazily when the language resolves.
-    // eslint-disable-next-line no-console
-    console.warn('[pierre] highlighter preload failed', error);
-  });
-}
-ensureHighlighterPreloaded();
+// Pierre self-registers all 10 bundled themes (pierre-light, pierre-dark, +
+// soft / vibrant / protanopia-deuteranopia / tritanopia variants) via
+// `@pierre/theming/collections/pierre.js`, which `@pierre/diffs`'s
+// shared_highlighter imports and registers through `registerThemeIfAbsent`.
+// Shiki languages are also lazy-loaded by Pierre on demand. We don't need
+// to call `registerCustomTheme` or `preloadHighlighter` for the bundled
+// theme/language set — calling `registerCustomTheme` on a name Pierre
+// already owns throws `DuplicateThemeError`, which Pierre catches and logs
+// as `SharedHighlight.registerCustomTheme: theme name already registered`.
+// If this file ever needs a Shiki theme or language Pierre doesn't ship,
+// register it here with `registerCustomTheme` / `registerCustomLanguage`.
 
 const SEVERITY_MAP: Record<EditorLspDiagnostic['severity'], MarkerSeverity> = {
   error: 'error',
