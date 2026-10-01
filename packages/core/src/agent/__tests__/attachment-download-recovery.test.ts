@@ -490,6 +490,9 @@ describe('attachment download recovery', () => {
       ['JPEG labelled as PNG', '/9j/4AAQSkZJRgABAQ==', 'image/png'],
       ['SVG', 'PHN2Zz48L3N2Zz4=', 'image/svg+xml'],
       ['WebP', 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', 'image/webp'],
+      // iPhone-style HEIC (24-byte `ftyp` box) and AVIF (28-byte box)
+      ['HEIC', 'AAAAGGZ0eXBoZWljAAAAAG1pZjFoZWlj', 'image/heic'],
+      ['AVIF', 'AAAAHGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZg==', 'image/avif'],
       ['PDF', 'JVBERi0xLjQK', 'application/pdf'],
     ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
       const dataUrlModel = makeModel('data-urls');

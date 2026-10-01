@@ -1,5 +1,4 @@
 import { convertBase64ToUint8Array } from '@ai-sdk/provider-utils-v6';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
 
@@ -191,8 +190,13 @@ export function isBase64Like(data: string): boolean {
 }
 
 const STRICT_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+// HEIC and AVIF are left out: the signature table only matches one exact `ftyp` box size and
+// brand, but real files vary in both (e.g. iPhone HEIC uses a 24-byte box).
+const UNRELIABLE_SIGNATURE_MEDIA_TYPES = new Set<string>(['image/heic', 'image/avif']);
 const SIGNED_IMAGE_MEDIA_TYPES = new Set<string>([
-  ...imageMediaTypeSignatures.map(signature => signature.mediaType),
+  ...imageMediaTypeSignatures
+    .map(signature => signature.mediaType)
+    .filter(mediaType => !UNRELIABLE_SIGNATURE_MEDIA_TYPES.has(mediaType)),
   'image/jpg',
 ]);
 
