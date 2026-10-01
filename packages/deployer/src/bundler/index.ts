@@ -13,6 +13,7 @@ import { analyzeBundle } from '../build/analyze';
 import { WORKSPACE_EXTERNALS } from '../build/analyze/constants';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
+import { getPackageMetadata, getPackageRootPath } from '../build/package-info';
 import type { ExternalDependencyInfo, InternalBundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import {
@@ -680,8 +681,7 @@ export abstract class Bundler extends MastraBundler {
     });
     const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
-      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(dep, external));
-      if ((analyzedBundleInfo.workspaceMap.has(dep) && !isWorkspaceExternal) || !isBareModuleSpecifier(dep)) {
+      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
@@ -709,6 +709,18 @@ export abstract class Bundler extends MastraBundler {
         packageSpec,
       });
     }
+
+    const coreRootPath = await getPackageRootPath('@mastra/core', entryProjectRoot);
+    const schemaCompatInfo = await getPackageMetadata('@mastra/schema-compat', coreRootPath ?? entryProjectRoot);
+    if (!schemaCompatInfo.version && !schemaCompatInfo.packageSpec) {
+      throw new MastraError({
+        id: 'DEPLOYER_BUNDLER_SCHEMA_COMPAT_NOT_FOUND',
+        text: 'Failed to resolve the installed @mastra/schema-compat version',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      });
+    }
+    dependenciesToInstall.set('@mastra/schema-compat', schemaCompatInfo);
 
     try {
       await this.writePackageJson(

@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, WORKSPACE_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
@@ -570,9 +570,8 @@ export async function analyzeBundle(
       }
 
       const pkgName = getPackageName(i);
-      const isWorkspaceExternal = WORKSPACE_EXTERNALS.some(external => isDependencyPartOfPackage(i, external));
 
-      if (pkgName && workspaceMap.has(pkgName) && !isWorkspaceExternal) {
+      if (pkgName && workspaceMap.has(pkgName)) {
         continue;
       }
 
@@ -632,17 +631,6 @@ export async function analyzeBundle(
     // `import('typescript')` in @mastra/core) without being installed in the user's project.
     import.meta.dirname,
   ];
-
-  // These packages remain external even when their imports originate inside prebuilt packages.
-  // That boundary hides them from source analysis, so keep them in the generated runtime manifest.
-  for (const dep of WORKSPACE_EXTERNALS) {
-    if (!mergedExternalDeps.has(dep)) {
-      const dependencyInfo = await resolveDependencyInfo(dep, undefined, externalMetadataParentPaths);
-      if (dependencyInfo.version || dependencyInfo.packageSpec) {
-        mergedExternalDeps.set(dep, dependencyInfo);
-      }
-    }
-  }
 
   // Retry externals that were discovered without install metadata (e.g. from entry analysis
   // where the package isn't resolvable from the entry's own location).
