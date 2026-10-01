@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { PackageManager } from '../../utils/package-manager';
 import type { CreateLLMProvider } from './command';
-import { PNPM_WORKSPACE } from './utils';
+import { needsPrereleaseNpmrc, PNPM_WORKSPACE, PRERELEASE_NPMRC } from './utils';
 import type { ResolvedMastraVersions } from './version-resolver';
 import { resolveMastraPackageVersions } from './version-resolver';
 
@@ -295,6 +295,9 @@ export async function adaptDefaultTemplate({
 
   if (packageManager === 'pnpm') {
     await write(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE);
+  }
+  if (needsPrereleaseNpmrc(packageManager, versionTag)) {
+    await write(path.join(projectPath, '.npmrc'), PRERELEASE_NPMRC);
   }
 
   return {

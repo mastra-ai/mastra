@@ -11,6 +11,7 @@ import {
   EMPTY_GITIGNORE,
   EMPTY_TSCONFIG,
   PNPM_WORKSPACE,
+  PRERELEASE_NPMRC,
   publishStagedProject,
   writeEmptyScaffold,
 } from './utils';
@@ -67,10 +68,12 @@ describe('empty scaffold', () => {
 
     expect(await listRelativeFiles(staging.projectPath)).toEqual([
       '.gitignore',
+      '.npmrc',
       'package.json',
       'src/mastra/index.ts',
       'tsconfig.json',
     ]);
+    expect(await fs.readFile(path.join(staging.projectPath, '.npmrc'), 'utf8')).toBe(PRERELEASE_NPMRC);
 
     const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
     expect(manifest).toEqual({

@@ -44,6 +44,13 @@ allowBuilds:
   utf-8-validate: true
 `;
 
+// npm semver never matches a newer prerelease core against already-published `>=x.y.z-0` peer ranges.
+export const PRERELEASE_NPMRC = 'legacy-peer-deps=true\n';
+
+export function needsPrereleaseNpmrc(packageManager: PackageManager, versionTag: string): boolean {
+  return packageManager === 'npm' && versionTag !== 'latest';
+}
+
 export interface OwnedStagingDirectory {
   rootPath: string;
   projectPath: string;
@@ -150,6 +157,9 @@ export async function writeEmptyScaffold({
 
   if (packageManager === 'pnpm') {
     writes.push(fs.writeFile(path.join(projectPath, 'pnpm-workspace.yaml'), PNPM_WORKSPACE, 'utf8'));
+  }
+  if (needsPrereleaseNpmrc(packageManager, versionTag)) {
+    writes.push(fs.writeFile(path.join(projectPath, '.npmrc'), PRERELEASE_NPMRC, 'utf8'));
   }
 
   await Promise.all(writes);
