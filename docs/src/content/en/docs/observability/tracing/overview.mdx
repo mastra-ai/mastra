@@ -849,6 +849,36 @@ const result = await run.start({
 })
 ```
 
+### Nesting a run under an earlier Mastra run
+
+A `parentSpanId` can point at two kinds of spans. The span can belong to your own tracing system, as in the examples above. Mastra then treats the run as the top of the trace it exports, and the run sets the trace's name, input, output, and tags.
+
+The span can also be an earlier Mastra run in the same trace, such as an LLM judge that scores the turn that just finished. Set `nestUnderParent: true` for this case. The new run becomes a child of that span, and the trace keeps the name, input, output, tags, user, and session of the run that started it.
+
+```ts
+const turn = await assistant.generate('When does my order ship?')
+
+await judge.generate(`Grade this answer: ${turn.text}`, {
+  tracingOptions: {
+    traceId: turn.traceId,
+    parentSpanId: turn.spanId,
+    nestUnderParent: true,
+  },
+})
+```
+
+The `nestUnderRun()` helper builds the same options from the earlier run's result:
+
+```ts
+import { nestUnderRun } from '@mastra/core/observability'
+
+await judge.generate(`Grade this answer: ${turn.text}`, {
+  tracingOptions: nestUnderRun(turn),
+})
+```
+
+The two runs don't need to share a process. Mastra ignores `nestUnderParent` when `parentSpanId` is missing. The [Langfuse](/integrations/observability/langfuse) and [Braintrust](/integrations/observability/braintrust) exporters use this option. In other exporters, only the tags rule applies.
+
 ### ID format requirements
 
 Mastra validates trace and span IDs to ensure compatibility:
