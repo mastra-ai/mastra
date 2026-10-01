@@ -839,7 +839,10 @@ describe('applyClientToolModelOutput', () => {
     expect(toModelOutput).not.toHaveBeenCalled();
   });
 
-  it('skips stored results that still carry an AI SDK v5 error envelope', async () => {
+  it.each([
+    ['error-text', 'it failed'],
+    ['error-json', { message: 'it failed' }],
+  ] as const)('skips stored %s results that still carry an AI SDK v5 error envelope', async (type, value) => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
 
@@ -861,7 +864,7 @@ describe('applyClientToolModelOutput', () => {
                 toolCallId: 'call-1',
                 toolName: 'browserTool',
                 args: {},
-                result: { type: 'error-text', value: 'it failed' },
+                result: { type, value },
               },
             },
           ],
