@@ -464,7 +464,8 @@ export type ObservationalMemoryActivationTTLByProvider = {
 };
 
 export type ObservationalMemoryActivationTTL =
-  ObservationalMemoryActivationTTLValue | ObservationalMemoryActivationTTLByProvider;
+  | ObservationalMemoryActivationTTLValue
+  | ObservationalMemoryActivationTTLByProvider;
 
 /**
  * Configuration for the observation step in Observational Memory.
