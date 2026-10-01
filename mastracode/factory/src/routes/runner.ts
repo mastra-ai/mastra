@@ -134,14 +134,24 @@ export async function startRunnerCommand(session: SourceControlSession, command:
   // appends an exit marker so the poller can report the exit code. `echo $!`
   // hands the wrapper subshell's pid back for aliveness checks and stop.
   //
-  // Run under a pseudo-TTY via util-linux `script -qefc` when available:
-  // programs block-buffer stdout when it's a plain file redirect (output
-  // appears in 4–8KB bursts or only at exit), but line-buffer — and emit
-  // colors — when they see a TTY. The typescript file goes to /dev/null
-  // because `script` writes a "Script started on …" header into it even with
-  // -q; we capture script's stdout relay instead, which is raw unbuffered
-  // writes of the pty output with no header.
-  const script = `cd ${shellQuote(handle.workdir)} && : > ${shellQuote(log)} && ( if command -v script >/dev/null 2>&1; then script -qefc ${shellQuote(trimmed)} /dev/null >> ${shellQuote(log)} 2>&1; else sh -c ${shellQuote(trimmed)} >> ${shellQuote(log)} 2>&1; fi; echo "${EXIT_MARKER}$?" >> ${shellQuote(log)} ) </dev/null >/dev/null 2>&1 & echo $!`;
+  // Run under a pseudo-TTY via `script` when available: programs block-buffer
+  // stdout when it's a plain file redirect (output appears in 4–8KB bursts or
+  // only at exit), but line-buffer — and emit colors — when they see a TTY.
+  // The typescript file goes to /dev/null because `script` writes a "Script
+  // started on …" header into it even with -q; we capture script's stdout
+  // relay instead, which is raw unbuffered writes of the pty output.
+  //
+  // Flag dialects differ: util-linux (Linux) takes `-qefc CMD FILE`, BSD
+  // (macOS) takes `-qeF FILE CMD...` — only util-linux answers --version,
+  // which is the detector. Both propagate the child's exit code via -e.
+  const runCmd = shellQuote(trimmed);
+  const quotedLog = shellQuote(log);
+  const wrapper =
+    `if command -v script >/dev/null 2>&1; then ` +
+    `if script --version >/dev/null 2>&1; then script -qefc ${runCmd} /dev/null >> ${quotedLog} 2>&1; ` +
+    `else script -qeF /dev/null sh -c ${runCmd} >> ${quotedLog} 2>&1; fi; ` +
+    `else sh -c ${runCmd} >> ${quotedLog} 2>&1; fi`;
+  const script = `cd ${shellQuote(handle.workdir)} && : > ${quotedLog} && ( ${wrapper}; echo "${EXIT_MARKER}$?" >> ${quotedLog} ) </dev/null >/dev/null 2>&1 & echo $!`;
   const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
   const pid = result.stdout.trim().split('\n').pop()?.trim() ?? '';
   if (result.exitCode !== 0 || !/^\d+$/.test(pid)) {
@@ -151,6 +161,28 @@ export async function startRunnerCommand(session: SourceControlSession, command:
   const now = Date.now();
   runs.set(runId, { runId, command: trimmed, pid, log, startedAt: now, lastPoll: now });
   return { workspacePath: session.sessionId, runId, command: trimmed };
+}
+
+/**
+ * Emulate in-place terminal rewrites in captured PTY output: progress bars
+ * repaint lines with bare \r (keep only the final repaint), and BSD `script`
+ * echoes the stdin EOF as a literal `^D` followed by two backspaces that rub
+ * it out (apply \b erasure). Expects \r\n already normalized to \n.
+ */
+export function normalizePtyArtifacts(output: string): string {
+  return output
+    .split('\n')
+    .map(line => {
+      const repaint = line.slice(line.lastIndexOf('\r') + 1);
+      if (!repaint.includes('\b')) return repaint;
+      let built = '';
+      for (const char of repaint) {
+        if (char === '\b') built = built.slice(0, -1);
+        else built += char;
+      }
+      return built;
+    })
+    .join('\n');
 }
 
 export async function pollRunnerCommand(session: SourceControlSession, runId: string): Promise<RunnerPollResult> {
@@ -184,12 +216,7 @@ export async function pollRunnerCommand(session: SourceControlSession, runId: st
     output = output.slice(0, markerIndex).replace(/\n$/, '');
   }
 
-  // Progress bars repaint in place with bare \r — emulate the terminal by
-  // keeping only the final repaint of each line.
-  output = output
-    .split('\n')
-    .map(line => line.slice(line.lastIndexOf('\r') + 1))
-    .join('\n');
+  output = normalizePtyArtifacts(output);
 
   return {
     workspacePath: session.sessionId,
