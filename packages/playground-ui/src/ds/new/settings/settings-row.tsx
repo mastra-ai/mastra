@@ -19,6 +19,9 @@ type SettingsRowLayoutProps = SettingsRowProps & {
   layout: 'factory' | 'section';
 };
 
+const factoryRowClassName = 'gap-2 px-4 py-3 sm:justify-between sm:gap-4';
+const factoryRowHeadingClassName = 'flex min-w-0 flex-col gap-0.5';
+
 export function SettingsRowLayout({
   label,
   description,
@@ -53,12 +56,12 @@ export function SettingsRowLayout({
         isSectionLayout
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'min-w-0',
-        layout === 'factory' && 'gap-2 px-4 py-3 sm:justify-between sm:gap-4',
+        layout === 'factory' && factoryRowClassName,
         className,
       )}
       {...props}
     >
-      <div className={cn('min-w-0', !isSectionLayout && 'flex flex-col', layout === 'factory' && 'gap-0.5')}>
+      <div className={isSectionLayout ? 'min-w-0' : factoryRowHeadingClassName}>
         <FieldLabel required={required} className={cn(tone === 'destructive' && 'text-destructive-foreground')}>
           {label}
         </FieldLabel>
@@ -108,10 +111,10 @@ export function SettingsFieldsetRow({ label, description, children, className, .
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn('flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}
+      className={cn('flex flex-col sm:flex-row sm:items-center', factoryRowClassName, className)}
       {...props}
     >
-      <div className="flex min-w-0 flex-col gap-0.5">
+      <div className={factoryRowHeadingClassName}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
           <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-muted-foreground">
