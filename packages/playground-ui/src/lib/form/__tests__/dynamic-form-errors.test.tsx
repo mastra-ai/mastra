@@ -80,3 +80,17 @@ describe('an error on a nested object', () => {
     );
   });
 });
+
+describe('a record field', () => {
+  it('names the group by the field and keeps each key and value apart', () => {
+    render(
+      <DynamicForm schema={z.object({ headers: z.record(z.string()) })} onSubmit={() => {}} submitButtonLabel="Run" />,
+    );
+
+    const group = screen.getByRole('group', { name: /^Headers/ });
+    const key = screen.getByRole('textbox', { name: 'Key' });
+    const value = screen.getByRole('textbox', { name: 'Value' });
+    expect(group.contains(key)).toBe(true);
+    expect(key.id).not.toBe(value.id);
+  });
+});
