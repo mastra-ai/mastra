@@ -41,6 +41,8 @@ export interface EditorTreeEntry {
   /** Workspace-relative path with posix separators. */
   path: string;
   type: 'file' | 'directory';
+  /** True for gitignored entries (ignored directories are collapsed — their contents are not listed). */
+  ignored?: boolean;
 }
 
 export interface EditorTreeListing {
@@ -231,9 +233,12 @@ export async function resolveAuthorizedSession(
 
 interface TreeWalk {
   /** Paths relative to the listed directory. */
-  rels: { rel: string; type: 'file' | 'directory' }[];
+  rels: { rel: string; type: 'file' | 'directory'; ignored?: boolean }[];
   truncated: boolean;
 }
+
+/** Cap on gitignored entries — they're decoration, not navigation, so keep them cheap. */
+const MAX_IGNORED_ENTRIES = 2000;
 
 /**
  * Fast path: `git ls-files` answers from the index in tens of milliseconds
@@ -246,14 +251,32 @@ interface TreeWalk {
 async function walkTreeViaGit(handle: SessionSandboxHandle, target: string): Promise<TreeWalk | null> {
   const quoted = target.replace(/'/g, `'\\''`);
   const cap = MAX_TREE_ENTRIES + 1;
-  const script = `cd '${quoted}' && git ls-files --cached --others --exclude-standard 2>/dev/null | head -n ${cap}`;
+  // Second pass lists gitignored entries so the tree can render them dimmed.
+  // `--directory` collapses fully-ignored directories (node_modules, dist…) to a
+  // single `dir/` line instead of streaming their contents.
+  const separator = '::editor-tree-ignored::';
+  const script = `cd '${quoted}' || exit 1
+git ls-files --cached --others --exclude-standard 2>/dev/null | head -n ${cap}
+echo '${separator}'
+git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | head -n ${MAX_IGNORED_ENTRIES}`;
   const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
   if (result.exitCode !== 0) return null;
-  const lines = result.stdout.split('\n').filter(Boolean);
-  if (lines.length === 0) return null; // Not a repo (or empty) — let find decide.
 
-  const truncated = lines.length > MAX_TREE_ENTRIES;
-  const files = truncated ? lines.slice(0, MAX_TREE_ENTRIES) : lines;
+  const tracked: string[] = [];
+  const ignored: string[] = [];
+  let section = tracked;
+  for (const line of result.stdout.split('\n')) {
+    if (!line) continue;
+    if (line === separator) {
+      section = ignored;
+      continue;
+    }
+    section.push(line);
+  }
+  if (tracked.length === 0) return null; // Not a repo (or empty) — let find decide.
+
+  const truncated = tracked.length > MAX_TREE_ENTRIES;
+  const files = truncated ? tracked.slice(0, MAX_TREE_ENTRIES) : tracked;
   const dirs = new Set<string>();
   const rels: TreeWalk['rels'] = [];
   for (const rel of files) {
@@ -263,6 +286,19 @@ async function walkTreeViaGit(handle: SessionSandboxHandle, target: string): Pro
       dirs.add(parts.slice(0, index).join('/'));
     }
     rels.push({ rel, type: 'file' });
+  }
+  for (const line of ignored) {
+    const isDir = line.endsWith('/');
+    const rel = isDir ? line.slice(0, -1) : line;
+    if (!rel) continue;
+    const parts = rel.split('/');
+    // Keep ignored entries that ARE a skip dir (show node_modules/ dimmed),
+    // but never anything nested inside one.
+    if (parts.slice(0, -1).some(part => TREE_SKIP_DIRS.has(part))) continue;
+    for (let index = 1; index < parts.length; index++) {
+      dirs.add(parts.slice(0, index).join('/'));
+    }
+    rels.push({ rel, type: isDir ? 'directory' : 'file', ignored: true });
   }
   for (const dir of dirs) rels.push({ rel: dir, type: 'directory' });
   return { rels, truncated };
@@ -318,10 +354,11 @@ export async function listEditorTree(session: SourceControlSession, relativePath
   const target = safeRelative ? posixPath.join(handle.workdir, safeRelative) : handle.workdir;
   const walk = (await walkTreeViaGit(handle, target)) ?? (await walkTreeViaFind(handle, target));
 
-  const entries: EditorTreeEntry[] = walk.rels.slice(0, MAX_TREE_ENTRIES).map(({ rel, type }) => ({
+  const entries: EditorTreeEntry[] = walk.rels.slice(0, MAX_TREE_ENTRIES).map(({ rel, type, ignored }) => ({
     name: posixPath.basename(rel),
     path: safeRelative ? posixPath.join(safeRelative, rel) : rel,
     type,
+    ...(ignored ? { ignored: true } : {}),
   }));
   const truncated = walk.truncated || walk.rels.length > MAX_TREE_ENTRIES;
   entries.sort((a, b) => {

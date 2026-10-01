@@ -29,6 +29,7 @@ import {
 } from '../../../hooks/use-editor';
 import type { EditorLspQueryKind, EditorLspSymbol } from '../../../api/types';
 import { useWorkspaceChanges } from '../../../hooks/use-fs';
+import { useScmStatus } from '../../../hooks/use-scm';
 import { useThreadWorkItem } from '../../../hooks/useThreadWorkItem';
 import { useChatSessionContext } from '../chat/context/useChatSessionContext';
 
@@ -157,6 +158,9 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
 
   const tree = useEditorTree(workspacePath);
   const changes = useWorkspaceChanges(workspacePath, { enabled: true });
+  // Git staging state for file-tree status colors (ScmPanel polls the same
+  // query, so React Query dedupes this to one request stream).
+  const scmStatus = useScmStatus(workspacePath);
   // While a buffer has unsaved edits, poll the disk copy — if the agent (or
   // anything else) rewrites the file underneath, we surface it as drift.
   const activeFile = useEditorFile(workspacePath, activePath ?? undefined, {
@@ -779,6 +783,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                   activePath={activePath}
                   onOpen={path => openFile(path)}
                   activity={agentActivity}
+                  scm={scmStatus.data}
                 />
               ) : leftTab === 'search' ? (
                 <SearchPanel workspacePath={workspacePath} onOpen={openFile} />
