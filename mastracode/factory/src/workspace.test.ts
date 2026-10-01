@@ -389,6 +389,8 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     for (const instructions of [review, rereview]) {
+      expect(instructions).toContain('Do not add a `Co-Authored-By` trailer');
+      expect(instructions).not.toContain('ID+<login>@users.noreply.github.com');
       expect(instructions).toContain('approve adds `status:auto-approved` and removes `status:changes-requested`');
       expect(instructions).toContain(
         'request changes adds `status:changes-requested` and removes `status:auto-approved`',
