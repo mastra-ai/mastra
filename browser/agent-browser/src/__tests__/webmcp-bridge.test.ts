@@ -4,7 +4,8 @@
  * Executes the real init script against a vm context with a mock navigator
  * and a postMessage bus, so we're exercising the exact code Playwright
  * injects into the page. The MCP-B tests run a fake in-page MCP server that
- * speaks the real `@mcp-b/transports` Tab transport wire format:
+ * speaks the real `@mcp-b/transports` Tab transport wire format (verified
+ * against the v5.1.0 source):
  * `{ channel, type: 'mcp', direction, payload }` envelopes with the
  * `mcp-check-ready` / `mcp-server-ready` handshake and JSON-RPC payloads.
  */

@@ -221,7 +221,7 @@ const BRIDGE_BODY = /* js */ `
 
   // ---------------------------------------------------------------------
   // MCP-B: MCP JSON-RPC client over the @mcp-b/transports Tab transport.
-  // Wire format (from @mcp-b/transports source):
+  // Wire format (verified against @mcp-b/transports v5.1.0 source):
   //   window.postMessage({ channel, type: 'mcp', direction, payload }, origin)
   //   client->server direction: 'client-to-server'; replies: 'server-to-client'
   //   handshake payloads: 'mcp-check-ready' -> 'mcp-server-ready';
