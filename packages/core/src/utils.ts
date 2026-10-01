@@ -74,6 +74,14 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   if (!source) return output;
 
   Object.keys(source).forEach(key => {
+    // Skip prototype-polluting keys so a `__proto__`/`constructor`/`prototype`
+    // property on an untrusted source (e.g. parsed from JSON) cannot reassign the
+    // merged object's prototype chain. Mirrors the guard already used by the
+    // path-setting helper in this module.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return;
+    }
+
     const targetValue = (output as Record<string, unknown>)[key];
     const sourceValue = (source as Record<string, unknown>)[key];
 

@@ -1031,6 +1031,25 @@ describe('deepMerge', () => {
     const result = deepMerge({ a: 1 }, { a: undefined });
     expect(result.a).toBe(1);
   });
+
+  it('ignores a __proto__ key and does not pollute the prototype chain', () => {
+    const malicious = JSON.parse('{"__proto__":{"polluted":"yes"},"b":2}');
+    const result = deepMerge({ a: 1 } as any, malicious);
+
+    // merged object does not inherit the injected property
+    expect((result as any).polluted).toBeUndefined();
+    // global prototype is untouched
+    expect(({} as any).polluted).toBeUndefined();
+    // prototype chain is intact
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    // legitimate keys still merge
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  it('ignores a constructor key rather than shadowing it as an own property', () => {
+    const result = deepMerge({} as any, JSON.parse('{"constructor":{"x":1}}'));
+    expect(Object.prototype.hasOwnProperty.call(result, 'constructor')).toBe(false);
+  });
 });
 
 describe('omitKeys', () => {
