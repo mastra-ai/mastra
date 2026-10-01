@@ -102,7 +102,7 @@ describe('useWorkspaceFileContent', () => {
 
   describe('when no path is given', () => {
     it('stays idle', () => {
-      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, null), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useWorkspaceFileContent(WORKSPACE_ID, undefined), { wrapper: makeWrapper() });
 
       expect(result.current.fetchStatus).toBe('idle');
     });
@@ -138,8 +138,6 @@ describe('useWorkspaceSearch', () => {
             path: 'skills/review/SKILL.md',
             label: 'review',
             score: 0.9,
-            skillName: 'review',
-            skillPath: 'skills/review',
           },
           { kind: 'file', path: 'README.md', label: 'README.md', score: 0.4 },
         ]),

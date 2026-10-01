@@ -1,24 +1,18 @@
 import type { ReactNode } from 'react';
-import type {
-  WorkspaceCreateDirectoryHandler,
-  WorkspaceDeleteHandler,
-  WorkspaceSkillRef,
-} from './use-workspace-context';
+import type { WorkspaceCreateDirectoryHandler, WorkspaceDeleteHandler } from './use-workspace-context';
 import { Workspace } from './workspace';
 import type { WorkspacePreviewFactory } from './workspace-active-file';
 
 export interface WorkspaceTreeViewProps {
   workspaceId: string;
-  /** Workspace-relative path (e.g. `src/index.ts`) opened on mount. */
-  initialFile?: string;
+  /** Workspace-relative path of the open file (e.g. `src/index.ts`), or `undefined`. Controlled by the parent. */
+  activeFilePath?: string;
+  /** Called when the user opens a file, or with `undefined` when a delete closes it. */
+  onActiveFileChange: (path: string | undefined) => void;
   /** Enables the delete action on tree rows. Omit to hide it. For directories, delete recursively. */
   onDelete?: WorkspaceDeleteHandler;
   /** Enables the "New folder" action. Receives a workspace-relative path. Omit to hide it. */
   onCreateDirectory?: WorkspaceCreateDirectoryHandler;
-  /** Called whenever the user opens another file (e.g. to sync the URL). */
-  onActiveFileChange?: (path: string | null) => void;
-  /** Skill search hits go here instead of opening in the viewer (e.g. to navigate to the skill page). */
-  onSkillSelect?: (skill: WorkspaceSkillRef) => void;
   /** Folders (and their contents) where delete and new folder are unavailable. Use `.` for the whole workspace. */
   readOnlyPaths?: string[];
   /** Include file search. Defaults to true. */

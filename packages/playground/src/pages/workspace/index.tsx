@@ -89,11 +89,11 @@ export default function Workspace() {
     void navigate(`/workspaces/${id}`);
   };
 
-  const setSelectedFile = (file: string | null) => {
-    updateSearchParams({ file });
+  const setSelectedFile = (file: string | undefined) => {
+    updateSearchParams({ file: file ?? null });
   };
 
-  const selectedFile = fileFromUrl;
+  const selectedFile = fileFromUrl ?? undefined;
 
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
@@ -305,16 +305,11 @@ export default function Workspace() {
             <WorkspaceTreeView
               key={effectiveWorkspaceId}
               workspaceId={effectiveWorkspaceId}
-              initialFile={selectedFile ?? undefined}
+              activeFilePath={selectedFile}
               onActiveFileChange={setSelectedFile}
               readOnlyPaths={readOnlyPaths}
               searchFiles={canSearchFiles}
               searchSkills={canSearchSkills}
-              onSkillSelect={({ skillName, skillPath }) =>
-                void navigate(
-                  `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
-                )
-              }
               onCreateDirectory={path =>
                 createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId })
               }

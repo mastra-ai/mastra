@@ -7,9 +7,6 @@ export interface WorkspaceSearchHit {
   path: string;
   label: string;
   score: number;
-  /** Set on skill hits. */
-  skillName?: string;
-  skillPath?: string;
 }
 
 // Chunked files are indexed as `<path>#chunk-<n>`.
@@ -62,8 +59,6 @@ export function useWorkspaceSearch(
             path: skillFilePath(result),
             label: result.skillName,
             score: result.score,
-            skillName: result.skillName,
-            skillPath: (result as SkillSearchResult & { skillPath?: string }).skillPath ?? result.source,
           });
         }
       }

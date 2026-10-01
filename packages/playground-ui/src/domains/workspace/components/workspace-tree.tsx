@@ -1,5 +1,6 @@
 import type { WorkspaceFileEntry } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
+import { FolderPlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
@@ -12,7 +13,7 @@ import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
-import { FileIcon, FolderIcon, FolderPlusIcon, TrashIcon } from '@/ds/icons';
+import { FileIcon, FolderIcon, TrashIcon } from '@/ds/icons';
 
 const formatBytes = (bytes: number) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -36,12 +37,7 @@ export function WorkspaceTree() {
 
   return (
     <>
-      <Tree
-        aria-label="Workspace files"
-        selectedId={activeFilePath ?? undefined}
-        onSelect={setActiveFilePath}
-        className="py-1"
-      >
+      <Tree aria-label="Workspace files" selectedId={activeFilePath} onSelect={setActiveFilePath} className="py-1">
         <Entries entries={data} parent={ROOT_PATH} onRequestDelete={setPendingDelete} />
       </Tree>
       <DeleteDialog entry={pendingDelete} onClose={() => setPendingDelete(null)} />
@@ -82,7 +78,7 @@ function DeleteButton({ name, onClick }: { name: string; onClick: () => void }) 
     <Button
       variant="destructive-ghost"
       size="icon-sm"
-      aria-label={`Delete ${name}`}
+      tooltip={`Delete ${name}`}
       onClick={event => {
         event.stopPropagation();
         onClick();
@@ -117,7 +113,7 @@ function FolderNode({ name, path, onRequestDelete }: NodeProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`New folder in ${name}`}
+                  tooltip={`New folder in ${name}`}
                   onClick={event => {
                     event.stopPropagation();
                     setOpen(true);
@@ -228,7 +224,7 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
     } finally {
       setIsDeleting(false);
     }
-    if (activeFilePath === entry.path || activeFilePath?.startsWith(`${entry.path}/`)) setActiveFilePath(null);
+    if (activeFilePath === entry.path || activeFilePath?.startsWith(`${entry.path}/`)) setActiveFilePath(undefined);
     queryClient.removeQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', entry.path] });
     await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', parentOf(entry.path)] });
     onClose();

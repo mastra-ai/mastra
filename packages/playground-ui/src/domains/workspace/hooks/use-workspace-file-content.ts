@@ -4,7 +4,7 @@ import { isMediaFile } from '../file-type';
 import { WORKSPACE_REFETCH_INTERVAL } from './use-workspace-directory';
 
 /** Reads a file (base64 for images/videos) and polls it so the viewer follows external edits. */
-export function useWorkspaceFileContent(workspaceId: string, path: string | null) {
+export function useWorkspaceFileContent(workspaceId: string, path?: string) {
   const client = useMastraClient();
   const encoding = path && isMediaFile(path) ? 'base64' : undefined;
 

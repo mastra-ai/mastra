@@ -66,4 +66,3 @@ export * from './MetricsIcon';
 export * from './LinearIcon';
 export * from './SlackIcon';
 export * from './SearchIcon';
-export * from './FolderPlusIcon';

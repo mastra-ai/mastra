@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
+import { useState } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   BASE_URL,
@@ -23,12 +24,33 @@ import type { WorkspaceTreeViewProps } from '../workspace-tree-view';
 
 const server = setupServer();
 
-function renderView(props: Omit<WorkspaceTreeViewProps, 'workspaceId'> = {}) {
+type ViewProps = Omit<WorkspaceTreeViewProps, 'workspaceId' | 'activeFilePath' | 'onActiveFileChange'> & {
+  initialFile?: string;
+  onActiveFileChange?: (path: string | undefined) => void;
+};
+
+/** Plays the parent's role: owns the active file and feeds it back to the controlled view. */
+function ControlledView({ initialFile, onActiveFileChange, ...props }: ViewProps) {
+  const [activeFilePath, setActiveFilePath] = useState(initialFile);
+  return (
+    <WorkspaceTreeView
+      workspaceId={WORKSPACE_ID}
+      activeFilePath={activeFilePath}
+      onActiveFileChange={path => {
+        setActiveFilePath(path);
+        onActiveFileChange?.(path);
+      }}
+      {...props}
+    />
+  );
+}
+
+function renderView(props: ViewProps = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <WorkspaceTreeView workspaceId={WORKSPACE_ID} {...props} />
+        <ControlledView {...props} />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -215,22 +237,32 @@ describe('WorkspaceTreeView', () => {
     });
   });
 
-  describe('when the search is toggled', () => {
-    it('hides the tree while open and restores it on close', async () => {
+  describe('when the search is opened', () => {
+    it('replaces the header actions with the search bar and a close button', async () => {
       server.use(listHandler({ '.': rootListing }));
-      renderView();
+      renderView({ onCreateDirectory: vi.fn() });
       await screen.findByRole('tree');
 
-      const toggle = screen.getByRole('button', { name: 'Search files and skills' });
-      fireEvent.click(toggle);
+      fireEvent.click(screen.getByRole('button', { name: 'Search files and skills' }));
 
+      expect(screen.getByRole('searchbox')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Search files and skills' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New folder' })).toBeNull();
       expect(screen.queryByRole('tree')).toBeNull();
       expect(screen.getByText('Type to find matching content.')).toBeTruthy();
+    });
 
-      fireEvent.click(toggle);
+    it('restores the tree and actions when closed', async () => {
+      server.use(listHandler({ '.': rootListing }));
+      renderView({ onCreateDirectory: vi.fn() });
+      await screen.findByRole('tree');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Search files and skills' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
 
       expect(await screen.findByRole('tree')).toBeTruthy();
       expect(screen.queryByRole('searchbox')).toBeNull();
+      expect(screen.getByRole('button', { name: 'New folder' })).toBeTruthy();
     });
   });
 
@@ -385,23 +417,25 @@ describe('WorkspaceTreeView', () => {
     });
   });
 
-  describe('when onSkillSelect is provided', () => {
-    it('hands skill hits to it instead of opening them', async () => {
+  describe('when a skill search hit is clicked', () => {
+    it('opens its SKILL.md in the viewer and reports it as the active file', async () => {
       server.use(
         listHandler({ '.': rootListing }),
+        readHandler(),
         http.get(`${WORKSPACE_URL}/search`, () => HttpResponse.json(fileSearchResponse)),
         http.get(`${WORKSPACE_URL}/skills/search`, () => HttpResponse.json(skillSearchResponse)),
       );
-      const onSkillSelect = vi.fn();
-      renderView({ onSkillSelect });
+      const onActiveFileChange = vi.fn();
+      renderView({ onActiveFileChange });
 
       fireEvent.click(screen.getByRole('button', { name: 'Search files and skills' }));
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search query' }), { target: { value: 'hello' } });
       const results = await screen.findByRole('list', { name: 'Search results' });
       fireEvent.click(within(results).getByRole('button', { name: /review/ }));
 
-      expect(onSkillSelect).toHaveBeenCalledWith({ skillName: 'review', skillPath: 'skills/review' });
-      expect(screen.queryByTestId('workspace-file-path')).toBeNull();
+      expect(onActiveFileChange).toHaveBeenCalledWith('skills/review/SKILL.md');
+      expect(screen.getByTestId('workspace-file-path').textContent).toBe('skills/review/SKILL.md');
+      expect(await screen.findByRole('heading', { name: 'Review skill' })).toBeTruthy();
     });
   });
 

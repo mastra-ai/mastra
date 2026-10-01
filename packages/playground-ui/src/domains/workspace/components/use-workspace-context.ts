@@ -11,22 +11,16 @@ export type WorkspaceDeleteHandler = (entry: WorkspaceEntryRef) => void | Promis
 /** Called with the workspace-relative path of the directory to create. */
 export type WorkspaceCreateDirectoryHandler = (path: string) => void | Promise<void>;
 
-export interface WorkspaceSkillRef {
-  skillName: string;
-  skillPath: string;
-}
-
 export interface WorkspaceContextValue {
   workspaceId: string;
-  activeFilePath: string | null;
-  setActiveFilePath: (path: string | null) => void;
+  activeFilePath?: string;
+  setActiveFilePath: (path: string | undefined) => void;
   isSearching: boolean;
   setSearching: (searching: boolean) => void;
   query: string;
   setQuery: (query: string) => void;
   onDelete?: WorkspaceDeleteHandler;
   onCreateDirectory?: WorkspaceCreateDirectoryHandler;
-  onSkillSelect?: (skill: WorkspaceSkillRef) => void;
   /** Whether a path is (inside) a read-only folder. */
   isReadOnly: (path: string) => boolean;
   searchFiles: boolean;

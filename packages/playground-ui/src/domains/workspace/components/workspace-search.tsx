@@ -1,3 +1,4 @@
+import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useWorkspaceSearch } from '../hooks/use-workspace-search';
 import { useWorkspaceContext } from './use-workspace-context';
@@ -19,7 +20,7 @@ export function WorkspaceSearchToggle() {
     <Button
       variant="ghost"
       size="icon-sm"
-      aria-label="Search files and skills"
+      tooltip="Search files and skills"
       aria-pressed={isSearching}
       onClick={() => setSearching(!isSearching)}
     >
@@ -48,28 +49,32 @@ function SearchInput() {
   const [, startTransition] = useTransition();
 
   return (
-    <Input
-      type="search"
-      size="sm"
-      autoFocus
-      aria-label="Search query"
-      placeholder="Search files and skills"
-      value={value}
-      onChange={event => {
-        const next = event.target.value;
-        setValue(next);
-        startTransition(() => setQuery(next));
-      }}
-      onKeyDown={event => {
-        if (event.key === 'Escape') setSearching(false);
-      }}
-    />
+    <div className="flex items-center gap-1">
+      <Input
+        type="search"
+        size="sm"
+        autoFocus
+        aria-label="Search query"
+        placeholder="Search files and skills"
+        value={value}
+        onChange={event => {
+          const next = event.target.value;
+          setValue(next);
+          startTransition(() => setQuery(next));
+        }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') setSearching(false);
+        }}
+      />
+      <Button variant="ghost" size="icon-sm" tooltip="Close search" onClick={() => setSearching(false)}>
+        <XIcon />
+      </Button>
+    </div>
   );
 }
 
 export function WorkspaceSearchResults() {
-  const { workspaceId, query, activeFilePath, setActiveFilePath, onSkillSelect, searchFiles, searchSkills } =
-    useWorkspaceContext();
+  const { workspaceId, query, activeFilePath, setActiveFilePath, searchFiles, searchSkills } = useWorkspaceContext();
   const { data, isLoading, isError, error } = useWorkspaceSearch(workspaceId, query, {
     files: searchFiles,
     skills: searchSkills,
@@ -96,13 +101,7 @@ export function WorkspaceSearchResults() {
           <button
             type="button"
             title={hit.path}
-            onClick={() => {
-              if (hit.kind === 'skill' && onSkillSelect && hit.skillName && hit.skillPath) {
-                onSkillSelect({ skillName: hit.skillName, skillPath: hit.skillPath });
-              } else {
-                setActiveFilePath(hit.path);
-              }
-            }}
+            onClick={() => setActiveFilePath(hit.path)}
             className={cn(
               'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-body-sm text-muted-foreground hover:bg-fill-subtle',
               activeFilePath === hit.path && 'bg-fill text-foreground',

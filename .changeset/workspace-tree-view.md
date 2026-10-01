@@ -11,7 +11,8 @@ const workspace = client.getWorkspace('my-workspace');
 
 <WorkspaceTreeView
   workspaceId="my-workspace"
-  initialFile="README.md"
+  activeFilePath={activeFilePath}
+  onActiveFileChange={setActiveFilePath}
   onDelete={({ path, type }) => workspace.delete(path, { recursive: type === 'directory' })}
   onCreateDirectory={path => workspace.mkdir(path, true)}
 />;
@@ -28,11 +29,11 @@ const workspace = client.getWorkspace('my-workspace');
 
 The layout is also available as composable `Workspace.*` parts (`Root`, `Aside`, `AsideHeader`, `Search`, `SearchToggle`, `CreateDirectory`, `Tree`, `ActiveFile`, `ActiveFileHeader`, `FilePath`, `ActiveFileContent`).
 
-Also added `FileIcon`, `TrashIcon`, `SearchIcon`, and `FolderPlusIcon` to the design-system icon set.
+Also added `FileIcon`, `TrashIcon`, and `SearchIcon` to the design-system icon set.
+
+The open file is controlled: the parent owns `activeFilePath` (state, URL, …) and updates it from `onActiveFileChange`, which also receives `undefined` when a delete closes the open file.
 
 More optional props for embedding the view in a page:
 
-- `onActiveFileChange(path)`: called when the user opens a file, for example to keep it in the URL.
 - `readOnlyPaths`: folders where delete and new folder are hidden. Pass `['.']` to make the whole workspace read-only.
 - `searchFiles` / `searchSkills`: turn each search source on or off. The search button is hidden when both are off.
-- `onSkillSelect({ skillName, skillPath })`: handles skill search hits (for example, opens the skill page) instead of opening the file in the viewer.
