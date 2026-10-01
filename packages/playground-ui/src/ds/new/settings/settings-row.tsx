@@ -54,6 +54,9 @@ export function SettingsRowLayout({
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'flex min-w-0 flex-col',
         layout === 'factory' && 'gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+        // One width for select/combobox controls beside the label (read by their triggers).
+        // Stacked on mobile, they keep filling the row.
+        layout === 'factory' && 'sm:[--field-shrink:0] sm:[--field-width:16rem]',
         className,
       )}
       {...props}
