@@ -112,6 +112,34 @@ export function jsonSchemaComplexity(schema: unknown): {
 }
 
 /**
+ * Counts every value in a raw schema and stops once `limit` is exceeded. Unlike
+ * {@link jsonSchemaComplexity}, which counts only schema-bearing keywords, this covers
+ * annotation and extension data and boolean subschema entries, so callers that copy or transfer
+ * the whole value can bound that work rather than the validation work a schema describes.
+ *
+ * Values already seen are counted once, matching how the same walk treats cycles.
+ */
+export function countJsonValues(value: unknown, limit: number): number {
+  const seen = new Set<object>();
+  const stack: unknown[] = [value];
+  let nodes = 0;
+
+  while (stack.length > 0) {
+    if (++nodes > limit) return nodes;
+    const current = stack.pop();
+    if (current === null || typeof current !== 'object' || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) stack.push(item);
+    } else {
+      for (const key of Object.keys(current)) stack.push(Reflect.get(current, key));
+    }
+  }
+
+  return nodes;
+}
+
+/**
  * Converts a 2019-09 schema (e.g. from zod v3) into 2020-12 form. Tuples are the
  * only structural difference handled: array-form `items` becomes `prefixItems`,
  * and `additionalItems` becomes `items`.

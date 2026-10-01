@@ -1,16 +1,28 @@
 import { compile } from 'json-schema-to-typescript';
 import type { SerializableMCPToolCatalog } from '../client/types';
-import { jsonSchemaComplexity, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
+import {
+  countJsonValues,
+  jsonSchemaComplexity,
+  MAX_JSON_SCHEMA_DEPTH,
+  MAX_JSON_SCHEMA_NODES,
+} from '../shared/json-schema-dialect';
 
 type Schema = boolean | Record<string, unknown>;
 
 /**
- * Total schema nodes one generation run will convert. The per-schema budget is the one the
- * runtime enforces before validating a tool, so a schema the runtime cannot use is never
- * converted. This ceiling adds a bound on the work a catalogue made of many large schemas can
- * demand from the converter.
+ * Raw JSON values a single schema may contain before generation widens it. Every value counts,
+ * including annotations, extension data, and boolean subschema entries, because that is what
+ * `prepare()` copies and conversion walks. The protocol node budget above only counts
+ * schema-bearing keywords, which bounds validation work but not these copies.
  */
-const MAX_CATALOG_NODES = MAX_JSON_SCHEMA_NODES * 10;
+export const MAX_SCHEMA_VALUES = MAX_JSON_SCHEMA_NODES * 10;
+
+/**
+ * Raw JSON values one generation run may contain in total. The per-schema budget keeps a single
+ * server-supplied schema bounded; this ceiling bounds what a catalogue made of many large
+ * schemas can demand from the converter.
+ */
+export const MAX_CATALOG_VALUES = MAX_SCHEMA_VALUES * 10;
 
 const maps = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas']);
 const singles = new Set([
@@ -250,18 +262,24 @@ export async function generateToolTypes(
   const serverNames = new Set<string>();
   const flatNames = new Set<string>();
   let schemaIndex = 0;
-  const budget = { nodes: 0 };
+  const budget = { values: 0 };
 
   async function convert(raw: unknown, position: string): Promise<string> {
     const name = `ToolSchema${++schemaIndex}`;
-    // Bounded before `prepare` copies anything, so an over-budget schema costs at most
-    // MAX_JSON_SCHEMA_NODES visits instead of a full traversal plus conversion.
-    const { error, limit, nodes } = jsonSchemaComplexity(raw);
+    // Both budgets are applied before `prepare()` copies anything, so an over-budget schema costs
+    // at most its budget in visits instead of a full traversal plus conversion.
+    const { error, limit } = jsonSchemaComplexity(raw);
     // Depth is a structural violation, not merely an expensive schema: keep failing it.
     if (limit === 'depth') fail(position);
-    budget.nodes += nodes;
-    if (error || budget.nodes > MAX_CATALOG_NODES) {
-      const reason = error ?? `Catalogue exceeds the maximum node count of ${MAX_CATALOG_NODES}`;
+    const values = countJsonValues(raw, MAX_SCHEMA_VALUES);
+    budget.values += values;
+    const reason =
+      error ??
+      (values > MAX_SCHEMA_VALUES ? `Schema exceeds the maximum value count of ${MAX_SCHEMA_VALUES}` : undefined) ??
+      (budget.values > MAX_CATALOG_VALUES
+        ? `Catalogue exceeds the maximum value count of ${MAX_CATALOG_VALUES}`
+        : undefined);
+    if (reason) {
       warnings.push(`${reason} at ${position}; widened to unknown`);
       declarations.push(`export type ${name} = unknown;\n`);
       return name;
