@@ -20,11 +20,7 @@ export function ToolDrawerContent({ description, overview, playground, canRun }:
       <Tabs<ToolDrawerTab> defaultTab="overview" className="grid gap-4 overflow-visible">
         <TabList variant="pill-ghost" size="sm">
           <Tab value="overview">Overview</Tab>
-          <Tab
-            value="playground"
-            disabled={playground === undefined}
-            disabledTooltip="You don't have permission to execute tools."
-          >
+          <Tab value="playground" disabled={!canRun} disabledTooltip="You don't have permission to execute tools.">
             Playground
           </Tab>
         </TabList>
