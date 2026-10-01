@@ -12682,6 +12682,28 @@ describe('Full Async Buffering Flow', () => {
     expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
   });
 
+  it('should resolve a multiplier blockAfter against a per-record messageTokens override', async () => {
+    // Instance threshold 10000 → default blockAfter 1.2x = 12000. The record override
+    // lowers the threshold to 3000, so the band must end at 3600, not 12000.
+    const { om, step, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 2000,
+      bufferActivation: 0.8,
+      reflectionObservationTokens: 50000,
+      messageCount: 40, // ~4400 tokens: past the override's blockAfter
+    });
+    await om.getStatus({ threadId, resourceId });
+    await om.updateRecordConfig(threadId, resourceId, { observation: { messageTokens: 3000 } });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.threshold).toBe(3000);
+    expect(status.observationBlockAfter).toBe(3600);
+    expect(status.inAsyncObservationBand).toBe(false);
+
+    await step(0);
+    expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+  });
+
   it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
