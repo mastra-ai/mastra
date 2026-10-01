@@ -297,6 +297,132 @@ if (this.subscriptionCount === 0) {
 
 Returns: `number`
 
+### Durable subscriptions
+
+The subscription-tracking methods above keep subscriptions in process memory: they're lost on restart and invisible to other processes. The durable methods below store subscriptions in the `signalSubscriptions` storage domain instead, so they survive restarts and are shared by every process that uses the same storage. They're protected async methods and sit alongside the in-memory registry without changing it.
+
+Durable subscriptions are scoped by agent, provider, resource, thread, and external resource ID. Two agents that share a provider `id` never see each other's subscriptions.
+
+Where the durable methods store data:
+
+- **No Mastra instance attached**: a provider-local, in-memory store.
+- **Default storage (no `storage` configured)**: the in-memory domain in the default store. Data stays in the process.
+- **libSQL or PostgreSQL**: the persistent `signalSubscriptions` adapter, shared by every process using that database.
+- **A storage adapter without the `signalSubscriptions` domain**: every durable method throws a `MastraError` with id `SIGNAL_PROVIDER_DURABLE_STORAGE_UNSUPPORTED`. The methods never fall back to process memory.
+
+Every durable method requires a connected agent. Calling one before `connect()` throws a `MastraError` with id `SIGNAL_PROVIDER_NOT_CONNECTED`.
+
+#### `subscribeDurable(target, externalResourceId, metadata?, deliveryOptions?)`
+
+Durably subscribe a thread to an external resource. Subscribing again to the same resource merges `metadata` into the stored metadata and keeps the existing subscription ID.
+
+```typescript
+const sub = await this.subscribeDurable(
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'github:mastra-ai/mastra#123',
+  { pr: 123 },
+  { ifIdle: true },
+)
+```
+
+Returns: `Promise<SignalSubscriptionRecord>`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'target',
+    type: 'SignalProviderTarget',
+    description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
+  },
+  {
+    name: 'externalResourceId',
+    type: 'string',
+    description: 'Provider-specific identifier for the external resource.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Data to store with the subscription. Shallow-merged into existing metadata on duplicate subscribes.',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'deliveryOptions',
+    type: 'Record<string, unknown>',
+    description: 'Delivery options stored with the subscription (for example, `{ ifIdle: true }`). Replaces the stored options when supplied.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `unsubscribeDurable(target, externalResourceId)`
+
+Remove a durable subscription and its delivery records.
+
+```typescript
+const removed = await this.unsubscribeDurable(
+  { threadId: 'thread-1', resourceId: 'user-1' },
+  'github:mastra-ai/mastra#123',
+)
+```
+
+Returns: `Promise<boolean>`: `true` if removed, `false` if no matching subscription existed.
+
+#### `getDurableSubscriptions()`
+
+Return every enabled durable subscription for this agent and provider, across all threads.
+
+```typescript
+const subs = await this.getDurableSubscriptions()
+```
+
+Returns: `Promise<SignalSubscriptionRecord[]>`
+
+#### `getDurableSubscriptionsForResource(externalResourceId)`
+
+Return the enabled durable subscriptions for this agent and provider that watch one external resource.
+
+```typescript
+const subs = await this.getDurableSubscriptionsForResource('github:mastra-ai/mastra#123')
+```
+
+Returns: `Promise<SignalSubscriptionRecord[]>`
+
+#### `hasDurableSubscription(target, externalResourceId)`
+
+Check whether a thread has an enabled durable subscription to an external resource.
+
+```typescript
+const subscribed = await this.hasDurableSubscription(target, 'github:mastra-ai/mastra#123')
+```
+
+Returns: `Promise<boolean>`
+
+#### `unsubscribeAllDurable(target?)`
+
+Remove durable subscriptions for this agent and provider. With a `target`, removes only that thread's subscriptions. Without one, removes them from every thread.
+
+```typescript
+const removed = await this.unsubscribeAllDurable({
+  threadId: 'thread-1',
+  resourceId: 'user-1',
+})
+```
+
+Returns: `Promise<number>`: count of removed subscriptions.
+
+#### `setDurableSubscriptionEnabled(id, enabled, fence?)`
+
+Enable or disable a durable subscription by ID. Disabled subscriptions are kept in storage but aren't returned by `getDurableSubscriptions()`, `getDurableSubscriptionsForResource()`, or `hasDurableSubscription()`.
+
+```typescript
+await this.setDurableSubscriptionEnabled(sub.id, false)
+```
+
+Returns: `Promise<SignalSubscriptionRecord | null>`: the updated subscription, or `null` if it doesn't exist.
+
+Pass `fence` only when the provider has claimed ownership of the thread's subscriptions. Without the current owner's fence, the update rejects for an owned thread.
+
 ### Polling
 
 #### `poll(subscriptions)`
@@ -373,7 +499,7 @@ async start() {
 
 #### `stop()`
 
-Called on shutdown. The default implementation stops polling and clears all subscriptions.
+Called on shutdown. The default implementation stops polling and clears the in-memory subscriptions. Durable subscriptions stay in storage. Overrides may return `void` or `Promise<void>`.
 
 ```typescript
 provider.stop()
@@ -489,6 +615,70 @@ The subscription object returned by `subscribe()`.
     name: 'metadata',
     type: 'Record<string, unknown>',
     description: 'Provider-specific metadata stored with the subscription.',
+  },
+]}
+/>
+
+### `SignalSubscriptionRecord`
+
+The durable subscription returned by the durable methods. Import the type from `@mastra/core/storage`. The record also carries internal coordination fields that providers shouldn't read or write.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the subscription. Stable across duplicate subscribes.',
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'The agent that owns this subscription.',
+  },
+  {
+    name: 'providerId',
+    type: 'string',
+    description: 'The provider that owns this subscription.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The thread receiving signals.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resource owning the thread.',
+  },
+  {
+    name: 'externalResourceId',
+    type: 'string',
+    description: 'Provider-specific identifier for the external resource.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Provider-specific metadata stored with the subscription.',
+  },
+  {
+    name: 'deliveryOptions',
+    type: 'Record<string, unknown>',
+    description: 'Delivery options stored with the subscription. Empty when none were supplied.',
+  },
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'Whether the subscription is active.',
+  },
+  {
+    name: 'createdAt',
+    type: 'Date',
+    description: 'When the subscription was created.',
+  },
+  {
+    name: 'updatedAt',
+    type: 'Date',
+    description: 'When the subscription was last changed.',
   },
 ]}
 />

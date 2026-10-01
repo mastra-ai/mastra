@@ -167,6 +167,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 
 - The memory `observational_memory` table has no timestamp anchor, so it can't be age-pruned and isn't a valid retention key.
 - Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. Retention doesn't have a separate `results` key.
+- `signalSubscriptions` has no retention policy: webhook delivery records live until their subscription is deleted, so a completed delivery id stays suppressed for the subscription's lifetime.
 - For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire): schedule definitions are config and aren't pruned.
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
 - DuckDB observability stores append-only events for all five signals. Its `spans` policy uses the event `timestamp` column rather than `startedAt`.
