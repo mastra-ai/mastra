@@ -420,4 +420,103 @@ describe('MessageList sealed message handling', () => {
     expect(newAssistant).toBeDefined();
     expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('new content after boundary');
   });
+
+  describe('same-id copy of a sealed message whose tool call has resolved (#22802)', () => {
+    const approvalMessage = (state: 'call' | 'result', options: { sealed: boolean }): MastraDBMessage =>
+      ({
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: 'Need approval first.', signature: 'sig-1' }],
+              providerMetadata: { anthropic: { signature: 'sig-1' } },
+            },
+            { type: 'text', text: 'May I run the workflow?' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state,
+                toolCallId: 'call-1',
+                toolName: 'runWorkflow',
+                args: { id: 'wf-1' },
+                ...(state === 'result' ? { result: 'complete' } : {}),
+              },
+              ...(options.sealed ? { metadata: { mastra: { sealedAt: 1 } } } : {}),
+            },
+          ] as MastraMessagePart[],
+          ...(options.sealed ? { metadata: { mastra: { sealed: true } } } : {}),
+        },
+      }) as MastraDBMessage;
+
+    const createList = () => {
+      const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Run the workflow' }] },
+        } as MastraDBMessage,
+        'memory',
+      );
+      return messageList;
+    };
+
+    const assistants = (messageList: MessageList) =>
+      messageList.get.all.db().filter(message => message.role === 'assistant');
+
+    const signaturesInPrompt = (messageList: MessageList) =>
+      JSON.stringify(messageList.get.all.aiV5.model()).match(/sig-1/g)?.length ?? 0;
+
+    const toolInvocation = (message: MastraDBMessage | undefined) =>
+      message?.content.parts.find(part => part.type === 'tool-invocation')?.toolInvocation;
+
+    it('records the result on the sealed message instead of copying its signed reasoning', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      const resumed = approvalMessage('result', { sealed: false });
+      toolInvocation(resumed)!.args = { id: 'edited' };
+      messageList.add(resumed, 'response');
+
+      const [assistant, ...rest] = assistants(messageList);
+      expect(rest).toHaveLength(0);
+      expect(assistant!.id).toBe('assistant-1');
+      expect(toolInvocation(assistant)).toMatchObject({ state: 'result', result: 'complete', args: { id: 'wf-1' } });
+      expect(signaturesInPrompt(messageList)).toBe(1);
+    });
+
+    it('ignores a reloaded copy that still has the call pending', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('result', { sealed: true }), 'response');
+
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      const [assistant, ...rest] = assistants(messageList);
+      expect(rest).toHaveLength(0);
+      expect(toolInvocation(assistant)).toMatchObject({ state: 'result', result: 'complete' });
+      expect(signaturesInPrompt(messageList)).toBe(1);
+    });
+
+    it('records the result and splits only content added after the seal', () => {
+      const messageList = createList();
+      messageList.add(approvalMessage('call', { sealed: true }), 'memory');
+
+      const resumed = approvalMessage('result', { sealed: false });
+      resumed.content.parts.push({ type: 'text', text: 'The workflow finished.' });
+      messageList.add(resumed, 'response');
+
+      const [sealed, added, ...rest] = assistants(messageList);
+      expect(rest).toHaveLength(0);
+      expect(toolInvocation(sealed)).toMatchObject({ state: 'result', result: 'complete' });
+      expect(added!.id).not.toBe('assistant-1');
+      expect(added!.content.parts).toEqual([expect.objectContaining({ type: 'text', text: 'The workflow finished.' })]);
+      expect(signaturesInPrompt(messageList)).toBe(1);
+    });
+  });
 });

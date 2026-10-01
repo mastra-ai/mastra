@@ -1579,6 +1579,39 @@ export class MessageList {
     return false;
   }
 
+  /**
+   * When `incoming` starts with a copy of the sealed `held` message that differs only in tool
+   * call states, moves each held call forward to the incoming state and returns true. Calls
+   * never move backward, so a stale copy leaves the held message untouched.
+   */
+  private resolveHeldToolCalls(held: MastraDBMessage, incoming: MastraDBMessage): boolean {
+    const heldParts = held.content.parts;
+    const incomingParts = incoming.content.parts.slice(0, heldParts.length);
+    if (incomingParts.length !== heldParts.length) return false;
+
+    const asHeld = incomingParts.map((part, i) => {
+      const heldPart = heldParts[i];
+      return part.type === 'tool-invocation' &&
+        heldPart?.type === 'tool-invocation' &&
+        part.toolInvocation.toolCallId === heldPart.toolInvocation.toolCallId
+        ? heldPart
+        : part;
+    });
+    if (!messagesAreEqual(held, { ...incoming, content: { ...incoming.content, parts: asHeld } })) return false;
+
+    incomingParts.forEach((part, i) => {
+      const heldPart = heldParts[i];
+      if (
+        part.type === 'tool-invocation' &&
+        heldPart?.type === 'tool-invocation' &&
+        advancesToolInvocationState(heldPart.toolInvocation.state, part.toolInvocation.state)
+      ) {
+        this.mergeToolResultIntoPart(held, i, part);
+      }
+    });
+    return true;
+  }
+
   public updateMessageMetadataByToolCallId(toolCallId: string, metadata: Record<string, unknown>): boolean {
     if (!toolCallId) {
       return false;
@@ -2386,9 +2419,16 @@ export class MessageList {
               // Stale message, ignore - don't replace, don't create new
               return this;
             }
+            // The same message with a held tool call resolved (#22802). Re-adding it whole would
+            // send its signed reasoning twice, which Anthropic rejects. Record the outcome on the
+            // held call instead, the same way a natively delivered result is recorded.
+            if (this.resolveHeldToolCalls(existingMessage, messageV2)) {
+              return this;
+            }
             // Not stale — these are fresh parts (e.g., a text flush). Treat all as new.
             newParts = incomingParts;
           } else {
+            this.resolveHeldToolCalls(existingMessage, messageV2);
             newParts = incomingParts.slice(sealedPartCount);
           }
 
