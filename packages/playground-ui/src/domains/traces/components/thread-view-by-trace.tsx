@@ -1,6 +1,6 @@
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useTraceSpanScores, TraceScoresTab } from '@/domains/scores';
+import { TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
 
@@ -149,15 +149,13 @@ function ThreadTraceRowContent({
   const { traceId, highlightSpans } = useThreadTraceRow();
   const { Link, paths } = useLinkComponent();
   const traceHref = paths.traceLink(traceId);
-  // First page only, for the tab badges; the Feedback and Scores bodies own their own pagination
-  // and share these queries through the React Query cache.
+  // First page only, for the tab badge; the Feedback body owns its own pagination
+  // and shares this query through the React Query cache.
   const { data: feedbackData } = useTraceFeedback({ traceId, enabled: withFeedback });
   // Same query the span tree observes (passive: the tree drives refetches).
   const { data: traceData } = useTraceSpans(traceId, { passive: true });
   const rootSpanId = traceData?.spans.find(span => span.parentSpanId == null)?.spanId;
-  const { data: spanScoresData } = useTraceSpanScores({ traceId, spanId: rootSpanId });
   const feedbackTotal = feedbackData?.pagination?.total;
-  const scoresTotal = spanScoresData?.pagination?.total;
 
   return (
     <>
@@ -182,7 +180,7 @@ function ThreadTraceRowContent({
               <Icon size="xs">
                 <ScorersIcon />
               </Icon>
-              Scores{scoresTotal != null && <> ({scoresTotal})</>}
+              Scores
             </ThreadTrace.Tab>
           </ThreadTrace.TabList>
         </ThreadTrace.MessagesHeader>
