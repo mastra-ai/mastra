@@ -17,7 +17,7 @@ export interface ToolResponseProps {
 export function ToolResponse({ isRunning, lastRun }: ToolResponseProps) {
   return (
     <SettingsGroup>
-      <SettingsHeader action={lastRun && !isRunning ? <ToolRunStatus run={lastRun} /> : undefined}>
+      <SettingsHeader action={!isRunning && lastRun && <ToolRunStatus run={lastRun} />}>
         <SettingsTitle>Response</SettingsTitle>
         <SettingsDescription>The value the tool returned.</SettingsDescription>
       </SettingsHeader>

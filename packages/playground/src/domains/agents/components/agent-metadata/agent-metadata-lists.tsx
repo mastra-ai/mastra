@@ -43,7 +43,7 @@ export interface AgentMetadataToolListProps {
 
 export const AgentMetadataToolList = ({ tools }: AgentMetadataToolListProps) => {
   const { Link } = useLinkComponent();
-  // Tools open in a drawer over the agent page you're on (see AgentToolDrawer in the agent layout).
+  // Tools open in a drawer over the agent page you're on (see ToolDrawer in the agent layout).
   const toolDrawerHref = useToolDrawerHref();
 
   if (tools.length === 0) {

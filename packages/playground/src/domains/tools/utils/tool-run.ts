@@ -15,10 +15,11 @@ function formatOutput(output: unknown): string {
 
 /** The text shown (and copied) for a run: pretty JSON output, or the error payload. */
 export function getRunCode(run: ToolRun): string {
-  return run.status === 'success' ? formatOutput(run.output) : run.error;
+  if (run.status === 'error') return run.error;
+  return formatOutput(run.output);
 }
 
 export function describeRunError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return JSON.stringify({ error: message }, null, 2);
+  if (error instanceof Error) return JSON.stringify({ error: error.message }, null, 2);
+  return JSON.stringify({ error: String(error) }, null, 2);
 }

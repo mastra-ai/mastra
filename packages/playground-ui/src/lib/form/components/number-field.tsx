@@ -8,7 +8,8 @@ const INVALID = Symbol('invalid');
 function toFieldValue(text: string): number | undefined | typeof INVALID {
   if (text === '') return undefined;
   const value = Number(text);
-  return isNaN(value) ? INVALID : value;
+  if (isNaN(value)) return INVALID;
+  return value;
 }
 
 export const NumberField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) => {

@@ -2,8 +2,9 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { McpToolDrawer } from '../mcp-tool-drawer';
+import { McpToolDrawerBody } from '../mcp-tool-drawer-body';
 import { authDisabled, echoTool } from './fixtures/mcp-servers';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -11,7 +12,9 @@ const TOOL_URL = `${TEST_BASE_URL}/api/mcp/v2/tools/echo`;
 
 // The drawer reads the open tool from `?tool=`, as the MCP server page does.
 const renderPanel = () =>
-  renderWithProviders(<McpToolDrawer serverId="v2" />, { router: { initialEntries: ['/mcps/v2?tool=echo'] } });
+  renderWithProviders(<ToolDrawer>{toolId => <McpToolDrawerBody serverId="v2" toolId={toolId} />}</ToolDrawer>, {
+    router: { initialEntries: ['/mcps/v2?tool=echo'] },
+  });
 
 /** Execution lives on the Playground tab, apart from the Overview the drawer opens on. */
 const runTool = async () => {
@@ -26,7 +29,7 @@ const useBaseHandlers = () => {
   );
 };
 
-describe('McpToolDrawer execution results', () => {
+describe('MCP tool drawer execution results', () => {
   it('renders the completed output of an ordinary tool', async () => {
     useBaseHandlers();
     const onExecute = vi.fn<() => void>();

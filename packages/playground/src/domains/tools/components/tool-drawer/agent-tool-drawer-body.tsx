@@ -21,5 +21,13 @@ export function AgentToolDrawerBody({ agentId, toolId }: AgentToolDrawerBodyProp
   if (isLoading) return <DataPanel.LoadingData />;
   if (!tool) return <DataPanel.NoData>This agent has no tool "{toolId}".</DataPanel.NoData>;
 
-  return <ToolDrawerBody tool={tool} execute={execute} currentAgentId={agentId} />;
+  return (
+    <ToolDrawerBody
+      tool={tool}
+      execute={execute}
+      currentAgentId={agentId}
+      requestContextEntityType="agent-tool"
+      requestContextEntityId={`${agentId}:${tool.id}`}
+    />
+  );
 }

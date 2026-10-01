@@ -16,5 +16,7 @@ export function ToolsPageDrawerBody({ toolId }: ToolsPageDrawerBodyProps) {
   if (isLoading) return <DataPanel.LoadingData />;
   if (!tool) return <DataPanel.NoData>Tool "{toolId}" not found.</DataPanel.NoData>;
 
-  return <ToolDrawerBody tool={tool} execute={execute} />;
+  return (
+    <ToolDrawerBody tool={tool} execute={execute} requestContextEntityType="tool" requestContextEntityId={tool.id} />
+  );
 }

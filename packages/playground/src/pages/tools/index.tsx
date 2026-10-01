@@ -9,7 +9,8 @@ import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { ToolsPageToolDrawer } from '@/domains/tools/components/tool-drawer/tools-page-tool-drawer';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
+import { ToolsPageDrawerBody } from '@/domains/tools/components/tool-drawer/tools-page-tool-drawer-body';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
 import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
 import type { ToolsSort } from '@/domains/tools/components/tools-list/tools-list';
@@ -87,7 +88,7 @@ export default function Tools() {
         onSortChange={(direction, key) => setSort({ key, direction })}
         selectedToolId={openToolId}
       />
-      <ToolsPageToolDrawer />
+      <ToolDrawer>{toolId => <ToolsPageDrawerBody toolId={toolId} />}</ToolDrawer>
     </PageLayout>
   );
 }

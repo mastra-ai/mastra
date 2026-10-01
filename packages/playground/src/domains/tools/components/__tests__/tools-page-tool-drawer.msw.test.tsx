@@ -2,7 +2,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ToolsPageToolDrawer } from '../tool-drawer/tools-page-tool-drawer';
+import { ToolDrawer } from '../tool-drawer/tool-drawer';
+import { ToolsPageDrawerBody } from '../tool-drawer/tools-page-tool-drawer-body';
 import { refundUserTool } from './fixtures/refund-tool';
 import { agentsWithRefundUser } from './fixtures/tool-agents';
 import { authDisabled } from '@/domains/mcps/components/__tests__/fixtures/mcp-servers';
@@ -13,7 +14,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test
 const renderDrawer = (toolId: string) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ToolsPageToolDrawer />
+      <ToolDrawer>{id => <ToolsPageDrawerBody toolId={id} />}</ToolDrawer>
     </TestLinkProvider>,
     { router: { initialEntries: [`/tools?tool=${toolId}`] } },
   );
@@ -26,7 +27,7 @@ const useBaseHandlers = () => {
   );
 };
 
-describe('ToolsPageToolDrawer', () => {
+describe('Tools page tool drawer', () => {
   describe('when the URL names a tool', () => {
     it('opens on its overview: input and output fields, and the agents that use it', async () => {
       useBaseHandlers();
