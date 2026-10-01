@@ -229,7 +229,7 @@ describe('mastra.schedules canonical service', () => {
     expect(typeof updated.nextFireAt).toBe('number');
   });
 
-  it('rejects cadence edits that leave a completed schedule without a future occurrence', async () => {
+  it('accepts cadence edits that leave a completed schedule without a future occurrence', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-23T09:00:00.000Z'));
     try {
@@ -237,6 +237,7 @@ describe('mastra.schedules canonical service', () => {
       const schedule = await mastra.schedules.create({
         agentId: 'a',
         cron: '0 0 10 23 9 * 2026',
+        timezone: 'UTC',
         prompt: 'p',
       });
       const store = await mastra.getStorage()!.getStore('schedules');
@@ -244,22 +245,81 @@ describe('mastra.schedules canonical service', () => {
 
       vi.setSystemTime(new Date('2026-09-23T15:00:00.000Z'));
 
-      await expect(mastra.schedules.update(schedule.id, { timezone: 'UTC' })).rejects.toMatchObject({
-        id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
-        details: { status: 400 },
-      });
-      await expect(
-        mastra.schedules.update(schedule.id, { cron: '0 0 11 23 9 * 2026', timezone: 'UTC' }),
-      ).rejects.toMatchObject({
-        id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
-        details: { status: 400 },
-      });
+      // Timezone-only edit: the cadence is already exhausted, so the row stays
+      // completed instead of failing.
+      const rezoned = await mastra.schedules.update(schedule.id, { timezone: 'UTC' });
+      expect(rezoned.status).toBe('completed');
+      expect(rezoned.nextFireAt).toBe(schedule.nextFireAt);
 
-      expect(await mastra.schedules.get(schedule.id)).toMatchObject({
-        status: 'completed',
-        cron: '0 0 10 23 9 * 2026',
-        nextFireAt: schedule.nextFireAt,
+      // Swapping in another exhausted cadence is accepted the same way, and the
+      // caller's edit is still persisted.
+      const recronned = await mastra.schedules.update(schedule.id, {
+        cron: '0 0 11 23 9 * 2026',
+        timezone: 'UTC',
       });
+      expect(recronned.status).toBe('completed');
+      expect(recronned.cron).toBe('0 0 11 23 9 * 2026');
+      expect(recronned.nextFireAt).toBe(schedule.nextFireAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects an invalid cron or timezone on update as a user error', async () => {
+    const { mastra } = makeMastra(['a']);
+    const schedule = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
+
+    await expect(mastra.schedules.update(schedule.id, { cron: 'not a cron' })).rejects.toMatchObject({
+      id: 'SCHEDULES_INVALID_TIMING',
+      details: { status: 400 },
+    });
+    await expect(mastra.schedules.update(schedule.id, { timezone: 'Not/AZone' })).rejects.toMatchObject({
+      id: 'SCHEDULES_INVALID_TIMING',
+      details: { status: 400 },
+    });
+
+    expect(await mastra.schedules.get(schedule.id)).toMatchObject({
+      cron: '*/5 * * * *',
+      status: 'active',
+    });
+  });
+
+  it('rejects creating a schedule whose cron has no future occurrence', async () => {
+    const { mastra } = makeMastra(['a']);
+
+    await expect(
+      mastra.schedules.create({ agentId: 'a', cron: '0 0 10 23 9 * 2020', prompt: 'p' }),
+    ).rejects.toMatchObject({ id: 'SCHEDULES_INVALID_TIMING', details: { status: 400 } });
+    await expect(mastra.schedules.create({ workflowId: 'w', cron: '0 0 10 23 9 * 2020' })).rejects.toMatchObject({
+      id: 'SCHEDULES_INVALID_TIMING',
+      details: { status: 400 },
+    });
+    await expect(mastra.schedules.create({ agentId: 'a', cron: 'not a cron', prompt: 'p' })).rejects.toMatchObject({
+      id: 'SCHEDULES_INVALID_TIMING',
+      details: { status: 400 },
+    });
+
+    expect(await mastra.schedules.list()).toEqual([]);
+  });
+
+  it('completes a paused schedule whose cadence has run out when resumed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-10T00:00:00.000Z'));
+    try {
+      const { mastra } = makeMastra(['a']);
+      const schedule = await mastra.schedules.create({
+        agentId: 'a',
+        cron: '0 0 10 23 9 * 2026',
+        timezone: 'UTC',
+        prompt: 'p',
+      });
+      expect((await mastra.schedules.pause(schedule.id)).status).toBe('paused');
+
+      vi.setSystemTime(new Date('2026-09-24T00:00:00.000Z'));
+
+      const resumed = await mastra.schedules.resume(schedule.id);
+      expect(resumed.status).toBe('completed');
+      expect(resumed.nextFireAt).toBe(schedule.nextFireAt);
     } finally {
       vi.useRealTimers();
     }

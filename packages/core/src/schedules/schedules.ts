@@ -60,6 +60,35 @@ function scheduleCompleted(id: string, op: string): MastraError {
 }
 
 /**
+ * Wrap a cron/timezone validation failure as a user error. Callers pass an
+ * unparseable expression, an unknown timezone, or a cadence that can never
+ * fire; all three are the caller's input to fix rather than a server fault.
+ */
+function invalidTiming(err: unknown, op: 'create' | 'update'): MastraError {
+  return new MastraError({
+    id: 'SCHEDULES_INVALID_TIMING',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    details: { status: 400 },
+    text: `schedules.${op}: ${err instanceof Error ? err.message : String(err)}`,
+  });
+}
+
+/**
+ * Next fire time for a brand-new schedule. A cadence whose final occurrence has
+ * already passed is rejected rather than persisted: the row could never run, so
+ * nothing is gained by storing it. Editing an existing schedule is different —
+ * those rows are terminal (`completed`), never resurrected into a dead cadence.
+ */
+function computeInitialFireAt(cron: string, timezone: string | undefined, now: number): number {
+  try {
+    return computeNextFireAt(cron, { timezone, after: now });
+  } catch (err) {
+    throw invalidTiming(err, 'create');
+  }
+}
+
+/**
  * Flat agent-schedule view returned by the {@link Schedules} service.
  * Projects the underlying `Schedule` row + `target.type === 'agent'` payload
  * onto a single object so callers never have to know about the schedules
@@ -285,7 +314,11 @@ export class Schedules {
   }
 
   async #createAgentSchedule(input: CreateAgentScheduleInput): Promise<AgentSchedule> {
-    validateCron(input.cron, input.timezone);
+    try {
+      validateCron(input.cron, input.timezone);
+    } catch (err) {
+      throw invalidTiming(err, 'create');
+    }
 
     if (!input.agentId) {
       throw new MastraError({
@@ -331,7 +364,7 @@ export class Schedules {
         : `${AGENT_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
-    const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
+    const nextFireAt = computeInitialFireAt(input.cron, input.timezone, now);
 
     const target: AgentTarget = {
       type: 'agent',
@@ -371,7 +404,11 @@ export class Schedules {
   }
 
   async #createWorkflowSchedule(input: CreateWorkflowScheduleInput): Promise<WorkflowSchedule> {
-    validateCron(input.cron, input.timezone);
+    try {
+      validateCron(input.cron, input.timezone);
+    } catch (err) {
+      throw invalidTiming(err, 'create');
+    }
 
     const store = await this.#getStore();
 
@@ -381,7 +418,7 @@ export class Schedules {
         : `${WORKFLOW_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
-    const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
+    const nextFireAt = computeInitialFireAt(input.cron, input.timezone, now);
 
     const target: WorkflowTarget = {
       type: 'workflow',
@@ -475,7 +512,11 @@ export class Schedules {
     const nextCron = patch.cron ?? existing.cron;
     const nextTimezone = patch.timezone !== undefined ? patch.timezone : existing.timezone;
     if (patch.cron !== undefined || patch.timezone !== undefined) {
-      validateCron(nextCron, nextTimezone);
+      try {
+        validateCron(nextCron, nextTimezone);
+      } catch (err) {
+        throw invalidTiming(err, 'update');
+      }
     }
 
     const nextTarget =
@@ -484,13 +525,15 @@ export class Schedules {
         : this.#patchWorkflowTarget(existing.target, patch);
 
     // Recompute the next fire when the cadence changes OR when this patch
-    // resumes a paused schedule. Editing a completed schedule's cadence
-    // reactivates it; lifecycle-only patches cannot resume a completed row.
+    // resumes a paused schedule. A completed row whose cadence is edited comes
+    // back as `active` when the new cadence has future occurrences; otherwise
+    // it stays `completed`. Lifecycle-only patches cannot resume a completed
+    // row.
     const timingChanged = patch.cron !== undefined || patch.timezone !== undefined;
     if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
       throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');
     }
-    const nextStatus: ScheduleStatus =
+    let nextStatus: ScheduleStatus =
       existing.status === 'completed'
         ? timingChanged
           ? (patch.status ?? 'active')
@@ -503,16 +546,11 @@ export class Schedules {
         { cron: nextCron, timezone: nextTimezone, nextFireAt: existing.nextFireAt },
         Date.now(),
       );
-      if (nextFire.completed) {
-        throw new MastraError({
-          id: 'SCHEDULES_NO_FUTURE_OCCURRENCE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: { status: 400 },
-          text: `schedules.update: cron "${nextCron}" has no future occurrence.`,
-        });
-      }
       nextFireAt = nextFire.nextFireAt;
+      // An edit that leaves the row with no future occurrence is accepted, but
+      // it cannot come back as `active`: the cadence is exhausted, so the row
+      // is terminal. `nextFireAt` is retained as the last known occurrence.
+      if (nextFire.completed && nextStatus === 'active') nextStatus = 'completed';
     }
 
     const updated = await store.updateSchedule(existing.id, {
@@ -632,10 +670,13 @@ export class Schedules {
     }
     if (existing.status === 'active') return toScheduleView(existing)!;
     if (existing.status === 'completed') throw scheduleCompleted(existing.id, 'resume');
-    const nextFireAt = computeNextFireAt(existing.cron, {
-      timezone: existing.timezone,
-      after: Date.now(),
-    });
+    // A paused schedule whose cadence has run out has nothing left to resume.
+    // Complete it instead of failing with a server error.
+    const { nextFireAt, completed: exhausted } = computeNextFire(existing, Date.now());
+    if (exhausted) {
+      const completed = await store.updateSchedule(existing.id, { status: 'completed' });
+      return toScheduleView(completed)!;
+    }
     const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt });
     return toScheduleView(updated)!;
   }

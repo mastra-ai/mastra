@@ -287,8 +287,8 @@ const schedules = await mastra.schedules.list({
           },
           {
             name: 'status',
-            type: "'active' | 'paused'",
-            description: 'Return only schedules with this status.',
+            type: "'active' | 'paused' | 'completed'",
+            description: 'Return only schedules with this status. The default listing omits completed schedules.',
             isOptional: true,
           },
         ],
@@ -302,7 +302,7 @@ const schedules = await mastra.schedules.list({
 
 #### `update(id, patch)`
 
-Updates a schedule. Changing `cron` or `timezone` recomputes the next fire time. Updating `status` from `paused` to `active` also recomputes the next fire time.
+Updates a schedule. Changing `cron` or `timezone` recomputes the next fire time. Updating `status` from `paused` to `active` also recomputes the next fire time. A schedule becomes `completed` once its cron has no future occurrence: editing the cadence of a completed schedule reactivates it when the new cadence can still fire, and leaves it completed when it can't.
 
 ```typescript
 const updated = await mastra.schedules.update('pinger', {
@@ -327,7 +327,7 @@ const paused = await mastra.schedules.pause('pinger')
 
 #### `resume(id)`
 
-Resumes a paused schedule and recomputes the next fire time from the current time.
+Resumes a paused schedule and recomputes the next fire time from the current time. A paused schedule whose cron has no future occurrence is completed instead of resumed.
 
 ```typescript
 const active = await mastra.schedules.resume('pinger')
