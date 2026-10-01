@@ -1595,17 +1595,25 @@ describe('prs route', () => {
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
 
-  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
+  it.each([
+    ['issues', 'issues'],
+    ['prs', 'pullRequests'],
+  ])('still lists %s when ingesting the polled events fails', async (resource, key) => {
     seedMaterializedProject();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
-      `/web/github/projects/p1/${resource}`,
-    );
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
-    warn.mockRestore();
+    try {
+      const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
+      const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+        `/web/github/projects/p1/${resource}`,
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json[key].length).toBeGreaterThan(0);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(json[key].length);
+      expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
