@@ -136,6 +136,7 @@ import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
+import { planApprovalGoalReplacesActiveScenario } from './plan-approval-goal-replaces-active.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
@@ -364,6 +365,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,
   'persistent-goal-reload': persistentGoalReloadScenario,
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
+  'plan-approval-goal-replaces-active': planApprovalGoalReplacesActiveScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'permission-request-hook': permissionRequestHookScenario,
