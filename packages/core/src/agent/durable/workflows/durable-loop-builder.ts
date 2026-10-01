@@ -928,7 +928,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
-                    attributes: { finishReason: finalOutput.stepResult?.reason, usageIncomplete },
+                    attributes: {
+                      finishReason: finalOutput.stepResult?.reason,
+                      ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                    },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }

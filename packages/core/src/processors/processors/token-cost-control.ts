@@ -489,13 +489,6 @@ export class TokenCostControl implements Processor<'token-cost-control', TokenCo
 
     if (usage.estimatedCost === null) return;
     const cost = usage.estimatedCost;
-    if (usage.incomplete && cost < maxCost) {
-      this.logger?.warn('TokenCostControl: incomplete token usage detected; allowing step (fail-open)', {
-        scope: this.scope,
-        scopeKey,
-      });
-      return;
-    }
 
     // Hard limit
     if (cost >= maxCost) {

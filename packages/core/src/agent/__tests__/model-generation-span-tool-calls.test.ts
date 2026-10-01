@@ -205,6 +205,7 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
       expect(endGenerationCalls).toHaveLength(1);
       expect(endGenerationCalls[0].output.toolCalls).toBeUndefined();
       expect(endGenerationCalls[0].output.text).toBe('Hello');
+      expect(endGenerationCalls[0].attributes).not.toHaveProperty('usageIncomplete');
     } finally {
       spy.mockRestore();
     }

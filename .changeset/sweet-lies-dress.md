@@ -9,6 +9,6 @@ Fixed usage aggregation so omitted provider token counts remain unknown across a
 
 For example, `{ inputTokens: 10, outputTokens: 20, totalTokens: 30 }` followed by `{ outputTokens: 5 }` now produces `{ inputTokens: undefined, outputTokens: 25, totalTokens: undefined }`.
 
-Observability still records known per-step token contributions, marks their aggregate as incomplete, and prevents `TokenCostControl` from enforcing against a partial estimated cost. The Responses API returns `usage: null` for an incomplete aggregate instead of fabricating zero-valued counters.
+Observability still records known per-step token contributions and marks their aggregate as incomplete. `TokenCostControl` treats the partial estimated cost as a known lower bound: hard and soft thresholds still apply when that lower bound crosses them, while lower values do not imply the complete cost is under budget. The Responses API returns `usage: null` for an incomplete aggregate instead of fabricating zero-valued counters.
 
 Durable iteration state written by this version may omit unknown primary counters and cannot be resumed by an older worker after a rollback. (#23469)

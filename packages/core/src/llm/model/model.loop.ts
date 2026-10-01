@@ -340,7 +340,7 @@ export class MastraLLMVNext extends MastraBase {
               },
               attributes: {
                 finishReason: props?.finishReason,
-                usageIncomplete,
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 responseId: props?.response.id,
                 // Account for Anthropic server-side fallbacks: when the primary
                 // model declines a turn and a fallback serves it, attribute the

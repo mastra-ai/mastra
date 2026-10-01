@@ -167,7 +167,7 @@ describe('TokenCostControl', () => {
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
     });
 
-    it('does not enforce a partial cost when usage metrics are incomplete', async () => {
+    it('allows incomplete usage when the known lower-bound cost is under maxCost', async () => {
       const obsStorage = createMockObservabilityStorage({
         inputCost: 0.25,
         outputCost: 0.15,
@@ -183,10 +183,6 @@ describe('TokenCostControl', () => {
       });
 
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'TokenCostControl: incomplete token usage detected; allowing step (fail-open)',
-        { scope: 'run', scopeKey: undefined },
-      );
       expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
         expect.objectContaining({
           aggregation: 'count',
@@ -1157,6 +1153,31 @@ describe('TokenCostControl', () => {
       expect(onViolation).toHaveBeenCalledTimes(1);
       expect(onViolation.mock.calls[0]![0].detail.threshold).toBe('soft');
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('80%'));
+    });
+
+    it('soft threshold evaluates the known lower-bound cost when usage is incomplete', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.25,
+        outputCost: 0.2,
+        costUnit: 'usd',
+        incomplete: true,
+      });
+      const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run', strategy: 'block', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-soft-incomplete') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail).toMatchObject({
+        threshold: 'soft',
+        totalUsage: { incomplete: true },
+      });
     });
 
     it('soft threshold fires onViolation with threshold soft and does not abort (warn strategy)', async () => {
