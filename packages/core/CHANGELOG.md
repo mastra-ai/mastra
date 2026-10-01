@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.73.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9))
+
+- Fixed chat channel agents ignoring mentions of their current display name after being renamed. For example, a Slack app renamed from `acme-bot` to `helper` now responds to `@helper` in channels, instead of only recognising its original username. The bot's current profile name is looked up once through the adapter and exposed as `botDisplayName` on the channel context. ([#25652](https://github.com/mastra-ai/mastra/pull/25652))
+
 ## 1.73.0
 
 ### Minor Changes
