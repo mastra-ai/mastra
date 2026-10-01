@@ -305,6 +305,25 @@ describe('mastra.schedules canonical service', () => {
     });
   });
 
+  it('completes an exhausted cron on update or resume and maps invalid cron to 400', async () => {
+    const { mastra } = makeMastra(['a']);
+    const pastYearCron = '0 0 0 1 1 * 2020';
+
+    const s = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });
+    await expect(mastra.schedules.update(s.id, { cron: 'not a cron' })).rejects.toMatchObject({
+      details: { status: 400 },
+    });
+    const exhausted = await mastra.schedules.update(s.id, { cron: pastYearCron });
+    expect(exhausted.status).toBe('completed');
+
+    const p = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'y' });
+    await mastra.schedules.pause(p.id);
+    const store = await mastra.getStorage()!.getStore('schedules');
+    await store!.updateSchedule(p.id, { cron: pastYearCron });
+    const resumed = await mastra.schedules.resume(p.id);
+    expect(resumed.status).toBe('completed');
+  });
+
   it('list filters by status', async () => {
     const { mastra } = makeMastra(['a']);
     const a = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });

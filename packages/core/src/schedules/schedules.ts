@@ -5,7 +5,7 @@ import type { Schedule, ScheduleStatus, SchedulesStorage } from '../storage/doma
 import { slugify } from '../utils/slugify';
 import {
   computeInitialFire,
-  computeNextFireAt,
+  computeNextFire,
   toEpochMs,
   validateCron,
   validateScheduleTiming,
@@ -558,7 +558,11 @@ export class Schedules {
     const nextCron = patch.cron ?? existing.cron;
     const nextTimezone = patch.timezone !== undefined ? patch.timezone : existing.timezone;
     if (!isOneOff && (patch.cron !== undefined || patch.timezone !== undefined)) {
-      validateCron(nextCron, nextTimezone);
+      try {
+        validateCron(nextCron, nextTimezone);
+      } catch (err) {
+        throw invalidTiming(err, 'update');
+      }
     }
     const nextRunAt = patch.runAt !== undefined ? toEpochMs(patch.runAt) : existing.runAt;
     if (patch.runAt !== undefined && !Number.isFinite(nextRunAt)) {
@@ -599,8 +603,12 @@ export class Schedules {
       if (isOneOff) {
         nextFireAt = nextRunAt!;
       } else {
-        nextFireAt = computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() });
-        if (nextStatus === 'active' && nextEndAt !== undefined && nextFireAt > nextEndAt) nextStatus = 'completed';
+        const next = computeNextFire(
+          { cron: nextCron, timezone: nextTimezone, endAt: nextEndAt, nextFireAt: existing.nextFireAt },
+          Date.now(),
+        );
+        nextFireAt = next.nextFireAt;
+        if (nextStatus === 'active' && next.completed) nextStatus = 'completed';
       }
     }
 
@@ -724,11 +732,12 @@ export class Schedules {
     if (existing.status === 'active') return toScheduleView(existing)!;
     if (existing.status === 'completed') throw scheduleCompleted(existing.id, 'resume');
     // One-offs keep their runAt (a past runAt fires on the next tick).
-    const nextFireAt =
-      existing.runAt != null
-        ? existing.runAt
-        : computeNextFireAt(existing.cron, { timezone: existing.timezone, after: Date.now() });
-    if (existing.endAt != null && existing.runAt == null && nextFireAt > existing.endAt) {
+    if (existing.runAt != null) {
+      const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt: existing.runAt });
+      return toScheduleView(updated)!;
+    }
+    const { nextFireAt, completed: exhausted } = computeNextFire(existing, Date.now());
+    if (exhausted) {
       const completed = await store.updateSchedule(existing.id, { status: 'completed' });
       return toScheduleView(completed)!;
     }

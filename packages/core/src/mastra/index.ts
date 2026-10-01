@@ -97,9 +97,9 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
+import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import { toEpochMs } from '../workflows/scheduler/cron';
+import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -1049,8 +1049,7 @@ export class Mastra<
                 const isOwnedHere = (() => {
                   if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
                   let parent = data?.parentWorkflow as
-                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
-                    | undefined;
+                    { workflowId?: string; runId?: string; parentWorkflow?: unknown } | undefined;
                   let depth = 0;
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
@@ -2246,8 +2245,8 @@ export class Mastra<
         // rather than fired, so a fresh deploy never runs a stale one-off.
         const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
           if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
-          const nextFireAt = computeNextFireAt(cron, { timezone: cfg.timezone, after: now });
-          return { nextFireAt, status: endAt !== undefined && nextFireAt > endAt ? 'completed' : 'active' };
+          const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' };
         };
 
         if (!existing) {
