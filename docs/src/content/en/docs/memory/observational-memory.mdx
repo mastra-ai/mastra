@@ -858,7 +858,7 @@ Set the `anthropic` entry to the same TTL as your `cacheControl.ttl`. Mastra doe
 
 How the object resolves:
 
-- Keys are provider names. Mastra compares them case-insensitively with the part of the model's provider before the first `.`, so `anthropic` matches both `anthropic` and `anthropic.messages`. Keys must not contain `.` or `/`.
+- Keys are provider names. Mastra compares them case-insensitively with the part of the model's provider before the first `.`, so `anthropic` matches both `anthropic` and `anthropic.messages`. Claude served through another provider uses that provider's key instead, for example `amazon-bedrock`. Keys must not contain `.` or `/`.
 - Each value accepts the same forms as a single TTL: milliseconds, a duration string, `"auto"`, or `false` to turn off idle activation for that provider.
 - `default` applies to every provider without its own key. Without `default`, those providers don't idle-activate.
 - `observation.activateAfterIdle` and `reflection.activateAfterIdle` accept the same object. An `observation.activateAfterIdle` object replaces the top-level value and isn't merged with it.

@@ -7,7 +7,7 @@ Added per-provider idle activation TTLs to observational memory. Pass an object 
 **Before**
 
 ```ts
-// 'auto' uses 5 minutes for Anthropic, so a 1-hour cache is dropped after 5 idle minutes
+// 'auto' uses 5 minutes for Anthropic: after 5 idle minutes OM activates and rewrites the prompt, invalidating a 1-hour cache that is still warm
 observationalMemory: {
   activateAfterIdle: 'auto',
 }

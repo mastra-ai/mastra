@@ -26,7 +26,7 @@ function getOpenAIPromptCacheRetention(
     : undefined;
 }
 
-export function isActivationTTLMap(
+function isActivationTTLMap(
   activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
 ): activateAfterIdle is ParsedActivationTTLMap {
   return typeof activateAfterIdle === 'object' && activateAfterIdle !== null;
@@ -39,25 +39,25 @@ export function getMarkerActivationTTL(
   return isActivationTTLMap(activateAfterIdle) ? undefined : activateAfterIdle;
 }
 
-/** The provider key a model matches in a per-provider map: its provider before the first `.`, lowercased. */
-export function getActivationTTLProviderKey(provider?: string): string | undefined {
-  const key = normalize(provider).split('.')[0];
-  return key || undefined;
+/** A map entry applies when its key equals the model's provider before the first `.`, lowercased. */
+function resolveActivationTTLMapEntry(
+  activateAfterIdle: ParsedActivationTTLMap,
+  modelContext?: ObservationModelContext,
+): ResolvedActivationTTL | false | undefined {
+  const providerKey = normalize(modelContext?.provider).split('.')[0];
+  if (providerKey && Object.hasOwn(activateAfterIdle.providers, providerKey)) {
+    return activateAfterIdle.providers[providerKey];
+  }
+  return activateAfterIdle.default;
 }
 
 export function resolveActivationTTL(
   activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
   modelContext?: ObservationModelContext,
 ): number | undefined {
-  let ttl: ResolvedActivationTTL | false | undefined = activateAfterIdle as ResolvedActivationTTL | undefined;
-
-  if (isActivationTTLMap(activateAfterIdle)) {
-    const providerKey = getActivationTTLProviderKey(modelContext?.provider);
-    ttl =
-      providerKey !== undefined && Object.hasOwn(activateAfterIdle.providers, providerKey)
-        ? activateAfterIdle.providers[providerKey]
-        : activateAfterIdle.default;
-  }
+  const ttl = isActivationTTLMap(activateAfterIdle)
+    ? resolveActivationTTLMapEntry(activateAfterIdle, modelContext)
+    : activateAfterIdle;
 
   if (ttl === undefined || ttl === false) {
     return undefined;

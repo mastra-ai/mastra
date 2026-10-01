@@ -225,12 +225,14 @@ function parseActivationTTLConfig(
   value: ActivationTTL | undefined,
   fieldPath: string,
 ): ResolvedActivationTTL | ParsedActivationTTLMap | undefined {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== 'object') {
     return parseActivationTTL(value, fieldPath);
   }
 
-  if (Array.isArray(value)) {
-    throw new Error(`${fieldPath} must be a TTL value or an object of per-provider TTLs, not an array.`);
+  if (value === null || Array.isArray(value)) {
+    throw new Error(
+      `${fieldPath} must be a TTL value or an object of per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
   }
 
   const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
@@ -240,7 +242,8 @@ function parseActivationTTLConfig(
     );
   }
 
-  const parsed: ParsedActivationTTLMap = { providers: {} };
+  // Null prototype so a JSON-sourced "__proto__" key is stored as a provider, not swallowed by the prototype setter.
+  const parsed: ParsedActivationTTLMap = { providers: Object.create(null) };
   const seenKeys = new Set<string>();
 
   for (const [rawKey, entryValue] of entries) {

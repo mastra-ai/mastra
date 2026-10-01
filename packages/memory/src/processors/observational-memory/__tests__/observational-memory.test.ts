@@ -8254,21 +8254,23 @@ describe('Locking Behavior', () => {
     });
 
     it.each([
-      { idleMinutes: 10, expectActivated: false },
-      { idleMinutes: 61, expectActivated: true },
+      { idleMinutes: 10, expectActivated: false, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: true, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: false, inheritOnly: true },
     ])(
-      'should resolve a per-provider reflection.activateAfterIdle map for the current model ($idleMinutes min idle)',
-      async ({ idleMinutes, expectActivated }) => {
+      'should resolve a per-provider reflection.activateAfterIdle map for the current model ($idleMinutes min idle, top-level map only: $inheritOnly)',
+      async ({ idleMinutes, expectActivated, inheritOnly }) => {
         vi.useFakeTimers();
         try {
           const now = new Date('2026-04-14T12:00:00.000Z');
           vi.setSystemTime(now);
           const idleMs = idleMinutes * 60_000;
 
-          const { storage, om } = await setupBufferedReflectionEnv({
-            reflectionActivateAfterIdle: { default: false, anthropic: '1h' },
-            reflectionObservationTokens: 500,
-          });
+          const { storage, om } = await setupBufferedReflectionEnv(
+            inheritOnly
+              ? { activateAfterIdle: { default: '1m', anthropic: '1m' }, reflectionObservationTokens: 500 }
+              : { reflectionActivateAfterIdle: { default: false, anthropic: '1h' }, reflectionObservationTokens: 500 },
+          );
 
           const threadId = 'thread-overshoot';
           const resourceId = 'resource-overshoot';

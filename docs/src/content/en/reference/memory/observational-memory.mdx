@@ -69,7 +69,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'activateAfterIdle',
     type: 'number | string | false | "auto" | Record<string, number | string | false | "auto">',
     description:
-      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, `false` to disable inherited observation idle activation, or an object of per-provider TTLs such as `{ default: 'auto', anthropic: '1h' }`. Object keys match the actor model provider before the first `.`, case-insensitively; `default` covers every other provider. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, `false` to disable inherited observation idle activation, or an object of per-provider TTLs such as `{ default: 'auto', anthropic: '1h' }`. Object keys match the actor model provider before the first `.`, case-insensitively, so `anthropic` covers the direct Anthropic provider but not Claude through another provider such as `amazon-bedrock`; `default` covers every other provider. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
     isOptional: true,
   },
   {

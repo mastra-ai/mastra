@@ -2228,6 +2228,27 @@ describe('activate()', () => {
         expect(result.activated).toBe(true);
       });
 
+      it('lets observation.activateAfterIdle false disable a top-level map', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: anthropicHour,
+          observationActivateAfterIdle: false,
+          idleMs: 61 * 60_000,
+          currentModel: anthropicModel,
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
+      it('keeps a JSON-sourced "__proto__" key as a provider entry', async () => {
+        const result = await activateAfterIdleFor({
+          activateAfterIdle: JSON.parse('{"__proto__": "1h", "default": "1m"}'),
+          idleMs: 10 * 60_000,
+          currentModel: { provider: '__proto__', modelId: 'model' },
+        });
+
+        expect(result.activated).toBe(false);
+      });
+
       it('omits the map from buffering markers', async () => {
         const om = new ObservationalMemory({
           storage,
@@ -2254,7 +2275,9 @@ describe('activate()', () => {
         [{ anthropic: { ttl: '1h' } }, 'activateAfterIdle.anthropic'],
         [{ anthropic: null }, 'activateAfterIdle.anthropic'],
         [{ anthropic: ['1h'] }, 'activateAfterIdle.anthropic'],
-        [['1h'], 'not an array'],
+        [['1h'], 'object of per-provider TTLs'],
+        [null, 'object of per-provider TTLs'],
+        [{ '  ': '1h' }, 'empty provider key'],
         [{}, 'at least one provider'],
         [{ anthropic: undefined }, 'at least one provider'],
         [{ Anthropic: '1h', anthropic: '5m' }, 'case-insensitive'],
