@@ -972,7 +972,13 @@ describe('MastraModelOutput', () => {
             cachedInputTokens: 4,
             raw: rawUsage,
           }),
-          createFinishChunk(runId, undefined, { inputTokens: 2, outputTokens: 2, totalTokens: 4 }),
+          createFinishChunk(runId, undefined, {
+            inputTokens: 2,
+            outputTokens: 2,
+            totalTokens: 4,
+            reasoningTokens: 10,
+            cachedInputTokens: 20,
+          }),
         ]),
         messageList: new MessageList({ threadId: 'test-thread' }),
         messageId: 'msg-1',
@@ -986,8 +992,8 @@ describe('MastraModelOutput', () => {
         inputTokens: 2,
         outputTokens: 2,
         totalTokens: 4,
-        reasoningTokens: 3,
-        cachedInputTokens: 4,
+        reasoningTokens: 10,
+        cachedInputTokens: 20,
         raw: rawUsage,
       });
     });
