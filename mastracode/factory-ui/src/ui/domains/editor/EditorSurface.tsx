@@ -175,6 +175,10 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
 
   // ── Inline diff (unified merge view against git HEAD) ────────────────────
   const [diffMode, setDiffMode] = useState(false);
+  // The command runner isn't ready to ship — all of its UI entry points
+  // (header button, palette command, panel) are hidden behind this flag.
+  // Flip to true to bring it back.
+  const runnerEnabled: boolean = false;
   const [runnerOpen, setRunnerOpen] = useState(false);
   const [blameEnabled, setBlameEnabled] = useState(false);
   const blameQuery = useBlame(workspacePath, activePath ?? undefined, {
@@ -720,7 +724,9 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
     { id: 'show-outline', label: 'Show Outline', run: () => setLeftTab('outline') },
     { id: 'show-scm', label: 'Show Source Control', run: () => setLeftTab('scm') },
     { id: 'toggle-diff', label: 'Toggle Inline Diff', run: () => setDiffMode(previous => !previous) },
-    { id: 'toggle-runner', label: 'Toggle Command Runner', run: () => setRunnerOpen(previous => !previous) },
+    ...(runnerEnabled
+      ? [{ id: 'toggle-runner', label: 'Toggle Command Runner', run: () => setRunnerOpen(previous => !previous) }]
+      : []),
     { id: 'toggle-blame', label: 'Toggle Git Blame', run: () => setBlameEnabled(previous => !previous) },
     { id: 'settings', label: 'Editor Settings', run: () => setSettingsOpen(true) },
     { id: 'show-files', label: 'Show Files Sidebar', run: () => setLeftTab('files') },
@@ -870,12 +876,14 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     icon={saveMutation.isPending ? <Spinner className="size-4" /> : <Save className="size-4" />}
                   />
                   <span className="bg-border mx-1 h-4 w-px" aria-hidden />
-                  <HeaderIconButton
-                    label={runnerOpen ? 'Hide command runner' : 'Command runner'}
-                    pressed={runnerOpen}
-                    onClick={() => setRunnerOpen(previous => !previous)}
-                    icon={<TerminalSquare className="size-4" />}
-                  />
+                  {runnerEnabled && (
+                    <HeaderIconButton
+                      label={runnerOpen ? 'Hide command runner' : 'Command runner'}
+                      pressed={runnerOpen}
+                      onClick={() => setRunnerOpen(previous => !previous)}
+                      icon={<TerminalSquare className="size-4" />}
+                    />
+                  )}
                   <HeaderIconButton
                     label="Editor settings"
                     pressed={settingsOpen}
@@ -1073,7 +1081,7 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                 </div>
               )}
             </div>
-            {runnerOpen && (
+            {runnerEnabled && runnerOpen && (
               <RunnerPanel
                 workspacePath={workspacePath}
                 themePreset={getEditorThemePreset(editorTheme)}
