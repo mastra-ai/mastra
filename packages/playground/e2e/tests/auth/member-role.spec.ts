@@ -99,7 +99,8 @@ test.describe('Member Role', () => {
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+        // The chip opens the tool drawer over the agent page you're on.
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=weatherInfo$/,
       );
       await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
         'href',
