@@ -1097,7 +1097,8 @@ export class AgentChannels {
   }
 
   /**
-   * Resolve the bot's current profile display name through the adapter, once per platform.
+   * Resolve the bot's current profile display name through the adapter, once per platform and bot user.
+   * Keyed by `botUserId` because one adapter can serve several installations, each with its own bot.
    * Adapters may report a stale handle as `userName` (e.g. Slack `auth.test` keeps the original
    * username after an app rename) while inbound mentions render the current display name.
    */
@@ -1106,22 +1107,23 @@ export class AgentChannels {
     const botUserId = adapter.botUserId;
     if (!botUserId || !adapter.getUser) return Promise.resolve(undefined);
 
-    const cached = this.botDisplayNames.get(platform);
+    const key = `${platform}:${botUserId}`;
+    const cached = this.botDisplayNames.get(key);
     if (cached) return cached;
 
     const pending = adapter.getUser(botUserId).then(
       user => {
         const name = user?.userName || user?.fullName || undefined;
-        if (!name) this.botDisplayNames.delete(platform);
+        if (!name) this.botDisplayNames.delete(key);
         return name;
       },
       err => {
-        this.botDisplayNames.delete(platform);
+        this.botDisplayNames.delete(key);
         this.log('debug', `[${platform}] Failed to resolve bot display name`, err);
         return undefined;
       },
     );
-    this.botDisplayNames.set(platform, pending);
+    this.botDisplayNames.set(key, pending);
     return pending;
   }
 

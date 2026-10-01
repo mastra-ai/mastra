@@ -1099,6 +1099,36 @@ describe('AgentChannels', () => {
         expect(second.botDisplayName).toBe('helper');
         expect(getUser).toHaveBeenCalledTimes(2);
       });
+
+      it('resolves each bot identity separately when one adapter serves several installations', async () => {
+        const names: Record<string, string> = { UBOT_A: 'helper-a', UBOT_B: 'helper-b' };
+        const getUser = vi.fn(async (userId: string) => ({
+          userId,
+          userName: names[userId]!,
+          fullName: names[userId]!,
+          isBot: true,
+        }));
+        const { channels, mockMastra } = await setup({ getUser, botUserId: 'UBOT_A' });
+        const adapter = channels.adapters.slack as any;
+
+        const a1 = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        adapter.botUserId = 'UBOT_B';
+        const b1 = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        adapter.botUserId = 'UBOT_A';
+        const a2 = await sendAndGetChannel(channels, mockMastra, 'message-3');
+        adapter.botUserId = 'UBOT_B';
+        const b2 = await sendAndGetChannel(channels, mockMastra, 'message-4');
+
+        expect([a1, a2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_A', 'helper-a'],
+          ['UBOT_A', 'helper-a'],
+        ]);
+        expect([b1, b2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_B', 'helper-b'],
+          ['UBOT_B', 'helper-b'],
+        ]);
+        expect(getUser.mock.calls).toEqual([['UBOT_A'], ['UBOT_B']]);
+      });
     });
 
     describe('suspended tool auto-resume', () => {
