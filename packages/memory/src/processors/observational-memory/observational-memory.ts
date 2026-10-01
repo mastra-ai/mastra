@@ -433,6 +433,9 @@ export class ObservationalMemory {
   /** Buffering state coordinator — manages static maps and buffering lifecycle. */
   readonly buffering: BufferingCoordinator;
 
+  /** Unresolved observation blockAfter (multiplier or absolute); resolved per record. */
+  private observationBlockAfterSetting: number | undefined;
+
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
@@ -691,6 +694,13 @@ export class ObservationalMemory {
     const observationActivateAfterIdlePath =
       config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
 
+    this.observationBlockAfterSetting = asyncBufferingDisabled
+      ? undefined
+      : (config.observation?.blockAfter ??
+        ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
+          ? 1.2
+          : undefined));
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
@@ -722,15 +732,10 @@ export class ObservationalMemory {
       activateAfterIdle: parseActivationTTLConfig(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
-      blockAfter: asyncBufferingDisabled
-        ? undefined
-        : resolveBlockAfter(
-            config.observation?.blockAfter ??
-              ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
-                ? 1.2
-                : undefined),
-            config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
-          ),
+      blockAfter: resolveBlockAfter(
+        this.observationBlockAfterSetting,
+        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+      ),
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
@@ -1255,6 +1260,14 @@ export class ObservationalMemory {
       return recordTokens;
     }
     return this.observationConfig.messageTokens;
+  }
+
+  /**
+   * Resolve the observation blockAfter for a record. A multiplier scales the record's
+   * effective messageTokens (per-record overrides included); an absolute value is used as-is.
+   */
+  private getEffectiveObservationBlockAfter(record: ObservationalMemoryRecord): number | undefined {
+    return resolveBlockAfter(this.observationBlockAfterSetting, this.getEffectiveMessageTokens(record));
   }
 
   /**
@@ -3118,7 +3131,7 @@ ${formattedMessages}
     // buffering (so a chunk becomes activatable) rather than leaving sync
     // observation as the only way out of the band.
     const asyncObservationEnabled = this.buffering.isAsyncObservationEnabled();
-    const observationBlockAfter = asyncObservationEnabled ? this.observationConfig.blockAfter : undefined;
+    const observationBlockAfter = asyncObservationEnabled ? this.getEffectiveObservationBlockAfter(record) : undefined;
     const inAsyncObservationBand =
       observationBlockAfter !== undefined && pendingTokens >= threshold && pendingTokens < observationBlockAfter;
     let shouldBuffer = false;
@@ -3719,9 +3732,8 @@ ${formattedMessages}
         const totalChunkMessageTokens = chunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
         const currentPendingTokens = livePendingTokens ?? (head.pendingMessageTokens || totalChunkMessageTokens);
 
-        const forceMaxActivation = !!(
-          this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
-        );
+        const blockAfter = this.getEffectiveObservationBlockAfter(head);
+        const forceMaxActivation = !!(blockAfter && currentPendingTokens >= blockAfter);
 
         // Storage adapters decrement the persisted pending count during the swap. Keep
         // that base aligned with the live count used to select chunks so the returned
