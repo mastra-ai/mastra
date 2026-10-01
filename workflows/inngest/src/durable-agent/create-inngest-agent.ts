@@ -1705,13 +1705,44 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         agent.getPubSub(),
       );
       if (!suspendedRun && !inMemorySuspension) {
-        try {
-          const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
-          suspendedRun = runs.find(run => run.runId === runId);
-        } catch (error) {
-          if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+        let storageUnavailable = false;
+        const findTargetRun = async () => {
+          try {
+            const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+            return runs.find(
+              run =>
+                run.runId === runId &&
+                (!options.toolCallId || run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId)),
+            );
+          } catch (error) {
+            if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+              storageUnavailable = true;
+              return undefined;
+            }
             throw error;
           }
+        };
+
+        suspendedRun = await findTargetRun();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (!suspendedRun && !storageUnavailable && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          suspendedRun = await findTargetRun();
+        }
+        if (!suspendedRun) {
+          throw new MastraError({
+            id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `Agent "${agent.name}" sendToolApproval() could not resolve suspended run "${runId}" before resuming it.`,
+            details: {
+              threadId,
+              resourceId,
+              runId,
+              agentName: agent.name,
+              ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+            },
+          });
         }
       }
 
