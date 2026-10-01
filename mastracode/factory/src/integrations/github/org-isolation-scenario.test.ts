@@ -214,6 +214,7 @@ const stateSigner = {
 
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const enforceFactoryCommitIdentityBeforePush = vi.fn(async () => {});
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
 /** DI-injected sandbox callback stub — presence signals "configured". */
@@ -234,8 +235,10 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
+    FACTORY_COMMIT_IDENTITY: { name: 'Mastra Factory', email: 'noreply@mastra.ai' },
     materializeRepo: (opts: any) => materializeRepo(opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
+    enforceFactoryCommitIdentityBeforePush: (...args: any[]) => enforceFactoryCommitIdentityBeforePush(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
     isValidGitRef: (v: unknown): v is string =>
@@ -378,6 +381,7 @@ beforeEach(() => {
   mintCount = 0;
   materializeRepo.mockClear();
   commitAll.mockClear();
+  enforceFactoryCommitIdentityBeforePush.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
 });
