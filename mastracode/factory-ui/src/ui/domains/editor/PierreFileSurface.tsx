@@ -41,6 +41,13 @@ interface PierreFileSurfaceProps {
   initialContent: string;
   readOnly?: boolean;
   selectLines?: LineRange | null;
+  /**
+   * Persistent line-range highlight without caret moves or focus steal.
+   * Keeps a multi-line selection visible while focus lives elsewhere (e.g.
+   * the send-to-agent bar's textarea) — the browser stops painting the
+   * native selection once the shadow contenteditable loses focus.
+   */
+  highlightLines?: LineRange | null;
   /** LSP diagnostics rendered as editor markers. Empty array clears them. */
   diagnostics?: EditorLspDiagnostic[] | null;
   /** Fired when the buffer text changes; receives the new document text. */
@@ -264,6 +271,7 @@ export function PierreFileSurface({
   initialContent,
   readOnly,
   selectLines,
+  highlightLines,
   diagnostics,
   blame,
   codeLenses,
@@ -726,10 +734,10 @@ export function PierreFileSurface({
   // Permalink jumps and search-panel line selection: the visible range
   // highlight comes from the `selectedLines` prop on <File>; this effect only
   // parks the caret at the range start and focuses the surface.
-  const selectedLines = useMemo(
-    () => (selectLines ? { start: Math.max(1, selectLines.start), end: Math.max(1, selectLines.end) } : null),
-    [selectLines],
-  );
+  const selectedLines = useMemo(() => {
+    const range = selectLines ?? highlightLines;
+    return range ? { start: Math.max(1, range.start), end: Math.max(1, range.end) } : null;
+  }, [selectLines, highlightLines]);
   useEffect(() => {
     if (!selectLines) return;
     const editor = editorRef.current;

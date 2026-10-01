@@ -1027,6 +1027,11 @@ export function EditorSurface({ workspacePath, threadId }: EditorSurfaceProps) {
                     initialContent={editorContent}
                     readOnly={activeIsExternal}
                     selectLines={jump && jump.path === activePath ? jump.range : null}
+                    highlightLines={
+                      buffers.pendingSelection && buffers.pendingSelection.path === activePath
+                        ? { start: buffers.pendingSelection.startLine, end: buffers.pendingSelection.endLine }
+                        : null
+                    }
                     diagnostics={activeIsExternal ? null : diagnostics}
                     blame={blameLines}
                     /* Code lens stays off until it gets a compact inline-widget
