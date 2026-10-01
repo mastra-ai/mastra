@@ -10,7 +10,7 @@ import {
 } from '@/lib/env-file';
 import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
-const ENV_ASSIGNMENT_LINE = /^(?:export\s+)?[A-Z_][A-Z0-9_]*\s*=/;
+const ENV_ASSIGNMENT_LINE = /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=/;
 
 export type EnvironmentVariableRow = EnvironmentVariableEntry;
 

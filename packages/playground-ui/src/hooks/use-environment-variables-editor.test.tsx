@@ -102,6 +102,18 @@ describe('useEnvironmentVariablesEditor', () => {
     ]);
   });
 
+  it('imports lowercase multi-line KEY=value pastes into a value field', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: '', value: '' }] }));
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'foo=1\nbar=2', 'value')).toBe(true);
+    });
+    expect(result.current.rows).toEqual([
+      { key: 'foo', value: '1' },
+      { key: 'bar', value: '2' },
+    ]);
+  });
+
   it('tracks dirty rows, reset state, and revealed values independently from the UI', () => {
     const { result } = renderHook(() =>
       useEnvironmentVariablesEditor({
