@@ -868,7 +868,7 @@ export class AgentChannels {
                   await thread.post(errorMessage);
                 }
               } catch (err) {
-                this.log('debug', 'Failed to post error message for action', { ...actionEventContext, error: err });
+                this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: err });
               }
             }
           };
@@ -1317,7 +1317,7 @@ export class AgentChannels {
       const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
       await chatThread.post(errorMessage);
     } catch (postErr) {
-      this.log('debug', 'Failed to post error message to thread', {
+      this.log('warn', 'Failed to post error message to thread', {
         platform: chatThread.adapter.name,
         threadId: chatThread.id,
         error: postErr,
