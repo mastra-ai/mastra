@@ -2,18 +2,34 @@ import type { FieldWrapperProps } from '@autoform/react';
 import React from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
 
-const DISABLED_LABELS = ['boolean', 'object', 'array'];
+const GROUP_TYPES = ['object', 'array'];
 
 export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, field, error }) => {
-  const isDisabled = DISABLED_LABELS.includes(field.type);
+  const description = field.fieldConfig?.description;
+
+  if (GROUP_TYPES.includes(field.type)) {
+    return (
+      <div className="pb-4 last:pb-0">
+        {children}
+        {description || error ? (
+          <Field invalid={Boolean(error)}>
+            {description && <FieldDescription>{description}</FieldDescription>}
+            <FieldError>{error}</FieldError>
+          </Field>
+        ) : null}
+      </div>
+    );
+  }
+
+  const rendersOwnLabel = field.type === 'boolean';
 
   return (
     <Field invalid={Boolean(error)} className="pb-4 last:pb-0">
-      {!isDisabled && <FieldLabel required={field.required}>{label}</FieldLabel>}
+      {!rendersOwnLabel && <FieldLabel required={field.required}>{label}</FieldLabel>}
 
       {children}
 
-      {field.fieldConfig?.description && <FieldDescription>{field.fieldConfig.description}</FieldDescription>}
+      {description && <FieldDescription>{description}</FieldDescription>}
 
       <FieldError>{error}</FieldError>
     </Field>
