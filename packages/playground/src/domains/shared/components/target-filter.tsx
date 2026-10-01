@@ -62,7 +62,6 @@ export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTarge
   return (
     <>
       <Select
-        name="filter-target-type"
         value={targetType || ALL_TARGETS}
         onValueChange={value => onTargetTypeChange(value === ALL_TARGETS ? '' : (value as DatasetTargetType))}
       >

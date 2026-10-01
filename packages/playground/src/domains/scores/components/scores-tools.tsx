@@ -16,7 +16,6 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
   return (
     <div className="flex items-center gap-2">
       <Select
-        name="select-entity"
         value={selectedEntity?.value || ''}
         onValueChange={(val: string) => {
           const entity = entityOptions?.find(entity => entity.value === val);
