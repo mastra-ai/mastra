@@ -83,7 +83,6 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
             )}
             <div className="flex min-w-0">
               <ModelCombobox
-                className="w-64 max-w-full shrink-0"
                 models={models}
                 value={defaultModelId}
                 placeholder="Select a model"

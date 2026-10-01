@@ -67,6 +67,11 @@ export const fieldTriggerStyle =
   fieldRimFocus +
   ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 
+// Width of a select/combobox trigger: fills its field unless an ancestor that owns
+// control sizing (SettingsRow) sets `--field-width` / `--field-shrink`. A width class
+// passed by the caller still wins, since `cn` drops the conflicting default.
+export const fieldTriggerWidthStyle = 'w-(--field-width,100%) shrink-(--field-shrink,1)';
+
 export const inputSurfaceAndFocusStyle =
   'bg-field shadow-input text-foreground disabled:bg-field-disabled ' +
   surfaceTintHover +
