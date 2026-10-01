@@ -40,7 +40,7 @@ const mockAnthropicOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
-  promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
+  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v3', transformParams: vi.fn() })),
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
   createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
@@ -411,6 +411,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -432,6 +433,7 @@ describe('resolveModel', () => {
           'x-resource-id': 'resource-456',
         },
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -448,6 +450,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -1025,6 +1028,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
