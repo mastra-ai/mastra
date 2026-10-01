@@ -10,6 +10,8 @@ import {
 } from '@/lib/env-file';
 import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
+const ENV_ASSIGNMENT_LINE = /^(?:export\s+)?[A-Z_][A-Z0-9_]*\s*=/;
+
 export type EnvironmentVariableRow = EnvironmentVariableEntry;
 
 export interface UseEnvironmentVariablesEditorOptions<TRow extends EnvironmentVariableRow = EnvironmentVariableRow> {
@@ -48,7 +50,7 @@ export interface EnvironmentVariablesEditorController<TRow extends EnvironmentVa
   getRowsForSubmit: () => TRow[];
   getEnvironmentVariablesForSubmit: () => Record<string, string>;
   handleFileUpload: (event: EnvironmentVariablesEditorFileUploadEvent) => Promise<void>;
-  handlePaste: (index: number, text: string, field?: 'key' | 'value') => boolean;
+  handlePaste: (index: number, text: string, field: 'key' | 'value') => boolean;
   clearUploadError: () => void;
   getRowId: (index: number) => string;
   isValueRevealed: (index: number) => boolean;
@@ -224,9 +226,12 @@ export function useCustomEnvironmentVariablesEditor<TRow extends EnvironmentVari
     return commitRows([...before, ...newRows, ...after], [...beforeIds, ...newRowIds, ...afterIds]);
   }
 
-  function handlePaste(index: number, text: string, field: 'key' | 'value' = 'key') {
-    // A single line pasted into a value (e.g. a connection string with `=`) is a literal value
-    if (field === 'value' && !/\r?\n/.test(text.trim())) return false;
+  function handlePaste(index: number, text: string, field: 'key' | 'value') {
+    // Values (connection strings, PEM keys, JSON) stay literal unless every line is a KEY= assignment
+    if (field === 'value') {
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2 || !lines.every(line => ENV_ASSIGNMENT_LINE.test(line.trim()))) return false;
+    }
 
     const entries = parsePastedEnvText(text);
     if (entries.length === 0) return false;
