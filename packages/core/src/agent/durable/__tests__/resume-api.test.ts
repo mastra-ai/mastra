@@ -369,23 +369,34 @@ describe('Resume API', () => {
       {
         name: 'merges an approval into custom data for an approval suspension',
         approved: true,
+        resumeData: { note: 'hello' },
         requiresApproval: true,
         expectedResumeData: { approved: true, note: 'hello' },
       },
       {
-        name: 'merges a decline and its context into custom data for an approval suspension',
+        name: 'keeps the decline decision authoritative when merging context into custom data',
         approved: false,
-        declineContext: { reason: 'not allowed' },
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: { note: 'hello' },
         requiresApproval: true,
         expectedResumeData: { approved: false, reason: 'not allowed', note: 'hello' },
       },
       {
         name: 'leaves custom data unchanged for an ordinary tool suspension',
         approved: true,
+        resumeData: { note: 'hello' },
         requiresApproval: false,
         expectedResumeData: { note: 'hello' },
       },
-    ])('$name', async ({ approved, declineContext, requiresApproval, expectedResumeData }) => {
+      {
+        name: 'keeps the decline decision authoritative without custom data',
+        approved: false,
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: undefined,
+        requiresApproval: true,
+        expectedResumeData: { approved: false, reason: 'not allowed' },
+      },
+    ])('$name', async ({ approved, declineContext, resumeData, requiresApproval, expectedResumeData }) => {
       const baseAgent = new Agent({
         id: 'stored-approval-options-agent',
         name: 'Stored Approval Options Agent',
@@ -418,7 +429,7 @@ describe('Resume API', () => {
         toolCallId,
         approved,
         declineContext,
-        resumeData: { note: 'hello' },
+        resumeData,
         memory,
       });
 

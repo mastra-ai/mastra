@@ -10309,12 +10309,12 @@ export class Agent<
     const resumeData =
       customResumeData !== undefined
         ? approvalGated && customResumeDataCanCarryApproval
-          ? { ...customResumeData, approved, ...(!approved && declineContext ? declineContext : {}) }
+          ? { ...customResumeData, ...(!approved && declineContext ? declineContext : {}), approved }
           : customResumeData
         : approved
           ? { approved }
           : declineContext
-            ? { approved, ...declineContext }
+            ? { ...declineContext, approved }
             : { approved };
     const resumeStreamOptions = {
       ...resumeOptions,

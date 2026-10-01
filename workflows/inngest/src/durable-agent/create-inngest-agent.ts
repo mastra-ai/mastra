@@ -1700,7 +1700,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         });
       }
 
-      if (!suspendedRun) {
+      const inMemorySuspension = agentThreadStreamRuntime.getResumableThreadRunSuspension(
+        { threadId, resourceId, runId, toolCallId: options.toolCallId },
+        agent.getPubSub(),
+      );
+      if (!suspendedRun && !inMemorySuspension) {
         try {
           const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
           suspendedRun = runs.find(run => run.runId === runId);
@@ -1714,7 +1718,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const suspendedToolCall = options.toolCallId
         ? suspendedRun?.toolCalls.find(toolCall => toolCall.toolCallId === options.toolCallId)
         : suspendedRun?.toolCalls[0];
-      const approvalGated = suspendedToolCall?.requiresApproval === true;
+      const approvalGated = inMemorySuspension
+        ? inMemorySuspension.kind === 'approval'
+        : suspendedToolCall?.requiresApproval === true;
       const customResumeDataCanCarryApproval =
         typeof customResumeData === 'object' && customResumeData !== null && !Array.isArray(customResumeData);
       if (approvalGated && customResumeData !== undefined && !customResumeDataCanCarryApproval) {
@@ -1736,11 +1742,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const resumeData =
         customResumeData !== undefined
           ? approvalGated && customResumeDataCanCarryApproval
-            ? { ...customResumeData, approved, ...(!approved && declineContext ? declineContext : {}) }
+            ? { ...customResumeData, ...(!approved && declineContext ? declineContext : {}), approved }
             : customResumeData
           : approved
             ? { approved }
-            : { approved, ...(declineContext ?? {}) };
+            : { ...(declineContext ?? {}), approved };
       const resumeOptions = deepMerge(
         (streamOptions ?? {}) as Record<string, any>,
         executionOptions as Record<string, any>,

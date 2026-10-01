@@ -1944,7 +1944,7 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       resourceId: 'res',
       runId: 'r2',
       approved: false,
-      declineContext: { reason: 'nope' },
+      declineContext: { reason: 'nope', approved: true } as { reason: string },
     });
 
     expect(approved).toEqual({ accepted: true, runId: 'r1', toolCallId: 't1' });
@@ -1967,9 +1967,9 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       expectedResumeData: { approved: true, note: 'hello' },
     },
     {
-      name: 'merges decline context into custom data for an approval suspension',
+      name: 'keeps the decline decision authoritative when merging context into custom data',
       approved: false,
-      declineContext: { reason: 'not allowed' },
+      declineContext: { reason: 'not allowed', approved: true } as { reason: string },
       requiresApproval: true,
       expectedResumeData: { approved: false, reason: 'not allowed', note: 'hello' },
     },
@@ -2002,6 +2002,33 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       expectedResumeData,
       expect.objectContaining({ toolCallId: 't1', memory: { thread: 'th', resource: 'res' } }),
     );
+    listSpy.mockRestore();
+  });
+
+  it('uses in-memory approval metadata before the suspended run is persisted', async () => {
+    const durableAgent = makeDurable('send-tool-approval-in-memory');
+    const { resumeSpy } = spyResume(durableAgent);
+    const suspensionSpy = vi
+      .spyOn(agentThreadStreamRuntime, 'getResumableThreadRunSuspension')
+      .mockReturnValue({ toolCallId: 't1', kind: 'approval' });
+    const listSpy = vi.spyOn(Agent.prototype, 'listSuspendedRuns').mockResolvedValue({ runs: [], total: 0 });
+
+    await durableAgent.sendToolApproval({
+      threadId: 'th',
+      resourceId: 'res',
+      runId: 'r1',
+      toolCallId: 't1',
+      approved: true,
+      resumeData: { note: 'hello' },
+    });
+
+    expect(resumeSpy).toHaveBeenCalledWith(
+      'r1',
+      { approved: true, note: 'hello' },
+      expect.objectContaining({ toolCallId: 't1', memory: { thread: 'th', resource: 'res' } }),
+    );
+    expect(listSpy).not.toHaveBeenCalled();
+    suspensionSpy.mockRestore();
     listSpy.mockRestore();
   });
 
