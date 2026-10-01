@@ -30,6 +30,7 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
       },
       layout: {
         type: 'object',
+        minProperties: 1,
         description:
           'Mesa mount layout mapping absolute paths to repo declarations, e.g. { "/docs": { "kind": "repo", "name": "docs", "mode": "rw" } }',
       },

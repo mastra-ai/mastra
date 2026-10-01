@@ -15,11 +15,17 @@ describe('mesaFilesystemProvider', () => {
     );
   });
 
-  it('requires at least one author in provider config', () => {
+  it('requires at least one author and layout path in provider config', () => {
     expect(mesaFilesystemProvider.configSchema.properties?.authors).toEqual(
       expect.objectContaining({
         type: 'array',
         minItems: 1,
+      }),
+    );
+    expect(mesaFilesystemProvider.configSchema.properties?.layout).toEqual(
+      expect.objectContaining({
+        type: 'object',
+        minProperties: 1,
       }),
     );
   });

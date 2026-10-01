@@ -59,13 +59,13 @@ if (hasMesaPrivateKey) {
   beforeAll(async () => {
     const privateKey = process.env.MESA_PRIVATE_KEY!;
     const mesa = new Mesa({ privateKey });
-    const repo = createTestRepoName();
+    const repoName = createTestRepoName();
 
-    await mesa.repos.create({ name: repo });
+    await mesa.repos.create({ name: repoName });
 
     mesaTestEnv = {
       privateKey,
-      repo,
+      repo: repoName,
       mesa,
     };
   });
