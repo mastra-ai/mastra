@@ -3181,9 +3181,7 @@ export class DurableAgent<
    * for the caller-resource guard. Never rehydrates.
    * @internal
    */
-  protected override async resolveRunResourceForGuard(
-    runId: string,
-  ): Promise<{ found: boolean; resourceId?: string }> {
+  protected override async resolveRunResourceForGuard(runId: string): Promise<{ found: boolean; resourceId?: string }> {
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
     if (this.#runRegistry.get(runId)) {
       return { found: true, resourceId: memoryInfo?.resourceId };

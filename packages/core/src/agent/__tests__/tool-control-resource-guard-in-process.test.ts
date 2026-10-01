@@ -83,8 +83,10 @@ describe('in-process (non-durable) tool-control caller-resource guard', () => {
   it('keeps the existing no-snapshot error for a keyed caller on an unknown run', async () => {
     const agent = new Agent({ id: 'plain-agent', name: 'Plain Agent', instructions: 'x', model: toolCallModel() });
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
-    await expect(agent.approveToolCall({ runId: 'ghost-run', requestContext: keyed('mallory') })).rejects.toMatchObject({
-      id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
-    });
+    await expect(agent.approveToolCall({ runId: 'ghost-run', requestContext: keyed('mallory') })).rejects.toMatchObject(
+      {
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+      },
+    );
   });
 });
