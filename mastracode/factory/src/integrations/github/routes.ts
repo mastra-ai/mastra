@@ -342,6 +342,7 @@ function polledPullRequestEvent(
         number: pullRequest.number,
         title: pullRequest.title,
         html_url: pullRequest.url,
+        ...(pullRequest.author ? { user: { login: pullRequest.author } } : {}),
         created_at: pullRequest.createdAt,
         state: 'open',
         merged: false,

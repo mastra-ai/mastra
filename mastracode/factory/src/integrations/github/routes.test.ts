@@ -655,6 +655,7 @@ function buildApp(
     users?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['users'];
     stateSigner?: typeof stateSigner | null;
     sessionRetirement?: SessionRetirementCoordinator;
+    ingestFactoryEvent?: Parameters<typeof buildGithubRoutes>[0]['ingestFactoryEvent'];
   } = {},
 ) {
   const app = new Hono();
@@ -1579,6 +1580,23 @@ describe('prs route', () => {
     });
     expect(json.nextPage).toBeNull();
     expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('preserves the pull request author in the synthetic intake event', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
+
+    expect(res.status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'pull_request',
+        payload: expect.objectContaining({
+          sender: { login: 'grace' },
+          pull_request: expect.objectContaining({ user: { login: 'grace' } }),
+        }),
+      }),
+    );
   });
 
   it('forwards the requested page and echoes the next page', async () => {
