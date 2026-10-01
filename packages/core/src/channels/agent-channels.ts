@@ -68,6 +68,12 @@ const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat',
  */
 const THREAD_HISTORY_OMITTED_CAP = 500;
 
+/** Gap marker between the thread's first message and the recent window, e.g. `[… 6 earlier Slack messages omitted]`. */
+function formatOmittedMarker(platform: string, omitted: string): string {
+  const label = platform.charAt(0).toUpperCase() + platform.slice(1);
+  return `[… ${omitted} earlier ${label} messages omitted]`;
+}
+
 /** Prior platform messages gathered for a first mention. */
 interface ThreadHistoryWindow {
   /** The thread's first message, when it falls outside `recent`. */
@@ -1387,7 +1393,7 @@ export class AgentChannels {
             thread: mastraThread,
             memory: { thread: mastraThread.id, resource: threadResourceId },
           });
-          if (!persisted) legacyHistoryBlock = this.formatLegacyHistoryBlock(history, chatThread);
+          if (!persisted) legacyHistoryBlock = this.formatLegacyHistoryBlock(history, chatThread, platform);
         }
       } else {
         this.logger?.debug?.(`Skipping thread history fetch — already subscribed to ${chatThread.id}`);
@@ -1712,8 +1718,11 @@ export class AgentChannels {
           id: `thread-history:${mastraThread.id}:gap`,
           type: 'user',
           tagName: 'user',
-          contents: `[… ${omitted} messages omitted]`,
+          contents: formatOmittedMarker(platform, omitted),
           attributes: { source: 'thread-history', kind: 'gap', omitted },
+          // Channel context without an author: clients render the platform
+          // badge on the marker without attributing it to anyone.
+          providerOptions: { mastra: { channels: { [platform]: {} } } },
           createdAt: previousCreatedAt,
         });
       }
@@ -1788,7 +1797,7 @@ export class AgentChannels {
   }
 
   /** The pre-signals history shape, kept for agents that cannot persist rows. */
-  private formatLegacyHistoryBlock(history: ThreadHistoryWindow, chatThread: Thread): string {
+  private formatLegacyHistoryBlock(history: ThreadHistoryWindow, chatThread: Thread, platform: string): string {
     const lines = ['[Thread context — messages in this thread before you joined]'];
     const line = (msg: Message) => {
       const author = msg.author.fullName || msg.author.userName || 'Unknown';
@@ -1799,7 +1808,9 @@ export class AgentChannels {
     };
     if (history.root) {
       lines.push(line(history.root));
-      if (history.omitted > 0) lines.push(`[… ${history.omitted}${history.capped ? '+' : ''} messages omitted]`);
+      if (history.omitted > 0) {
+        lines.push(formatOmittedMarker(platform, `${history.omitted}${history.capped ? '+' : ''}`));
+      }
     }
     for (const msg of history.recent) lines.push(line(msg));
     return lines.join('\n');

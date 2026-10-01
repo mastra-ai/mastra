@@ -3029,7 +3029,7 @@ describe('thread history', () => {
     expect(signals).toHaveLength(11);
     expect(signals.map(s => s.contents)).toEqual([
       'message 0',
-      '[… 5 messages omitted]',
+      '[… 5 earlier Slack messages omitted]',
       ...Array.from({ length: 9 }, (_, i) => `message ${i + 6}`),
     ]);
     expect(signals.map(s => s.id)).toEqual([
@@ -3051,7 +3051,8 @@ describe('thread history', () => {
     expect(signals[0].createdAt).toEqual(new Date(BASE_TIME));
     expect(signals[1].attributes).toEqual({ source: 'thread-history', kind: 'gap', omitted: '5' });
     expect(signals[1].createdAt).toEqual(new Date(BASE_TIME + 1));
-    expect(signals[1].providerOptions).toBeUndefined();
+    // Platform badge without an author, so clients can tag the marker as channel context.
+    expect(signals[1].providerOptions).toEqual({ mastra: { channels: { slack: {} } } });
     const botRow = signals.find(s => s.attributes.messageId === 'h7')!;
     expect(botRow.attributes).toMatchObject({ authorName: 'Other Bot', authorId: 'B1', isBot: 'true' });
     for (let i = 2; i < signals.length; i++) {
@@ -3086,7 +3087,7 @@ describe('thread history', () => {
   it('emits only the root and the gap marker when maxMessages is 1', async () => {
     const t = await setup({ threadContext: { maxMessages: 1 } });
     await t.run(makeChatThread(Array.from({ length: 5 }, (_, i) => historyMessage(i))));
-    expect(t.signals().map(s => s.contents)).toEqual(['message 0', '[… 4 messages omitted]']);
+    expect(t.signals().map(s => s.contents)).toEqual(['message 0', '[… 4 earlier Slack messages omitted]']);
   });
 
   it('falls back to monotonic timestamps for messages without a valid dateSent', async () => {
@@ -3115,7 +3116,7 @@ describe('thread history', () => {
       const signals = t.signals();
       expect(forwardFetch).toHaveBeenCalledTimes(1);
       expect(signals[0].contents).toBe('message 0');
-      expect(signals[1].contents).toBe('[… 500+ messages omitted]');
+      expect(signals[1].contents).toBe('[… 500+ earlier Slack messages omitted]');
       expect(signals[1].attributes.omitted).toBe('500+');
       expect(signals).toHaveLength(11);
     });
@@ -3132,7 +3133,7 @@ describe('thread history', () => {
         ),
       );
       expect(forwardFetch).toHaveBeenCalledTimes(1);
-      expect(t.signals()[1].contents).toBe('[… 500+ messages omitted]');
+      expect(t.signals()[1].contents).toBe('[… 500+ earlier Slack messages omitted]');
     });
 
     it('keeps the exact count when the walk reaches the root at the cap boundary', async () => {
@@ -3148,7 +3149,7 @@ describe('thread history', () => {
       );
       expect(forwardFetch).toHaveBeenCalledTimes(1);
       expect(t.signals()[0].contents).toBe('message 0');
-      expect(t.signals()[1].contents).toBe('[… 499 messages omitted]');
+      expect(t.signals()[1].contents).toBe('[… 499 earlier Slack messages omitted]');
     });
 
     it('needs no forward fetch when the walk exhausts before the cap', async () => {
@@ -3162,7 +3163,7 @@ describe('thread history', () => {
         ),
       );
       expect(forwardFetch).not.toHaveBeenCalled();
-      expect(t.signals()[1].contents).toBe('[… 498 messages omitted]');
+      expect(t.signals()[1].contents).toBe('[… 498 earlier Slack messages omitted]');
     });
   });
 
@@ -3322,7 +3323,7 @@ describe('thread history', () => {
       expect(t.dispatches).toHaveLength(1);
       const text = t.dispatches[0].signalContents as string;
       expect(text).toContain('[Thread context — messages in this thread before you joined]');
-      expect(text).toContain('[… 5 messages omitted]');
+      expect(text).toContain('[… 5 earlier Slack messages omitted]');
       expect(text).toContain('(msg:h0): message 0');
     });
 
@@ -3355,7 +3356,7 @@ describe('thread history', () => {
       expect(text.split('\n\n')[0]!.split('\n')).toEqual([
         '[Thread context — messages in this thread before you joined]',
         '[Alice (<@U1>)] (msg:h0): message 0',
-        '[… 5 messages omitted]',
+        '[… 5 earlier Slack messages omitted]',
         '[Alice (<@U1>)] (msg:h6): message 6',
         '[Other Bot (<@B1>) (bot)] (msg:h7): message 7',
         ...Array.from({ length: 7 }, (_, k) => {
@@ -3526,7 +3527,7 @@ describe('thread history end to end', () => {
     const texts = userTurns.map(turnText);
     expect(texts[0]).toContain('source="thread-history"');
     expect(texts[0]).toContain('message 0');
-    expect(texts[1]).toContain('[… 5 messages omitted]');
+    expect(texts[1]).toContain('[… 5 earlier Slack messages omitted]');
     expect(texts[texts.length - 1]).toContain('what was the first message?');
     expect(texts[texts.length - 1]).not.toContain('[Thread context');
     expect(texts.join('\n').indexOf('message 0')).toBeLessThan(texts.join('\n').indexOf('what was the first message?'));
