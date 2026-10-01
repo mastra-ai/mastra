@@ -43,6 +43,7 @@ let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub']
 let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let threadScheduler: Awaited<ReturnType<typeof createMastraCode>>['threadScheduler'] | undefined;
+let stopNotificationDispatch: Awaited<ReturnType<typeof createMastraCode>>['stopNotificationDispatch'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
@@ -104,6 +105,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   storageMaintenance = result.storageMaintenance;
   stopPluginSignalProviders = result.stopPluginSignalProviders;
   threadScheduler = result.threadScheduler;
+  stopNotificationDispatch = result.stopNotificationDispatch;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -210,6 +212,8 @@ const asyncCleanup = (): Promise<void> => {
       : undefined;
     // Schedules live only in this process; stop their timers so none fires mid-shutdown.
     threadScheduler?.stop();
+    // Release this process's notification dispatch leases before the pubsub that holds them closes.
+    await stopNotificationDispatch?.().catch(() => {});
     const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language

@@ -12,14 +12,19 @@ import { mkdtempSync, rmSync } from 'node:fs';
 
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { dispatchDueNotifications, InMemoryNotificationsStorage } from '@mastra/core/notifications';
+import {
+  defaultNotificationDeliveryDecision,
+  dispatchDueNotifications,
+  InMemoryNotificationsStorage,
+} from '@mastra/core/notifications';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { createSignalsPubSub } from '../signals-pubsub.js';
+import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from '../notification-dispatch.js';
+import { createSignalsPubSub, notificationDispatchLeaseKey } from '../signals-pubsub.js';
 
 const AGENT_ID = 'code-agent';
 const USAGE = { inputTokens: { total: 1 }, outputTokens: { total: 1 } };
@@ -67,7 +72,15 @@ function createProject(
     resourceId,
     notifications,
     work,
-  }: { rootDir: string; resourceId: string; notifications: InMemoryNotificationsStorage; work: WorkLog },
+    withDispatch = false,
+  }: {
+    rootDir: string;
+    resourceId: string;
+    notifications: InMemoryNotificationsStorage;
+    work: WorkLog;
+    /** Give this process Mastra Code's own dispatch: a dispatch timer for its resource and the hold policy. */
+    withDispatch?: boolean;
+  },
 ) {
   let toolRunning = 0;
   let calls = 0;
@@ -114,22 +127,57 @@ function createProject(
   });
 
   const pubsub = createSignalsPubSub(resourceId, { rootDir });
-  const agent = new Agent({ id: AGENT_ID, name: AGENT_ID, instructions: 'Test', model, tools: { slowTool } });
-  const mastra = new Mastra({
+  const dispatcher = createResourceNotificationDispatcher({
+    getMastra: () => mastra,
+    getResourceIds: () => [resourceId],
+    leases: pubsub.getLeaseProvider(),
+    owner: name,
+    // Ticked by hand.
+    intervalMs: 3_600_000,
+  });
+  const agent = new Agent({
+    id: AGENT_ID,
+    name: AGENT_ID,
+    instructions: 'Test',
+    model,
+    tools: { slowTool },
+    ...(withDispatch
+      ? {
+          notifications: {
+            deliveryPolicy: {
+              decide: input =>
+                shouldHoldNotificationDelivery({
+                  resourceId: input.record.resourceId!,
+                  ownedHere: input.record.resourceId === resourceId,
+                  dispatcher,
+                })
+                  ? { ...defaultNotificationDeliveryDecision(input), hold: true }
+                  : undefined,
+            },
+          },
+        }
+      : {}),
+  });
+  const mastra: Mastra = new Mastra({
     logger: false,
     agents: { [AGENT_ID]: agent },
     pubsub,
     storage: new MastraCompositeStore({ id: `${name}-storage`, domains: { notifications } }),
   });
   cleanups.push(async () => {
+    await dispatcher.stop();
     await mastra.shutdown().catch(() => {});
     await pubsub.close().catch(() => {});
   });
 
   return {
     agent,
-    /** What this process's scheduled dispatcher does on a tick. */
+    resourceId,
+    leases: pubsub.getLeaseProvider(),
+    /** What this process does when it wins a fire of the dispatch schedule every process shares. */
     dispatchTick: () => dispatchDueNotifications({ mastra, storage: notifications }),
+    /** This process's own dispatch of its resource. */
+    dispatcher,
     get toolRunning() {
       return toolRunning;
     },
@@ -144,17 +192,36 @@ async function waitFor(predicate: () => boolean, what: string, timeoutMs = 3000)
   }
 }
 
-async function setUp() {
+async function setUp({ withDispatch = false }: { withDispatch?: boolean } = {}) {
   // Short root: socket paths are capped at 104 bytes on macOS.
   const rootDir = mkdtempSync('/tmp/mct-');
   cleanups.push(() => rmSync(rootDir, { recursive: true, force: true }));
+  // Unique per test, so nothing carries over between tests even where the
+  // socket root is not honored (the code before this fix put every socket
+  // under /tmp/mc).
+  const suffix = Math.random().toString(36).slice(2, 8);
   const notifications = new InMemoryNotificationsStorage();
   const work = createWorkLog();
-  const ours = createProject('ours', { rootDir, resourceId: 'sentinel-aaa', notifications, work });
-  const other = createProject('other', { rootDir, resourceId: 'mastra-bbb', notifications, work });
-  const target = { resourceId: 'sentinel-aaa', threadId: 'sentinel-thread' };
+  const ours = createProject('ours', { rootDir, resourceId: `sentinel-${suffix}`, notifications, work, withDispatch });
+  const other = createProject('other', { rootDir, resourceId: `mastra-${suffix}`, notifications, work, withDispatch });
+  const target = { resourceId: ours.resourceId, threadId: 'sentinel-thread' };
   const memory = { resource: target.resourceId, thread: target.threadId };
-  return { notifications, work, ours, other, target, memory };
+  return { rootDir, notifications, work, ours, other, target, memory };
+}
+
+/** A notification already due, as the dispatcher finds it after a deferral or a summary schedule. */
+function dueNotification(resourceId: string, threadId: string, extra: { id: string; priority?: 'urgent' | 'high' }) {
+  return {
+    agentId: AGENT_ID,
+    resourceId,
+    threadId,
+    source: 'sentinel',
+    kind: 'ping',
+    priority: extra.priority ?? 'high',
+    summary: 'ping',
+    deliverAt: new Date(Date.now() - 1000),
+    id: extra.id,
+  } as const;
 }
 
 describe('notifications shared across Mastra Code projects', () => {
@@ -208,4 +275,71 @@ describe('notifications shared across Mastra Code projects', () => {
       expect(work.maxInFlight).toBe(1);
     }, 30_000);
   }
+});
+
+describe("each Mastra Code process delivers its own resources' notifications", () => {
+  it('the process that wins the shared dispatch schedule holds them, and the owner delivers them itself', async () => {
+    const { notifications, work, ours, other, target } = await setUp({ withDispatch: true });
+    ours.dispatcher.start();
+    other.dispatcher.start();
+    await Promise.all([ours.dispatcher.tick(), other.dispatcher.tick()]);
+    await notifications.createNotification(dueNotification(target.resourceId, target.threadId, { id: 'n1' }));
+
+    for (let fire = 0; fire < 3; fire++) {
+      expect(await other.dispatchTick()).toEqual({ delivered: [], failed: [], signals: [] });
+    }
+    const held = await notifications.getNotification({ threadId: target.threadId, id: 'n1' });
+    expect(held).toMatchObject({ status: 'pending' });
+    expect(held?.deliveryAttempts ?? 0).toBe(0);
+    expect(work.ran).toEqual([]);
+
+    await ours.dispatcher.tick();
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'our run');
+    expect((await notifications.getNotification({ threadId: target.threadId, id: 'n1' }))?.status).toBe('delivered');
+    expect(work.ran.every(entry => entry.startsWith('ours:'))).toBe(true);
+  }, 30_000);
+
+  it("delivers our notification however many of a closed project's notifications are waiting ahead of it", async () => {
+    const { notifications, work, ours, target } = await setUp({ withDispatch: true });
+    ours.dispatcher.start();
+    await ours.dispatcher.tick();
+    for (let index = 0; index < 120; index++) {
+      await notifications.createNotification(
+        dueNotification('closed-project', 'closed-thread', { id: `old-${index}` }),
+      );
+    }
+    await sleep(5);
+    await notifications.createNotification(
+      dueNotification(target.resourceId, target.threadId, { id: 'mine', priority: 'urgent' }),
+    );
+
+    await ours.dispatcher.tick();
+    await waitFor(() => work.ran.length > 0 && work.inFlight === 0, 'our run');
+
+    expect((await notifications.getNotification({ threadId: target.threadId, id: 'mine' }))?.status).toBe('delivered');
+    const closed = await notifications.listNotifications({ threadId: 'closed-thread' });
+    expect(closed.every(record => record.status === 'pending')).toBe(true);
+  }, 30_000);
+
+  it('lets exactly one process dispatch a resource that two processes serve', async () => {
+    const { rootDir, notifications, work, ours } = await setUp({ withDispatch: true });
+    const worktree = createProject('worktree', {
+      rootDir,
+      resourceId: ours.resourceId,
+      notifications,
+      work,
+      withDispatch: true,
+    });
+    const key = notificationDispatchLeaseKey(ours.resourceId);
+    ours.dispatcher.start();
+    await ours.dispatcher.tick();
+    worktree.dispatcher.start();
+    await worktree.dispatcher.tick();
+    expect(await worktree.leases.getLeaseOwner(key)).toBe('ours');
+
+    await ours.dispatcher.stop();
+    expect(await worktree.leases.getLeaseOwner(key)).toBeUndefined();
+    await worktree.dispatcher.tick();
+    expect(await worktree.leases.getLeaseOwner(key)).toBe('worktree');
+  }, 30_000);
 });

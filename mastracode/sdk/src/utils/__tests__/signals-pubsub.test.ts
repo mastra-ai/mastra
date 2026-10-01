@@ -213,6 +213,17 @@ describe('SignalsPubSub', () => {
     expect(findSocket(`/tmp/mc/${threadResource}/.leases.sock`)?.closed).toBe(true);
   });
 
+  it("holds a resource's notification dispatch lease in that resource's directory", async () => {
+    const { createSignalsPubSub, notificationDispatchLeaseKey } = await import('../signals-pubsub.js');
+    const pubsub = createSignalsPubSub('mastra-bbb');
+
+    await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('sentinel-aaa'), 'owner', 1000);
+    await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('../escape'), 'owner', 1000);
+
+    expect(findSocket('/tmp/mc/sentinel-aaa/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:sentinel-aaa']);
+    expect(findSocket('/tmp/mc/mastra-bbb/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:../escape']);
+  });
+
   it("routes another resource's thread stream to that resource's directory", async () => {
     const { createSignalsPubSub } = await import('../signals-pubsub.js');
     const pubsub = createSignalsPubSub('mastra-bbb');

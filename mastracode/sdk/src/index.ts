@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
@@ -127,6 +127,7 @@ import { mastraBrand } from './theme-palette.js';
 import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
+import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from './utils/notification-dispatch.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -503,6 +504,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
   let activeSession: Session<MastraCodeState> | undefined;
+  // Every session this controller has live, whose resources this process
+  // dispatches notifications for.
+  const liveSessions = new Set<Session<MastraCodeState>>();
   // Same trick for the controller, which plugins reach through a lazy accessor.
   // Plugins load well before the controller is constructed, and a closure over
   // the `controller` binding itself would throw on early access rather than
@@ -601,11 +605,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
-  const signalsPubSub = configuredPubSub ?? (useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined);
-  // Other local Mastra Code processes, one per project, coordinate with this
-  // one through the built-in socket pubsub.
-  const sharesLocalProcesses = !configuredPubSub && useUnixSocketPubSub;
-  const crossProcessPubSub = config?.crossProcessPubSub ?? sharesLocalProcesses;
+  const ownSignalsPubSub =
+    !configuredPubSub && useUnixSocketPubSub ? createSignalsPubSub(project.resourceId) : undefined;
+  const signalsPubSub = configuredPubSub ?? ownSignalsPubSub;
+  const crossProcessPubSub = config?.crossProcessPubSub ?? Boolean(ownSignalsPubSub);
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
@@ -820,6 +823,27 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
+
+  // Notification delivery. Every local Mastra Code process shares one database,
+  // so one notification store and one dispatch schedule, and whichever process
+  // wins a scheduled fire cannot run another project's thread. When Mastra Code
+  // owns the pubsub, each process delivers only the due notifications of the
+  // resources its own sessions serve, from its own timer below, and its delivery
+  // policy holds every other delivery (see the code agent's `notifications`).
+  // The dispatch lease is file-based, so it works with the socket pubsub off
+  // too; on Windows there is none, and each process dispatches unleased.
+  const ownsNotificationDispatch = !configuredPubSub;
+  const notificationDispatcher = createResourceNotificationDispatcher({
+    getMastra: () => controller.getMastra(),
+    getResourceIds: () => [...liveSessions].map(session => session.identity.getResourceId()),
+    leases: !ownsNotificationDispatch
+      ? undefined
+      : (
+          ownSignalsPubSub ?? (process.platform !== 'win32' ? createSignalsPubSub(project.resourceId) : undefined)
+        )?.getLeaseProvider(),
+    owner: `${ownerId}:${process.pid}:${randomUUID()}`,
+    onError: error => console.warn('Notification dispatch failed:', error),
+  });
 
   // Agent — githubSignals is created before `controller` but the closure below
   // captures `controller` by reference; it is only invoked at notification time,
@@ -1146,11 +1170,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             resourceId: input.record.resourceId,
             threadId: input.record.threadId,
           });
-          if (streamOptions) return { ...decision, streamOptions };
-          // On the local socket pubsub, a thread no session here owns belongs
-          // to another Mastra Code process (another project) sharing this
-          // database. Leave its notifications for that process's dispatcher.
-          return sharesLocalProcesses ? { ...decision, hold: true } : decision;
+          const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
+          if (!ownsNotificationDispatch) return withOptions;
+          // `hold` only applies at delivery time; it is ignored when a
+          // notification is first sent.
+          const hold = shouldHoldNotificationDelivery({
+            resourceId: input.record.resourceId,
+            ownedHere: streamOptions !== undefined,
+            dispatcher: notificationDispatcher,
+          });
+          return hold ? { ...withOptions, hold: true } : withOptions;
         },
       },
     },
@@ -1529,6 +1558,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
   });
 
+  controller.onSessionCreated(session => {
+    liveSessions.add(session);
+  });
+  controller.onSessionDeleted(session => {
+    liveSessions.delete(session);
+  });
+
   const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
   // Thread ownership advertisement is part of experimental cross-agent
   // communication: without it, sessions never claim or advertise their thread to
@@ -1663,6 +1699,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     /** Process-local `/schedules` scheduler. Call `stop()` on shutdown. */
     threadScheduler,
     /**
+     * Starts delivering the due notifications of this controller's sessions'
+     * resources from this process. Called by the composition layer once the
+     * controller is inited. A no-op when the embedder configured its own
+     * PubSub, whose shared dispatch schedule keeps delivering everything.
+     */
+    startNotificationDispatch: () => {
+      if (ownsNotificationDispatch) notificationDispatcher.start();
+    },
+    /** Stops this process's notification dispatch and releases its leases. Call on shutdown. */
+    stopNotificationDispatch: () => notificationDispatcher.stop(),
+    /**
      * Hands Mastra to the statically configured input processors.
      *
      * The Agent does this itself, but only for processors configured as a
@@ -1777,6 +1824,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
+  base.startNotificationDispatch();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
   const knowledgeInspector = await base.createKnowledgeInspector(session);
@@ -1923,6 +1971,7 @@ export async function prepareAgentControllerMount(
     // exactly once regardless of how Mastra Code was mounted.
     base.registerConfiguredProcessorsWithMastra();
     base.startPluginSignalProviders();
+    base.startNotificationDispatch();
   };
 
   return { base, mastraArgs, finalize };

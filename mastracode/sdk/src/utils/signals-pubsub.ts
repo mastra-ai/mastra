@@ -9,6 +9,7 @@ const SHARED_SCOPE_DIR = '_shared';
 const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
 const THREAD_KEY_SEPARATOR = '\0';
 const THREAD_CLAIM_LEASE_PREFIX = 'thread-claim:';
+const NOTIFICATION_DISPATCH_LEASE_PREFIX = 'notification-dispatch:';
 const OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 const MAX_PATH_SEGMENT_LENGTH = 128;
 
@@ -48,8 +49,24 @@ function decodeThreadTopic(topic: string): string | undefined {
   }
 }
 
-/** The resource whose thread a lease key guards: the run lease and the claim lease. */
+/**
+ * The lease that lets exactly one process dispatch a resource's due
+ * notifications. Held in that resource's directory, so every process serving
+ * the resource contends for it whichever project it was started in.
+ */
+export function notificationDispatchLeaseKey(resourceId: string): string {
+  return `${NOTIFICATION_DISPATCH_LEASE_PREFIX}${resourceId}`;
+}
+
+/**
+ * The resource a lease key belongs to: a thread's run lease and claim lease,
+ * and a resource's notification dispatch lease.
+ */
 function resourceOfLeaseKey(key: string): string | undefined {
+  if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX)) {
+    const resourceId = key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length);
+    return isSafePathSegment(resourceId) ? resourceId : undefined;
+  }
   return resourceOfThreadKey(
     key.startsWith(THREAD_CLAIM_LEASE_PREFIX) ? key.slice(THREAD_CLAIM_LEASE_PREFIX.length) : key,
   );

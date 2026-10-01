@@ -52,6 +52,8 @@ export type DispatchDueNotificationsInput = {
   storage: NotificationsStorage;
   now?: Date;
   limit?: number;
+  /** Only dispatch notifications for this resource's threads. */
+  resourceId?: string;
 };
 
 export type DispatchDueNotificationsResult = {
@@ -201,20 +203,19 @@ async function sendNotificationSummary({
   if (!first.resourceId) throw new Error('Notification summary is missing resourceId');
 
   const agent = (await mastra.getAgentById(first.agentId as never)) as NotificationDispatchAgent;
+  const decision = await resolveDeliveryTimeDecision(mastra, agent, {
+    record: first,
+    threadState: agentThreadStreamRuntime.getThreadState(
+      { resourceId: first.resourceId, threadId: first.threadId },
+      agent.getPubSub?.(),
+    ),
+    now,
+  });
+  if (decision.hold) return null;
   // The all-low-priority batch persists without waking, so it never starts a
   // run and needs no stream options.
   const allLowPriority = records.every(record => record.priority === 'low');
-  const { streamOptions, hold } = allLowPriority
-    ? { streamOptions: undefined, hold: false }
-    : await resolveDeliveryTimeDecision(mastra, agent, {
-        record: first,
-        threadState: agentThreadStreamRuntime.getThreadState(
-          { resourceId: first.resourceId, threadId: first.threadId },
-          agent.getPubSub?.(),
-        ),
-        now,
-      });
-  if (hold) return null;
+  const streamOptions = allLowPriority ? undefined : decision.streamOptions;
   const summary = summarizeNotifications(records);
   const signal = createNotificationSummarySignal(summary);
   const target: SendAgentSignalOptions = allLowPriority
@@ -264,8 +265,9 @@ export async function dispatchDueNotifications({
   storage,
   now = new Date(),
   limit = 100,
+  resourceId,
 }: DispatchDueNotificationsInput): Promise<DispatchDueNotificationsResult> {
-  const due = await storage.listDueNotifications({ now, limit });
+  const due = await storage.listDueNotifications({ now, limit, ...(resourceId ? { resourceId } : {}) });
   const delivered: NotificationRecord[] = [];
   const failed: Array<{ record: NotificationRecord; error: string }> = [];
   const signals: CreatedAgentSignal[] = [];
