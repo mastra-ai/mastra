@@ -68,6 +68,17 @@ function FieldItem({ className, ...props }: FieldItemProps) {
   );
 }
 
+function RequiredMark() {
+  return (
+    <>
+      <span aria-hidden className="ml-0.5 text-destructive-foreground in-data-disabled:text-muted-foreground">
+        *
+      </span>{' '}
+      <span className="sr-only">(required)</span>
+    </>
+  );
+}
+
 type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
   required?: boolean;
@@ -100,14 +111,7 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       {...props}
     >
       {children}
-      {required ? (
-        <>
-          <span aria-hidden className="ml-0.5 text-destructive-foreground in-data-disabled:text-muted-foreground">
-            *
-          </span>{' '}
-          <span className="sr-only">(required)</span>
-        </>
-      ) : null}
+      {required ? <RequiredMark /> : null}
     </FieldPrimitive.Label>
   );
 }
@@ -204,15 +208,19 @@ function Fieldset({ className, ...props }: FieldsetProps) {
 
 type FieldsetLegendProps = Omit<FieldsetPrimitive.Legend.Props, 'className'> & {
   className?: string;
+  required?: boolean;
 };
 
-function FieldsetLegend({ className, ...props }: FieldsetLegendProps) {
+function FieldsetLegend({ className, required = false, children, ...props }: FieldsetLegendProps) {
   return (
     <FieldsetPrimitive.Legend
       data-slot="fieldset-legend"
       className={cn('text-label text-foreground data-disabled:text-muted-foreground', className)}
       {...props}
-    />
+    >
+      {children}
+      {required ? <RequiredMark /> : null}
+    </FieldsetPrimitive.Legend>
   );
 }
 

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsLayout,
@@ -66,6 +67,12 @@ export const Connection: Story = {
         <SettingsRow label="API prefix">
           <Input defaultValue="/api" className="w-full sm:max-w-96" />
         </SettingsRow>
+        <SettingsFieldsetRow label="Header" description="Sent with every request.">
+          <div className="flex w-full gap-2 sm:max-w-96">
+            <Input aria-label="Header name" defaultValue="x-api-key" />
+            <Input aria-label="Header value" type="password" defaultValue="secret" />
+          </div>
+        </SettingsFieldsetRow>
       </SettingsContainer>
     </SettingsGroup>
   ),

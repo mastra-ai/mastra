@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
@@ -120,6 +121,22 @@ describe('Settings', () => {
       );
 
       expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when one row holds several controls', () => {
+    it('names the group by the row and keeps each control apart', () => {
+      render(
+        <SettingsFieldsetRow label="Add label route" description="Pick a label and a board.">
+          <Input aria-label="Label" />
+          <Input aria-label="Board" />
+        </SettingsFieldsetRow>,
+      );
+
+      screen.getByRole('group', { name: 'Add label route', description: 'Pick a label and a board.' });
+      const label = screen.getByRole('textbox', { name: 'Label' });
+      const board = screen.getByRole('textbox', { name: 'Board' });
+      expect(label.id).not.toBe(board.id);
     });
   });
 

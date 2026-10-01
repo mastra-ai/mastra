@@ -1,7 +1,8 @@
 import { LockKeyholeIcon } from 'lucide-react';
+import { useId } from 'react';
 import type { ReactNode } from 'react';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
-import type { FieldProps } from '@/ds/components/Field';
+import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
+import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
 import { cn } from '@/lib/utils';
 
 export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
@@ -92,4 +93,33 @@ export function SettingsRowLayout({
 
 export function SettingsRow(props: SettingsRowProps) {
   return <SettingsRowLayout {...props} layout="factory" />;
+}
+
+export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
+  label: ReactNode;
+  description?: ReactNode;
+  children?: ReactNode;
+};
+
+export function SettingsFieldsetRow({ label, description, children, className, ...props }: SettingsFieldsetRowProps) {
+  const descriptionId = useId();
+
+  return (
+    <Fieldset
+      data-slot="settings-row"
+      aria-describedby={description == null ? undefined : descriptionId}
+      className={cn('flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4', className)}
+      {...props}
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <FieldsetLegend>{label}</FieldsetLegend>
+        {description != null && (
+          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-muted-foreground">
+            {description}
+          </div>
+        )}
+      </div>
+      {children}
+    </Fieldset>
+  );
 }
