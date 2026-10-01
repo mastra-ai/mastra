@@ -21,7 +21,7 @@ import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
-import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
+import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
@@ -950,10 +950,7 @@ export class AIV5Adapter {
 
         const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
           matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
+          matchingCall.result = normalizeToolOutput(toolResultPart.output).output;
         };
 
         // When the matching tool-call isn't in this same model message (e.g. the

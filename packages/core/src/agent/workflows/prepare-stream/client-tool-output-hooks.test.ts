@@ -61,6 +61,18 @@ function toolResultMessage(toolCallId: string, result: unknown, toolName = 'brow
   };
 }
 
+function toolInvocationResultMessage(toolCallId: string, result: unknown, toolName = 'browserTool') {
+  return {
+    role: 'assistant' as const,
+    content: [
+      {
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result },
+      },
+    ],
+  };
+}
+
 describe('fireClientToolOutputHooks', () => {
   it('fires onOutput for a trailing correlated client tool result', async () => {
     const onOutput = vi.fn();
@@ -96,6 +108,30 @@ describe('fireClientToolOutputHooks', () => {
     expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { value: 72, unit: 'F' } }));
   });
 
+  it('does not unwrap an unknown `{ type, value }` domain object', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'celsius', value: 20 };
+
+    const messages = [toolCallMessage('call-1'), toolResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
+  });
+
+  it('preserves sibling metadata on a recognized wrapper-shaped object', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'json', value: { ok: true }, receipt: 'r-1' };
+
+    const messages = [toolCallMessage('call-1'), toolResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
+  });
+
   it('unwraps the AI SDK v5 `{ type, value }` output wrapper', async () => {
     const onOutput = vi.fn();
     const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
@@ -118,6 +154,43 @@ describe('fireClientToolOutputHooks', () => {
     await fireClientToolOutputHooks({ messages, tools });
 
     expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { ok: true } }));
+  });
+
+  it('normalizes stored tool-invocation results with the same wrapper rules', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const messages = [
+      toolCallMessage('call-1'),
+      toolInvocationResultMessage('call-1', { type: 'json', value: { ok: true } }),
+    ];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { ok: true } }));
+  });
+
+  it('does not fire onOutput for stored error tool-invocation results', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const messages = [
+      toolCallMessage('call-1'),
+      toolInvocationResultMessage('call-1', { type: 'error-text', value: 'client failed' }),
+    ];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
+  it('preserves unknown stored tool-invocation domain objects', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'celsius', value: 20 };
+    const messages = [toolCallMessage('call-1'), toolInvocationResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
   });
 
   it('preserves the server-defined onOutput when a serialized client tool of the same name is sent', async () => {
