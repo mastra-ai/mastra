@@ -22,8 +22,8 @@ export function DatasetItemScorerSelector({
 }: DatasetItemScorerSelectorProps) {
   return (
     <div className="grid gap-3">
-      <Field orientation="horizontal" className="gap-3">
-        <Switch checked={overrideEnabled} onCheckedChange={onOverrideEnabledChange} disabled={disabled} />
+      <Field orientation="horizontal" disabled={disabled} className="gap-3">
+        <Switch checked={overrideEnabled} onCheckedChange={onOverrideEnabledChange} />
         <FieldLabel>Override dataset scorers</FieldLabel>
       </Field>
       <Txt variant="caption" tone="muted">

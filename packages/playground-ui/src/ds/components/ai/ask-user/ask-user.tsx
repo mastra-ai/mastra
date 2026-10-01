@@ -74,7 +74,7 @@ export const AskUserOptionRow = ({
   className,
   ...props
 }: AskUserOptionRowProps) => (
-  <FieldItem className="contents">
+  <FieldItem disabled={disabled} className="contents">
     <FieldLabel
       // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
       aria-disabled={disabled || undefined}

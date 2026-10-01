@@ -215,25 +215,22 @@ function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false 
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Field>
-          <Fieldset
-            className="gap-2"
-            render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} disabled={readOnly} />}
-          >
+        <Field disabled={readOnly}>
+          <Fieldset className="gap-2" render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} />}>
             <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
             <FieldItem>
-              <RadioGroupItem value="none" disabled={readOnly} />
+              <RadioGroupItem value="none" />
               <FieldLabel>None (evaluate all)</FieldLabel>
             </FieldItem>
             <FieldItem>
-              <RadioGroupItem value="ratio" disabled={readOnly} />
+              <RadioGroupItem value="ratio" />
               <FieldLabel>Ratio (percentage)</FieldLabel>
             </FieldItem>
           </Fieldset>
         </Field>
 
         {samplingType === 'ratio' && (
-          <Field className="mt-2 gap-1.5">
+          <Field disabled={readOnly} className="mt-2 gap-1.5">
             <FieldLabel>Sample Rate (0-1)</FieldLabel>
             <Input
               type="number"
@@ -243,7 +240,6 @@ function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false 
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
               className="h-8"
-              disabled={readOnly}
             />
           </Field>
         )}

@@ -45,11 +45,10 @@ export const Browser = ({ editable = true }: BrowserProps) => {
           </Txt>
         </div>
 
-        <Field orientation="horizontal" className="mt-1 gap-3">
+        <Field orientation="horizontal" disabled={!editable} className="mt-1 gap-3">
           <Switch
             checked={browserEnabled}
             onCheckedChange={handleCheckedChange}
-            disabled={!editable}
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />

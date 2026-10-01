@@ -2,7 +2,6 @@ import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { SearchIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -58,21 +57,18 @@ export const ToolGrid = ({
 
         <Field
           orientation="horizontal"
+          disabled={!editable}
           data-testid="tools-only-selected-filter"
-          className={cn(
-            'inline-flex cursor-pointer text-meta text-muted-foreground select-none',
-            !editable && 'cursor-not-allowed opacity-60',
-          )}
+          className="inline-flex select-none data-disabled:opacity-60"
         >
           <Checkbox
             checked={onlySelected}
             onCheckedChange={value => onOnlySelectedChange(value === true)}
-            disabled={!editable}
             data-testid="tools-only-selected-filter-checkbox"
             style={filterCheckboxStyle}
             className="h-3 w-3 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
-          <FieldLabel size="smaller">Show only selected</FieldLabel>
+          <FieldLabel className="text-meta text-muted-foreground">Show only selected</FieldLabel>
         </Field>
       </div>
 
