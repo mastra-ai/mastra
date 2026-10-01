@@ -11,7 +11,53 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Source ids to sync; `null` = nothing selected. */
   sourceIds: string[] | null;
+  /** Linear project id → repository slug its issues start in. */
   repositoryByLinearProject?: Record<string, string>;
+  /** Jira source id → repository slug its issues start in when no component route matches. */
+  repositoryByJiraProject?: Record<string, string>;
+  /** Jira source id → component name → repository slug; a matching component wins over the project default. */
+  repositoryByJiraComponent?: Record<string, Record<string, string>>;
+}
+
+function normalizeComponentName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Repository slug Settings › Intake routes a work item to, before the card
+ * carries one of its own. Linear cards map by project; Jira cards map by the
+ * first routed component, then by project. `undefined` when nothing applies —
+ * the server's `resolveWorkItemRepository` mirrors this order.
+ */
+export function mappedRepositorySlug(
+  source: string | null | undefined,
+  metadata: Record<string, unknown> | null | undefined,
+  config: Pick<IntakeConfig, 'linear' | 'jira'> | undefined,
+): string | undefined {
+  if (!config || !metadata) return undefined;
+  if (source === 'linear-issue') {
+    const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
+    return linearProjectId ? config.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
+  }
+  if (source === 'jira-issue') {
+    const sourceId = typeof metadata.jiraSourceId === 'string' ? metadata.jiraSourceId : undefined;
+    if (!sourceId) return undefined;
+    const componentRoutes = config.jira.repositoryByJiraComponent?.[sourceId];
+    const components = Array.isArray(metadata.components)
+      ? metadata.components.filter((component): component is string => typeof component === 'string')
+      : [];
+    if (componentRoutes && components.length > 0) {
+      const byName = new Map(
+        Object.entries(componentRoutes).map(([name, slug]) => [normalizeComponentName(name), slug]),
+      );
+      for (const component of components) {
+        const slug = byName.get(normalizeComponentName(component));
+        if (slug) return slug;
+      }
+    }
+    return config.jira.repositoryByJiraProject?.[sourceId];
+  }
+  return undefined;
 }
 
 export interface IntakeConfig {

@@ -7,6 +7,7 @@ import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 import { useFactoryQuery } from './useFactories';
 import { useIntakeConfigQuery } from './useIntakeConfig';
+import { mappedRepositorySlug } from '../ui/domains/factory/services/intake';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
 
@@ -44,12 +45,9 @@ export function useStartFactoryRun() {
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      const linearProjectId =
-        workItem.source === 'linear-issue' && typeof workItem.metadata?.linearProjectId === 'string'
-          ? workItem.metadata.linearProjectId
-          : undefined;
-      const config = linearProjectId && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
-      const mappedSlug = linearProjectId ? config?.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
+      const mappable = workItem.source === 'linear-issue' || workItem.source === 'jira-issue';
+      const config = mappable && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
+      const mappedSlug = mappedRepositorySlug(workItem.source, workItem.metadata, config);
       const targetSlug =
         repositorySlug ??
         (typeof workItem.metadata?.repository === 'string' ? workItem.metadata.repository : undefined) ??

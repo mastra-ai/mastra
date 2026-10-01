@@ -24,7 +24,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { adfToText } from '../../jira/adf.js';
 import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
-import { JiraApiClient, JiraApiError } from '../../jira/api.js';
+import { JiraApiClient, JiraApiError, jiraComponentNames } from '../../jira/api.js';
 import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules.js';
 import { resolveJiraRules } from '../../jira/default-rules.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
@@ -248,12 +248,14 @@ export class PlatformJiraIntegration implements FactoryIntegration {
           stateType: issue.stateType,
           priority: issue.priority,
           project: issue.source,
+          jiraSourceId: issue.sourceId,
           site: issue.site,
           assignee: issue.assignee,
           assignees: issue.assignees ?? [],
           creator: issue.author,
           author: issue.author,
           labels: issue.labels,
+          components: issue.components ?? [],
           createdAt: issue.createdAt,
           updatedAt: issue.updatedAt,
         },
@@ -314,8 +316,10 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     const { context, issue } = (await this.#findIssue(input)) ?? {};
     if (!context || !issue) return null;
     const { comments, total } = await this.#listAllComments(context.api, issue.key);
+    const projectId = issue.fields.project?.id;
     return {
       ...this.#toIntakeIssue(issue, context.siteUrl),
+      ...(projectId ? { sourceId: encodeSourceId(context.connection.id, projectId) } : {}),
       commentCount: total,
       description: issue.fields.description ? adfToText(issue.fields.description) || null : null,
       comments: comments.map(comment => ({
@@ -448,6 +452,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       assignee: fields.assignee?.displayName ?? null,
       source: fields.project?.key ?? null,
       labels: fields.labels ?? [],
+      components: jiraComponentNames(fields.components),
       commentCount: null,
       createdAt: fields.created ?? '',
       updatedAt: fields.updated ?? '',

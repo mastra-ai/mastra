@@ -41,6 +41,8 @@ export interface JiraIssueIngress {
   /** Jira site host the issue was read from, when available. */
   site: string | null;
   labels: string[];
+  /** Jira component names the issue is filed under. */
+  components?: string[];
   createdAt: string;
   updatedAt: string;
   /** Jira source the issue was read from; resolves the bound board via `intakeBoards`. */

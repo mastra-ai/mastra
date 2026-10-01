@@ -14,7 +14,26 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
   sourceIds: string[] | null;
+  /** Linear project id → repository slug its issues start in. */
   repositoryByLinearProject?: Record<string, string>;
+  /** Jira intake source id → repository slug its issues start in when no component route matches. */
+  repositoryByJiraProject?: Record<string, string>;
+  /** Jira intake source id → component name → repository slug; a matching component wins over the project default. */
+  repositoryByJiraComponent?: Record<string, Record<string, string>>;
+}
+
+/** Jira project → repository routing read from an org's intake selection. */
+export interface JiraRepositoryRoutes {
+  byProject?: Record<string, string>;
+  byComponent?: Record<string, Record<string, string>>;
+}
+
+export function jiraRepositoryRoutes(selection: IntakeSelection | undefined): JiraRepositoryRoutes | undefined {
+  if (!selection?.repositoryByJiraProject && !selection?.repositoryByJiraComponent) return undefined;
+  return {
+    ...(selection.repositoryByJiraProject ? { byProject: selection.repositoryByJiraProject } : {}),
+    ...(selection.repositoryByJiraComponent ? { byComponent: selection.repositoryByJiraComponent } : {}),
+  };
 }
 
 export type IntakeConfig = Record<string, IntakeSelection>;

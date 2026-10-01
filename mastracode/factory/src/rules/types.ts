@@ -451,8 +451,12 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
     project: string | null;
     site: string | null;
     labels: readonly string[];
+    /** Jira component names the issue is filed under; Settings › Intake maps them to repositories. */
+    components?: readonly string[];
     createdAt: string;
     updatedAt: string;
+    /** Intake source id the issue was read from; keys the Jira project → repository mapping. */
+    sourceId?: string | null;
   };
 }
 

@@ -5,6 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
+import { jiraRepositoryRoutes } from '../storage/domains/intake/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -136,13 +137,17 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
+    const intakeConfig = await this.#intake?.getConfig({
+      orgId: request.orgId,
+      integrationIds: ['linear', 'jira'],
+    });
     let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       item: storedItem ?? { metadata: request.workItem.input.metadata ?? null },
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+      jiraRepositoryRoutes: jiraRepositoryRoutes(intakeConfig?.jira),
     });
     if (repository.status === 'ambiguous') {
       // A retry of this role's existing session keeps its already-chosen

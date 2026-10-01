@@ -11,6 +11,7 @@ import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { useRecentAuditEvents } from '../../hooks/useAuditEvents';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useIntakeConfigQuery } from '../../hooks/useIntakeConfig';
+import { mappedRepositorySlug } from '../domains/factory/services/intake';
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
 import type { IntakeSource } from '../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../domains/factory/boardStages';
@@ -194,10 +195,7 @@ function BoardContent({
     onSelect: (slug: string) => void,
     onResolved: () => void,
   ) => {
-    const mappedSlug =
-      source === 'linear-issue' && typeof metadata?.linearProjectId === 'string'
-        ? intakeConfig.data?.linear.repositoryByLinearProject?.[metadata.linearProjectId]
-        : undefined;
+    const mappedSlug = mappedRepositorySlug(source, metadata, intakeConfig.data);
     const knownSlug = typeof metadata?.repository === 'string' ? metadata.repository : mappedSlug;
     if (
       factory.repositories.length > 1 &&

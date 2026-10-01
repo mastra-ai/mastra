@@ -1007,6 +1007,61 @@ describe('IntakeSection', () => {
       });
     });
 
+    it('maps a routed Jira project and its components to the Factory’s linked repositories', async () => {
+      seedFactories();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_A}/source-control-connections`, () =>
+          HttpResponse.json({
+            connections: [
+              {
+                id: 'conn-a',
+                repositories: [
+                  {
+                    id: 'ghp-web',
+                    branch: null,
+                    sandboxWorkdir: null,
+                    repository: { slug: 'acme/web', defaultBranch: 'main' },
+                  },
+                  {
+                    id: 'ghp-api',
+                    branch: null,
+                    sandboxWorkdir: null,
+                    repository: { slug: 'acme/api', defaultBranch: 'main' },
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+      const { saved } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001', '10002'] } },
+        bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A, board: 'work' }],
+      });
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for ENG · Engineering' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'acme/web' }));
+      await waitFor(() => expect(saved.at(-1)?.jira.repositoryByJiraProject).toEqual({ '10001': 'acme/web' }));
+      // The unrouted project offers no mapping.
+      expect(screen.queryByRole('combobox', { name: 'Repository for OPS · Operations' })).not.toBeInTheDocument();
+
+      await userEvent.type(screen.getByRole('textbox', { name: 'Component for ENG · Engineering' }), 'Backend');
+      await userEvent.click(screen.getByRole('combobox', { name: 'Repository for new ENG · Engineering component' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'acme/api' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+      await waitFor(() =>
+        expect(saved.at(-1)?.jira.repositoryByJiraComponent).toEqual({ '10001': { Backend: 'acme/api' } }),
+      );
+      expect(saved.at(-1)?.jira.repositoryByJiraProject).toEqual({ '10001': 'acme/web' });
+
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Remove route for ENG · Engineering component Backend' }),
+      );
+      await waitFor(() => expect(saved.at(-1)?.jira.repositoryByJiraComponent).toEqual({}));
+    });
+
     it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {
       useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: null } } });
       server.use(

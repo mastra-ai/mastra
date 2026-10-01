@@ -308,6 +308,7 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             project: issue.source,
             site: issue.site,
             labels: issue.labels,
+            components: issue.components ?? [],
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,

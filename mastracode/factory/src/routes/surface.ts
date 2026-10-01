@@ -36,6 +36,7 @@ import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
+import { jiraRepositoryRoutes } from '../storage/domains/intake/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -310,13 +311,14 @@ export async function prepareFactoryRuleBinding(
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
     const boundSession = await reuseBoundSession(sourceControl, input);
-    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
+    const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear', 'jira'] });
     let repository = await resolveWorkItemRepository({
       sourceControl,
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
       item: input.item,
       linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
+      jiraRepositoryRoutes: jiraRepositoryRoutes(intakeConfig?.jira),
     });
     if (repository.status === 'ambiguous' && boundSession) {
       const link = await sourceControl.projectRepositories.get({

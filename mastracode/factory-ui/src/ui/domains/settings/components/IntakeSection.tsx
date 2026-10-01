@@ -33,6 +33,7 @@ import type { FactoryProject, GithubStatus } from '../../workspaces/services/git
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
+import { JiraRepositoryRouting } from './JiraRepositoryRouting';
 import { IntakeSourceRouting, LinearRouting } from './LinearRouting';
 
 import { SettingsSubsection } from './SettingsSubsection';
@@ -792,6 +793,15 @@ export function IntakeSection() {
               sourceIds={jiraSourceIds}
               sources={jiraProjects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
               factories={factoriesQuery.data ?? []}
+            />
+            <JiraRepositoryRouting
+              config={config}
+              busy={busy}
+              update={update}
+              sourceIds={jiraSourceIds}
+              projects={jiraProjects}
+              factories={factoriesQuery.data ?? []}
+              bindings={bindingsQuery.data ?? []}
             />
           </SettingsContainer>
         </SettingsSubsection>

@@ -1,3 +1,4 @@
+import type { JiraRepositoryRoutes } from '../storage/domains/intake/base.js';
 import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorageHandle,
@@ -15,14 +16,45 @@ interface LinkedRepository {
   slug: string;
 }
 
+/** Case-insensitive, like labels: Jira preserves component casing but users rarely type it the same way twice. */
+function normalizeComponentName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Repository a Jira card is routed to by Settings › Intake: the first of the
+ * card's components with a route under its source wins, then the source's
+ * project default. `undefined` when the card is not a routed Jira card.
+ */
+export function resolveJiraMappedRepository(
+  metadata: Record<string, unknown>,
+  routes: JiraRepositoryRoutes | undefined,
+): string | undefined {
+  const sourceId = typeof metadata.jiraSourceId === 'string' ? metadata.jiraSourceId : undefined;
+  if (!sourceId || !routes) return undefined;
+  const componentRoutes = routes.byComponent?.[sourceId];
+  const components = Array.isArray(metadata.components)
+    ? metadata.components.filter((component): component is string => typeof component === 'string')
+    : [];
+  if (componentRoutes && components.length > 0) {
+    const byName = new Map(Object.entries(componentRoutes).map(([name, slug]) => [normalizeComponentName(name), slug]));
+    for (const component of components) {
+      const slug = byName.get(normalizeComponentName(component));
+      if (slug) return slug;
+    }
+  }
+  return routes.byProject?.[sourceId];
+}
+
 export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
   item: Pick<WorkItemRow, 'metadata'>;
   linearRepositoryMap?: Record<string, string>;
+  jiraRepositoryRoutes?: JiraRepositoryRoutes;
 }): Promise<WorkItemRepositoryResolution> {
-  const { sourceControl, orgId, factoryProjectId, item, linearRepositoryMap } = args;
+  const { sourceControl, orgId, factoryProjectId, item, linearRepositoryMap, jiraRepositoryRoutes } = args;
   const metadata = item.metadata ?? {};
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
   const linked: LinkedRepository[] = [];
@@ -55,7 +87,9 @@ export async function resolveWorkItemRepository(args: {
   const externalRepositoryId = metadata.githubRepositoryId ?? metadata.gitlabProjectId;
   const externalRepositorySignal = externalRepositoryId == null ? undefined : String(externalRepositoryId);
   const linearProjectId = typeof metadata.linearProjectId === 'string' ? metadata.linearProjectId : undefined;
-  const mappedRepository = linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined;
+  const mappedRepository =
+    resolveJiraMappedRepository(metadata, jiraRepositoryRoutes) ??
+    (linearProjectId ? linearRepositoryMap?.[linearProjectId] : undefined);
 
   if (repositorySignal) {
     const match = linked.find(repository => repository.slug === repositorySignal);

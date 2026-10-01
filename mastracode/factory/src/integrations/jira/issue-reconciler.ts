@@ -23,8 +23,10 @@ function issueToIngress(issueRef: string, issue: IntakeIssue): JiraIssueIngress 
     project: issue.source ?? null,
     site: null,
     labels: [...(issue.labels ?? [])],
+    components: [...(issue.components ?? [])],
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
+    sourceId: issue.sourceId ?? null,
   };
 }
 
@@ -50,7 +52,7 @@ export function attachJiraIssueReconciler(
     storage: context.runtime.workItems,
     isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
     issueId: item => item.externalSource?.externalId,
-    metadata: (item, issue) => ({
+    metadata: (item, issue, resolved) => ({
       identifier: issue.identifier,
       issueRef: item.externalSource?.externalId ?? issue.id,
       autoStartCandidate: issue.stateType === 'unstarted' || issue.stateType === 'started',
@@ -58,11 +60,14 @@ export function attachJiraIssueReconciler(
       stateType: issue.stateType,
       priority: issue.priority,
       project: issue.source,
+      // Backfills cards filed before the project → repository mapping existed.
+      jiraSourceId: issue.sourceId ?? resolved.sourceId ?? undefined,
       assignee: issue.assignee,
       assignees: issue.assignees ?? [],
       creator: issue.author,
       author: issue.author,
       labels: issue.labels ?? [],
+      components: issue.components ?? [],
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
     }),

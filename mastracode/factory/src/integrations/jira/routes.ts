@@ -298,6 +298,7 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
             assignee: issue.assignee,
             project: issue.source,
             labels: issue.labels,
+            components: issue.components ?? [],
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,

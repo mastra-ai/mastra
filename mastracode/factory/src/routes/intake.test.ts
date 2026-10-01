@@ -818,4 +818,38 @@ describe('parseIntakeConfig', () => {
     expect(parseIntakeConfig({ github: { enabled: 'yes' } })).toBeNull();
     expect(parseIntakeConfig({ github: { enabled: true, sourceIds: ['a', 'a'] } })).toBeNull();
   });
+
+  it('keeps Jira project and component repository mappings, dropping empty component sets', () => {
+    expect(
+      parseIntakeConfig({
+        jira: {
+          enabled: true,
+          sourceIds: ['10001', '10002'],
+          repositoryByJiraProject: { '10001': 'acme/app' },
+          repositoryByJiraComponent: { '10001': { Backend: 'acme/api', Web: 'acme/web' }, '10002': {} },
+        },
+      }),
+    ).toEqual({
+      jira: {
+        enabled: true,
+        sourceIds: ['10001', '10002'],
+        repositoryByJiraProject: { '10001': 'acme/app' },
+        repositoryByJiraComponent: { '10001': { Backend: 'acme/api', Web: 'acme/web' } },
+      },
+    });
+  });
+
+  it('rejects malformed Jira repository mappings and ignores them on other integrations', () => {
+    expect(parseIntakeConfig({ jira: { enabled: true, repositoryByJiraProject: { '10001': '' } } })).toBeNull();
+    expect(parseIntakeConfig({ jira: { enabled: true, repositoryByJiraProject: ['acme/app'] } })).toBeNull();
+    expect(
+      parseIntakeConfig({ jira: { enabled: true, repositoryByJiraComponent: { '10001': { '  ': 'acme/app' } } } }),
+    ).toBeNull();
+    expect(
+      parseIntakeConfig({ jira: { enabled: true, repositoryByJiraComponent: { '10001': { Backend: 42 } } } }),
+    ).toBeNull();
+    expect(parseIntakeConfig({ linear: { enabled: true, repositoryByJiraProject: { '10001': 'acme/app' } } })).toEqual({
+      linear: { enabled: true, sourceIds: null },
+    });
+  });
 });

@@ -42,7 +42,7 @@ import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { adfToText } from './adf.js';
 import { buildJiraAgentTools } from './agent-tools.js';
 import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
-import { JiraApiClient, JiraApiError } from './api.js';
+import { JiraApiClient, JiraApiError, jiraComponentNames } from './api.js';
 import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
@@ -263,11 +263,13 @@ export class JiraIntegration implements FactoryIntegration {
           stateType: issue.stateType,
           priority: issue.priority,
           project: issue.source,
+          jiraSourceId: issue.sourceId,
           assignee: issue.assignee,
           assignees: issue.assignees ?? [],
           creator: issue.author,
           author: issue.author,
           labels: issue.labels,
+          components: issue.components ?? [],
           createdAt: issue.createdAt,
           updatedAt: issue.updatedAt,
         },
@@ -403,6 +405,7 @@ export class JiraIntegration implements FactoryIntegration {
       source: fields.project?.key ?? null,
       sourceId: fields.project?.id ?? null,
       labels: fields.labels ?? [],
+      components: jiraComponentNames(fields.components),
       commentCount: null,
       createdAt: fields.created ?? '',
       updatedAt: fields.updated ?? '',

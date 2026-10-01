@@ -8,7 +8,7 @@ import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
 import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { normalizeIntakeLabel, resolveIntakeLabelRoute } from '../storage/domains/intake/base.js';
-import type { IntakeConfig, IntakeLabelRoute, IntakeStorage } from '../storage/domains/intake/base.js';
+import type { IntakeConfig, IntakeLabelRoute, IntakeSelection, IntakeStorage } from '../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -283,24 +283,96 @@ function sanitizeIdList(value: unknown): string[] | null | undefined {
   return ids.length === value.length && new Set(ids).size === ids.length ? ids : undefined;
 }
 
-function sanitizeLinearRepositoryMap(value: unknown): Record<string, string> | undefined {
+const MAX_REPOSITORY_SLUG_LENGTH = 512;
+const MAX_COMPONENT_NAME_LENGTH = 255;
+
+/** `source id → repository slug`; `undefined` rejects the whole map. */
+function sanitizeRepositoryMap(value: unknown): Record<string, string> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const entries = Object.entries(value);
   if (entries.length > 200) return undefined;
   const mapping: Record<string, string> = Object.create(null);
-  for (const [projectId, slug] of entries) {
+  for (const [sourceId, slug] of entries) {
     if (
-      !projectId ||
-      projectId.length > MAX_INTAKE_SOURCE_ID_LENGTH ||
+      !sourceId ||
+      sourceId.length > MAX_INTAKE_SOURCE_ID_LENGTH ||
       typeof slug !== 'string' ||
       !slug.trim() ||
-      slug.length > 512
+      slug.length > MAX_REPOSITORY_SLUG_LENGTH
     ) {
       return undefined;
     }
-    mapping[projectId] = slug;
+    mapping[sourceId] = slug;
   }
   return mapping;
+}
+
+/** `source id → component name → repository slug`; `undefined` rejects the whole map. */
+function sanitizeComponentRepositoryMap(value: unknown): Record<string, Record<string, string>> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > 200) return undefined;
+  const mapping: Record<string, Record<string, string>> = Object.create(null);
+  for (const [sourceId, routes] of entries) {
+    if (!sourceId || sourceId.length > MAX_INTAKE_SOURCE_ID_LENGTH) return undefined;
+    if (typeof routes !== 'object' || routes === null || Array.isArray(routes)) return undefined;
+    const routeEntries = Object.entries(routes);
+    if (routeEntries.length > 200) return undefined;
+    const sourceRoutes: Record<string, string> = Object.create(null);
+    for (const [component, slug] of routeEntries) {
+      if (
+        !component.trim() ||
+        component.length > MAX_COMPONENT_NAME_LENGTH ||
+        typeof slug !== 'string' ||
+        !slug.trim() ||
+        slug.length > MAX_REPOSITORY_SLUG_LENGTH
+      ) {
+        return undefined;
+      }
+      sourceRoutes[component] = slug;
+    }
+    if (routeEntries.length > 0) mapping[sourceId] = sourceRoutes;
+  }
+  return mapping;
+}
+
+type RepositoryMappings = Pick<
+  IntakeSelection,
+  'repositoryByLinearProject' | 'repositoryByJiraProject' | 'repositoryByJiraComponent'
+>;
+
+/**
+ * Provider-specific repository mappings a selection may carry. Each returns
+ * the sanitized value, `undefined` when absent, or `null` when present but
+ * malformed — which rejects the request.
+ */
+function parseRepositoryMappings(
+  integrationId: string,
+  selection: {
+    repositoryByLinearProject?: unknown;
+    repositoryByJiraProject?: unknown;
+    repositoryByJiraComponent?: unknown;
+  },
+): RepositoryMappings | null {
+  const result: RepositoryMappings = {};
+  if (integrationId === 'linear' && selection.repositoryByLinearProject !== undefined) {
+    const mapping = sanitizeRepositoryMap(selection.repositoryByLinearProject);
+    if (!mapping) return null;
+    result.repositoryByLinearProject = mapping;
+  }
+  if (integrationId === 'jira') {
+    if (selection.repositoryByJiraProject !== undefined) {
+      const mapping = sanitizeRepositoryMap(selection.repositoryByJiraProject);
+      if (!mapping) return null;
+      result.repositoryByJiraProject = mapping;
+    }
+    if (selection.repositoryByJiraComponent !== undefined) {
+      const mapping = sanitizeComponentRepositoryMap(selection.repositoryByJiraComponent);
+      if (!mapping) return null;
+      result.repositoryByJiraComponent = mapping;
+    }
+  }
+  return result;
 }
 
 /** Validate a request body into an intake config, rejecting unknown shapes. */
@@ -322,23 +394,19 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
     ) {
       return null;
     }
-    const selection = value as { enabled?: unknown; sourceIds?: unknown; repositoryByLinearProject?: unknown };
+    const selection = value as {
+      enabled?: unknown;
+      sourceIds?: unknown;
+      repositoryByLinearProject?: unknown;
+      repositoryByJiraProject?: unknown;
+      repositoryByJiraComponent?: unknown;
+    };
     if (typeof selection.enabled !== 'boolean') return null;
     const sourceIds = sanitizeIdList(selection.sourceIds ?? null);
     if (sourceIds === undefined) return null;
-    const repositoryByLinearProject =
-      integrationId === 'linear' ? sanitizeLinearRepositoryMap(selection.repositoryByLinearProject) : undefined;
-    if (
-      integrationId === 'linear' &&
-      selection.repositoryByLinearProject !== undefined &&
-      repositoryByLinearProject === undefined
-    )
-      return null;
-    config[integrationId] = {
-      enabled: selection.enabled,
-      sourceIds,
-      ...(repositoryByLinearProject ? { repositoryByLinearProject } : {}),
-    };
+    const mappings = parseRepositoryMappings(integrationId, selection);
+    if (mappings === null) return null;
+    config[integrationId] = { enabled: selection.enabled, sourceIds, ...mappings };
   }
   return config;
 }

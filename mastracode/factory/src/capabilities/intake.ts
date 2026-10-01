@@ -60,6 +60,8 @@ export interface IntakeIssue {
   /** Provider project id, independent of the selected source (which may be a team). */
   projectId?: string | null;
   labels: string[];
+  /** Provider component names the issue is filed under (Jira); lets intake map issues to repositories. */
+  components?: string[];
   /** Provider label name to its display color, when supplied by the upstream API. */
   labelColors?: Record<string, string>;
   commentCount: number | null;

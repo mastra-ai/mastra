@@ -39,6 +39,7 @@ export const JIRA_ISSUE_FIELDS = [
   'priority',
   'issuetype',
   'project',
+  'components',
   'created',
   'updated',
 ] as const;
@@ -138,6 +139,8 @@ export interface JiraIssueFields {
   priority?: { name: string } | null;
   issuetype?: { name: string };
   project?: { id: string; key: string; name?: string };
+  /** Project components the issue is filed under; Factory routes them to repositories. */
+  components?: Array<{ id?: string; name: string }>;
   created?: string;
   updated?: string;
 }
@@ -146,6 +149,13 @@ export interface JiraIssue {
   id: string;
   key: string;
   fields: JiraIssueFields;
+}
+
+/** Component names in Jira's order, dropping entries without a usable name. */
+export function jiraComponentNames(components: JiraIssueFields['components']): string[] {
+  return (components ?? [])
+    .map(component => (typeof component?.name === 'string' ? component.name.trim() : ''))
+    .filter(name => name.length > 0);
 }
 
 export interface JiraSearchPage {
