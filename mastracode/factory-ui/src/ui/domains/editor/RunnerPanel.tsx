@@ -438,12 +438,8 @@ export function RunnerPanel({ workspacePath, themePreset, onJump, onClose }: Run
       className="runner-terminal border-border flex h-64 shrink-0 flex-col border-t font-mono text-[13px] leading-relaxed"
       style={
         {
-          '--term-bg-dark': swatch.dark.bg,
           '--term-fg-dark': swatch.dark.fg,
           '--term-accent-dark': swatch.dark.accent,
-          '--term-bg-light': swatch.light.bg,
-          '--term-fg-light': swatch.light.fg,
-          '--term-accent-light': swatch.light.accent,
         } as React.CSSProperties
       }
       data-testid="runner-panel"

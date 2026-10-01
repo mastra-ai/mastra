@@ -130,10 +130,18 @@ export async function startRunnerCommand(session: SourceControlSession, command:
 
   const runId = randomBytes(8).toString('hex');
   const log = `/tmp/mastra-runner-${runId}.log`;
-  // Detach the command with its output redirected to the log; the wrapper
+  // Detach the command with its output captured to the log; the wrapper
   // appends an exit marker so the poller can report the exit code. `echo $!`
   // hands the wrapper subshell's pid back for aliveness checks and stop.
-  const script = `cd ${shellQuote(handle.workdir)} && : > ${shellQuote(log)} && ( sh -c ${shellQuote(trimmed)} >> ${shellQuote(log)} 2>&1; echo "${EXIT_MARKER}$?" >> ${shellQuote(log)} ) </dev/null >/dev/null 2>&1 & echo $!`;
+  //
+  // Run under a pseudo-TTY via util-linux `script -qefc` when available:
+  // programs block-buffer stdout when it's a plain file redirect (output
+  // appears in 4–8KB bursts or only at exit), but line-buffer — and emit
+  // colors — when they see a TTY. The typescript file goes to /dev/null
+  // because `script` writes a "Script started on …" header into it even with
+  // -q; we capture script's stdout relay instead, which is raw unbuffered
+  // writes of the pty output with no header.
+  const script = `cd ${shellQuote(handle.workdir)} && : > ${shellQuote(log)} && ( if command -v script >/dev/null 2>&1; then script -qefc ${shellQuote(trimmed)} /dev/null >> ${shellQuote(log)} 2>&1; else sh -c ${shellQuote(trimmed)} >> ${shellQuote(log)} 2>&1; fi; echo "${EXIT_MARKER}$?" >> ${shellQuote(log)} ) </dev/null >/dev/null 2>&1 & echo $!`;
   const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
   const pid = result.stdout.trim().split('\n').pop()?.trim() ?? '';
   if (result.exitCode !== 0 || !/^\d+$/.test(pid)) {
@@ -164,6 +172,10 @@ export async function pollRunnerCommand(session: SourceControlSession, runId: st
     output = lineEnd === -1 ? '' : output.slice(lineEnd + 1);
   }
 
+  // PTY output uses \r\n line endings — normalize before marker parsing so
+  // the slice around the exit marker doesn't leave a stray trailing \r.
+  output = output.replace(/\r\n/g, '\n');
+
   let exitCode: number | undefined;
   const markerIndex = output.lastIndexOf(EXIT_MARKER);
   if (markerIndex !== -1) {
@@ -171,6 +183,13 @@ export async function pollRunnerCommand(session: SourceControlSession, runId: st
     if (Number.isFinite(parsed)) exitCode = parsed;
     output = output.slice(0, markerIndex).replace(/\n$/, '');
   }
+
+  // Progress bars repaint in place with bare \r — emulate the terminal by
+  // keeping only the final repaint of each line.
+  output = output
+    .split('\n')
+    .map(line => line.slice(line.lastIndexOf('\r') + 1))
+    .join('\n');
 
   return {
     workspacePath: session.sessionId,

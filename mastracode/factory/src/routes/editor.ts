@@ -41,7 +41,7 @@ export interface EditorTreeEntry {
   /** Workspace-relative path with posix separators. */
   path: string;
   type: 'file' | 'directory';
-  /** True for gitignored entries (ignored directories are collapsed — their contents are not listed). */
+  /** True for gitignored entries. Their contents are listed too (dimmed), except inside skip dirs like node_modules. */
   ignored?: boolean;
 }
 
@@ -168,7 +168,7 @@ const MAX_ORIGINAL_BYTES = 5 * 1024 * 1024;
 const MAX_READ_BYTES = 5 * 1024 * 1024;
 
 /** Directories the tree skips outright — they explode the entry count with no editor value. */
-const TREE_SKIP_DIRS = new Set(['.git', 'node_modules', '.turbo', 'dist', 'build', '.next', '.cache']);
+const TREE_SKIP_DIRS = new Set(['.git', 'node_modules', '.turbo', 'dist', 'build', '.next', '.cache', '.docusaurus']);
 
 export interface SessionSandboxHandle {
   sandbox: ExecutableSandbox;
@@ -238,7 +238,7 @@ interface TreeWalk {
 }
 
 /** Cap on gitignored entries — they're decoration, not navigation, so keep them cheap. */
-const MAX_IGNORED_ENTRIES = 2000;
+const MAX_IGNORED_ENTRIES = 4000;
 
 /**
  * Fast path: `git ls-files` answers from the index in tens of milliseconds
@@ -251,27 +251,36 @@ const MAX_IGNORED_ENTRIES = 2000;
 async function walkTreeViaGit(handle: SessionSandboxHandle, target: string): Promise<TreeWalk | null> {
   const quoted = target.replace(/'/g, `'\\''`);
   const cap = MAX_TREE_ENTRIES + 1;
-  // Second pass lists gitignored entries so the tree can render them dimmed.
-  // `--directory` collapses fully-ignored directories (node_modules, dist…) to a
-  // single `dir/` line instead of streaming their contents.
+  // Three passes:
+  //   1. tracked + untracked-not-ignored files (the navigable tree),
+  //   2. `--directory` collapses fully-ignored dirs to `dir/` lines — we use it
+  //      to learn WHICH dirs are fully ignored (for dimming), and it's the only
+  //      line skip dirs like node_modules get (their contents stay hidden),
+  //   3. individual ignored files OUTSIDE skip dirs, so the contents of normal
+  //      ignored dirs (.husky/_, .env folders…) are browsable, dimmed.
+  const skipPattern = [...TREE_SKIP_DIRS].map(dir => dir.replace(/\./g, '\\.')).join('|');
   const separator = '::editor-tree-ignored::';
   const script = `cd '${quoted}' || exit 1
 git ls-files --cached --others --exclude-standard 2>/dev/null | head -n ${cap}
 echo '${separator}'
-git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | head -n ${MAX_IGNORED_ENTRIES}`;
+git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | head -n ${MAX_IGNORED_ENTRIES}
+echo '${separator}'
+git ls-files --others --ignored --exclude-standard 2>/dev/null | grep -Ev '(^|/)(${skipPattern})/' | head -n ${MAX_IGNORED_ENTRIES}`;
   const result = await handle.sandbox.executeCommand('sh', ['-c', script], { timeout: 15_000 });
   if (result.exitCode !== 0) return null;
 
   const tracked: string[] = [];
-  const ignored: string[] = [];
-  let section = tracked;
+  const ignoredCollapsed: string[] = [];
+  const ignoredFiles: string[] = [];
+  const sections = [tracked, ignoredCollapsed, ignoredFiles];
+  let sectionIndex = 0;
   for (const line of result.stdout.split('\n')) {
     if (!line) continue;
     if (line === separator) {
-      section = ignored;
+      sectionIndex = Math.min(sectionIndex + 1, sections.length - 1);
       continue;
     }
-    section.push(line);
+    sections[sectionIndex]!.push(line);
   }
   if (tracked.length === 0) return null; // Not a repo (or empty) — let find decide.
 
@@ -287,37 +296,42 @@ git ls-files --others --ignored --exclude-standard --directory 2>/dev/null | hea
     }
     rels.push({ rel, type: 'file' });
   }
-  // `--directory` usually collapses a fully-ignored dir to one `dir/` line, but
-  // when the dir carries its own .gitignore (e.g. `.husky/_`) git lists BOTH the
-  // dir and its contents. Track emitted ignored dirs (git output is sorted, so a
-  // dir precedes its contents) and drop anything nested inside one — otherwise
-  // the nested files re-synthesise the dir into `dirs` and we emit it twice.
-  const ignoredDirs = new Set<string>();
-  for (const line of ignored) {
-    const isDir = line.endsWith('/');
-    const rel = isDir ? line.slice(0, -1) : line;
+  // Fully-ignored dirs from the `--directory` pass. Includes skip dirs
+  // themselves (node_modules shows dimmed with its contents hidden), excludes
+  // anything nested inside a skip dir.
+  const ignoredDirSet = new Set<string>();
+  for (const line of ignoredCollapsed) {
+    if (!line.endsWith('/')) continue; // Plain ignored files come from pass 3.
+    const rel = line.slice(0, -1);
     if (!rel) continue;
     const parts = rel.split('/');
-    // Keep ignored entries that ARE a skip dir (show node_modules/ dimmed),
-    // but never anything nested inside one.
     if (parts.slice(0, -1).some(part => TREE_SKIP_DIRS.has(part))) continue;
-    let insideIgnoredDir = false;
-    for (let index = 1; index < parts.length; index++) {
-      if (ignoredDirs.has(parts.slice(0, index).join('/'))) {
-        insideIgnoredDir = true;
-        break;
-      }
+    ignoredDirSet.add(rel);
+    for (let index = 1; index <= parts.length; index++) {
+      dirs.add(parts.slice(0, index).join('/'));
     }
-    if (insideIgnoredDir) continue;
-    if (isDir) ignoredDirs.add(rel);
+  }
+  // Ignored files (never inside skip dirs — the grep already excluded those).
+  for (const rel of ignoredFiles) {
+    const parts = rel.split('/');
+    if (parts.some(part => TREE_SKIP_DIRS.has(part))) continue;
     for (let index = 1; index < parts.length; index++) {
       dirs.add(parts.slice(0, index).join('/'));
     }
-    rels.push({ rel, type: isDir ? 'directory' : 'file', ignored: true });
+    rels.push({ rel, type: 'file', ignored: true });
   }
-  // Ignored dirs were already pushed above — don't emit them a second time.
+  // A dir is dimmed when it (or an ancestor) is fully ignored. Every dir is
+  // emitted exactly once from the set — duplicates crash Pierre's path store.
+  const isIgnoredPath = (rel: string): boolean => {
+    if (ignoredDirSet.has(rel)) return true;
+    const parts = rel.split('/');
+    for (let index = 1; index < parts.length; index++) {
+      if (ignoredDirSet.has(parts.slice(0, index).join('/'))) return true;
+    }
+    return false;
+  };
   for (const dir of dirs) {
-    if (!ignoredDirs.has(dir)) rels.push({ rel: dir, type: 'directory' });
+    rels.push({ rel: dir, type: 'directory', ...(isIgnoredPath(dir) ? { ignored: true } : {}) });
   }
   return { rels, truncated };
 }
