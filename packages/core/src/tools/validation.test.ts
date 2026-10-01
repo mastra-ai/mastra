@@ -1,8 +1,10 @@
+import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
+import { RequestContext } from '../request-context';
 import { createTool } from './tool';
-import { validateToolInput } from './validation';
+import { validateRequestContext, validateToolInput } from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -2451,5 +2453,20 @@ describe('Standard Schema path segment format (PathSegment objects)', () => {
     expect(result.error!.message).toContain('address.city');
     expect(result.error!.message).toContain('address.zip');
     expect(result.error!.message).not.toContain('[object Object]');
+  });
+});
+
+describe('validateRequestContext', () => {
+  it('rejects values when a Valibot schema returns both value and issues', () => {
+    const valibotSchema = v.object({ tenantId: v.string() });
+    const jsonSchema = () => ({ type: 'object' as const, properties: { tenantId: { type: 'string' as const } } });
+    const schema = {
+      '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } },
+    };
+    const requestContext = new RequestContext([['tenantId', 42]]);
+
+    const result = validateRequestContext(schema as any, requestContext, 'tenant-tool');
+
+    expect(result.error?.message).toContain('tenantId');
   });
 });
