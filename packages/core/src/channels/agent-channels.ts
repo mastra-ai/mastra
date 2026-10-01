@@ -558,21 +558,31 @@ export class AgentChannels {
           const defaultHandler = async () => {
             const { actionId } = event;
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
+            const platform = event.adapter.name;
+            const messageId = event.messageId;
+            // Correlation for every log line in this handler: the card the
+            // button lives on, who clicked it, and the tool call it targets.
+            const actionLog = {
+              platform,
+              threadId: (event.thread as Thread | null)?.id,
+              messageId,
+              actionId,
+              toolCallId: actionId.split(':')[1],
+              actorId: event.user?.userId,
+            };
             try {
               const approved = actionId.startsWith('tool_approve:');
-              const toolCallId = actionId.split(':')[1];
+              const toolCallId = actionLog.toolCallId;
               if (!toolCallId) {
-                this.log('info', 'Missing toolCallId in action event', { actionId });
+                this.log('info', 'Missing toolCallId in action event', actionLog);
                 return;
               }
 
               const chatThread = event.thread as Thread | null;
               if (!chatThread) {
-                this.log('info', 'No thread in action event', { toolCallId });
+                this.log('info', 'No thread in action event', actionLog);
                 return;
               }
-              const platform = event.adapter.name;
-              const messageId = event.messageId;
               const adapter = this.adapters[platform];
               const adapterConfig = this.adapterConfigs[platform];
               if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
@@ -588,11 +598,7 @@ export class AgentChannels {
                 // Approval cards can only continue runs on threads created by an
                 // earlier message. Do not mint a replacement from the clicker's
                 // identity when that durable mapping is missing.
-                this.log('warn', 'No mapped channel thread found for tool approval action', {
-                  platform,
-                  threadId: chatThread.id,
-                  toolCallId,
-                });
+                this.log('warn', 'No mapped channel thread found for tool approval action', actionLog);
                 return;
               }
 
@@ -665,11 +671,7 @@ export class AgentChannels {
                             .filter((id): id is string => !!id),
                         );
                         if (!requesterId && authors.size > 1) {
-                          this.log('info', 'Ignoring tool approval action: requester is ambiguous', {
-                            platform,
-                            threadId: chatThread.id,
-                            toolCallId,
-                          });
+                          this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionLog);
                           return;
                         }
                         requesterId ??= [...authors][0];
@@ -682,7 +684,7 @@ export class AgentChannels {
               }
 
               if (!runId) {
-                this.log('info', 'No pending approval found', { platform, threadId: chatThread.id, toolCallId });
+                this.log('info', 'No pending approval found', actionLog);
                 return;
               }
 
@@ -691,10 +693,7 @@ export class AgentChannels {
               const actorId = event.user?.userId;
               if (requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
-                  platform,
-                  threadId: chatThread.id,
-                  toolCallId,
-                  actorId,
+                  ...actionLog,
                   requesterId,
                 });
                 return;
@@ -741,11 +740,7 @@ export class AgentChannels {
                       : 'markdown' in message && message.markdown.trim().length === 0;
                   return blank ? undefined : message;
                 } catch (err) {
-                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, {
-                    platform,
-                    toolCallId,
-                    error: err,
-                  });
+                  this.log('debug', `toolDisplay threw for ${decision.kind} event`, { ...actionLog, error: err });
                   return undefined;
                 }
               };
@@ -760,7 +755,7 @@ export class AgentChannels {
                       formatToolDenied(displayName, argsSummary, byUser, useCards),
                   );
                 } catch (err) {
-                  this.log('debug', 'Failed to edit denied card', { platform, toolCallId, error: err });
+                  this.log('debug', 'Failed to edit denied card', { ...actionLog, error: err });
                 }
 
                 // Resume the suspended run with a denial so the agent can produce a
@@ -793,11 +788,7 @@ export class AgentChannels {
                 } catch (err) {
                   const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
                   if (isStaleApproval) {
-                    this.log('info', 'Ignoring stale tool denial action (runId already consumed)', {
-                      platform,
-                      threadId: chatThread.id,
-                      toolCallId,
-                    });
+                    this.log('info', 'Ignoring stale tool denial action (runId already consumed)', actionLog);
                   } else {
                     throw err;
                   }
@@ -817,7 +808,7 @@ export class AgentChannels {
                   renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
                 );
               } catch (err) {
-                this.log('debug', 'Failed to edit approved card', { platform, toolCallId, error: err });
+                this.log('debug', 'Failed to edit approved card', { ...actionLog, error: err });
               }
 
               // Build request context for the resumed stream. Stash the render
@@ -851,11 +842,7 @@ export class AgentChannels {
             } catch (err) {
               const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
               if (isStaleApproval) {
-                this.log('info', 'Ignoring stale tool approval action (runId already consumed)', {
-                  platform,
-                  threadId: chatThread.id,
-                  toolCallId,
-                });
+                this.log('info', 'Ignoring stale tool approval action (runId already consumed)', actionLog);
                 return;
               }
               // The resolver also runs on approval continuations, so a refusal
@@ -863,12 +850,12 @@ export class AgentChannels {
               // inbound path (see handleChatMessage).
               if (err instanceof ChannelSessionRejectedError) {
                 this.log('info', 'Session resolver refused the tool approval action', {
-                  actionId: event.actionId,
+                  ...actionLog,
                   reason: err.message,
                 });
                 return;
               }
-              this.log('error', 'Error handling tool approval action', { actionId: event.actionId, error: err });
+              this.log('error', 'Error handling tool approval action', { ...actionLog, error: err });
               try {
                 const thread = event.thread;
                 if (thread) {
@@ -880,7 +867,7 @@ export class AgentChannels {
                   await thread.post(errorMessage);
                 }
               } catch (err) {
-                this.log('debug', 'Failed to post error message for action', { actionId: event.actionId, error: err });
+                this.log('debug', 'Failed to post error message for action', { ...actionLog, error: err });
               }
             }
           };
@@ -1410,12 +1397,7 @@ export class AgentChannels {
           messageId: message.id,
         };
         this.log('debug', 'Fetching thread history for first mention', { ...logContext, maxMessages });
-        const history = await collectThreadHistory(
-          chatThread,
-          historyExcludeIds,
-          maxMessages,
-          (level, message, fields) => this.log(level, message, fields),
-        );
+        const history = await collectThreadHistory(chatThread, historyExcludeIds, maxMessages, this.log.bind(this));
         this.log('debug', 'Fetched thread history', {
           ...logContext,
           fetched: history.recent.length + (history.root ? 1 : 0),
