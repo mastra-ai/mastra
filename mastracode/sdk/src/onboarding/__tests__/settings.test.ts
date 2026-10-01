@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -223,6 +223,34 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('settings-path isolation', () => {
+  it('does not migrate host auth settings into an explicit settings path', () => {
+    const appDataDir = mkdtempSync(join(tmpdir(), 'mastracode-host-settings-'));
+    const isolatedDir = mkdtempSync(join(tmpdir(), 'mastracode-isolated-settings-'));
+    const isolatedPath = join(isolatedDir, 'settings.json');
+    const previousAppDataDir = process.env.MASTRA_APP_DATA_DIR;
+
+    try {
+      process.env.MASTRA_APP_DATA_DIR = appDataDir;
+      const authPath = join(appDataDir, 'auth.json');
+      writeFileSync(authPath, JSON.stringify({ _modeModelId_build: 'anthropic/host-model' }));
+
+      const settings = loadSettings(isolatedPath);
+
+      expect(settings.models.modeDefaults).toEqual({});
+      expect(existsSync(isolatedPath)).toBe(false);
+      expect(JSON.parse(readFileSync(authPath, 'utf-8'))).toMatchObject({
+        _modeModelId_build: 'anthropic/host-model',
+      });
+    } finally {
+      if (previousAppDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+      else process.env.MASTRA_APP_DATA_DIR = previousAppDataDir;
+      rmSync(appDataDir, { recursive: true, force: true });
+      rmSync(isolatedDir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('atomic writes', () => {
   it('preserves an existing file mode across the rename', () => {
