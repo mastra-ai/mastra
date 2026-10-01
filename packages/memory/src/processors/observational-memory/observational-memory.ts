@@ -15,7 +15,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
-import { resolveActivationTTL } from './activation-ttl';
+import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -217,6 +217,71 @@ function parseActivationTTL(
   return amount * multiplier;
 }
 
+/**
+ * Parse an `activateAfterIdle` config value: a scalar TTL, or a per-provider map
+ * like `{ default: 'auto', anthropic: '1h' }`.
+ */
+function parseActivationTTLConfig(
+  value: ActivationTTL | undefined,
+  fieldPath: string,
+): ResolvedActivationTTL | ParsedActivationTTLMap | undefined {
+  if (typeof value !== 'object') {
+    return parseActivationTTL(value, fieldPath);
+  }
+
+  if (value === null || Array.isArray(value)) {
+    throw new Error(
+      `${fieldPath} must be a TTL value or an object of per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  if (entries.length === 0) {
+    throw new Error(
+      `${fieldPath} must set at least one provider or "default" when using per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  // Null prototype so a JSON-sourced "__proto__" key is stored as a provider, not swallowed by the prototype setter.
+  const parsed: ParsedActivationTTLMap = { providers: Object.create(null) };
+  const seenKeys = new Set<string>();
+
+  for (const [rawKey, entryValue] of entries) {
+    const key = rawKey.trim().toLowerCase();
+    const entryPath = `${fieldPath}.${rawKey}`;
+
+    if (!key) {
+      throw new Error(`${fieldPath} contains an empty provider key.`);
+    }
+    if (key.includes('.') || key.includes('/')) {
+      throw new Error(
+        `${entryPath} is not a valid provider key. Use the provider name before the first ".", e.g. "anthropic" instead of "anthropic.messages".`,
+      );
+    }
+    if (seenKeys.has(key)) {
+      throw new Error(`${entryPath} duplicates another key in ${fieldPath}. Provider keys are case-insensitive.`);
+    }
+    seenKeys.add(key);
+
+    if (entryValue !== false && typeof entryValue !== 'number' && typeof entryValue !== 'string') {
+      throw new Error(
+        `${entryPath} must be a non-negative number of milliseconds, a duration string like "5m" or "1hr", "auto", or false.`,
+      );
+    }
+
+    const ttl = entryValue === false ? false : parseActivationTTL(entryValue, entryPath)!;
+    if (key === 'default') {
+      if (ttl !== false) {
+        parsed.default = ttl;
+      }
+    } else {
+      parsed.providers[key] = ttl;
+    }
+  }
+
+  return parsed;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import {
@@ -274,6 +339,9 @@ import type {
   ThresholdRange,
   ObservationMarkerConfig,
   ObservationModelContext,
+  ActivationTTL,
+  ParsedActivationTTLMap,
+  ResolvedActivationTTL,
 } from './types';
 
 let hasWarnedResourceScopeDeprecation = false;
@@ -641,7 +709,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateAfterIdle: parseActivationTTLConfig(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
@@ -683,7 +751,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateAfterIdle: parseActivationTTLConfig(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
       activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
@@ -1306,7 +1374,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
-      activateAfterIdle: this.observationConfig.activateAfterIdle,
+      activateAfterIdle: getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
     };
   }
 
@@ -3640,7 +3708,8 @@ ${formattedMessages}
           currentModel,
           config: {
             ...this.getObservationMarkerConfig(),
-            activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,
+            activateAfterIdle:
+              activationActivateAfterIdle ?? getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
           },
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
