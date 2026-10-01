@@ -178,6 +178,7 @@ function createMockSettings() {
 
 /** Stand-in for the Mastra the controller builds on init(). */
 const mastraStub = {
+  getStorage: vi.fn(() => undefined),
   startWorkers: vi.fn(async () => {}),
   stopWorkers: vi.fn(async () => {}),
   addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {

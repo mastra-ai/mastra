@@ -119,9 +119,12 @@ export function createResourceNotificationDispatcher(options: ResourceNotificati
   };
 
   const tick = (): Promise<void> => {
-    ticking ??= runTick().finally(() => {
-      ticking = undefined;
-    });
+    // Ticks run from a timer, so a failure must be reported, never left as an unhandled rejection.
+    ticking ??= runTick()
+      .catch(error => options.onError?.(error))
+      .finally(() => {
+        ticking = undefined;
+      });
     return ticking;
   };
 
