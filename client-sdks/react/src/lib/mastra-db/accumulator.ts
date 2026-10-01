@@ -1555,6 +1555,31 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return replaceAt(result, messageIndex, withMetadata(targetMessage, nextMetadata));
     }
 
+    case 'tool-call-resumed': {
+      const resumedToolCallId = chunk.payload.toolCallId;
+      for (let i = result.length - 1; i >= 0; i--) {
+        const message = result[i];
+        if (!message || message.role !== 'assistant') continue;
+        const meta = message.content.metadata as MastraDBMessageMetadata | undefined;
+        // Hydrated messages carry `pendingToolApprovals`; live ones carry `requireApprovalMetadata`.
+        const metadataKeys =
+          chunk.payload.kind === 'approval'
+            ? (['pendingToolApprovals', 'requireApprovalMetadata'] as const)
+            : (['suspendedTools'] as const);
+        let nextMeta: Record<string, any> | undefined;
+        for (const metadataKey of metadataKeys) {
+          const entries = meta?.[metadataKey] as Record<string, { toolCallId?: string }> | undefined;
+          if (!entries) continue;
+          const key = Object.keys(entries).find(k => (entries[k]?.toolCallId ?? k) === resumedToolCallId);
+          if (!key) continue;
+          const { [key]: _removed, ...remaining } = entries;
+          nextMeta = { ...(nextMeta ?? meta), [metadataKey]: remaining };
+        }
+        if (nextMeta) return replaceAt(result, i, withMetadata(message, nextMeta as MastraDBMessageMetadata));
+      }
+      return result;
+    }
+
     case 'finish':
     case 'abort': {
       return finishStreamingAssistantMessage(result);

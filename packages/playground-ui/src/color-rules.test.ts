@@ -28,7 +28,7 @@ const findings = (pattern: RegExp, allowed: (path: string) => boolean) =>
     .flatMap(file => file.lines.filter(line => pattern.test(line)).map(line => `${file.path}: ${line.trim()}`));
 
 const chromaticRole =
-  '(?:(?:red|orange|yellow|green|cyan|blue|purple|pink)-(?:soft-)?\\d+|(?:success|destructive|warning|info)(?:-[a-z]+)*|badge-[a-z]+(?:-[a-z]+)?|product-[a-z-]+|chart-[a-z-]+|span-[a-z]+|brand-[a-z]+(?:-[a-z]+)?)';
+  '(?:(?:red|orange|amber|green|cyan|blue|purple|pink)-(?:soft-)?\\d+|(?:success|destructive|warning|info)(?:-[a-z]+)*|badge-[a-z]+(?:-[a-z]+)?|product-[a-z-]+|chart-[a-z-]+|span-[a-z]+|brand-[a-z]+(?:-[a-z]+)?)';
 const translucentChromatic = new RegExp(
   `\\b(?:bg|text|border(?:-[lrtbxy])?|ring|fill|stroke|outline|shadow|from|via|to|decoration|divide|accent)-${chromaticRole}/\\d+`,
 );

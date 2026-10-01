@@ -35,7 +35,10 @@ export function FieldBlockLabel({
       {children}
       {required ? (
         <>
-          <span aria-hidden className={cn('ml-0.5', disabled ? 'text-muted-foreground' : 'text-destructive-indicator')}>
+          <span
+            aria-hidden
+            className={cn('ml-0.5', disabled ? 'text-muted-foreground' : 'text-destructive-foreground')}
+          >
             *
           </span>
           <span className="sr-only"> (required)</span>

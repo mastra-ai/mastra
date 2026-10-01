@@ -29,7 +29,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="flex items-center gap-2 text-body text-warning-indicator">
+      <div className="flex items-center gap-2 text-body text-warning-foreground">
         <AlertTriangleIcon className="h-4 w-4" />
         {invalidCount} of {totalRows} rows will be skipped (validation failed)
       </div>
@@ -80,7 +80,7 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
           {errorPath !== '/' ? errorPath : ''}
         </code>
       </td>
-      <td className="px-2 py-1 text-destructive-indicator">{errorMessage}</td>
+      <td className="px-2 py-1 text-destructive-foreground">{errorMessage}</td>
     </tr>
   );
 }

@@ -56,7 +56,7 @@ function RunWaiting({ since }: { since: number }) {
     <Txt
       as="span"
       variant="meta"
-      className="flex items-center gap-1.5 text-warning-indicator tabular-nums"
+      className="flex items-center gap-1.5 text-warning-foreground tabular-nums"
       title="Waiting for input"
     >
       <Pause aria-hidden className="size-3.5" />

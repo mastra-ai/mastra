@@ -11,7 +11,7 @@ import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -178,6 +178,12 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+// Matches the snapshot wait of the durable resume path this check gates
+// (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
+const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
+// Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
+const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
+
 function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
   return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
@@ -189,6 +195,7 @@ async function validateDurableToolCallAccess({
   toolCallId,
   requestContext,
   threadId,
+  abortSignal,
 }: {
   mastra: any;
   agent: Agent;
@@ -196,58 +203,73 @@ async function validateDurableToolCallAccess({
   toolCallId?: string;
   requestContext: RequestContext;
   threadId?: string;
+  abortSignal?: AbortSignal;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-  const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: getDurableLoopWorkflowName(agent),
-    runId,
-  });
-  if (!workflowRun) {
+  if (!workflowsStore) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
   }
-
-  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
-  if (typeof snapshot === 'string') {
-    try {
-      snapshot = JSON.parse(snapshot) as Record<string, any>;
-    } catch {
-      snapshot = undefined;
-    }
-  }
-
-  const input = snapshot?.context?.input;
-  const persistedResourceIds = new Set(
-    [
-      workflowRun.resourceId,
-      input?.state?.resourceId,
-      input?.messageListState?.memoryInfo?.resourceId,
-      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
-    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
-  );
-  // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+  const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
-  const [persistedResourceId] = persistedResourceIds;
-  if (
-    persistedResourceIds.size > 1 ||
-    (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
-  }
 
-  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
-  if (threadId && persistedThreadId !== threadId) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
-  }
+  // The approval chunk can reach the client before the suspended snapshot is persisted,
+  // so wait (bounded) for storage to catch up before denying.
+  const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
+  while (true) {
+    const workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
 
-  if (
-    !snapshot ||
-    snapshot.status !== 'suspended' ||
-    input?.agentId !== agent.id ||
-    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+    let snapshot = workflowRun?.snapshot as Record<string, any> | string | undefined;
+    if (typeof snapshot === 'string') {
+      try {
+        snapshot = JSON.parse(snapshot) as Record<string, any>;
+      } catch {
+        snapshot = undefined;
+      }
+    }
+
+    const input = snapshot?.context?.input;
+    const persistedResourceIds = new Set(
+      [
+        workflowRun?.resourceId,
+        input?.state?.resourceId,
+        input?.messageListState?.memoryInfo?.resourceId,
+        input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+      ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+    );
+    // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+    const [persistedResourceId] = persistedResourceIds;
+    if (
+      persistedResourceIds.size > 1 ||
+      (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+    ) {
+      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    }
+
+    const ready =
+      !!workflowRun &&
+      !!snapshot &&
+      snapshot.status === 'suspended' &&
+      (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
+
+    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
+      if (!workflowRun) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      }
+
+      const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+      if (threadId && persistedThreadId !== threadId) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+      }
+
+      if (!ready || input?.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+      }
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, DURABLE_SNAPSHOT_WAIT_INTERVAL_MS));
   }
 }
 
@@ -439,6 +461,22 @@ export interface SerializedAgent {
 
 export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
+}
+
+function getAgentModelRef(agentModel: Agent['model'], llm: Awaited<ReturnType<Agent['getLLM']>> | undefined) {
+  if (typeof agentModel === 'string') {
+    const { provider, modelId } = parseModelString(agentModel);
+    return { provider: provider ?? llm?.getProvider(), modelId };
+  }
+  const model = llm?.getModel();
+  if (
+    model instanceof ModelRouterLanguageModel &&
+    model.gatewayId !== 'models.dev' &&
+    model.gatewayId !== model.provider
+  ) {
+    return { provider: model.gatewayId, modelId: `${model.provider}/${model.modelId}` };
+  }
+  return { provider: llm?.getProvider(), modelId: llm?.getModelId() };
 }
 
 export async function getSerializedAgentTools(
@@ -867,11 +905,7 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     defaultOptions,
@@ -1191,11 +1225,7 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
@@ -2707,6 +2737,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.approveToolCall({
@@ -2908,6 +2939,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.declineToolCall({
@@ -3010,6 +3042,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3212,6 +3245,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -3279,6 +3313,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.approveToolCallGenerate({
@@ -3331,6 +3366,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.declineToolCallGenerate({

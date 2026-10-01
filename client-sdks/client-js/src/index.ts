@@ -28,6 +28,8 @@ export type {
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
   PlanResume,
+  AgentControllerCommandAck,
+  AgentControllerCommandRejection,
 } from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most

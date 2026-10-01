@@ -1,5 +1,5 @@
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTraceSpanScores, TraceScoresTab } from '@/domains/scores';
 import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
 import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
@@ -11,11 +11,14 @@ import { TracesErrorContent } from '@/domains/traces/components/traces-error-con
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 import { useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
+import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
+
+const THREAD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -44,12 +47,17 @@ export function ThreadViewByTrace({
   anchorTraceId,
   onOpenScore,
 }: ThreadViewByTraceProps) {
+  const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(
+    () => ({ threadId, startedAt: { start: new Date(Date.now() - THREAD_WINDOW_MS) } }),
+    [threadId],
+  );
   const { rows, isLoading, setEndOfListElement, error } = useTracesListSource({
     initialAutoRefetch: false,
     withQueryTrace,
+    legacyFilters,
     query: now => ({
       timeRange: {
-        from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
         to: now.toISOString(),
       },
       where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },

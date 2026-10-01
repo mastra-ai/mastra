@@ -213,7 +213,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                         data-slot="tab-close"
                         onClick={tab.onClose}
                         className={cn(
-                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-indicator',
+                          'rounded p-0.5 hover:bg-fill-hover hover:text-destructive-foreground',
                           transitions.colors,
                         )}
                       />
@@ -264,7 +264,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             render={
                               <DropdownMenu.Item
                                 data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-indicator data-[highlighted]:text-destructive-indicator"
+                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
                                 style={{ gridArea: `${index + 1} / 1` }}
                                 onClick={tab.onClose}
                               />

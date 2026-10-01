@@ -183,6 +183,7 @@ async function runGoalStep(
     pendingChunk: goalChunks.find(c => c.payload.pending),
     goalChunks,
     record: store.states.get(`${THREAD_ID}:${GOAL_STATE_TYPE}`)!,
+    store,
     stepResult,
     messages,
     dataParts,
@@ -479,10 +480,15 @@ describe('goal step judge-failure semantics', () => {
   it('pauses the objective and stops the loop when the judge/scorer throws', async () => {
     // The decision the model "would" have returned is irrelevant: the scorer
     // throws before it matters. The step must not treat the error as continue.
-    const { record, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
+    const { record, store, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
 
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(1);
+    // A failed evaluation produced no verdict, so it must not consume the run budget.
+    expect(record.runsUsed).toBe(0);
+    // Read back through the store API: the persisted record is paused with the budget untouched.
+    const stored = await store.getState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE });
+    expect(stored).toMatchObject({ status: 'paused', runsUsed: 0 });
+    expect(stored?.pausedReason).toContain('judge model exploded');
     // A failed judge must stop the loop, not silently iterate against it.
     expect(stepResult.isContinued).toBe(false);
     expect(chunk.payload.status).toBe('paused');
@@ -527,8 +533,8 @@ describe('goal step judge-failure semantics', () => {
     // Loop stops immediately (isContinued false) — no march toward 500.
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    // Only the single failed run was consumed (3 → 4), not the whole budget.
-    expect(record.runsUsed).toBe(4);
+    // The failed evaluation consumes no budget (stays 3), let alone the whole budget.
+    expect(record.runsUsed).toBe(3);
     expect(chunk.payload.judgeFailed).toBe(true);
     // The status drives the TUI label away from "continue" → it renders "paused".
     expect(chunk.payload.status).toBe('paused');
@@ -556,10 +562,14 @@ describe('goal step judge-failure semantics', () => {
 
     // The step must NOT throw — the failure is handled internally.
     expect(thrown).toBeUndefined();
-    const { record, stepResult, chunk } = res!;
+    const { record, store, stepResult, chunk } = res!;
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(4);
+    expect(record.runsUsed).toBe(3);
+    expect(await store.getState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE })).toMatchObject({
+      status: 'paused',
+      runsUsed: 3,
+    });
     expect(chunk.payload.judgeFailed).toBe(true);
     expect(chunk.payload.status).toBe('paused');
     expect(chunk.payload.reason).toContain('Bad Request');

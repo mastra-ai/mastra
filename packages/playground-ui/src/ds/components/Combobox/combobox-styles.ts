@@ -143,5 +143,5 @@ export const comboboxStyles = {
   optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** Error message */
-  error: 'text-caption text-destructive-indicator',
+  error: 'text-caption text-destructive-foreground',
 } as const;
