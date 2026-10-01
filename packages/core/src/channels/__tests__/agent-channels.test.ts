@@ -3116,6 +3116,18 @@ describe('thread history', () => {
     expect(stamps.at(-1)!).toBeLessThanOrEqual(Date.now());
   });
 
+  it('keeps an untimestamped first row before later rows with real timestamps', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const history = Array.from({ length: 4 }, (_, i) => historyMessage(i, i === 0 ? { metadata: {} } : {}));
+    await t.run(makeChatThread(history));
+    const stamps = t.signals().map(s => (s.createdAt as Date).getTime());
+    expect(stamps).toHaveLength(4);
+    for (let i = 1; i < stamps.length; i++) expect(stamps[i]).toBeGreaterThan(stamps[i - 1]!);
+    // Real timestamps are preserved; the fallback sits just before the first real one.
+    expect(stamps.slice(1)).toEqual([1, 2, 3].map(i => BASE_TIME + i * 1000));
+    expect(stamps[0]).toBeLessThan(BASE_TIME + 1000);
+  });
+
   describe('omitted-count cap', () => {
     it('renders 500+ and fetches the root from the front of the thread past the cap', async () => {
       const t = await setup({ threadContext: { maxMessages: 10 } });

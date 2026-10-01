@@ -1633,13 +1633,21 @@ export class AgentChannels {
     for (const message of history.recent) ordered.push({ message, gapAfter: false });
 
     const signals: AgentSignalInput[] = [];
-    // Rows without a valid platform timestamp get monotonic fallbacks that
-    // still precede the trigger (which is stamped "now" at dispatch).
-    let previousCreatedAt = new Date(Date.now() - ordered.length - 2);
-    const resolveCreatedAt = (message: Message): Date => {
+    // Rows without a valid platform timestamp get monotonic fallbacks. The
+    // base is the earliest real timestamp in the window (so an untimestamped
+    // first row cannot land after later rows), else "now" minus the row count
+    // so every row still precedes the trigger. Timestamps are also clamped
+    // nondecreasing so MessageList's createdAt sort keeps thread order.
+    const validDateSent = (message: Message): Date | undefined => {
       const dateSent = message.metadata?.dateSent;
-      const valid = dateSent instanceof Date && !Number.isNaN(dateSent.getTime()) ? dateSent : undefined;
-      previousCreatedAt = valid ?? new Date(previousCreatedAt.getTime() + 1);
+      return dateSent instanceof Date && !Number.isNaN(dateSent.getTime()) ? dateSent : undefined;
+    };
+    const earliest = Math.min(...ordered.map(({ message }) => validDateSent(message)?.getTime() ?? Infinity));
+    let previousCreatedAt = new Date((Number.isFinite(earliest) ? earliest : Date.now()) - ordered.length - 2);
+    const resolveCreatedAt = (message: Message): Date => {
+      const valid = validDateSent(message);
+      previousCreatedAt =
+        valid && valid.getTime() > previousCreatedAt.getTime() ? valid : new Date(previousCreatedAt.getTime() + 1);
       return previousCreatedAt;
     };
 
