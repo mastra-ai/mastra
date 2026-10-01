@@ -3,6 +3,9 @@ import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/prom
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { SerializableMCPToolCatalog } from '../client/types';
+import { MAX_SCHEMA_VALUES } from '../shared/json-schema-dialect';
+import { boundTransfer } from './generate';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const entry = fileURLToPath(new URL('./index.ts', import.meta.url));
@@ -276,5 +279,48 @@ describe('client-file generation', () => {
     expect((await run.done).code).not.toBe(0);
     expect((await events()).some(item => item.event === 'exit')).toBe(true);
     expect(await readdir(directory)).not.toContain('generated.ts');
+  });
+});
+
+describe('transfer bounds', () => {
+  function catalog(inputSchema: unknown): SerializableMCPToolCatalog {
+    return { weather: { measure: { name: 'measure', inputSchema, server: { name: 'weather' } } } };
+  }
+
+  it('widens an oversized schema before the definitions are transferred', () => {
+    const wide = { type: 'object', examples: Array.from({ length: MAX_SCHEMA_VALUES }, () => true) };
+    const result = boundTransfer(catalog(wide));
+    expect(result.widened).toBe(1);
+    expect(result.catalog.weather!.measure!.inputSchema).toBe(true);
+    expect(() => structuredClone(result.catalog)).not.toThrow();
+  });
+
+  it('bounds the schema without touching the catalogue it was discovered in', () => {
+    // The definitions are the client's own discovery result, so widening one must not reach back
+    // into a catalogue the client may still be caching.
+    const wide = { type: 'object', examples: Array.from({ length: MAX_SCHEMA_VALUES }, () => true) };
+    const original = catalog(wide);
+    boundTransfer(original);
+    expect(original.weather!.measure!.inputSchema).toBe(wide);
+  });
+
+  it('bounds every value the transfer would copy, not only the ones it walks', () => {
+    // `examples` is annotation data the converter ignores, but the transfer still copies it, so it
+    // cannot be allowed to reach the worker at width. The proxy throws if it is ever cloned, which
+    // is what a proxy-free schema would cost in memory but not prove.
+    const values = new Proxy([], {
+      get: (target, key, receiver) => {
+        if (key === 'length') return Number.MAX_SAFE_INTEGER;
+        if (typeof key === 'string' && /^\d+$/.test(key)) {
+          if (Number(key) > MAX_SCHEMA_VALUES) throw new Error('copied past the budget');
+          return true;
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const result = boundTransfer(catalog({ type: 'object', examples: values }));
+    expect(() => structuredClone(result.catalog)).not.toThrow();
+    expect(result.widened).toBe(1);
+    expect(result.catalog.weather!.measure!.inputSchema).toBe(true);
   });
 });

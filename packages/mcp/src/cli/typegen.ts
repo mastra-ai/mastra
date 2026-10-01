@@ -3,26 +3,12 @@ import type { SerializableMCPToolCatalog } from '../client/types';
 import {
   countJsonValues,
   jsonSchemaComplexity,
+  MAX_CATALOG_VALUES,
   MAX_JSON_SCHEMA_DEPTH,
-  MAX_JSON_SCHEMA_NODES,
+  MAX_SCHEMA_VALUES,
 } from '../shared/json-schema-dialect';
 
 type Schema = boolean | Record<string, unknown>;
-
-/**
- * Raw JSON values a single schema may contain before generation widens it. Every value counts,
- * including annotations, extension data, and boolean subschema entries, because that is what
- * `prepare()` copies and conversion walks. The protocol node budget above only counts
- * schema-bearing keywords, which bounds validation work but not these copies.
- */
-export const MAX_SCHEMA_VALUES = MAX_JSON_SCHEMA_NODES * 10;
-
-/**
- * Raw JSON values one generation run may contain in total. The per-schema budget keeps a single
- * server-supplied schema bounded; this ceiling bounds what a catalogue made of many large
- * schemas can demand from the converter.
- */
-export const MAX_CATALOG_VALUES = MAX_SCHEMA_VALUES * 10;
 
 const maps = new Set(['properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas']);
 const singles = new Set([
