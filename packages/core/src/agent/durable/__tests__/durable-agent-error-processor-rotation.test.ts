@@ -3,9 +3,13 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import type { Processor } from '../../../processors';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
+import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 
 function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) => void) {
   let calls = 0;
@@ -39,6 +43,51 @@ function makeFailThenAnswerModel(failures = 1, recordPrompt?: (prompt: unknown) 
 }
 
 describe('durable agent API-error retry', () => {
+  it('reports the API-error retry to the other processor hooks like Agent does', async () => {
+    const run = async (durable: boolean) => {
+      const seen: Record<string, number[]> = { inputStep: [], llmRequest: [], outputStep: [] };
+      const observer: Processor = {
+        id: 'retry-count-observer',
+        processInputStep: async ({ retryCount }) => {
+          seen.inputStep!.push(retryCount);
+        },
+        processLLMRequest: async ({ retryCount }) => {
+          seen.llmRequest!.push(retryCount);
+        },
+        processOutputStep: async ({ retryCount, messageList }) => {
+          seen.outputStep!.push(retryCount);
+          return messageList;
+        },
+      };
+      const agent = new Agent({
+        id: 'api-error-retry-count',
+        name: 'api-error-retry-count',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        inputProcessors: [observer],
+        outputProcessors: [observer],
+        maxProcessorRetries: 1,
+        errorProcessors: [{ id: 'retry-on-api-error', processAPIError: async () => ({ retry: true }) }],
+      });
+      if (durable) {
+        const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+        const { fullStream, cleanup } = await durableAgent.stream('hello', { maxProcessorRetries: 1 });
+        for await (const _ of fullStream) {
+          // drain
+        }
+        await cleanup?.();
+      } else {
+        const result = await agent.stream('hello', { maxProcessorRetries: 1 });
+        await result.consumeStream();
+      }
+      return seen;
+    };
+
+    const expected = await run(false);
+    expect(expected.outputStep).toEqual([1]);
+    expect(await run(true)).toEqual(expected);
+  });
+
   it('lets an error processor rotate the response id before the retry', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const memory = new MockMemory();
@@ -90,6 +139,46 @@ describe('durable agent API-error retry', () => {
     });
     const { messages } = await memory.recall({ threadId, resourceId });
     expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
+  });
+  it('honors a call-time errorProcessors override in place of the resolved list', async () => {
+    // Parity with the agentic engine: a call-time list replaces the resolved list,
+    // including the shared stability defaults. The default stack never retries an
+    // unmatched 500, so only the caller's processor can recover the call.
+    const overrideRuns: string[] = [];
+    const agent = new Agent({
+      id: 'durable-api-error-override',
+      name: 'durable-api-error-override',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+      maxProcessorRetries: 1,
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { fullStream, cleanup } = await durableAgent.stream('hello', {
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'call-time-retry',
+          processAPIError: async () => {
+            overrideRuns.push('call-time-retry');
+            return { retry: true };
+          },
+        },
+      ],
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of fullStream) {
+      chunks.push(chunk);
+    }
+    await cleanup?.();
+
+    const text = chunks
+      .filter(chunk => chunk.type === 'text-delta')
+      .map(chunk => chunk.payload?.text ?? '')
+      .join('');
+    expect(text).toBe('the retried answer');
+    expect(overrideRuns).toEqual(['call-time-retry']);
   });
   it('carries a rotated id into the next retry instead of falling back', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
@@ -216,5 +305,177 @@ describe('durable agent API-error retry', () => {
     expect(prompts).toHaveLength(2);
     expect(JSON.stringify(prompts[0])).not.toContain('keep the answer short this time');
     expect(JSON.stringify(prompts[1])).toContain('keep the answer short this time');
+  });
+});
+
+describe('durable serialized hasErrorProcessors flag', () => {
+  it('is true when the caller configured error processors', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-configured',
+      name: 'durable-flag-configured',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      errorProcessors: [{ id: 'custom', processAPIError: async () => ({ retry: false }) }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput } = await durableAgent.prepare('hello');
+
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
+  });
+
+  it('is true for a call-time errorProcessors override', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-override',
+      name: 'durable-flag-override',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput } = await durableAgent.prepare('hello', {
+      errorProcessors: [{ id: 'call-time', processAPIError: async () => ({ retry: false }) }],
+    } as any);
+
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
+  });
+
+  it('is false when only the framework default processors resolve', async () => {
+    const agent = new Agent({
+      id: 'durable-flag-defaults-only',
+      name: 'durable-flag-defaults-only',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { workflowInput, registryEntry } = await durableAgent.prepare('hello');
+
+    // The resolved list still carries the framework defaults…
+    expect(registryEntry.errorProcessors!.length).toBeGreaterThan(0);
+    // …but the serialized flag says the caller configured none, so the
+    // implicit retry-cap warning stays quiet for bare agents.
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(false);
+  });
+});
+
+describe('durable error-processor resolution', () => {
+  const throwingResolver = async (): Promise<Processor[]> => {
+    throw new Error('resolver unavailable');
+  };
+
+  it('keeps the configured output processors when the error-processor resolver throws', async () => {
+    const redactor: Processor = {
+      id: 'output-redactor',
+      processOutputStream: vi.fn(async ({ part }) =>
+        part.type === 'text-delta' ? { ...part, payload: { ...part.payload, text: '[REDACTED]' } } : part,
+      ),
+    };
+    const agent = new Agent({
+      id: 'durable-error-resolver-throws',
+      name: 'durable-error-resolver-throws',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      outputProcessors: [redactor],
+      errorProcessors: throwingResolver,
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const stream = await durableAgent.stream('hello');
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) chunks.push(chunk);
+    await stream.cleanup?.();
+
+    const text = chunks
+      .filter(chunk => chunk.type === 'text-delta')
+      .map(chunk => chunk.payload.text)
+      .join('');
+    expect(redactor.processOutputStream).toHaveBeenCalled();
+    expect(text).toBe('[REDACTED]');
+  });
+
+  it('resolves a dynamic error-processor list once and shares it with the request lane', async () => {
+    const resolver = vi.fn((): Processor[] => [
+      { id: 'dynamic-error', processLLMRequest: () => undefined, processAPIError: () => undefined },
+    ]);
+    const agent = new Agent({
+      id: 'durable-error-resolver-once',
+      name: 'durable-error-resolver-once',
+      instructions: 'You are helpful.',
+      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      errorProcessorDefaults: false,
+      errorProcessors: resolver,
+    });
+
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    const { registryEntry, workflowInput } = await durableAgent.prepare('hello');
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(registryEntry.llmRequestInputProcessors).toEqual([registryEntry.errorProcessors![0]]);
+    expect((workflowInput.options as any).hasErrorProcessors).toBe(true);
+  });
+
+  describe('after the run registry entry is lost', () => {
+    async function prepareThenEvict(agent: Agent, options?: Record<string, unknown>) {
+      const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+      const mastra = new Mastra({ agents: { [agent.id]: durableAgent as any }, logger: false });
+      const { runId, workflowInput } = await durableAgent.prepare('hello', options as any);
+      // A worker in another process (or after a restart) has no registry entry and rebuilds the
+      // pipeline from the registered agent plus the serialized workflow input.
+      globalRunRegistry.delete(runId);
+      try {
+        return await resolveRuntimeDependencies({ mastra, runId, agentId: agent.id, input: workflowInput });
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    }
+
+    it('keeps a call-time empty errorProcessors override', async () => {
+      const agent = new Agent({
+        id: 'durable-rebuild-empty-override',
+        name: 'durable-rebuild-empty-override',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      });
+
+      const rebuilt = await prepareThenEvict(agent, { errorProcessors: [] });
+
+      expect(rebuilt.errorProcessors).toEqual([]);
+      expect(rebuilt.llmRequestInputProcessors).toEqual([]);
+    });
+
+    it("rebuilds the wrapped agent's error processors, not the defaults", async () => {
+      const custom: Processor = { id: 'custom', processLLMRequest: () => undefined, processAPIError: () => undefined };
+      const agent = new Agent({
+        id: 'durable-rebuild-wrapped-config',
+        name: 'durable-rebuild-wrapped-config',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+        errorProcessorDefaults: false,
+        errorProcessors: [custom],
+      });
+
+      const rebuilt = await prepareThenEvict(agent);
+
+      expect(rebuilt.errorProcessors).toEqual([custom]);
+      expect(rebuilt.llmRequestInputProcessors).toEqual([custom]);
+    });
+
+    it('resolves the defaults without an override', async () => {
+      const agent = new Agent({
+        id: 'durable-rebuild-defaults',
+        name: 'durable-rebuild-defaults',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      });
+
+      const rebuilt = await prepareThenEvict(agent);
+
+      expect(rebuilt.errorProcessors!.map(processor => processor.id)).toEqual([
+        'provider-history-compat',
+        'prefill-error-handler',
+        'stream-error-retry-processor',
+      ]);
+    });
   });
 });

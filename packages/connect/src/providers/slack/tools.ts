@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addReactionTool } from './tools/add-reaction.js';
 import { archiveChannelTool } from './tools/archive-channel.js';
 import { createChannelTool } from './tools/create-channel.js';
@@ -109,5 +109,5 @@ export function createSlackTools(options?: ProviderToolsOptions) {
     slack_unpin_message: unpinMessageTool(platformProxy),
     slack_update_message: updateMessageTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

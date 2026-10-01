@@ -1,8 +1,4 @@
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
@@ -50,24 +46,24 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: true });
 
   if (isLoading) {
-    return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
+    return <DataListSkeleton columns="auto 1fr auto auto auto auto auto auto" />;
   }
 
   const sortFor = (key: ProcessorsSortKey) => (sort?.key === key ? sort.direction : undefined);
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
-      <EntityList.Top>
+    <DataList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
+      <DataList.Top>
         {onSortChange ? (
-          <EntityList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>
+          <DataList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>
             Name
-          </EntityList.SortableTopCell>
+          </DataList.SortableTopCell>
         ) : (
-          <EntityList.TopCell>Name</EntityList.TopCell>
+          <DataList.TopCell>Name</DataList.TopCell>
         )}
-        <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCellSmart long="Input" short="Input" tooltip="Contains Input phase" className="text-center" />
-        <EntityList.TopCellSmart
+        <DataList.TopCell>Description</DataList.TopCell>
+        <DataList.TopCellSmart long="Input" short="Input" tooltip="Contains Input phase" className="text-center" />
+        <DataList.TopCellSmart
           long="Input Step"
           short={
             <>
@@ -77,7 +73,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           tooltip="Contains Input Step phase"
           className="text-center"
         />
-        <EntityList.TopCellSmart
+        <DataList.TopCellSmart
           long="Output Step"
           short={
             <>
@@ -87,7 +83,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           tooltip="Contains Output Step phase"
           className="text-center"
         />
-        <EntityList.TopCellSmart
+        <DataList.TopCellSmart
           long="Output Stream"
           short={
             <>
@@ -97,7 +93,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           tooltip="Contains Output Stream phase"
           className="text-center"
         />
-        <EntityList.TopCellSmart
+        <DataList.TopCellSmart
           long="Output Result"
           short={
             <>
@@ -108,15 +104,15 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           className="text-center"
         />
         {onSortChange ? (
-          <EntityList.SortableTopCell sortKey="agents" sort={sortFor('agents')} onSortChange={onSortChange} align="end">
+          <DataList.SortableTopCell sortKey="agents" sort={sortFor('agents')} onSortChange={onSortChange} align="end">
             Used by
-          </EntityList.SortableTopCell>
+          </DataList.SortableTopCell>
         ) : (
-          <EntityList.TopCellSmart short="Used by" long="Used by Agents" className="text-center" />
+          <DataList.TopCellSmart short="Used by" long="Used by Agents" className="text-center" />
         )}
-      </EntityList.Top>
+      </DataList.Top>
 
-      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Processors match your search" /> : null}
+      {filteredData.length === 0 && search ? <DataList.NoMatch message="No Processors match your search" /> : null}
 
       {filteredData.map((processor, index) => {
         const name = truncateString(processor.name || processor.id, 50);
@@ -129,18 +125,18 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           : paths.processorLink(processor.id);
 
         return (
-          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link} {...getRowProps(index)}>
-            <EntityList.NameCell>{name}</EntityList.NameCell>
-            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
+          <DataList.RowLink key={processor.id} to={linkTo} LinkComponent={Link} {...getRowProps(index)}>
+            <DataList.NameCell>{name}</DataList.NameCell>
+            <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
             {phaseKeys.map(key => (
-              <EntityList.TextCell key={key} className="text-center">
+              <DataList.TextCell key={key} className="text-center">
                 {phaseSet.has(key) && <CheckIcon className="mx-auto size-4" />}
-              </EntityList.TextCell>
+              </DataList.TextCell>
             ))}
-            <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
-          </EntityList.RowLink>
+            <DataList.TextCell className="text-center">{agentsCount || ''}</DataList.TextCell>
+          </DataList.RowLink>
         );
       })}
-    </EntityList>
+    </DataList>
   );
 }

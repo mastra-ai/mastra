@@ -86,11 +86,11 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-success-edge border-t-transparent" />
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="mb-2 text-destructive-indicator">Failed to load reference</p>
+              <p className="mb-2 text-destructive-foreground">Failed to load reference</p>
               <Txt tone="muted">{error}</Txt>
             </div>
           ) : content ? (

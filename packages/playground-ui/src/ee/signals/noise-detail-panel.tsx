@@ -101,7 +101,7 @@ export function NoiseDetailPanel({
                   </Txt>
                 )}
                 {noiseQuery.isError && (
-                  <Txt className="mt-4 text-destructive-indicator">Unable to load noise details.</Txt>
+                  <Txt className="mt-4 text-destructive-foreground">Unable to load noise details.</Txt>
                 )}
                 {noiseQuery.data && (
                   <Txt tone="ink" font="mono" className="mt-4 tabular-nums">
@@ -130,7 +130,7 @@ export function NoiseDetailPanel({
                   </Txt>
                 )}
                 {examplesQuery.isError && (
-                  <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                  <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
                 )}
                 {examplesQuery.data && (
                   <>

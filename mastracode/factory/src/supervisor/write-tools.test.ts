@@ -84,6 +84,7 @@ async function setup() {
     scope: SCOPE,
     userId: 'user-supervisor',
     workItems: seed.workItems,
+    boards: createBoardRegistry(),
     audit: seed.audit,
     transitionService,
     reconcileAcceptanceLabels,
@@ -135,6 +136,7 @@ describe('createFactorySupervisorWriteTools', () => {
       scope: SCOPE,
       userId: 'user-supervisor',
       workItems: seed.workItems,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       audit: seed.audit,
       transitionService,
     });

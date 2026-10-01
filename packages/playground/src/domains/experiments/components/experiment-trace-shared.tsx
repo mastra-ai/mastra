@@ -7,7 +7,7 @@ const spanBadgeHues: Record<string, CategoricalHue> = {
   workflow: 'cyan',
   model: 'purple',
   mcp: 'green',
-  tool: 'yellow',
+  tool: 'amber',
   workspace: 'orange',
 };
 

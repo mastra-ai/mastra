@@ -128,6 +128,19 @@ describe('runMC', () => {
     expect(result.threadId).toBeTruthy();
   });
 
+  it('creates a fresh thread when no thread option is provided', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Fresh answer.') }),
+    });
+    const initialThreadId = session.thread.getId();
+
+    const result = await runMC({ controller, session, prompt: 'Start fresh' }).result;
+
+    expect(initialThreadId).toBeTruthy();
+    expect(result.threadId).toBeTruthy();
+    expect(result.threadId).not.toBe(initialThreadId);
+  });
+
   it('yields controller events while iterating, then resolves', async () => {
     const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('Hi there') }) });
 

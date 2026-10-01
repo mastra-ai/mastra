@@ -102,7 +102,7 @@ function FieldLabel({ className, required = false, size = 'default', children, o
       {children}
       {required ? (
         <>
-          <span aria-hidden className="ml-0.5 text-destructive-indicator in-data-disabled:text-muted-foreground">
+          <span aria-hidden className="ml-0.5 text-destructive-foreground in-data-disabled:text-muted-foreground">
             *
           </span>{' '}
           <span className="sr-only">(required)</span>
@@ -140,7 +140,7 @@ type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 
   className?: string;
 };
 
-const fieldErrorClassName = '-mt-1 flex gap-1 text-caption text-destructive-indicator';
+const fieldErrorClassName = '-mt-1 flex gap-1 text-caption text-destructive-foreground';
 
 function FieldErrorIcon() {
   return (

@@ -337,7 +337,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 };
 
 const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: string }> = {
-  timeRange: { icon: ClockIcon, color: hueAccentColor('yellow') },
+  timeRange: { icon: ClockIcon, color: hueAccentColor('amber') },
   rootEntityType: { icon: BoxIcon, color: hueAccentColor('purple') },
   entityName: { icon: TagIcon, color: hueAccentColor('cyan') },
   entityId: { icon: FingerprintIcon, color: hueAccentColor('pink') },
@@ -349,7 +349,7 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: str
   runId: { icon: PlayIcon, color: hueAccentColor('purple') },
   threadId: { icon: MessageSquareIcon, color: hueAccentColor('blue') },
   sessionId: { icon: LayersIcon, color: hueAccentColor('orange') },
-  requestId: { icon: RadioIcon, color: hueAccentColor('yellow') },
+  requestId: { icon: RadioIcon, color: hueAccentColor('amber') },
   resourceId: { icon: HashIcon, color: hueAccentColor('green') },
   userId: { icon: UserIcon, color: hueAccentColor('orange') },
   organizationId: { icon: BuildingIcon, color: hueAccentColor('cyan') },
@@ -359,11 +359,11 @@ const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: str
   'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
   'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
   'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
-  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-indicator)' },
+  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-foreground)' },
   'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
-  'scores.score': { icon: PercentIcon, color: hueAccentColor('yellow') },
+  'scores.score': { icon: PercentIcon, color: hueAccentColor('amber') },
   'feedback.feedbackType': { icon: ThumbsUpIcon, color: hueAccentColor('purple') },
-  'feedback.value': { icon: StarIcon, color: hueAccentColor('yellow') },
+  'feedback.value': { icon: StarIcon, color: hueAccentColor('amber') },
   'feedback.comment': { icon: MessageCircleIcon, color: hueAccentColor('blue') },
 };
 

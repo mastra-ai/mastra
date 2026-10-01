@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
@@ -510,7 +510,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     authScopeKey: string;
     api: 'chat' | 'responses';
   }): string {
-    cacheKeyHmacSecret ??= randomBytes(32);
+    cacheKeyHmacSecret ??= Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32)));
     return createHmac('sha256', cacheKeyHmacSecret)
       .update(
         JSON.stringify([

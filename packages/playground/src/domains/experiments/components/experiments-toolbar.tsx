@@ -121,7 +121,7 @@ export function ExperimentsToolbar({
               </Badge>
               selected
               {selection.compareDisabledReason && (
-                <span className="text-destructive-indicator">· {selection.compareDisabledReason}</span>
+                <span className="text-destructive-foreground">· {selection.compareDisabledReason}</span>
               )}
             </ButtonsGroupText>
             <Button variant="primary" disabled={!canCompare} onClick={selection.onExecuteCompare} icon={<GitCompare />}>

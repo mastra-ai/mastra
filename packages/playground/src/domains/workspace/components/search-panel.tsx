@@ -42,7 +42,7 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   hybrid: {
     label: 'Hybrid',
     icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-badge-yellow-strong text-badge-yellow-foreground border-badge-yellow-edge',
+    color: 'bg-badge-amber-strong text-badge-amber-foreground border-badge-amber-edge',
   },
 };
 

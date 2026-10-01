@@ -43,7 +43,7 @@ const diffLineStyles = {
   removed: 'code-diff-removed bg-destructive-subtle',
   added: 'code-diff-added bg-success-subtle',
 };
-const searchMatchStyle = 'code-search-match rounded-sm bg-warning-subtle';
+const searchMatchStyle = 'code-search-match rounded-sm bg-badge-amber-strong';
 
 interface CodeViewProps {
   code: string;

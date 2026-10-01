@@ -225,6 +225,7 @@ async function openAccountManager(
 }
 
 export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login' | 'logout'): Promise<void> {
+  ctx.authStorage?.reload();
   const allProviders = getOAuthProviders();
   const loggedInIds = allProviders.filter(p => ctx.authStorage?.isLoggedIn(p.id)).map(p => p.id);
 
@@ -262,6 +263,7 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
         ctx.state.ui.hideOverlay();
         const provider = providers.find(p => p.id === providerId);
         if (provider) {
+          ctx.authStorage?.reload();
           if (mode === 'login') {
             const accounts = ctx.authStorage?.listAccounts(provider.id) ?? [];
             if (accounts.length > 0) {

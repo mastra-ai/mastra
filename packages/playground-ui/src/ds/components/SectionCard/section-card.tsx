@@ -48,16 +48,7 @@ export function SectionCard({
         </div>
         {action != null ? <div className="shrink-0">{action}</div> : null}
       </div>
-      <div
-        className={cn(
-          'min-w-0 px-4 pt-3 pb-4',
-          fillHeight && 'flex-1',
-          danger ? 'bg-destructive-subtle' : null,
-          contentClassName,
-        )}
-      >
-        {children}
-      </div>
+      <div className={cn('min-w-0 px-4 pt-3 pb-4', fillHeight && 'flex-1', contentClassName)}>{children}</div>
     </section>
   );
 }

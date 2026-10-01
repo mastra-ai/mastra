@@ -14,7 +14,7 @@ export function SignalsErrorState({
   return (
     <section className="m-4 rounded-lg border border-border bg-background p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
-        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-indicator" />
+        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-foreground" />
         <div>
           <Txt as="h1" variant="subheading" tone="ink">
             {message}

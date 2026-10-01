@@ -14,8 +14,6 @@
  * user codes, poll delays).
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { nextPollDelayMs } from '@mastra/code-sdk/auth/device-code';
 import { completeAnthropicLogin, startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
 import {
@@ -304,7 +302,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 502);
           }
 
-          const sessionId = randomUUID();
+          const sessionId = globalThis.crypto.randomUUID();
           const tenant = sessionTenant(ctx);
           await (
             await sessionStore(ctx)
@@ -425,7 +423,11 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           // regardless of how eagerly the client calls this route.
           const now = Date.now();
           const nextPollAt = session.nextPollAt?.getTime();
-          if (nextPollAt != null && now < nextPollAt) {
+          // claimLoginSession parks next_poll_at at expires_at while another
+          // request owns the flow. That is a lock, not a schedule, so fall
+          // through to the claim and take its short retry instead.
+          const parkedByClaim = nextPollAt != null && nextPollAt >= session.expiresAt.getTime();
+          if (nextPollAt != null && now < nextPollAt && !parkedByClaim) {
             return c.json({ status: 'pending', nextPollMs: nextPollAt - now });
           }
 

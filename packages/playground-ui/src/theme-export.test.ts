@@ -578,7 +578,7 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|yellow|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
@@ -591,6 +591,18 @@ describe('theme.css export', () => {
     }
     expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
+  });
+
+  it('keeps the brand green indicator readable as text on light surfaces', () => {
+    const { lightVariables } = getThemeVariables(themeCss);
+    const brandGreen = resolveToken('brand-green-indicator', lightVariables);
+    const brandLightness = Number(brandGreen.match(/^oklch\(([\d.]+)\s/)?.[1]);
+
+    expect(oklchAlpha(brandGreen)).toBe(1);
+    for (const background of ['background', 'card']) {
+      const backgroundLightness = oklchLightness(resolveToken(background, lightVariables));
+      expect(wcagContrast(brandLightness, backgroundLightness)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('registers every @theme color with tailwind-merge, so cn() can resolve a conflict between two of them', () => {

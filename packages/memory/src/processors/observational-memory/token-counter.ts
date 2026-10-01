@@ -417,7 +417,7 @@ function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-function isHttpUrlString(value: unknown): boolean {
+export function isHttpUrlString(value: unknown): boolean {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
 
@@ -440,7 +440,11 @@ function isLikelyBase64Content(value: string): boolean {
   return /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 }
 
-function decodeImageBuffer(value: unknown): Buffer | undefined {
+/**
+ * Decodes a stored attachment payload (data URI, raw base64, Buffer, or typed array) into bytes.
+ * Returns undefined for remote URLs, filesystem paths, and anything that isn't a decodable payload.
+ */
+export function decodeImageBuffer(value: unknown): Buffer | undefined {
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
     return value;
   }
