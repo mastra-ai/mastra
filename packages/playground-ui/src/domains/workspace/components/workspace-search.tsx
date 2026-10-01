@@ -40,11 +40,11 @@ const countLabel = (count: number, noun: string) => `${count} ${noun}${count ===
 function AsideTitle() {
   const { fileCount, skillCount } = useWorkspaceContext();
   return (
-    <Txt as="span" variant="label" tone="muted" className="flex min-w-0 items-center gap-1.5 truncate">
+    <Txt as="span" variant="label" tone="muted" className="block min-w-0 truncate">
       <span>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</span>
       {skillCount === undefined ? null : (
         <>
-          <Txt as="span" variant="label" tone="faint" aria-hidden>
+          <Txt as="span" variant="label" tone="faint" aria-hidden className="mx-1.5">
             ·
           </Txt>
           <span>{countLabel(skillCount, 'Skill')}</span>
