@@ -205,6 +205,42 @@ describe('Mastra.restartAllActiveWorkflowRuns with evented workflows (issue #249
     }
   });
 
+  it('retries a recovered run whose restart was abandoned by stopWorkers', async () => {
+    const storage = new MockStore();
+    const id = 'evented-stop-start';
+    const { mastra: hostA, runId } = await orphanRun(id, storage, { autoRestartActiveRuns: true });
+
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    let calls = 0;
+    const step2B = vi.fn(async () => {
+      calls++;
+      if (calls === 1) await gate;
+      return {};
+    });
+    const hostB = newHost(
+      makeWorkflow(id, async () => ({}), step2B, { autoRestartActiveRuns: true }),
+      storage,
+    );
+    try {
+      await hostB.restartAllActiveWorkflowRuns();
+      await hostB.startWorkers();
+      await vi.waitFor(() => expect(step2B).toHaveBeenCalledTimes(1));
+
+      // Workers stop while that restart is still in flight; it can never settle.
+      await hostB.stopWorkers();
+      await hostB.startWorkers();
+      await hostB.restartAllActiveWorkflowRuns();
+
+      await waitForStatus(storage, id, runId, 'success');
+      expect(step2B).toHaveBeenCalledTimes(2);
+    } finally {
+      release();
+      await hostB.stopWorkers();
+      await hostA.stopWorkers();
+    }
+  });
+
   it('recovers runs from different workflows that share a runId', async () => {
     const storage = new MockStore();
     const runId = 'shared-run';

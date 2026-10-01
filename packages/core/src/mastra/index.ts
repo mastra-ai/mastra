@@ -899,7 +899,7 @@ export class Mastra<
   /** Evented run restarts requested before a workflow consumer is wired (`workflowName:runId` -> `{ workflowName, runId }`). */
   #pendingEventedRestarts = new Map<string, { workflowName: string; runId: string }>();
   /** Run ids whose restart is in flight, so overlapping sweeps don't drive a run twice. */
-  #inFlightRestarts = new Set<string>();
+  #inFlightRestarts = new Map<string, object>();
   /**
    * Set when something has signalled that the scheduler is needed at runtime
    * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
@@ -4156,7 +4156,8 @@ export class Mastra<
 
   async #restartWorkflowRun(workflowName: string, runId: string): Promise<void> {
     const key = `${workflowName}:${runId}`;
-    this.#inFlightRestarts.add(key);
+    const token = {};
+    this.#inFlightRestarts.set(key, token);
     try {
       const workflow = this.getWorkflowById(workflowName);
       const run = await workflow.createRun({ runId });
@@ -4165,7 +4166,8 @@ export class Mastra<
     } catch (error) {
       this.#logger.error('Failed to restart workflow run', { workflow: workflowName, runId, error });
     } finally {
-      this.#inFlightRestarts.delete(key);
+      // A stopWorkers() + newer restart may have replaced this entry; only remove our own.
+      if (this.#inFlightRestarts.get(key) === token) this.#inFlightRestarts.delete(key);
     }
   }
 
@@ -7051,6 +7053,8 @@ export class Mastra<
     // honor them, but they must not resurrect workers behind a stopped instance.
     this.#workersStarted = false;
     this.#allWorkersStarted = false;
+    // Restarts in flight can't settle against workers that are gone; let later sweeps retry them.
+    this.#inFlightRestarts.clear();
 
     // A runtime signal may have kicked off a lazy worker start that is still in
     // flight. Wait for it so the teardown below covers what it started —
