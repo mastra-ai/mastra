@@ -6,7 +6,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '
 import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/InputGroup';
 import { mergeRefs } from '@/lib/merge-refs';
 
-export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' | 'type' | 'ref'> & {
+export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' | 'type' | 'ref' | 'error'> & {
   label: string;
   value: string;
   onValueChange: (value: string) => void;
