@@ -525,6 +525,100 @@ describe('prepareFactoryRuleBinding', () => {
     expect(sessionId).not.toBe(planSession.sessionId);
   });
 
+  it('keeps a linked automation starter while minting a separate human-owned review session', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id, ['review'], { role: 'review', board: 'review' });
+    input.item.parentWorkItemId = 'parent-work-item';
+    input.parentItem = {
+      ...input.item,
+      id: 'parent-work-item',
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      board: null,
+      parentWorkItemId: null,
+      stages: ['execute'],
+      stageHistory: [
+        { stage: 'planning', enteredAt: new Date(), exitedAt: new Date(), by: 'factory-rule-dispatcher' },
+        { stage: 'execute', enteredAt: new Date(), exitedAt: null, by: 'user-1' },
+      ],
+      sessions: {
+        work: {
+          sessionId: 'parent-automation-session',
+          branch: 'factory/issue-49',
+          threadId: 'parent-automation-thread',
+          startedBy: 'factory-rule-dispatcher',
+          credentialUserId: 'user-1',
+        },
+      },
+    };
+    input.record.approvedBy = 'user-1';
+    input.record.actor = {
+      type: 'human',
+      id: 'user-1',
+      initiator: { userId: 'user-1', displayName: 'Ada Lovelace' },
+    };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      userId: 'user-1',
+      starter: { type: 'system', id: 'factory-rule-dispatcher' },
+    });
+    expect((prepare.mock.calls[0]![0] as unknown as { sessionId: string }).sessionId).not.toBe(
+      'parent-automation-session',
+    );
+  });
+
+  it('keeps a linked human starter when another human starts the separate review session', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id, ['review'], { role: 'review', board: 'review' });
+    input.item.parentWorkItemId = 'parent-work-item';
+    input.parentItem = {
+      ...input.item,
+      id: 'parent-work-item',
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      board: null,
+      parentWorkItemId: null,
+      stages: ['execute'],
+      stageHistory: [{ stage: 'execute', enteredAt: new Date(), exitedAt: null, by: 'original-human' }],
+      sessions: {
+        work: {
+          sessionId: 'parent-human-session',
+          branch: 'factory/issue-49',
+          threadId: 'parent-human-thread',
+          startedBy: 'original-human',
+          startedByDisplayName: 'Original Human',
+          credentialUserId: 'user-1',
+        },
+      },
+    };
+    input.record.approvedBy = 'user-1';
+    input.record.actor = { type: 'human', id: 'user-1' };
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    expect(prepare.mock.calls[0]![0]).toMatchObject({
+      userId: 'user-1',
+      starter: { type: 'human', id: 'original-human' },
+    });
+    expect((prepare.mock.calls[0]![0] as unknown as { sessionId: string }).sessionId).not.toBe('parent-human-session');
+  });
+
   it('does not inherit an earlier session on a different branch', async () => {
     const { seeded, project, github, planSession } = await planOwnedSession('factory/other');
     const prepare = vi.fn(async () => ({}) as never);

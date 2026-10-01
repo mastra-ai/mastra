@@ -53,6 +53,7 @@ import {
 import {
   isAgentActor,
   type FactoryDispatchFailureCode,
+  type WorkItemSessionRef,
   type WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
@@ -278,6 +279,46 @@ function continuedSessionStarter(input: FactoryBindingPreparationInput, prepared
   return refs.find(ref => !isHumanActorId(ref.startedBy)) ?? refs[0];
 }
 
+/** Latest durable starter on an item's own board, with custom roles supported. */
+function latestItemStarter(item: FactoryBindingPreparationInput['item'], boards: BoardRegistry) {
+  const board = boards.get(boardForWorkItem(item));
+  const roles: string[] = [];
+  const phases = [...item.stages].reverse().concat([...item.stageHistory].reverse().map(entry => entry.stage));
+  for (const phase of phases) {
+    const role = board?.roleForPhase(phase);
+    if (role && !roles.includes(role)) roles.push(role);
+  }
+  for (const role of roles) {
+    const ref = item.sessions[role];
+    if (ref) return ref;
+  }
+  return Object.values(item.sessions).at(-1);
+}
+
+/**
+ * A linked PR Review card deliberately gets a fresh session, but it is still a
+ * continuation of the exact Work item that produced the PR. The person who
+ * presses Review consents to the run and owns its credentials; they do not
+ * replace the parent run's durable initiator.
+ */
+function linkedParentStarter(
+  input: FactoryBindingPreparationInput,
+  boards: BoardRegistry,
+): WorkItemSessionRef | undefined {
+  const parent = input.parentItem;
+  if (
+    input.role !== 'review' ||
+    input.item.externalSource?.type !== 'pull-request' ||
+    !parent ||
+    input.item.parentWorkItemId !== parent.id ||
+    parent.orgId !== input.record.orgId ||
+    parent.factoryProjectId !== input.record.factoryProjectId
+  ) {
+    return undefined;
+  }
+  return latestItemStarter(parent, boards);
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -390,7 +431,7 @@ export async function prepareFactoryRuleBinding(
     const initiator = parseFactoryInitiatorProfile(input.record.actor?.initiator);
     const approvedByProfile = parseFactoryInitiatorProfile(input.record.actor?.approvedByProfile);
     const sessionRef = input.item.sessions[input.role];
-    const continuedStarter = continuedSessionStarter(input, preparedSession);
+    const continuedStarter = linkedParentStarter(input, boards) ?? continuedSessionStarter(input, preparedSession);
     const sessionProfile = parseFactoryInitiatorProfile(
       continuedStarter
         ? { userId: continuedStarter.startedBy, displayName: continuedStarter.startedByDisplayName }

@@ -4584,13 +4584,20 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
-  it('prepares a missing binding before dispatching a rule-driven skill', async () => {
+  it('prepares a missing binding with its exact linked parent before dispatching a rule-driven skill', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'triage',
       skillName: 'understand-issue',
       idempotencyKey: 'skill-auto-start',
+    });
+    const parentItem = await createItem(storage, 'github-issue:parent');
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'factory-rule-dispatcher',
+      patch: { parentWorkItemId: parentItem.id },
     });
     const { controller, session } = createSession();
     const prepareBinding = vi.fn(async () => {
@@ -4627,7 +4634,11 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(prepareBinding).toHaveBeenCalledWith(
-      expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
+      expect.objectContaining({
+        item: expect.objectContaining({ id: item.id, parentWorkItemId: parentItem.id }),
+        parentItem: expect.objectContaining({ id: parentItem.id }),
+        role: 'triage',
+      }),
     );
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),

@@ -332,6 +332,8 @@ function factoryRequestContext(input: {
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: WorkItemRow;
+  /** Exact linked parent, when one exists in the same Factory project. */
+  parentItem?: WorkItemRow;
   role: string;
 }
 
@@ -1541,7 +1543,11 @@ export class FactoryDecisionDispatcher {
       );
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
+    const linkedParent = item.parentWorkItemId
+      ? await this.#storage.get({ orgId: record.orgId, id: item.parentWorkItemId })
+      : undefined;
+    const parentItem = linkedParent?.factoryProjectId === record.factoryProjectId ? linkedParent : undefined;
+    await this.#prepareBinding({ record, item, ...(parentItem ? { parentItem } : {}), role });
     return this.#requireBinding(record, role);
   }
 
