@@ -355,9 +355,50 @@ export interface CompiledDuckDBTraceQuery {
   values: unknown[];
 }
 
+// Columns stored on each root event row, so a predicate over them has the same value on the raw
+// event as on the current root. `startedAt` is excluded: it is derived from the preceding event.
+// Computed fields (status, durationMs, metadata.*) and tags stay in `candidates`, as in PostgreSQL.
+const ROOT_PUSHDOWN_FIELDS = new Set<string>([
+  'traceId',
+  'threadId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
+  'endedAt',
+  'entityName',
+  'entityType',
+  'environment',
+]);
+
+function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
+  if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
+  return ROOT_PUSHDOWN_FIELDS.has(predicate.field);
+}
+
+/** Top-level AND conjuncts of `where` that only read root-row columns. */
+function rootPushdownPredicates(predicate: TrustedTraceQueryPredicate | undefined): TrustedTraceQueryPredicate[] {
+  if (!predicate) return [];
+  const conjuncts = predicate.type === 'boolean' && predicate.operator === 'and' ? predicate.args : [predicate];
+  return conjuncts.filter(isRootPushdownPredicate);
+}
+
+/**
+ * Builds the selection CTEs. `root_trace_ids` narrows the root scan to traces that could have a
+ * qualifying current root before the window functions run: some root event carries the current
+ * root's own conditions (ended, tenant, pushed `where` conjuncts) and some root event has a
+ * timestamp in the window (the current root's `startedAt` is a root event's timestamp in its
+ * trace). This only removes traces that cannot qualify; `root_events` / `current_roots` still see
+ * every root event of the remaining traces, and the full `where` is applied in `candidates`.
+ */
 function compileDuckDBTraceScope(
   relatedCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
+  timeRange: { from: string; to: string },
+  rootPredicates: TrustedTraceQueryPredicate[] = [],
 ): { ctes: string[]; values: unknown[] } {
   // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
   const tenantConditions = (alias: string): string[] =>
@@ -373,8 +414,23 @@ function compileDuckDBTraceScope(
     const conditions = tenantConditions(alias);
     return conditions.length ? `\n      WHERE ${conditions.join(' AND ')}` : '';
   };
-  const values: unknown[] = [...tenantValues];
+  const rowConditions = ['r.endedAt IS NOT NULL', ...tenantConditions('r')];
+  const values: unknown[] = [timeRange.from, timeRange.to, ...tenantValues];
+  for (const predicate of rootPredicates) {
+    const compiled = compilePredicate(predicate);
+    rowConditions.push(`(${compiled.sql})`);
+    values.push(...compiled.values);
+  }
+  values.push(timeRange.from, timeRange.to, ...tenantValues);
   const ctes = [
+    `root_trace_ids AS (
+      SELECT r.traceId
+      FROM span_events r
+      WHERE r.parentSpanId IS NULL
+      GROUP BY r.traceId
+      HAVING bool_or(r.timestamp >= CAST(? AS TIMESTAMP) AND r.timestamp < CAST(? AS TIMESTAMP))
+        AND bool_or(${rowConditions.join('\n          AND ')})
+    )`,
     `root_events AS (
       SELECT
         *,
@@ -384,6 +440,7 @@ function compileDuckDBTraceScope(
         END AS startedAt
       FROM span_events
       WHERE parentSpanId IS NULL
+        AND traceId IN (SELECT traceId FROM root_trace_ids)
     )`,
     `current_roots AS (
       SELECT * EXCLUDE (rootRank)
@@ -482,8 +539,12 @@ export function compileDuckDBTraceCandidates(
   columns: string,
 ): { ctes: string[]; values: unknown[] } {
   const relatedCollections = collectRelatedCollections(plan.where);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(
+    relatedCollections,
+    plan.scope,
+    plan.timeRange,
+    rootPushdownPredicates(plan.where),
+  );
 
   let predicateSql = 'TRUE';
   if (plan.where) {
@@ -532,7 +593,7 @@ LIMIT ?`,
     values.push(watermark ?? '0', plan.limit + 1);
     return {
       sql: `${candidates},
-  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM root_events),
+  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM span_events WHERE parentSpanId IS NULL),
   delta_rows AS (
     SELECT * FROM candidates
     WHERE deltaWatermark > CAST(? AS BIGINT) ${watermark === undefined ? 'AND FALSE' : ''}
@@ -563,7 +624,7 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
     SELECT COUNT(*) AS total
     FROM candidates
   )
-SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM root_events) AS streamHead' : ''}
+SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM span_events WHERE parentSpanId IS NULL) AS streamHead' : ''}
 FROM page_total
 LEFT JOIN page_rows ON TRUE
 ORDER BY page_rows.__row_position ASC NULLS LAST`,
@@ -593,8 +654,7 @@ LIMIT ?`,
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(relatedCollections, plan.scope, plan.traces.timeRange);
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -661,8 +721,7 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
 export function compileDuckDBTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(new Set(), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(new Set(), plan.scope, plan.timeRange);
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
@@ -685,8 +744,11 @@ LIMIT ?`,
 }
 
 export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values } = compileDuckDBTraceScope(
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+    plan.timeRange,
+  );
   let fieldSql: string;
   let source = discoverySource(plan.predicateScope);
   if (plan.predicateScope === 'trace' && plan.path === 'tags') {

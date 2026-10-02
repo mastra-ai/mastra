@@ -15,3 +15,5 @@ const plan = planTraceAggregate(
 );
 const { rows, truncated } = await observability.aggregateTraces(plan);
 ```
+
+`queryTraces()`, `queryThreads()`, and trace-query discovery are also faster over large stores: the time range, tenant scope, and simple root filters such as `environment`, `entityName`, or `threadId` now narrow the scan before each trace's current root span is selected. Results are unchanged.

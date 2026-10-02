@@ -25,7 +25,15 @@ describe('DuckDB trace aggregate compiler', () => {
     expect(compiled.sql).toContain('root_scope AS (');
     expect(compiled.sql).toContain('candidates AS (');
     expect(compiled.sql).toContain('FROM candidates r');
-    expect(compiled.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'prod']);
+    expect(compiled.sql).toMatch(/root_trace_ids AS \([\s\S]*?r\.environment IS NOT DISTINCT FROM \?/);
+    expect(compiled.values.slice(0, 6)).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'prod',
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      'prod',
+    ]);
     expect(placeholders(compiled.sql)).toBe(compiled.values.length);
   });
 
@@ -42,7 +50,18 @@ describe('DuckDB trace aggregate compiler', () => {
     expect(compiled.sql).not.toContain('OR TRUE');
     expect(compiled.sql).not.toContain('0.25');
     expect(compiled.sql).toContain("json_type(r.metadata, ?) = 'VARCHAR'");
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, 0.25, 101]);
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      path,
+      path,
+      path,
+      path,
+      0.25,
+      101,
+    ]);
     expect(placeholders(compiled.sql)).toBe(compiled.values.length);
   });
 
@@ -69,7 +88,7 @@ describe('DuckDB trace aggregate compiler', () => {
   it('suppresses the zero row for an ungrouped empty population', () => {
     const compiled = compileDuckDBTraceAggregate(plan());
 
-    expect(compiled.sql).not.toContain('GROUP BY');
+    expect(compiled.sql).not.toMatch(/FROM facts[\s\S]*GROUP BY/);
     expect(compiled.sql).toContain('HAVING count(*) > 0');
   });
 
