@@ -238,7 +238,15 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
           disconnect: vi.fn(async () => void lifecycleMocks.order.push('mcp-stop')),
         },
         effectiveDefaults: {},
-        signalsPubSub: { close: vi.fn(async () => void lifecycleMocks.order.push('signals-stop')) },
+        // close() reads `this` like the real pubsub, so a detached call is caught.
+        signalsPubSub: {
+          closed: false,
+          async close() {
+            this.closed = true;
+            lifecycleMocks.order.push('signals-stop');
+          },
+        },
+        stopNotificationDispatch: vi.fn(async () => void lifecycleMocks.order.push('dispatch-stop')),
         stopPluginSignalProviders: vi.fn(() => lifecycleMocks.order.push('providers-stop')),
       };
     });
@@ -264,6 +272,11 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     );
     expect(lifecycleMocks.order.at(-1)).toBe('exit-0');
     expect(lifecycleMocks.diagnostics.stop).toHaveBeenCalledOnce();
+    // Dispatch leases are released first; the pubsub closes only after the workers stop.
+    const at = (step: string) => lifecycleMocks.order.indexOf(step);
+    expect(at('dispatch-stop')).toBeGreaterThan(-1);
+    expect(at('dispatch-stop')).toBeLessThan(at('workers-stop'));
+    expect(at('signals-stop')).toBeGreaterThan(at('workers-stop'));
   });
 
   it('stops diagnostics when Mastra Code startup fails', async () => {
