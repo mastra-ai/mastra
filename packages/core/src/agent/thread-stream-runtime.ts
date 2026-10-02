@@ -4233,6 +4233,23 @@ export class AgentThreadStreamRuntime {
       scheduleCheck();
     };
 
+    const resolveTerminalEventStreamId = (runId: string, streamId?: string) => {
+      if (streamId) return streamId;
+
+      const registered = registeredSeqsByRunId.get(runId);
+      let resolved: { streamId: string; streamSeq: number } | undefined;
+      for (const [registeredStreamId, streamSeq] of registered ?? []) {
+        const tracked =
+          remoteRuns.has(registeredStreamId) ||
+          deferredRunsByStreamId.has(registeredStreamId) ||
+          remoteRunLeaseWatchTokens.has(registeredStreamId);
+        if (tracked && (resolved === undefined || streamSeq < resolved.streamSeq)) {
+          resolved = { streamId: registeredStreamId, streamSeq };
+        }
+      }
+      return resolved?.streamId ?? runId;
+    };
+
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
@@ -4322,7 +4339,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-failed') {
-        const eventStreamId = data.streamId ?? data.runId;
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         remoteRunSuspensionPrompts.delete(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
@@ -4380,7 +4397,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
-        const eventStreamId = data.streamId ?? data.runId;
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         remoteRunSuspensionPrompts.delete(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);

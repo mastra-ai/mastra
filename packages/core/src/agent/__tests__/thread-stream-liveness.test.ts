@@ -82,6 +82,62 @@ describe('thread stream remote-run liveness', () => {
     await consumed;
   });
 
+  it('resolves a legacy suspension boundary without stopping a newer resumed stream', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-legacy-suspended');
+    const { runtime, pubsub, emit } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const resumedStreamId = `${harness.streamId}-resumed`;
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      sourceId: 'origin',
+      part: { type: 'start', payload: {} },
+    });
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: resumedStreamId, streamSeq: 2 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: resumedStreamId,
+      sourceId: 'origin',
+      part: { type: 'start', payload: {} },
+    });
+    await emit({ type: 'run-suspended', runId: harness.runId });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: resumedStreamId,
+      sourceId: 'origin',
+      part: { type: 'text-delta', payload: { text: 'resumed' } },
+    });
+    await flush();
+
+    expect(collected.map(part => part.type)).toEqual(['start', 'start', 'text-delta']);
+
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+
+    expect(collected.map(part => part.type)).toEqual(['start', 'start', 'text-delta', 'error']);
+    expect(collected[3].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
   it('reports lease loss when a prompt-bearing stream continues before losing its owner', async () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-prompt-continued');
