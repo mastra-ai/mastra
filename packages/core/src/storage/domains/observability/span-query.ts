@@ -6,9 +6,9 @@
  * Current-record selection precedes mutable predicates and pagination. A store must
  * define its version rule; endedAt alone is not a general-purpose revision number.
  */
-import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
 import {
+  digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
   normalizeTraceQueryTenantScope,
@@ -134,7 +134,17 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
 export const spanQueryResponseSchema = z
   .object({
     spans: z.array(spanQueryRowSchema).max(SPAN_QUERY_MAX_LIMIT),
-    page: z.object({ next: z.string().min(1).max(SPAN_QUERY_MAX_CURSOR_BYTES).nullable() }).strict(),
+    page: z
+      .object({
+        // Base64url is ASCII, so string length also enforces the byte limit.
+        next: z
+          .string()
+          .min(1)
+          .max(SPAN_QUERY_MAX_CURSOR_BYTES)
+          .regex(/^[A-Za-z0-9_-]+$/)
+          .nullable(),
+      })
+      .strict(),
   })
   .strict()
   .superRefine((response, context) => {
@@ -166,6 +176,17 @@ const cursorEnvelopeSchema = z
   })
   .strict();
 
+/**
+ * Ordering semantics every store compiler must implement:
+ * - Sort by `orderBy.field` in the requested direction, then break ties by
+ *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
+ * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
+ *   Null organizationId/resourceId values sort last and compare equal to other nulls.
+ * - Resume strictly after the cursor using that same complete ordering. Apply the
+ *   requested direction only to the timestamp; identity tie-breaks remain ascending.
+ *   Use null-safe equality/comparison for tenant fields, not a raw nullable SQL tuple.
+ * - Select and page unique current span identities before hydrating previews or cost.
+ */
 export interface TrustedSpanQueryPlan {
   result: 'spans';
   timeRange: { from: string; to: string };
@@ -195,21 +216,16 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
     to: new Date(request.timeRange.to).toISOString(),
   };
   const orderBy = request.orderBy[0]!;
-  // All objects below are constructed in canonical property order, including the
-  // shared predicate planner's output. Page size may change without invalidating a cursor.
-  const binding = createHash('sha256')
-    .update(
-      JSON.stringify({
-        version: 1,
-        result: 'spans',
-        timeRange,
-        where,
-        orderBy,
-        scope,
-        authorization: options.authorizationBinding,
-      }),
-    )
-    .digest('hex');
+  // Page size may change without invalidating a cursor.
+  const binding = digestBinding({
+    version: 1,
+    result: 'spans',
+    timeRange,
+    where,
+    orderBy,
+    scope,
+    authorization: options.authorizationBinding,
+  });
   let cursor: TrustedSpanQueryPlan['cursor'];
   if (request.page.after) {
     let decoded: unknown;

@@ -11,6 +11,7 @@ import {
 } from './span-query';
 import type { SpanQueryRow } from './span-query';
 import {
+  digestBinding,
   parseTraceQueryRequest,
   planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
@@ -125,10 +126,33 @@ describe('span cursor ownership', () => {
   const after = encodeSpanQueryCursor(initial, values);
 
   it('round trips the full scoped identity and allows changing page size', () => {
+    expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next: after } }).success).toBe(true);
     expect(planSpanQuery({ timeRange, where, page: { after, limit: 2 } }, options)).toMatchObject({
       limit: 2,
       cursor: { ...values, sortValue: '2026-10-01T12:00:00.000Z' },
     });
+  });
+
+  it('uses the shared binding regardless of planned object property order', () => {
+    expect(initial.binding).toBe(
+      digestBinding({
+        authorization: options.authorizationBinding,
+        scope: { resourceId: scope.resourceId, organizationId: scope.organizationId },
+        orderBy: { direction: 'desc', field: 'startedAt' },
+        where: Object.fromEntries(Object.entries(initial.where!).reverse()),
+        timeRange: { to: initial.timeRange.to, from: initial.timeRange.from },
+        result: 'spans',
+        version: 1,
+      }),
+    );
+  });
+
+  it('rejects oversized and non-base64url response cursors', () => {
+    for (const next of ['', 'a'.repeat(8193), '\u00e9'.repeat(8192), `${after}=`, `${after}\n`]) {
+      expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next } }).success).toBe(false);
+    }
+    expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next: 'a'.repeat(8192) } }).success).toBe(true);
+    expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next: null } }).success).toBe(true);
   });
 
   it.each([

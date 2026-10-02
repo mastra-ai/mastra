@@ -1619,7 +1619,8 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   return normalized as Array<string | number>;
 }
 
-function digestBinding(value: unknown): string {
+/** @internal Shared query binding with property-order-independent serialization. */
+export function digestBinding(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 
