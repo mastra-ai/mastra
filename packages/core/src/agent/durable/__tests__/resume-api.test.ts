@@ -660,6 +660,31 @@ describe('Resume with CachingPubSub Event Replay', () => {
     initialCleanup();
   });
 
+  it('should live-tail when resuming without cached history', async () => {
+    const mockModel = createTextModel('Resumed');
+    const subscribeSpy = vi.spyOn(cachingPubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(cachingPubsub, 'subscribeFromOffset');
+
+    const baseAgent = new Agent({
+      id: 'cache-miss-resume-agent',
+      name: 'Cache Miss Resume Agent',
+      instructions: 'Test cache-miss resume',
+      model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
+      pubsub: cachingPubsub,
+    });
+    const { runId } = await durableAgent.prepare('Hello');
+
+    const result = await durableAgent.resume(runId, { approved: true });
+
+    expect(subscribeSpy).toHaveBeenCalledWith(`agent.stream.${runId}`, expect.any(Function), { startFrom: 'latest' });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
+    result.cleanup();
+  });
+
   it('should deduplicate events during resume replay', async () => {
     const receivedEvents: Event[] = [];
     const mockModel = createTextModel('Response');

@@ -80,11 +80,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based).
+   * Start replay from this index (0-based), or live-tail from new events only.
    * If undefined, uses full replay (subscribeWithReplay).
-   * If specified, uses efficient indexed replay (subscribeFromOffset).
+   * A numeric offset uses efficient indexed replay when supported.
    */
-  offset?: number;
+  offset?: number | 'latest';
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -606,9 +606,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       const subscribePromise =
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
-          : pubsub.supportsOffsets
-            ? pubsub.subscribeFromOffset(topic, offset, subscribedCallback)
-            : pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' });
+          : offset === 'latest' || !pubsub.supportsOffsets
+            ? pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' })
+            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
 
       subscribePromise
         .then(() => {

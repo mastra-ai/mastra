@@ -801,6 +801,29 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should live-tail when cached history is unavailable', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    vi.spyOn(pubsub, 'supportsOffsets', 'get').mockReturnValue(true);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-cache-miss-resume',
+      messageId: 'msg-cache-miss',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 'latest',
+    });
+
+    await ready;
+
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-cache-miss-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('should unsubscribe from pubsub even when cleanup is called before subscribe resolves', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
 
