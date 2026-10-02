@@ -3947,11 +3947,10 @@ export class DurableAgent<
   }
 
   /**
-   * Read the current number of cached events for this run's stream topic.
-   * Used by resume and recovery so we don't re-deliver events emitted by the
-   * prior segment (notably the SUSPENDED chunk that paused it). When cached
-   * history is unavailable, live-tail because the persistent transport may
-   * still retain the prior segment.
+   * Resolve the replay position for this run's stream topic.
+   * Returns the cached event count when history is available, or `latest` when it is unavailable.
+   * Resume and recovery use this position so they don't re-deliver events emitted by the prior segment
+   * (notably the SUSPENDED chunk that paused it) from a persistent transport.
    */
   async #getPubsubOffset(runId: string): Promise<number | 'latest'> {
     const pubsub = this.pubsub as PubSub & {
