@@ -279,28 +279,35 @@ async function executeCommand(input: Record<string, any>, context: any) {
   // Unbounded accumulation here crashes the process with RangeError on very large output.
   const stdout = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
   const stderr = new RetainedOutputBuffer(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+  // Snapshot the abort state when the command settles: an abort that lands afterwards
+  // (while the result is being reported) did not stop the command.
+  let abortedWhenSettled = false;
   try {
-    const result = await sandbox.executeCommand(command, [], {
-      timeout: timeout ?? undefined,
-      cwd: cwd ?? undefined,
-      abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
-      onStdout: async (data: string) => {
-        stdout.append(data);
-        await context?.writer?.custom({
-          type: 'data-sandbox-stdout',
-          data: { output: data, timestamp: Date.now(), toolCallId },
-          transient: true,
-        });
-      },
-      onStderr: async (data: string) => {
-        stderr.append(data);
-        await context?.writer?.custom({
-          type: 'data-sandbox-stderr',
-          data: { output: data, timestamp: Date.now(), toolCallId },
-          transient: true,
-        });
-      },
-    });
+    const result = await sandbox
+      .executeCommand(command, [], {
+        timeout: timeout ?? undefined,
+        cwd: cwd ?? undefined,
+        abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
+        onStdout: async (data: string) => {
+          stdout.append(data);
+          await context?.writer?.custom({
+            type: 'data-sandbox-stdout',
+            data: { output: data, timestamp: Date.now(), toolCallId },
+            transient: true,
+          });
+        },
+        onStderr: async (data: string) => {
+          stderr.append(data);
+          await context?.writer?.custom({
+            type: 'data-sandbox-stderr',
+            data: { output: data, timestamp: Date.now(), toolCallId },
+            transient: true,
+          });
+        },
+      })
+      .finally(() => {
+        abortedWhenSettled = context?.abortSignal?.aborted === true;
+      });
 
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -325,7 +332,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       // reports 128, which also means "fatal" for git), so the abort signal is the only
       // reliable way to tell the model why it stopped. `killed: false` means the command
       // exited on its own just before the abort.
-      const aborted = context?.abortSignal?.aborted && result.killed !== false && !result.timedOut;
+      const aborted = abortedWhenSettled && result.killed !== false && !result.timedOut;
       const exitLine = `Exit code: ${result.exitCode}`;
       return appendTerminalLine(parts, aborted ? `${ABORTED_COMMAND_NOTE}\n${exitLine}` : exitLine);
     }
@@ -353,10 +360,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorLine = `Error: ${errorMessage}`;
-    return appendTerminalLine(
-      parts,
-      context?.abortSignal?.aborted ? `${ABORTED_COMMAND_NOTE}\n${errorLine}` : errorLine,
-    );
+    return appendTerminalLine(parts, abortedWhenSettled ? `${ABORTED_COMMAND_NOTE}\n${errorLine}` : errorLine);
   }
 }
 

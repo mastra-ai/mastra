@@ -6,6 +6,9 @@ import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHi
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
+const ABORTED_PROCESS_NOTE =
+  'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
+
 export const getProcessOutputTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
   description: `Get the current output (stdout, stderr) and status of a background process by its PID.
@@ -121,7 +124,8 @@ Use this after starting a background command with execute_command (background: t
       }
 
       if (!running) {
-        parts.push('', `Exit code: ${handle.exitCode}`);
+        // The exit code of an aborted process is a provider-specific kill code, so say why it stopped.
+        parts.push('', ...(handle.killedByAbort ? [ABORTED_PROCESS_NOTE] : []), `Exit code: ${handle.exitCode}`);
       }
 
       span.end({ success: true }, { exitCode: handle.exitCode });

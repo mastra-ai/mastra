@@ -389,6 +389,37 @@ describe('ProcessHandle wait abortSignal', () => {
     expect(kill).not.toHaveBeenCalled();
   });
 
+  it('records that an abort killed the process', async () => {
+    const handle = new TestProcessHandle();
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    controller.abort();
+    handle.finish();
+    await waiting;
+
+    expect(handle.killedByAbort).toBe(true);
+  });
+
+  it('does not record an abort kill when the process exited before the kill landed', async () => {
+    const handle = new TestProcessHandle();
+    vi.spyOn(handle, 'kill').mockResolvedValue(false);
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    controller.abort();
+    handle.finish();
+    await waiting;
+
+    expect(handle.killedByAbort).toBe(false);
+  });
+
+  it('does not record an abort kill for a direct kill()', async () => {
+    const handle = new TestProcessHandle();
+    await handle.kill();
+    expect(handle.killedByAbort).toBe(false);
+  });
+
   it('a wait without a signal is unaffected', async () => {
     const handle = new TestProcessHandle();
     const waiting = handle.wait();

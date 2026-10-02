@@ -236,6 +236,7 @@ export abstract class ProcessHandle {
 
   private _stdout: RetainedOutputBuffer;
   private _stderr: RetainedOutputBuffer;
+  private _killedByAbort = false;
   private _stdoutListeners = new Set<(data: string) => void>();
   private _stderrListeners = new Set<(data: string) => void>();
   private _reader?: Readable;
@@ -268,7 +269,7 @@ export abstract class ProcessHandle {
       // instead of blocking past the caller's lifetime.
       const abortSignal = waitOptions?.abortSignal;
       const onAbort = () => {
-        void this.kill().catch(() => {});
+        void this.killForAbort().catch(() => {});
       };
       if (abortSignal?.aborted) onAbort();
       else abortSignal?.addEventListener('abort', onAbort, { once: true });
@@ -287,6 +288,27 @@ export abstract class ProcessHandle {
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
       }
     };
+  }
+
+  /**
+   * Whether the process was killed because an `abortSignal` passed to spawn or
+   * `wait()` fired while it was still running. A direct `kill()` does not set it.
+   */
+  get killedByAbort(): boolean {
+    return this._killedByAbort;
+  }
+
+  /** Kill the process for a fired abort signal and record it in {@link killedByAbort}. */
+  async killForAbort(): Promise<void> {
+    if (this.exitCode !== undefined) return;
+    this._killedByAbort = true;
+    try {
+      // `false` means the process exited on its own before the kill landed.
+      if (!(await this.kill())) this._killedByAbort = false;
+    } catch (error) {
+      this._killedByAbort = false;
+      throw error;
+    }
   }
 
   /** Retained stdout so far */

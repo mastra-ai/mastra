@@ -546,7 +546,7 @@ describe('executeCommandTool data chunks', () => {
       expect(result).toBe(`${abortNote}\nExit code: -1`);
     });
 
-    it('does not label a command that exited on its own before the abort', async () => {
+    it('does not label a command the provider reports was not killed', async () => {
       const context = createAbortedContext(async () => ({
         success: false,
         exitCode: 128,
@@ -604,6 +604,48 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
 
       expect(result).toBe(`started\n\n${abortNote}\nError: process terminated`);
+    });
+
+    function abortOnExitChunk(writerCustom: ReturnType<typeof vi.fn>, controller: AbortController) {
+      writerCustom.mockImplementation(async (chunk: { type: string }) => {
+        if (chunk.type === 'data-sandbox-exit') controller.abort();
+      });
+    }
+
+    it('does not label a failed command when the abort arrives after it finished', async () => {
+      const controller = new AbortController();
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: 'error: tests failed',
+          executionTimeMs: 5,
+        }),
+      });
+      context.abortSignal = controller.signal;
+      abortOnExitChunk(writerCustom, controller);
+
+      const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
+
+      expect(controller.signal.aborted).toBe(true);
+      expect(result).toBe('stderr:\nerror: tests failed\n\nExit code: 1');
+    });
+
+    it('does not label a sandbox error when the abort arrives after it was thrown', async () => {
+      const controller = new AbortController();
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async () => {
+          throw new Error('connection reset');
+        },
+      });
+      context.abortSignal = controller.signal;
+      abortOnExitChunk(writerCustom, controller);
+
+      const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
+
+      expect(controller.signal.aborted).toBe(true);
+      expect(result).toBe('Error: connection reset');
     });
   });
 
