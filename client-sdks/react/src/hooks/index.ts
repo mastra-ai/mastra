@@ -7,3 +7,4 @@ export * from './traces';
 export * from './feedback';
 export * from './metrics';
 export * from './workflows';
+export * from './workspace';

@@ -1,7 +1,7 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { isMediaFile } from '../file-type';
+import { isMediaFile } from './file-type';
 import { WORKSPACE_REFETCH_INTERVAL } from './use-workspace-directory';
+import { useMastraClient } from '@/mastra-client-context';
 
 /** Reads a file (base64 for images/videos) and polls it so the viewer follows external edits. */
 export function useWorkspaceFileContent(workspaceId: string, path?: string) {

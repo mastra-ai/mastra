@@ -1,7 +1,6 @@
-import { is404NotFoundError } from '@mastra/react/hooks';
+import { is404NotFoundError, useWorkspaceDirectory } from '@mastra/react/hooks';
 import type { ReactNode } from 'react';
 import { Panel } from 'react-resizable-panels';
-import { useWorkspaceDirectory } from '../hooks/use-workspace-directory';
 import { ROOT_PATH } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceActiveFileContent as ActiveFileBody } from './workspace-active-file';

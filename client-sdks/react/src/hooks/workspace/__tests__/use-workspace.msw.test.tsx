@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { useWorkspaceDirectory } from '../use-workspace-directory';
+import { useWorkspaceFileContent } from '../use-workspace-file-content';
+import { useWorkspaceSearch } from '../use-workspace-search';
 import {
   BASE_URL,
   WORKSPACE_ID,
@@ -16,10 +18,8 @@ import {
   rootListing,
   skillSearchResponse,
   readResponse,
-} from '../../__tests__/fixtures/workspace';
-import { useWorkspaceDirectory } from '../use-workspace-directory';
-import { useWorkspaceFileContent } from '../use-workspace-file-content';
-import { useWorkspaceSearch } from '../use-workspace-search';
+} from './fixtures/workspace';
+import { MastraReactProvider } from '@/mastra-react-provider';
 
 const server = setupServer();
 

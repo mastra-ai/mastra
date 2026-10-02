@@ -9,6 +9,7 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useWorkspaceInfo, useStoredWorkspaces } from '@mastra/react/hooks';
 import {
   AlertTriangle,
   ChevronDown,
@@ -39,8 +40,6 @@ import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { useWorkspaceInfo } from '@/domains/workspace/hooks';
-import { useStoredWorkspaces } from '@/domains/workspace/hooks/use-stored-workspaces';
 
 type DialogMode = 'simple' | 'advanced';
 

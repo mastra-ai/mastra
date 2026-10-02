@@ -1,13 +1,13 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from '../compatibility';
+import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from './compatibility';
 import type {
   WorkspaceInfo,
   WorkspacesListResponse,
   FileStatResponse,
   WriteFileParams,
   WriteFileFromFileParams,
-} from '../types';
+} from './types';
+import { useMastraClient } from '@/mastra-client-context';
 
 function getParentPath(path: string): string {
   return path.split('/').slice(0, -1).join('/') || (path.startsWith('/') ? '/' : '.');

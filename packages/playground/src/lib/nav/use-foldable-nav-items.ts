@@ -1,8 +1,8 @@
 import { useExpiringLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
+import { useWorkspaces } from '@mastra/react/hooks';
 import { useEffect } from 'react';
 import { z } from 'zod/v4';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
-import { useWorkspaces } from '@/domains/workspace/hooks/use-workspace';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 import type { NavItem } from '@/lib/nav/nav-items';
 

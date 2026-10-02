@@ -1,5 +1,5 @@
 import type { GetWorkflowRunByIdResponse, MastraClient } from '@mastra/client-js';
-import type { UseMutationResult, UseQueryOptions } from '@tanstack/react-query';
+import type { UseInfiniteQueryResult, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useInView } from '../shared/use-in-view';
@@ -34,7 +34,9 @@ export function selectUniqueRuns(data: { pages: WorkflowRuns[] }) {
 export const useWorkflowRuns = (
   workflowId: string,
   { enabled = true, summary = false }: { enabled?: boolean; summary?: boolean } = {},
-) => {
+): UseInfiniteQueryResult<ReturnType<typeof selectUniqueRuns>, Error> & {
+  setEndOfListElement: ReturnType<typeof useInView>['setRef'];
+} => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const query = useInfiniteQuery({
@@ -68,7 +70,7 @@ export const useWorkflowRun = (
   workflowId: string,
   runId: string,
   refetchInterval?: UseQueryOptions<GetWorkflowRunByIdResponse>['refetchInterval'],
-) => {
+): UseQueryResult<GetWorkflowRunByIdResponse, Error> => {
   const client = useMastraClient();
   return useQuery({
     queryKey: workflowRunQueryKey(workflowId, runId),
