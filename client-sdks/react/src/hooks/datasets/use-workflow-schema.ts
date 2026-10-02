@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 /**
  * Hook to fetch workflow input/output schema by workflow ID.

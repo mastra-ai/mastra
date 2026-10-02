@@ -1,11 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { useExperimentsForDatasetFilter, type ExperimentTargetFilter } from '@mastra/react/hooks';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
-import {
-  useExperimentsForDatasetFilter,
-  type ExperimentTargetFilter,
-} from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 
 type ReviewStatus = 'needs-review' | 'complete';
 

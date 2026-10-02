@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface DatasetVersion {
   id?: string;

@@ -1,19 +1,20 @@
-import type { GetMetricAggregateArgs, GetMetricAggregateResponse } from '@mastra/client-js';
-import { MastraReactProvider } from '@mastra/react';
+// @vitest-environment jsdom
+import type { MastraClient } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
 
+import { server } from '../../../test/msw-server';
+import { TEST_BASE_URL } from '../../../test/render';
 import { useExperimentMetrics } from '../use-experiment-metrics';
-import {
-  renamedPostgresWithMetrics,
-  storageWithoutMetrics,
-} from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
-import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:4111';
+const BASE_URL = TEST_BASE_URL;
+
+type GetMetricAggregateArgs = Parameters<MastraClient['getMetricAggregate']>[0];
+type GetMetricAggregateResponse = Awaited<ReturnType<MastraClient['getMetricAggregate']>>;
 const EXPERIMENT_ID = 'exp-123';
 
 const makeWrapper = () => {
@@ -58,16 +59,13 @@ afterEach(() => {
 });
 
 describe('useExperimentMetrics', () => {
-  describe('given a metrics-capable observability store', () => {
-    beforeEach(() => {
-      server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)));
-    });
-
+  describe('when the observability store supports metrics', () => {
     it('when called with an experimentId, then it requests aggregates filtered by that experimentId and no time window', async () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed' }),
+        () =>
+          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -85,7 +83,8 @@ describe('useExperimentMetrics', () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed' }),
+        () =>
+          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -105,7 +104,8 @@ describe('useExperimentMetrics', () => {
       useAggregateHandler(() => nullAggregate);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed' }),
+        () =>
+          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -124,7 +124,7 @@ describe('useExperimentMetrics', () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'running' }),
+        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'running', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -138,7 +138,8 @@ describe('useExperimentMetrics', () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed' }),
+        () =>
+          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -153,7 +154,7 @@ describe('useExperimentMetrics', () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: undefined, experimentStatus: 'completed' }),
+        () => useExperimentMetrics({ experimentId: undefined, experimentStatus: 'completed', supportsMetrics: true }),
         { wrapper: makeWrapper() },
       );
 
@@ -165,13 +166,13 @@ describe('useExperimentMetrics', () => {
     });
   });
 
-  describe('given an observability store that does not support metrics', () => {
-    it('when called, then it makes no aggregate request and isEnabled is false', async () => {
-      server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(storageWithoutMetrics)));
+  describe('when the observability store does not support metrics', () => {
+    it('makes no aggregate request and reports isEnabled false', async () => {
       useAggregateHandler(respondByAggregation);
 
       const { result } = renderHook(
-        () => useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed' }),
+        () =>
+          useExperimentMetrics({ experimentId: EXPERIMENT_ID, experimentStatus: 'completed', supportsMetrics: false }),
         { wrapper: makeWrapper() },
       );
 

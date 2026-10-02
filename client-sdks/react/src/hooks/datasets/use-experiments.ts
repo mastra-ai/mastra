@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 /**
  * Hook to list all experiments across all datasets with optional pagination

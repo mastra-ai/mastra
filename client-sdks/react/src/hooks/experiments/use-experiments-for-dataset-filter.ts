@@ -1,6 +1,6 @@
 import type { ExperimentTargetType, ListExperimentsParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 /** Explicit page size: server defaults are 20 (global) / 10 (per dataset), which is too small for the list. */
 export const EXPERIMENTS_PAGE_SIZE = 100;

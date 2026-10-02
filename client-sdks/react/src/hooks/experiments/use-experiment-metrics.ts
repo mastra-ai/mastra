@@ -1,7 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface ExperimentMetrics {
   totalTokens: number | null;
@@ -14,6 +13,8 @@ export interface ExperimentMetrics {
 interface UseExperimentMetricsArgs {
   experimentId: string | undefined;
   experimentStatus: DatasetExperiment['status'] | undefined;
+  /** Whether the observability store can serve metrics; no requests are made when false. */
+  supportsMetrics: boolean;
 }
 
 /**
@@ -21,9 +22,8 @@ interface UseExperimentMetricsArgs {
  * Filters only by experimentId — no time window, since the experiment already bounds the row set.
  * Polls every 2 seconds while the experiment is running or pending.
  */
-export const useExperimentMetrics = ({ experimentId, experimentStatus }: UseExperimentMetricsArgs) => {
+export const useExperimentMetrics = ({ experimentId, experimentStatus, supportsMetrics }: UseExperimentMetricsArgs) => {
   const client = useMastraClient();
-  const { supportsMetrics } = useObservabilityStorageCapabilities();
   const isEnabled = Boolean(experimentId) && supportsMetrics;
   const isActive = experimentStatus === 'running' || experimentStatus === 'pending';
 

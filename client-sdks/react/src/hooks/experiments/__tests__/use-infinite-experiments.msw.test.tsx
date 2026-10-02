@@ -1,12 +1,13 @@
+// @vitest-environment jsdom
 import type { DatasetExperiment } from '@mastra/client-js';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import { buildListExperimentsResponse, experiments } from '../../components/__tests__/fixtures/experiments';
+import { useMockIntersectionObserver } from '../../../test/intersection-observer';
+import { server } from '../../../test/msw-server';
+import { makeWrapper, TEST_BASE_URL } from '../../../test/render';
 import { EXPERIMENTS_PER_PAGE, useInfiniteExperiments } from '../use-infinite-experiments';
-import { useMockIntersectionObserver } from '@/test/intersection-observer';
-import { server } from '@/test/msw-server';
-import { makeWrapper, TEST_BASE_URL } from '@/test/render';
+import { buildListExperimentsResponse, experiments } from './fixtures/experiments';
 
 type PagedResponse = ReturnType<typeof buildListExperimentsResponse>;
 
@@ -40,7 +41,7 @@ const ids = (list: DatasetExperiment[] | undefined) => list?.map(exp => exp.id);
 describe('useInfiniteExperiments', () => {
   const { intersect } = useMockIntersectionObserver();
 
-  describe('Given the API returns a single page', () => {
+  describe('when the API returns a single page', () => {
     it('when no dataset is given, then it requests the first page of the global list and flattens it', async () => {
       const urls = servePages([experiments]);
       const { wrapper } = makeWrapper();
@@ -93,7 +94,7 @@ describe('useInfiniteExperiments', () => {
     });
   });
 
-  describe('Given the API reports more pages', () => {
+  describe('when the API reports more pages', () => {
     const [first, second, third] = experiments;
 
     it('when the next page is fetched, then it is appended and the server is asked for page 1', async () => {
@@ -126,7 +127,7 @@ describe('useInfiniteExperiments', () => {
     });
   });
 
-  describe('Given the first page is empty', () => {
+  describe('when the first page is empty', () => {
     it('when the hook resolves, then there is no next page and no extra request', async () => {
       const urls = servePages([[]]);
       const { wrapper } = makeWrapper();

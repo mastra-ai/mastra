@@ -1,6 +1,6 @@
 import type { DatasetItemVersionResponse } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export type DatasetItemVersion = DatasetItemVersionResponse & {
   validTo: number | null;

@@ -1,9 +1,10 @@
-import type { ClientScoreRowData, MastraClient } from '@mastra/client-js';
+import type { ClientScoreRowData, DatasetExperimentResult, MastraClient } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
+import { useInView } from '../shared/use-in-view';
 
 /**
  * Hook to fetch a single dataset experiment with polling while running
@@ -47,7 +48,9 @@ export const useDatasetExperimentResults = ({
   experimentId,
   experimentStatus,
   orderBy,
-}: UseDatasetExperimentResultsParams) => {
+}: UseDatasetExperimentResultsParams): UseInfiniteQueryResult<DatasetExperimentResult[], Error> & {
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+} => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 

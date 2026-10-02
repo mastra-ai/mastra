@@ -1,8 +1,9 @@
-import type { ListExperimentsParams } from '@mastra/client-js';
-import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
-import { useMastraClient } from '@mastra/react';
+import type { DatasetExperiment, ListExperimentsParams } from '@mastra/client-js';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
+import { useInView } from '../shared/use-in-view';
 import type { ExperimentTargetFilter } from './use-experiments-for-dataset-filter';
 
 export const EXPERIMENTS_PER_PAGE = 100;
@@ -18,7 +19,9 @@ export function useInfiniteExperiments(
   datasetId: string | undefined,
   target?: ExperimentTargetFilter,
   orderBy?: ExperimentsOrderBy,
-) {
+): UseInfiniteQueryResult<DatasetExperiment[], Error> & {
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+} {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const targetType = target?.targetType || undefined;

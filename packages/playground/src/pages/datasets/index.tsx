@@ -4,14 +4,13 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { useInfiniteDatasets } from '@mastra/react/hooks';
+import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 
