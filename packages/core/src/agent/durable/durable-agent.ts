@@ -3176,9 +3176,42 @@ export class DurableAgent<
    * Override the inherited `approveToolCall()` to route through the durable
    * `resume()` path.
    */
+  /**
+   * Resolve a run's owning resource read-only (registry, then persisted row)
+   * for the caller-resource guard. Never rehydrates.
+   * @internal
+   */
+  protected override async resolveRunResourceForGuard(runId: string): Promise<{ found: boolean; resourceId?: string }> {
+    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    if (this.#runRegistry.get(runId)) {
+      return { found: true, resourceId: memoryInfo?.resourceId };
+    }
+    try {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      if (!persisted) return { found: false };
+      const snapshot =
+        typeof persisted.snapshot === 'string'
+          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+          : (persisted.snapshot as WorkflowRunState);
+      const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+      if (!workflowInput) return { found: false };
+      const messageListMemoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { resourceId?: string } } | undefined
+      )?.memoryInfo;
+      return { found: true, resourceId: workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId };
+    } catch (error) {
+      this.logger.warn(`Could not resolve the resource that owns run ${runId}; treating it as unresolved`, {
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      return { found: false };
+    }
+  }
+
   override async approveToolCall(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
+    await this.assertToolControlCallerOwnsRun(options);
     return this.resumeStream({ approved: true }, options);
   }
 
@@ -3189,6 +3222,7 @@ export class DurableAgent<
   override async declineToolCall(
     options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
+    await this.assertToolControlCallerOwnsRun(options);
     const { reason, ...resumeOptions } = options;
     return this.resumeStream({ approved: false, ...(reason !== undefined ? { reason } : {}) }, resumeOptions);
   }
@@ -3196,6 +3230,7 @@ export class DurableAgent<
   override async approveToolCallGenerate<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    await this.assertToolControlCallerOwnsRun(options);
     const { runId, ...resumeOptions } = options;
     return this.resumeGenerate(runId, { approved: true }, resumeOptions as any) as any;
   }
@@ -3203,6 +3238,7 @@ export class DurableAgent<
   override async declineToolCallGenerate<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    await this.assertToolControlCallerOwnsRun(options);
     const { runId, reason, ...resumeOptions } = options;
     return this.resumeGenerate(
       runId,
