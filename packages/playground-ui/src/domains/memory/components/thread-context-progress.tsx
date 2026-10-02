@@ -28,14 +28,14 @@ function ProgressBar({
 
   return (
     <div className={cn('min-w-0 flex-1', toneClass[tone])}>
-      <Txt as="div" variant="meta" tone="muted" className="mb-1 flex items-center justify-between gap-2">
+      <div className="mb-1 flex items-center justify-between gap-2 text-muted-foreground">
         <Txt as="span" variant="meta" tone="ink" className="uppercase">
           {label}
         </Txt>
-        <span className="text-muted-foreground tabular-nums">
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k
-        </span>
-      </Txt>
+        </Txt>
+      </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
         <div className="h-full rounded-full bg-current/80" style={{ width: `${percent}%` }} />
       </div>

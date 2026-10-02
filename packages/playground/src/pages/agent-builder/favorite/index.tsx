@@ -138,32 +138,32 @@ export default function AgentBuilderFavoritePage() {
               <ActionRow.Start>
                 {features.skills && (
                   <div className="flex overflow-hidden rounded-lg border border-border">
-                    <Txt
-                      as="button"
-                      variant="column"
-                      tone="ink"
+                    <button
                       onClick={() => setTab('agents')}
                       className={cn(
+                        'text-foreground',
                         'px-3 py-1.5',
                         controlStateColorTransition,
                         tab === 'agents' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
-                      Agents
-                    </Txt>
-                    <Txt
-                      as="button"
-                      variant="column"
-                      tone="ink"
+                      <Txt as="span" variant="column" className="block">
+                        Agents
+                      </Txt>
+                    </button>
+                    <button
                       onClick={() => setTab('skills')}
                       className={cn(
+                        'text-foreground',
                         'px-3 py-1.5',
                         controlStateColorTransition,
                         tab === 'skills' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
-                      Skills
-                    </Txt>
+                      <Txt as="span" variant="column" className="block">
+                        Skills
+                      </Txt>
+                    </button>
                   </div>
                 )}
                 <div className="max-w-120 flex-1">

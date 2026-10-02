@@ -60,20 +60,22 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <Txt as="div" variant="caption" className="flex min-w-0 items-center gap-3 text-warning-foreground">
-      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+    <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
+      <Txt as="span" variant="caption" className="truncate">
+        You are seeing v{activeDatasetVersion}, which is an older version of the dataset
+      </Txt>
       {onReturnToLatestVersion && (
-        <Txt
-          as="button"
-          variant="caption"
+        <button
           type="button"
           onClick={onReturnToLatestVersion}
           className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
         >
-          Return to latest
-        </Txt>
+          <Txt as="span" variant="caption" className="block">
+            Return to latest
+          </Txt>
+        </button>
       )}
-    </Txt>
+    </div>
   );
 
   // Hidden on an empty dataset: the list's empty state takes over. Kept while a

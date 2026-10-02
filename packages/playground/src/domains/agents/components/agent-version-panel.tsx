@@ -55,13 +55,11 @@ export function AgentVersionPanel({
 
               return (
                 <li key={version.id}>
-                  <Txt
-                    as="button"
-                    variant="body"
-                    tone="ink"
+                  <button
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
+                      'text-foreground',
                       'w-full border-l-2 px-3 py-2.5 text-left',
                       controlStateColorTransition,
                       isSelected
@@ -79,7 +77,7 @@ export function AgentVersionPanel({
                     <Txt variant="meta" tone="faint" className="mt-0.5">
                       {formatDate(version.createdAt, 'date-time') ?? ''}
                     </Txt>
-                  </Txt>
+                  </button>
                 </li>
               );
             })}

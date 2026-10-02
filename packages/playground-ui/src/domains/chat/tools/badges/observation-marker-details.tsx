@@ -101,9 +101,11 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
     <ActivityItem icon={<Braces />} label="Extractions" detail={detail} detailFont="sans" aria-label="Extractions">
       {entries.map(([slug, value]) => (
         <div key={slug} className="rounded-md border border-border bg-fill-subtle p-2">
-          <Txt as="div" variant="meta" tone="muted" className="uppercase">
-            {slug}
-          </Txt>
+          <div className="text-muted-foreground uppercase">
+            <Txt as="span" variant="meta" className="block">
+              {slug}
+            </Txt>
+          </div>
           {typeof value === 'object' && value !== null ? (
             <Txt
               as="pre"
@@ -124,12 +126,16 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
           key={failure.slug}
           className="rounded-md border border-destructive-edge bg-destructive-subtle p-2 text-destructive-subtle-foreground"
         >
-          <Txt as="div" variant="meta" className="uppercase">
-            {failure.slug}
-          </Txt>
-          <Txt as="div" variant="caption" className="mt-1">
-            {failure.error}
-          </Txt>
+          <div className="uppercase">
+            <Txt as="span" variant="meta" className="block">
+              {failure.slug}
+            </Txt>
+          </div>
+          <div className="mt-1">
+            <Txt as="span" variant="caption" className="block">
+              {failure.error}
+            </Txt>
+          </div>
         </div>
       ))}
     </ActivityItem>

@@ -110,21 +110,21 @@ export function WorkspaceSearchResults() {
     <ul aria-label="Search results" className="flex flex-col py-1">
       {data.map(hit => (
         <li key={hit.path}>
-          <Txt
-            as="button"
-            variant="body-sm"
-            tone="ink"
+          <button
             type="button"
             title={hit.path}
             onClick={() => setActiveFilePath(hit.path)}
             className={cn(
+              'text-foreground',
               'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-fill-subtle',
               activeFilePath === hit.path && 'bg-fill',
             )}
           >
             <Icon size="sm">{hit.kind === 'skill' ? <SkillIcon /> : <FileIcon />}</Icon>
-            <span className="truncate">{hit.label}</span>
-          </Txt>
+            <Txt as="span" variant="body-sm" className="truncate">
+              {hit.label}
+            </Txt>
+          </button>
         </li>
       ))}
     </ul>

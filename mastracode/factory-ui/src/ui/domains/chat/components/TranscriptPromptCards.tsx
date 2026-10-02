@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { PlanResume } from '@mastra/client-js';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -117,13 +118,17 @@ export function SuspensionCard({
   if (prompt.toolName === 'request_access') {
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
-        <Txt as="div" variant="subheading" tone="ink" className={promptTitle}>
-          Grant access to {payload.requestedPath ?? 'a path'}?
-        </Txt>
-        {payload.reason && (
-          <Txt as="div" variant="caption" tone="muted" className="mt-0.5">
-            Reason: {payload.reason}
+        <div className={cn('text-foreground', promptTitle)}>
+          <Txt as="span" variant="subheading" className="block">
+            Grant access to {payload.requestedPath ?? 'a path'}?
           </Txt>
+        </div>
+        {payload.reason && (
+          <div className="text-muted-foreground mt-0.5">
+            <Txt as="span" variant="caption" className="block">
+              Reason: {payload.reason}
+            </Txt>
+          </div>
         )}
         <div className={promptActions}>
           <Button
@@ -168,9 +173,11 @@ function AskUserCard({
   const question = payload.question ?? 'The agent has a question';
   return (
     <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
-      <Txt as="div" variant="subheading" tone="ink" className={promptTitle}>
-        {question}
-      </Txt>
+      <div className={cn('text-foreground', promptTitle)}>
+        <Txt as="span" variant="subheading" className="block">
+          {question}
+        </Txt>
+      </div>
       {options.length > 0 ? (
         <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
           {options.map(opt => (

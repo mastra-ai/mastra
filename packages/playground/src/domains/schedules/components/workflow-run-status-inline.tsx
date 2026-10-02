@@ -15,12 +15,14 @@ export interface WorkflowRunStatusInlineProps {
 export function WorkflowRunStatusInline({ status }: WorkflowRunStatusInlineProps) {
   const { icon, color } = getStatusVisual(status);
   return (
-    <Txt as="span" variant="caption" className={`inline-flex items-center gap-1.5 whitespace-nowrap ${color}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap ${color}`}>
       <span className="inline-flex shrink-0 items-center" aria-hidden>
         {icon}
       </span>
-      <span>{status}</span>
-    </Txt>
+      <Txt as="span" variant="caption">
+        {status}
+      </Txt>
+    </span>
   );
 }
 

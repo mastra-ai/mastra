@@ -178,20 +178,20 @@ export function ThemeDetailPanel({
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
                               <li key={example.traceId}>
-                                <Txt
-                                  as="button"
-                                  variant="body"
-                                  tone="ink"
+                                <button
                                   type="button"
                                   aria-label={`View trace insight for ${example.signalText}`}
+                                  onClick={() => setInsightTraceId(example.traceId)}
                                   className={cn(
+                                    'text-foreground',
                                     raisedSurfaceStyle,
                                     'state-layer w-full cursor-pointer rounded-md p-3 text-left',
                                   )}
-                                  onClick={() => setInsightTraceId(example.traceId)}
                                 >
-                                  {example.signalText}
-                                </Txt>
+                                  <Txt as="span" variant="body" className="block">
+                                    {example.signalText}
+                                  </Txt>
+                                </button>
                               </li>
                             ))}
                           </ul>

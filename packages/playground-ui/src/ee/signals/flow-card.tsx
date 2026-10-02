@@ -67,19 +67,13 @@ export function FlowCard({
           reorderDisabled={reorderDisabled}
           onOrderChange={handleHeaderOrderChange}
         />
-        <Txt
-          as="div"
-          variant="meta"
-
-          tone="muted"
-          aria-label="Themes"
-          className="flex items-center gap-2 py-1"
-          role="separator"
-        >
-          <span aria-hidden="true" className="h-px w-5 bg-border" />
-          THEMES
-          <span aria-hidden="true" className="h-px flex-1 bg-border" />
-        </Txt>
+        <div aria-label="Themes" role="separator" className="flex items-center gap-2 py-1 text-muted-foreground">
+          <Txt as="span" variant="meta" aria-hidden="true" className="h-px w-5 bg-border"></Txt>
+          <Txt as="span" variant="meta" className="block">
+            THEMES
+          </Txt>
+          <Txt as="span" variant="meta" aria-hidden="true" className="h-px flex-1 bg-border"></Txt>
+        </div>
         <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
           <Sankey
             data={records}

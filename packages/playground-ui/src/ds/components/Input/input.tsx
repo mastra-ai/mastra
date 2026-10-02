@@ -61,17 +61,18 @@ export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
     testId?: string;
     textVariant?: TextStyleProps['variant'];
     font?: TextStyleProps['font'];
+    tone?: TextStyleProps['tone'];
     /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
   };
 
-function Input({ className, size, testId, variant, textVariant, font, error, ...props }: InputProps) {
+function Input({ className, size, testId, variant, textVariant, font, tone, error, ...props }: InputProps) {
   return (
     <InputPrimitive
       className={cn(
         inputVariants({ variant: resolveFieldVariant(variant), size }),
         fieldErrorRim,
-        textStyle({ variant: textVariant, font }),
+        textStyle({ variant: textVariant, font, tone }),
         className,
       )}
       data-testid={testId}

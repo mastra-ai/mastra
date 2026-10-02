@@ -14,9 +14,11 @@ type SpanTimingHoverCardProps = {
 export function SpanTimingHoverCard({ span, startShiftMs }: SpanTimingHoverCardProps) {
   return (
     <HoverCardContent className="pr-6">
-      <Txt as="div" variant="caption" className={cn('mt-1 mb-2 flex items-center gap-2')}>
-        Span Timing
-      </Txt>
+      <div className={cn('mt-1 mb-2 flex items-center gap-2')}>
+        <Txt as="span" variant="caption" className="block">
+          Span Timing
+        </Txt>
+      </div>
       <DataKeysAndValues>
         <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>{formatDurationPrecise(span.latency) ?? '-'}</DataKeysAndValues.Value>

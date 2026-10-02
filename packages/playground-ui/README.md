@@ -145,12 +145,17 @@ Product call sites use `Txt` or the text props of a shared component. Role utili
 
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
 
-The `as` prop preserves native semantics, including links, buttons, definition-list entries, timestamps, and preformatted text. The `render` prop composes an existing component while preserving its refs and event handlers:
+`Txt` renders text elements: headings, paragraphs, inline text, labels, timestamps, and preformatted text. It cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
 
 ```tsx
-<Txt variant="caption" render={<Link to="/runs" />}>
-  View runs
-</Txt>
+<div className="flex items-center gap-2">
+  <Icon />
+  <Txt as="span" variant="caption">Supporting copy</Txt>
+</div>
+<Link to="/runs">
+  <Txt as="span" variant="caption">View runs</Txt>
+</Link>
+<Button onClick={run}>Run</Button>
 <Input font="mono" aria-label="Setup command" />
 <Tree.Label font="mono">src/index.ts</Tree.Label>
 ```

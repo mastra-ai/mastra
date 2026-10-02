@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
@@ -169,14 +170,11 @@ export function SidebarAttention() {
                 </ScrollAreaViewport>
               </ScrollArea>
             ) : (
-              <Txt
-                as="div"
-                variant="caption"
-                tone="faint"
-                className="flex min-h-24 items-center justify-center px-3.5 text-center"
-              >
-                {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
-              </Txt>
+              <div className={cn('text-placeholder', 'flex min-h-24 items-center justify-center px-3.5 text-center')}>
+                <Txt as="span" variant="caption" className="block">
+                  {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
+                </Txt>
+              </div>
             )}
           </TabContent>
         </Tabs>

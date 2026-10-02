@@ -1,6 +1,6 @@
 # Typography review screenshots
 
-Captured with Chromium against the actual Factory sign-in page and Playground UI Storybook. Screens show the shared DS in dark and light themes at desktop (1440×1000), tablet (768×1024), and mobile (390×844). The Signals story renders the actual empty-state component. Technical-values and text-role stories demonstrate the API contracts.
+Captured with Chromium against the actual Factory sign-in page and Playground UI Storybook. Screens show the shared DS in dark and light themes at desktop (1440×1000), tablet (768×1024), and mobile (390×844). The Signals story renders the actual empty-state component. Technical-values, text-role, and text-leaf stories demonstrate the API contracts.
 
 Factory authentication uses a network fixture (`/auth/me`, unauthenticated Better Auth); the install banner is dismissed so it does not obscure the comparison. Factory’s decorative canvas animation keeps running, so its pixels differ independently of typography. Factory images use viewport screenshots; Storybook images use full-page screenshots.
 
@@ -64,3 +64,13 @@ No browser page errors occurred during capture. These captures cover the major v
 | desktop  | ![desktop dark](after/prose-editor-desktop-dark.png) | ![desktop light](after/prose-editor-desktop-light.png) |
 | tablet   | ![tablet dark](after/prose-editor-tablet-dark.png)   | ![tablet light](after/prose-editor-tablet-light.png)   |
 | mobile   | ![mobile dark](after/prose-editor-mobile-dark.png)   | ![mobile light](after/prose-editor-mobile-light.png)   |
+
+## Text leaves — native layout and controls own their markup
+
+The div handles the row layout. Native buttons own interaction and wrap their text in Txt; the standard Button keeps its existing label contract. Txt itself cannot render a div or button.
+
+| Viewport | Dark                                                | Light                                                 |
+| -------- | --------------------------------------------------- | ----------------------------------------------------- |
+| desktop  | ![desktop dark](after/text-leaves-desktop-dark.png) | ![desktop light](after/text-leaves-desktop-light.png) |
+| tablet   | ![tablet dark](after/text-leaves-tablet-dark.png)   | ![tablet light](after/text-leaves-tablet-light.png)   |
+| mobile   | ![mobile dark](after/text-leaves-mobile-dark.png)   | ![mobile light](after/text-leaves-mobile-light.png)   |

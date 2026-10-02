@@ -32,7 +32,7 @@ export function GoalPanel() {
   const progress = `${goal.iteration}/${goal.maxRuns}`;
 
   return (
-    <Txt as="div" variant="caption" className={goalBar}>
+    <div className={goalBar}>
       <span className="text-badge-pink-indicator inline-flex">
         <Target size={15} />
       </span>
@@ -65,6 +65,6 @@ export function GoalPanel() {
       <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
         Clear
       </Button>
-    </Txt>
+    </div>
   );
 }

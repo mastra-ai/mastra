@@ -77,18 +77,20 @@ export function TemplateForm({
             </Txt>
             <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
               {isLoadingEnvVars ? (
-                <Txt
-                  as="div"
-                  variant="caption"
-                  tone="muted"
+                <div
                   className={cn(
+                    'text-muted-foreground',
                     'col-span-2 flex items-center justify-center gap-4',
                     '[&_svg]:h-[1.1em] [&_svg]:w-[1.1em] [&_svg]:opacity-50',
                     'animate-in duration-300 fade-in',
                   )}
                 >
-                  <Spinner /> Loading variables...
-                </Txt>
+                  <Spinner />
+                  <Txt as="span" variant="caption" className="block">
+                    {' '}
+                    Loading variables...
+                  </Txt>
+                </div>
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
@@ -112,14 +114,11 @@ export function TemplateForm({
               )}
             </div>
             <div className="relative mt-3.5 border-t border-border pt-12">
-              <Txt
-                as="div"
-                variant="caption"
-                tone="muted"
-                className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background"
-              >
-                And
-              </Txt>
+              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background text-muted-foreground">
+                <Txt as="span" variant="caption" className="block">
+                  And
+                </Txt>
+              </div>
 
               <Txt as="h3" tone="muted">
                 Set AI Model for Template Installation

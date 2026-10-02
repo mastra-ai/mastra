@@ -167,17 +167,17 @@ function WorkItemActions({
 
         if (!session) {
           return (
-            <Txt
+            <Link
+              to={relationshipPath(related, factoryId)}
+              aria-label={`Open ${label}: ${related.title}`}
               key={related.id}
-              as="span"
-              variant="caption"
-              render={<Link to={relationshipPath(related, factoryId)} aria-label={`Open ${label}: ${related.title}`} />}
-              tone="muted"
-              className="hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
+              className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
               <Link2 size={13} aria-hidden />
-              {label}
-            </Txt>
+              <Txt as="span" variant="caption" className="block">
+                {label}
+              </Txt>
+            </Link>
           );
         }
 

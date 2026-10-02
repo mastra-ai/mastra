@@ -2,6 +2,7 @@ import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hel
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
@@ -47,9 +48,11 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-4">
-        <Txt as="div" variant="body" tone="muted">
-          Drag columns to assign them to dataset fields
-        </Txt>
+        <div className="text-muted-foreground">
+          <Txt as="span" variant="body" className="block">
+            Drag columns to assign them to dataset fields
+          </Txt>
+        </div>
 
         {ZONES.map(zone => {
           const columnsInZone = getColumnsForZone(zone.id);
@@ -91,14 +94,14 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                       <Draggable key={column} draggableId={column} index={index}>
                         {(provided, snapshot) => {
                           const child = (
-                            <Txt
-                              as="div"
-                              variant="subheading"
-                              tone="faint"
+                            <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
+                              className={cn(
+                                'text-placeholder',
+                                `inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`,
+                              )}
                             >
                               <span
                                 {...provided.dragHandleProps}
@@ -108,8 +111,10 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                                   <GripVertical className="h-3.5 w-3.5" />
                                 </Icon>
                               </span>
-                              <span>{column}</span>
-                            </Txt>
+                              <Txt as="span" variant="subheading">
+                                {column}
+                              </Txt>
+                            </div>
                           );
 
                           // Portal dragged item to document.body to avoid
@@ -133,9 +138,11 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <Txt as="div" variant="body" className="text-warning-foreground">
-            At least one column must be mapped to Input
-          </Txt>
+          <div className="text-warning-foreground">
+            <Txt as="span" variant="body" className="block">
+              At least one column must be mapped to Input
+            </Txt>
+          </div>
         )}
       </div>
     </DragDropContext>

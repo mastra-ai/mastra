@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 /**
  * The force-directed knowledge graph: React Flow renders DOM nodes/edges while
@@ -234,15 +235,14 @@ function TruncationBanner({ payload }: { payload: KnowledgeGraphPayload }) {
   if (payload.unresolvedCapped.count > 0) parts.push(`${payload.unresolvedCapped.count} links unresolved (capped)`);
   if (parts.length === 0) return null;
   return (
-    <Txt
-      as="div"
-      variant="caption"
-      tone="muted"
+    <div
       data-testid="knowledge-truncation-banner"
-      className="border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
+      className="text-muted-foreground border-border bg-card pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-md border px-3 py-1"
     >
-      Partial view — {parts.join(' · ')}
-    </Txt>
+      <Txt as="span" variant="caption" className="block">
+        Partial view — {parts.join(' · ')}
+      </Txt>
+    </div>
   );
 }
 
@@ -260,25 +260,27 @@ function FilterChip({
   icon: React.ReactNode;
 }) {
   return (
-    <Txt
-      as="button"
-      variant="column"
-      tone="muted"
+    <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={[
-        'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
-        active
-          ? accent
-            ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
-            : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
-          : 'border-border bg-card hover:text-foreground',
-      ].join('')}
+      className={cn(
+        'text-muted-foreground',
+        [
+          'flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 transition-colors',
+          active
+            ? accent
+              ? 'border-badge-amber-edge bg-badge-amber-strong text-badge-amber-foreground'
+              : 'border-badge-purple-edge bg-badge-purple-strong text-badge-purple-foreground'
+            : 'border-border bg-card hover:text-foreground',
+        ].join(''),
+      )}
     >
-      {icon}
-      {label}
-    </Txt>
+      <Txt as="span" variant="column" className="block">
+        {icon}
+        {label}
+      </Txt>
+    </button>
   );
 }
 
@@ -610,9 +612,7 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
   if (hover.kind === 'node' && hover.node) {
     const { node, degree } = hover.node.data;
     return (
-      <Txt
-        as="div"
-        variant="caption"
+      <div
         data-testid="knowledge-hover-card"
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 min-w-48 rounded-lg p-3`}
         style={style}
@@ -634,40 +634,80 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
           </Txt>
         ) : null}
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-          <dt>Kind</dt>
-          <dd>{node.kind}</dd>
-          <dt>Scope</dt>
-          <dd>{RUNG_LABELS[node.rung]}</dd>
-          <dt>Knowledge records</dt>
-          <dd>{node.recordCount}</dd>
-          <dt>Links</dt>
+          <dt>
+            <Txt as="span" variant="caption" className="block">
+              Kind
+            </Txt>
+          </dt>
           <dd>
-            {degree.incoming} in · {degree.outgoing} out
+            <Txt as="span" variant="caption" className="block">
+              {node.kind}
+            </Txt>
           </dd>
-          <dt>Updated</dt>
-          <dd>{new Date(node.updatedAt).toLocaleString()}</dd>
+          <dt>
+            <Txt as="span" variant="caption" className="block">
+              Scope
+            </Txt>
+          </dt>
+          <dd>
+            <Txt as="span" variant="caption" className="block">
+              {RUNG_LABELS[node.rung]}
+            </Txt>
+          </dd>
+          <dt>
+            <Txt as="span" variant="caption" className="block">
+              Knowledge records
+            </Txt>
+          </dt>
+          <dd>
+            <Txt as="span" variant="caption" className="block">
+              {node.recordCount}
+            </Txt>
+          </dd>
+          <dt>
+            <Txt as="span" variant="caption" className="block">
+              Links
+            </Txt>
+          </dt>
+          <dd>
+            <Txt as="span" variant="caption" className="block">
+              {degree.incoming} in · {degree.outgoing} out
+            </Txt>
+          </dd>
+          <dt>
+            <Txt as="span" variant="caption" className="block">
+              Updated
+            </Txt>
+          </dt>
+          <dd>
+            <Txt as="span" variant="caption" className="block">
+              {new Date(node.updatedAt).toLocaleString()}
+            </Txt>
+          </dd>
         </dl>
-      </Txt>
+      </div>
     );
   }
   if (hover.kind === 'record' && hover.record) {
     const { record } = hover.record.data;
     return (
-      <Txt
-        as="div"
-        variant="caption"
+      <div
         data-testid="knowledge-hover-card"
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
         <div className="text-foreground mb-1 flex items-center gap-1.5">
-          Record
+          <Txt as="span" variant="caption" className="block">
+            Record
+          </Txt>
           {record.pinned ? <Pin size={11} className="text-badge-amber-indicator" aria-label="Pinned" /> : null}
         </div>
-        <Txt as="div" variant="body-sm" tone="muted">
-          {record.text}
-        </Txt>
-      </Txt>
+        <div className="text-muted-foreground">
+          <Txt as="span" variant="body-sm" className="block">
+            {record.text}
+          </Txt>
+        </div>
+      </div>
     );
   }
   if (hover.kind === 'edge' && hover.edge) {
@@ -675,18 +715,22 @@ function GraphHoverCard({ hover, nodesById }: { hover: HoverCard; nodesById: Map
     const source = resolve(hover.edge.source);
     const target = resolve(hover.edge.target);
     return (
-      <Txt
-        as="div"
-        variant="caption"
+      <div
         data-testid="knowledge-hover-card"
         className={`${overlaySurfaceStyle} pointer-events-none fixed z-50 max-w-72 rounded-lg p-3`}
         style={style}
       >
-        <div className="text-foreground">{source && target ? `${source} → ${target}` : 'Record'}</div>
-        <Txt as="div" variant="body-sm" tone="muted" className="mt-0.5">
-          {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
-        </Txt>
-      </Txt>
+        <div className="text-foreground">
+          <Txt as="span" variant="caption" className="block">
+            {source && target ? `${source} → ${target}` : 'Record'}
+          </Txt>
+        </div>
+        <div className="text-muted-foreground mt-0.5">
+          <Txt as="span" variant="body-sm" className="block">
+            {hover.edge.data?.text ?? 'Mentioned in a knowledge record'}
+          </Txt>
+        </div>
+      </div>
     );
   }
   return null;

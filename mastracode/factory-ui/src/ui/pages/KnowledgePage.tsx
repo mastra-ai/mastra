@@ -56,35 +56,33 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <Txt
-      as="nav"
-      variant="caption"
-      tone="muted"
-      aria-label="Knowledge scope"
-      className="mt-1 flex flex-wrap items-center gap-1"
-    >
+    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1">
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
-        org
+        <Txt as="span" variant="caption" className="block">
+          org
+        </Txt>
       </button>
       <ChevronRight size={11} />
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
-        project
+        <Txt as="span" variant="caption" className="block">
+          project
+        </Txt>
       </button>
       {threadId ? (
         <>
           <ChevronRight size={11} />
-          <span className="text-badge-purple-indicator max-w-52 truncate" title={threadId}>
+          <Txt as="span" variant="caption" title={threadId} className="text-badge-purple-indicator max-w-52 truncate">
             session {threadId.slice(0, 8)}
-          </span>
+          </Txt>
         </>
       ) : null}
       {trail.map((entry, index) => (
         <span key={`${entry.nodeId}-${index}`} className="flex items-center gap-1">
           <ChevronRight size={11} />
           {index === trail.length - 1 ? (
-            <span className="text-foreground max-w-44 truncate" title={entry.name}>
+            <Txt as="span" variant="caption" tone="ink" title={entry.name} className="max-w-44 truncate">
               {entry.name}
-            </span>
+            </Txt>
           ) : (
             <button
               type="button"
@@ -92,12 +90,14 @@ function Breadcrumb({
               title={entry.name}
               onClick={() => onTrailClick(index)}
             >
-              {entry.name}
+              <Txt as="span" variant="caption" className="block">
+                {entry.name}
+              </Txt>
             </button>
           )}
         </span>
       ))}
-    </Txt>
+    </nav>
   );
 }
 
@@ -165,15 +165,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           <Txt tone="muted" as="p" variant="body">
             This session's knowledge is no longer available.
           </Txt>
-          <Txt
-            as="button"
-            variant="body"
-            type="button"
-            className="text-badge-purple-indicator hover:underline"
-            onClick={backToProject}
-          >
-            Back to the project view
-          </Txt>
+          <button type="button" className="text-badge-purple-indicator hover:underline" onClick={backToProject}>
+            <Txt as="span" variant="body" className="block">
+              Back to the project view
+            </Txt>
+          </button>
         </div>
       );
     } else {

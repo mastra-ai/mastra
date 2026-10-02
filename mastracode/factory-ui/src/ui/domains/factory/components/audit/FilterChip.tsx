@@ -14,14 +14,12 @@ export function FilterChip({
   onClick: () => void;
 }) {
   return (
-    <Txt
-      as="button"
-      variant="meta"
-      tone="ink"
+    <button
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
+        'text-foreground',
         'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors',
         focusRing,
         pressed
@@ -29,8 +27,12 @@ export function FilterChip({
           : 'hover:bg-fill hover:text-foreground focus-visible:bg-fill focus-visible:text-foreground',
       )}
     >
-      {dotClass ? <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotClass)} /> : null}
-      {label}
-    </Txt>
+      {dotClass ? (
+        <Txt as="span" variant="meta" aria-hidden="true" className={cn('size-1.5 rounded-full', dotClass)}></Txt>
+      ) : null}
+      <Txt as="span" variant="meta" className="block">
+        {label}
+      </Txt>
+    </button>
   );
 }

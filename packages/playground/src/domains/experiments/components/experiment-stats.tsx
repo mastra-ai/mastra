@@ -49,39 +49,40 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <Txt
-        as="div"
-        variant="caption"
-        tone="muted"
-        className={cn('flex items-center gap-3', '[&>span]:flex [&>span]:items-center [&>span]:gap-1')}
+      <div
+        className={cn(
+          'text-muted-foreground',
+          'flex items-center gap-3',
+          '[&>span]:flex [&>span]:items-center [&>span]:gap-1',
+        )}
       >
-        <span>
+        <Txt as="span" variant="caption">
           Total:{' '}
           <Txt as="b" variant="column" tone="muted">
             {experiment.totalItems}
           </Txt>
-        </span>
-        <span>
+        </Txt>
+        <Txt as="span" variant="caption">
           Processed:{' '}
           <Txt as="b" variant="column" tone="muted">
             {experiment.succeededCount}
           </Txt>
-        </span>
-        <span>
+        </Txt>
+        <Txt as="span" variant="caption">
           Errored:{' '}
           <Txt as="b" variant="column" tone="muted">
             {experiment.failedCount}
           </Txt>
-        </span>
+        </Txt>
         {(status === 'pending' || status === 'running') && (
-          <span>
+          <Txt as="span" variant="caption">
             Pending:{' '}
             <Txt as="b" variant="column" tone="muted">
               {pendingCount}
             </Txt>
-          </span>
+          </Txt>
         )}
-      </Txt>
+      </div>
     </div>
   );
 }

@@ -15,11 +15,7 @@ export interface AgentMetadataListItemProps {
 }
 
 export const AgentMetadataListItem = ({ children, className }: AgentMetadataListItemProps) => {
-  return (
-    <Txt as="li" variant="label" className={cn('flex shrink-0', className)}>
-      {children}
-    </Txt>
-  );
+  return <li className={cn('flex shrink-0', className)}>{children}</li>;
 };
 
 export interface AgentMetadataListEmptyProps {

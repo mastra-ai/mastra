@@ -56,9 +56,11 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             tabIndex={0}
           >
             {agentEntries.map(([agentKey, agent]) => (
-              <Txt as="li" variant="column" tone="ink" key={agentKey} className="overflow-wrap-anywhere">
-                {agent.name || agent.id || agentKey}
-              </Txt>
+              <li key={agentKey} className="overflow-wrap-anywhere text-foreground">
+                <Txt as="span" variant="column" className="block">
+                  {agent.name || agent.id || agentKey}
+                </Txt>
+              </li>
             ))}
           </ul>
         </div>

@@ -206,7 +206,7 @@ const PackagesModalContent = ({
         </div>
 
         <div className="max-h-64 overflow-y-auto rounded-md border border-border">
-          <Txt as="div" variant="body" className="grid grid-cols-[1fr_auto_auto]">
+          <div className="grid grid-cols-[1fr_auto_auto]">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border')}>
                 <div className="min-w-0 truncate px-3 py-2 text-foreground">
@@ -266,7 +266,7 @@ const PackagesModalContent = ({
                 </div>
               </div>
             ))}
-          </Txt>
+          </div>
         </div>
 
         {hasUpdates && updateCommand && (

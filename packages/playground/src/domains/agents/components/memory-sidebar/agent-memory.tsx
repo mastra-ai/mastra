@@ -187,9 +187,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <Txt tone="muted" className="mb-3">
                 Semantic recall is not enabled for this agent. Enable it to search through conversation history.
               </Txt>
-              <Txt
-                as="a"
-                variant="body"
+              <a
                 href="https://mastra.ai/en/docs/memory/semantic-recall"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -198,9 +196,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
                   controlStateColorTransition,
                 )}
               >
-                Learn about semantic recall
+                <Txt as="span" variant="body" className="block">
+                  Learn about semantic recall
+                </Txt>
                 <ExternalLink className="h-3 w-3" />
-              </Txt>
+              </a>
             </div>
           )}
         </div>

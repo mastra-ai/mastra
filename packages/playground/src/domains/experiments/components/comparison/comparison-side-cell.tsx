@@ -119,14 +119,20 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <Txt as="div" variant="body" key={key} className="flex items-start justify-between gap-4">
-                <dt className="text-muted-foreground">{key}</dt>
+              <div key={key} className="flex items-start justify-between gap-4">
+                <dt className="text-muted-foreground">
+                  <Txt as="span" variant="body" className="block">
+                    {key}
+                  </Txt>
+                </dt>
                 <dd className="break-all text-foreground">
-                  <Txt as="span" variant="body" font="mono">
-                    {formatValue(value)}
+                  <Txt as="span" variant="body" className="block">
+                    <Txt as="span" variant="body" font="mono">
+                      {formatValue(value)}
+                    </Txt>
                   </Txt>
                 </dd>
-              </Txt>
+              </div>
             ))}
           </dl>
         </ComparisonSection>

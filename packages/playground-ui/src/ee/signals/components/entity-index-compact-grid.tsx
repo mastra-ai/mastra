@@ -51,28 +51,40 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <Txt as="dt" variant="meta" tone="muted">
-              Traces
-            </Txt>
-            <Txt as="dd" variant="caption" tone="ink">
-              {metadata.traceCount}
-            </Txt>
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Traces
+              </Txt>
+            </dt>
+            <dd className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.traceCount}
+              </Txt>
+            </dd>
           </div>
           <div>
-            <Txt as="dt" variant="meta" tone="muted">
-              Signals set
-            </Txt>
-            <Txt as="dd" variant="caption" tone="ink">
-              {metadata.signalsSet}
-            </Txt>
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Signals set
+              </Txt>
+            </dt>
+            <dd className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.signalsSet}
+              </Txt>
+            </dd>
           </div>
           <div>
-            <Txt as="dt" variant="meta" tone="muted">
-              Updated
-            </Txt>
-            <Txt as="dd" variant="caption" tone="ink" title={entity.updatedAt}>
-              {metadata.updatedAt}
-            </Txt>
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Updated
+              </Txt>
+            </dt>
+            <dd title={entity.updatedAt} className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.updatedAt}
+              </Txt>
+            </dd>
           </div>
         </dl>
       </CardContent>

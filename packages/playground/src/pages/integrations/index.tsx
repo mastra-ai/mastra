@@ -62,10 +62,10 @@ export default function IntegrationsPage() {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Integrations</h1>
-      <Txt as="div" variant="body" className="max-w-3xl space-y-6">
-        <p className="text-muted-foreground">
+      <div className="max-w-3xl space-y-6">
+        <Txt as="p" variant="body" tone="muted">
           Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
-        </p>
+        </Txt>
 
         <ProviderToolkitSelector
           providers={providers}
@@ -98,7 +98,7 @@ export default function IntegrationsPage() {
           disconnectError={disconnect.error}
           onDisconnect={handleDisconnect}
         />
-      </Txt>
+      </div>
     </PageLayout>
   );
 }

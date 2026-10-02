@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
@@ -205,9 +206,11 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
     return (
-      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
-        You need to sign in to use GitHub. Reload the page — if that doesn't work, sign out and back in.
-      </Txt>
+      <div className={cn('text-muted-foreground', calloutClass)}>
+        <Txt as="span" variant="caption" className="block">
+          You need to sign in to use GitHub. Reload the page — if that doesn't work, sign out and back in.
+        </Txt>
+      </div>
     );
   }
 
@@ -215,52 +218,60 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (status.reason === 'missing_config' && status.diagnostics) {
     const missing = status.diagnostics.missingGithubAppEnvVars;
     return (
-      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
-        <p className="m-0 mb-1">GitHub is disabled on the server.</p>
+      <div className={cn('text-muted-foreground', calloutClass)}>
+        <Txt as="p" variant="caption" className="m-0 mb-1">
+          GitHub is disabled on the server.
+        </Txt>
         {missing.length > 0 && (
-          <p className="m-0 mb-1">
+          <Txt as="p" variant="caption" className="m-0 mb-1">
             Missing env vars: <code className="text-muted-foreground">{missing.join(', ')}</code>
-          </p>
+          </Txt>
         )}
-        <p className="m-0">
+        <Txt as="p" variant="caption" className="m-0">
           Set them in <code className="text-muted-foreground">mastracode/web/.env</code>, register{' '}
           <code className="text-muted-foreground">http://localhost:5173/auth/github/callback</code> as the GitHub App
           callback URL, then restart <code className="text-muted-foreground">pnpm web:dev</code> from{' '}
           <code className="text-muted-foreground">mastracode/web</code>.
-        </p>
-      </Txt>
+        </Txt>
+      </div>
     );
   }
 
   // Organization required: signed in but no WorkOS org.
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
-      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
-        Your account has no WorkOS organization. Connecting repositories requires an org. Sign out and back in to
-        auto-create one, or ask your admin to add you to an org.
-      </Txt>
+      <div className={cn('text-muted-foreground', calloutClass)}>
+        <Txt as="span" variant="caption" className="block">
+          Your account has no WorkOS organization. Connecting repositories requires an org. Sign out and back in to
+          auto-create one, or ask your admin to add you to an org.
+        </Txt>
+      </div>
     );
   }
 
   // Not connected: app installed but no installation persisted (callback didn't complete).
   if (!connected && status.reason === 'not_connected') {
     return (
-      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
-        The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
-        redirects to <code className="text-muted-foreground">/auth/github/callback</code> — make sure that URL is
-        registered in your GitHub App settings (Callback URL).
-      </Txt>
+      <div className={cn('text-muted-foreground', calloutClass)}>
+        <Txt as="span" variant="caption" className="block">
+          The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
+          redirects to <code className="text-muted-foreground">/auth/github/callback</code> — make sure that URL is
+          registered in your GitHub App settings (Callback URL).
+        </Txt>
+      </div>
     );
   }
 
   // Connected but no repos: installation may have no repo access.
   if (connected && empty) {
     return (
-      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
-        No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
-        repository access at <code className="text-muted-foreground">https://github.com/settings/installations</code>{' '}
-        and grant access to at least one repo.
-      </Txt>
+      <div className={cn('text-muted-foreground', calloutClass)}>
+        <Txt as="span" variant="caption" className="block">
+          No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
+          repository access at <code className="text-muted-foreground">https://github.com/settings/installations</code>{' '}
+          and grant access to at least one repo.
+        </Txt>
+      </div>
     );
   }
 

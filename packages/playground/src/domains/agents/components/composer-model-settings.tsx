@@ -236,20 +236,17 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               </Entry>
 
               {showSamplingBanner && (
-                <Txt
-                  as="div"
-                  variant="caption"
-                  tone="muted"
-                  className="flex items-center gap-2 rounded bg-card px-3 py-2"
+                <div
                   data-testid="sampling-restriction-banner"
+                  className="flex items-center gap-2 rounded bg-card px-3 py-2 text-muted-foreground"
                 >
                   <Info className="h-3.5 w-3.5 shrink-0" />
-                  <span>
+                  <Txt as="span" variant="caption">
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
                       : 'Claude 4.5+ models only accept Temperature OR Top P. Setting Temperature will clear Top P.'}
-                  </span>
-                </Txt>
+                  </Txt>
+                </div>
               )}
 
               <Entry label="Temperature">

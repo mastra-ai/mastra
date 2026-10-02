@@ -24,17 +24,19 @@ export function ValidationSummary({ errors }: ValidationSummaryProps) {
 
   return (
     <Notice variant="destructive" title={`${errors.length} validation error${errors.length !== 1 ? 's' : ''} found`}>
-      <Txt as="div" variant="body" className="max-h-[120px] space-y-1 overflow-y-auto">
+      <div className="max-h-[120px] space-y-1 overflow-y-auto">
         {errors.map((error: ValidationError, index: number) => (
           <div key={index}>
-            Row {error.row}:{' '}
-            <Txt as="span" variant="subheading">
-              [{error.column}]
-            </Txt>{' '}
-            - {error.message}
+            <Txt as="span" variant="body" className="block">
+              Row {error.row}:{' '}
+              <Txt as="span" variant="subheading">
+                [{error.column}]
+              </Txt>{' '}
+              - {error.message}
+            </Txt>
           </div>
         ))}
-      </Txt>
+      </div>
     </Notice>
   );
 }

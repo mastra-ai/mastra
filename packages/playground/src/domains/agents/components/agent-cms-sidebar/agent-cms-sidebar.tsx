@@ -98,12 +98,10 @@ const SidebarLink = ({
 
   return (
     <li className="flex flex-col gap-0">
-      <Txt
-        as="span"
-        variant="body"
-        tone={active ? 'ink' : undefined}
-        render={<Link href={href} />}
+      <Link
+        href={href}
         className={cn(
+          active ? 'text-foreground' : '',
           'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2',
           controlStateColorTransition,
           active ? 'border-border-strong bg-fill-hover' : `hover:bg-fill-subtle ${quietTextHover}`,
@@ -133,7 +131,7 @@ const SidebarLink = ({
             {description}
           </Txt>
         </div>
-      </Txt>
+      </Link>
 
       {!isLast && <div className="ml-6 inline-block h-2 w-0.5 bg-card" />}
     </li>

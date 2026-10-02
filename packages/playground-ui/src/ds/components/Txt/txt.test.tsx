@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { Input } from '../Input';
 import { Txt } from './Txt';
@@ -24,17 +24,19 @@ describe('Txt', () => {
     });
   });
 
-  describe('when composing a router link', () => {
-    it('preserves client-side navigation', () => {
+  describe('when text is inside a router link', () => {
+    it('preserves client-side navigation owned by the link', () => {
       render(
         <MemoryRouter>
           <Routes>
             <Route
               path="/"
               element={
-                <Txt variant="caption" render={<Link to="/details" />}>
-                  Details
-                </Txt>
+                <Link to="/details">
+                  <Txt as="span" variant="caption">
+                    Details
+                  </Txt>
+                </Link>
               }
             />
             <Route path="/details" element={<h1>Details page</h1>} />
@@ -46,50 +48,15 @@ describe('Txt', () => {
     });
   });
 
-  describe('when the rendered element and Txt both receive a ref', () => {
-    it('attaches both refs to the same native element', () => {
+  describe('when text receives a ref', () => {
+    it('attaches the ref to the native text element', () => {
       const textRef = createRef<HTMLElement>();
-      const linkRef = createRef<HTMLAnchorElement>();
       render(
-        <Txt ref={textRef} variant="caption" render={<a ref={linkRef} href="#details" />}>
+        <Txt as="span" ref={textRef}>
           Details
         </Txt>,
       );
-      expect(textRef.current).toBe(screen.getByRole('link', { name: 'Details' }));
-      expect(linkRef.current).toBe(textRef.current);
-    });
-  });
-
-  describe('when the rendered element and Txt both have a click handler', () => {
-    it('calls both handlers for a single activation', () => {
-      const onTextClick = vi.fn();
-      const onButtonClick = vi.fn();
-      render(
-        <Txt
-          as="button"
-          variant="label"
-          onClick={onTextClick}
-          render={<button type="button" onClick={onButtonClick} />}
-        >
-          Run
-        </Txt>,
-      );
-      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
-      expect(onTextClick).toHaveBeenCalledOnce();
-      expect(onButtonClick).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('when a native button is disabled', () => {
-    it('does not activate its handler', () => {
-      const onClick = vi.fn();
-      render(
-        <Txt as="button" variant="label" disabled onClick={onClick}>
-          Run
-        </Txt>,
-      );
-      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
-      expect(onClick).not.toHaveBeenCalled();
+      expect(textRef.current).toBe(screen.getByText('Details'));
     });
   });
 });

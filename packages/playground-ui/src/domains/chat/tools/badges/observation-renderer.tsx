@@ -222,9 +222,7 @@ function ObservationItem({
 
   return (
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
-      <Txt
-        as="div"
-        variant="caption"
+      <div
         className={cn(
           'flex items-start gap-1.5',
           bgColor && 'rounded px-1.5 py-0.5',
@@ -233,7 +231,14 @@ function ObservationItem({
         )}
       >
         {observation.isNested && (
-          <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
+          <Txt
+            as="span"
+            variant="caption"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('shrink-0', useInheritedTextColor && 'opacity-60')}
+          >
+            →
+          </Txt>
         )}
         <span className="flex-1">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
@@ -249,7 +254,7 @@ function ObservationItem({
             {observation.time}
           </Txt>
         )}
-      </Txt>
+      </div>
       {observation.children.length > 0 && (
         <div className="mt-0.5">
           {observation.children.map((child, i) => (
@@ -306,20 +311,20 @@ function ThreadSection({
   return (
     <div className="mb-3">
       {showThreadId && thread.threadId !== 'default' && (
-        <Txt
-          as="div"
-          variant="meta"
-          tone="muted"
+        <div
           className={cn(
+            'text-muted-foreground',
             'mb-1 inline-block rounded px-1 py-0.5',
             useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50',
           )}
         >
-          Thread{' '}
-          <Txt as="span" variant="meta" font="mono">
-            {thread.threadId}
+          <Txt as="span" variant="meta" className="block">
+            Thread{' '}
+            <Txt as="span" variant="meta" font="mono">
+              {thread.threadId}
+            </Txt>
           </Txt>
-        </Txt>
+        </div>
       )}
       {thread.dateBlocks.map((block, i) => (
         <DateBlock key={i} block={block} useInheritedTextColor={useInheritedTextColor} />
@@ -356,14 +361,16 @@ export function ObservationRenderer({
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
     return (
-      <Txt as="div" variant="caption" tone="muted" className={cn('italic', className)}>
-        No observations
-      </Txt>
+      <div className={cn('text-muted-foreground', 'italic', className)}>
+        <Txt as="span" variant="caption" className="block">
+          No observations
+        </Txt>
+      </div>
     );
   }
 
   return (
-    <Txt as="div" variant="body" className={cn('overflow-hidden', className)}>
+    <div className={cn('overflow-hidden', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
@@ -380,26 +387,34 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="mt-2 border-t border-border pt-2">
-          <Txt as="div" variant="meta" tone="muted" className="mb-1 uppercase">
-            Current Task
-          </Txt>
-          <Txt as="div" variant="caption" tone="ink" className="whitespace-pre-wrap">
-            {parsed.currentTask}
-          </Txt>
+          <div className="mb-1 text-muted-foreground uppercase">
+            <Txt as="span" variant="meta" className="block">
+              Current Task
+            </Txt>
+          </div>
+          <div className="whitespace-pre-wrap text-foreground">
+            <Txt as="span" variant="caption" className="block">
+              {parsed.currentTask}
+            </Txt>
+          </div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="mt-2 border-t border-border pt-2">
-          <Txt as="div" variant="meta" tone="muted" className="mb-1 uppercase">
-            Suggested Response
-          </Txt>
-          <Txt as="div" variant="caption" className="whitespace-pre-wrap text-foreground/80 italic">
-            {parsed.suggestedResponse}
-          </Txt>
+          <div className="mb-1 text-muted-foreground uppercase">
+            <Txt as="span" variant="meta" className="block">
+              Suggested Response
+            </Txt>
+          </div>
+          <div className="whitespace-pre-wrap text-foreground/80 italic">
+            <Txt as="span" variant="caption" className="block">
+              {parsed.suggestedResponse}
+            </Txt>
+          </div>
         </div>
       )}
-    </Txt>
+    </div>
   );
 }
 

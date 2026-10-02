@@ -173,41 +173,43 @@ const RefBlockContent = ({
                       )}
                     </div>
                     <div className="p-1">
-                      <Txt
-                        as="button"
-                        variant="meta"
-                        tone="ink"
+                      <button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
+                        className={cn(
+                          'text-foreground',
+                          'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                        )}
                       >
                         <Icon className="h-3.5! w-3.5! text-muted-foreground">
                           <ExternalLink />
                         </Icon>
-                        Open original
-                      </Txt>
+                        <Txt as="span" variant="meta" className="block">
+                          Open original
+                        </Txt>
+                      </button>
                       {onDereference && (
-                        <Txt
-                          as="button"
-                          variant="meta"
-                          tone="ink"
+                        <button
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
                           }}
+                          className={cn(
+                            'text-foreground',
+                            'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle',
+                          )}
                         >
                           <Icon className="h-3.5! w-3.5! text-muted-foreground">
                             <X />
                           </Icon>
-                          De-reference block
-                        </Txt>
+                          <Txt as="span" variant="meta" className="block">
+                            De-reference block
+                          </Txt>
+                        </button>
                       )}
                       {onDelete && (
-                        <Txt
-                          as="button"
-                          variant="meta"
+                        <button
                           type="button"
                           className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
@@ -215,8 +217,10 @@ const RefBlockContent = ({
                           <Icon className="h-3.5! w-3.5!">
                             <X />
                           </Icon>
-                          Remove block
-                        </Txt>
+                          <Txt as="span" variant="meta" className="block">
+                            Remove block
+                          </Txt>
+                        </button>
                       )}
                     </div>
                     {usedByAgents.length > 0 && (
@@ -239,14 +243,14 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <Txt as="div" variant="meta" className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
+              <div className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>
+                <Txt as="span" variant="meta">
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'
                     : 'Runtime uses the last published version until these edits are published.'}
-                </span>
-              </Txt>
+                </Txt>
+              </div>
             )}
 
             {/* Editable content */}

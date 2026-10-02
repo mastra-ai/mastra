@@ -91,9 +91,11 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
 
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
-      <Txt variant="caption" tone="ink" className="pb-2" as="div">
-        Approval required for <InlineCode>{toolName}</InlineCode>
-      </Txt>
+      <div className="pb-2 text-foreground">
+        <Txt as="span" variant="caption" className="block">
+          Approval required for <InlineCode>{toolName}</InlineCode>
+        </Txt>
+      </div>
       <div className="flex items-center gap-2">
         <Button
           variant="default"
@@ -274,27 +276,18 @@ export const Txtmessage = ({
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <Txt
-          variant="body"
-          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-          as="div"
-        >
+        <div className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
           <MarkdownRenderer className="text-black">{txt}</MarkdownRenderer>
-        </Txt>
+        </div>
       </div>
     );
   }
 
   if (role === 'assistant' || role === 'system') {
     return (
-      <Txt
-        variant="body"
-        tone="muted"
-        className="max-w-[80%] [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-        as="div"
-      >
+      <div className="max-w-[80%] text-muted-foreground [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
-      </Txt>
+      </div>
     );
   }
 
@@ -311,18 +304,16 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       <div className="flex items-start gap-2.5">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="subheading" tone="ink" as="div">
-            Something went wrong while building the agent.
-          </Txt>
-          <Txt
-            variant="caption"
-            tone="muted"
-            className="break-words"
-            as="div"
-            data-testid="agent-builder-chat-error-summary"
-          >
-            {error.summary}
-          </Txt>
+          <div className="text-foreground">
+            <Txt as="span" variant="subheading" className="block">
+              Something went wrong while building the agent.
+            </Txt>
+          </div>
+          <div data-testid="agent-builder-chat-error-summary" className="break-words text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              {error.summary}
+            </Txt>
+          </div>
         </div>
       </div>
 
@@ -441,12 +432,14 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
-      {label}{' '}
-      <Txt as="strong" variant="subheading" tone="ink">
-        {value}
+    <div className="min-w-0 flex-1 truncate text-muted-foreground">
+      <Txt as="span" variant="body" className="block">
+        {label}{' '}
+        <Txt as="strong" variant="subheading" tone="ink">
+          {value}
+        </Txt>
       </Txt>
-    </Txt>
+    </div>
   </div>
 );
 

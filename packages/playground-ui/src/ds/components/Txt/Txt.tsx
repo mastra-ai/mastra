@@ -5,63 +5,30 @@ import { textStyle } from '@/ds/primitives/text';
 import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
-type TextElement =
-  | 'h1'
-  | 'h2'
-  | 'h3'
-  | 'h4'
-  | 'h5'
-  | 'h6'
-  | 'p'
-  | 'span'
-  | 'label'
-  | 'div'
-  | 'a'
-  | 'button'
-  | 'pre'
-  | 'strong'
-  | 'b'
-  | 'li'
-  | 'summary'
-  | 'dt'
-  | 'dd'
-  | 'dl'
-  | 'nav'
-  | 'section'
-  | 'ul'
-  | 'th'
-  | 'table'
-  | 'details'
-  | 'time'
-  | 'input'
-  | 'textarea';
+type TextElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'pre' | 'strong' | 'b' | 'time';
 
 export interface TxtProps extends HTMLAttributes<HTMLElement>, TextStyleProps {
   as?: TextElement;
   ref?: Ref<HTMLElement>;
   htmlFor?: string;
-  render?: useRender.RenderProp;
 }
 
 type ElementTxtProps<T extends TextElement> = TextStyleProps & {
   as?: T;
   ref?: Ref<HTMLElement>;
   htmlFor?: string;
-  render?: useRender.RenderProp;
 } & Omit<ComponentPropsWithoutRef<T>, keyof TextStyleProps | 'as' | 'ref'>;
 
-/** The element supplies semantics; the role supplies the complete text style. */
+/** Typography for text elements. Controls and layout containers own their markup. */
 export function Txt<T extends TextElement = 'p'>({
   as,
   className,
   variant = 'body',
   tone,
   font,
-  render,
   ...props
 }: ElementTxtProps<T>) {
   return useRender({
-    render,
     defaultTagName: as ?? 'p',
     props: {
       ...props,

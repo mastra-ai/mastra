@@ -191,9 +191,11 @@ export function BuilderAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <Txt as="div" variant="eyebrow" tone="muted" className="mb-2">
-                {hasSearchResults ? 'Search results' : 'Popular skills'}
-              </Txt>
+              <div className="mb-2 text-muted-foreground">
+                <Txt as="span" variant="eyebrow" className="block">
+                  {hasSearchResults ? 'Search results' : 'Popular skills'}
+                </Txt>
+              </div>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
@@ -237,14 +239,18 @@ export function BuilderAddSkillDialog({
                                   </Txt>
                                 )}
                               </div>
-                              <Txt as="div" variant="caption" tone="muted" className="truncate">
-                                {skill.topSource}
+                              <div className="truncate text-muted-foreground">
+                                <Txt as="span" variant="caption" className="block">
+                                  {skill.topSource}
+                                </Txt>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                              <Download className="h-3 w-3" />
+                              <Txt as="span" variant="caption">
+                                {skill.installs.toLocaleString()}
                               </Txt>
                             </div>
-                            <Txt as="div" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1">
-                              <Download className="h-3 w-3" />
-                              <span>{skill.installs.toLocaleString()}</span>
-                            </Txt>
                           </div>
                         </button>
                       );
@@ -271,16 +277,20 @@ export function BuilderAddSkillDialog({
                         <Txt as="h3" variant="subheading" tone="ink" className="truncate">
                           {selectedSkill.name}
                         </Txt>
-                        <Txt as="div" variant="caption" tone="muted" className="mt-1 flex items-center gap-3">
+                        <div className="mt-1 flex items-center gap-3 text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <GithubIcon className="h-3 w-3" />
-                            {selectedSkill.topSource}
+                            <Txt as="span" variant="caption" className="block">
+                              {selectedSkill.topSource}
+                            </Txt>
                           </span>
                           <span className="flex items-center gap-1">
                             <Download className="h-3 w-3" />
-                            {selectedSkill.installs.toLocaleString()} installs
+                            <Txt as="span" variant="caption" className="block">
+                              {selectedSkill.installs.toLocaleString()} installs
+                            </Txt>
                           </span>
-                        </Txt>
+                        </div>
                       </div>
                       {githubUrl && (
                         <a

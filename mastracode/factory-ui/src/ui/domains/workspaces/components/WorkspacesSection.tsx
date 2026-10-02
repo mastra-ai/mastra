@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -366,16 +367,15 @@ function WorkspaceGroup({
         </Txt>
       ) : null}
       {hiddenCount > 0 && (
-        <Txt
-          as="button"
-          variant="caption"
-          tone="muted"
+        <button
           type="button"
-          className="hover:text-foreground pl-3 text-left"
           onClick={() => setExpanded(value => !value)}
+          className={cn('text-muted-foreground', 'hover:text-foreground pl-3 text-left')}
         >
-          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
-        </Txt>
+          <Txt as="span" variant="caption" className="block">
+            {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+          </Txt>
+        </button>
       )}
     </section>
   );

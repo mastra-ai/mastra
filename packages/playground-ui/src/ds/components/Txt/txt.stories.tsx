@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../Button';
 import { Input } from '../Input';
 import { Tree } from '../Tree';
 import { Txt } from './Txt';
@@ -25,7 +26,7 @@ const meta: Meta<typeof Txt> = {
     },
     font: {
       control: { type: 'inline-radio' },
-      options: ['body', 'mono'],
+      options: ['body', 'display', 'mono'],
     },
   },
 };
@@ -190,6 +191,34 @@ export const TechnicalValues: Story = {
         {' · '}
         <span className="tabular-nums">1,204 tokens</span>
       </Txt>
+    </div>
+  ),
+};
+
+export const TextLeaves: Story = {
+  render: () => (
+    <div className="flex w-80 max-w-full flex-col gap-5">
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <Txt as="span" variant="label">
+          Layout stays on the div
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted">
+          42 items
+        </Txt>
+      </div>
+      <div className="flex overflow-hidden rounded-lg border border-border">
+        <button type="button" className="bg-fill px-3 py-1.5" aria-pressed="true">
+          <Txt as="span" variant="column" className="block">
+            Agents
+          </Txt>
+        </button>
+        <button type="button" className="px-3 py-1.5" aria-pressed="false">
+          <Txt as="span" variant="column" className="block">
+            Skills
+          </Txt>
+        </button>
+      </div>
+      <Button>Standard button owns its label style</Button>
     </div>
   ),
 };

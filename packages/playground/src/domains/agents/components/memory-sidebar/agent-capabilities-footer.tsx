@@ -96,9 +96,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
   }
 
   return (
-    <Txt
-      as="a"
-      variant="meta"
+    <a
       aria-label={`${label}: ${status}`}
       href={docsHref}
       target="_blank"
@@ -125,9 +123,13 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           <Txt as="span" variant="meta" tone="ink" className="min-w-0 truncate">
             {label}
           </Txt>
-          <span className="shrink-0 text-muted-foreground tabular-nums">{status}</span>
+          <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+            {status}
+          </Txt>
         </span>
-        <span className="mt-0.5 block text-muted-foreground">{description}</span>
+        <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
+          {description}
+        </Txt>
       </span>
       <ExternalLink
         className={cn(
@@ -135,7 +137,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           controlStateColorTransition,
         )}
       />
-    </Txt>
+    </a>
   );
 }
 

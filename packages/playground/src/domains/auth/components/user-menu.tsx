@@ -82,9 +82,7 @@ export function UserMenu({ user }: UserMenuProps) {
             {availableRoles.map(role => {
               const isActive = isImpersonating && impersonatedRole?.id === role.id;
               return (
-                <Txt
-                  as="button"
-                  variant="body"
+                <button
                   key={role.id}
                   type="button"
                   disabled={isSwitching}
@@ -101,9 +99,11 @@ export function UserMenu({ user }: UserMenuProps) {
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  <span className="flex-1 capitalize">{role.name}</span>
+                  <Txt as="span" variant="body" className="flex-1 capitalize">
+                    {role.name}
+                  </Txt>
                   {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
-                </Txt>
+                </button>
               );
             })}
           </div>

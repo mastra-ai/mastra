@@ -157,7 +157,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { Link } = useLinkComponent();
 
   return (
-    <Txt as="div" variant="body-sm" font="body" className="h-screen bg-sidebar">
+    <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>
@@ -171,6 +171,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>
-    </Txt>
+    </div>
   );
 };

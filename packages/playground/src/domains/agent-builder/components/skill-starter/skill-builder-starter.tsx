@@ -164,9 +164,7 @@ export const SkillBuilderStarter = () => {
           {EXAMPLES.map((example, i) => {
             const Icon = example.icon;
             return (
-              <Txt
-                as="button"
-                variant="caption"
+              <button
                 key={example.title}
                 type="button"
                 onClick={() => handleExampleClick(example.prompt)}
@@ -179,8 +177,10 @@ export const SkillBuilderStarter = () => {
                 )}
               >
                 <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
-                {example.title}
-              </Txt>
+                <Txt as="span" variant="caption" className="block">
+                  {example.title}
+                </Txt>
+              </button>
             );
           })}
         </div>

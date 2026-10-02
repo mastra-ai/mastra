@@ -235,16 +235,18 @@ export const MemorySearch = ({
                 >
                   <div className="flex flex-col gap-2">
                     {result.context?.before && result.context.before.length > 0 && (
-                      <Txt as="div" variant="caption" className="space-y-1 opacity-50">
+                      <div className="space-y-1 opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <Txt as="span" variant="column">
                               {msg.role}:
                             </Txt>
-                            <span className="text-muted-foreground">{truncateContent(msg.content, 50)}</span>
+                            <Txt as="span" variant="caption" tone="muted">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
                           </div>
                         ))}
-                      </Txt>
+                      </div>
                     )}
 
                     <div className="flex items-start justify-between gap-2">
@@ -291,16 +293,18 @@ export const MemorySearch = ({
                     </div>
 
                     {result.context?.after && result.context.after.length > 0 && (
-                      <Txt as="div" variant="caption" className="space-y-1 opacity-50">
+                      <div className="space-y-1 opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
                             <Txt as="span" variant="column">
                               {msg.role}:
                             </Txt>
-                            <span className="text-muted-foreground">{truncateContent(msg.content, 50)}</span>
+                            <Txt as="span" variant="caption" tone="muted">
+                              {truncateContent(msg.content, 50)}
+                            </Txt>
                           </div>
                         ))}
-                      </Txt>
+                      </div>
                     )}
                   </div>
                 </button>

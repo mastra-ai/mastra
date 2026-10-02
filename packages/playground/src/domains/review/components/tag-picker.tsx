@@ -58,9 +58,7 @@ export function TagPicker({
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Txt
-            as="button"
-            variant="meta"
+          <button
             type="button"
             className={cn(
               quietTextHover,
@@ -69,8 +67,10 @@ export function TagPicker({
             )}
           >
             <Plus className="h-3 w-3" />
-            tag
-          </Txt>
+            <Txt as="span" variant="meta" className="block">
+              tag
+            </Txt>
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-52 p-2" align="start">
           <Input
@@ -85,28 +85,27 @@ export function TagPicker({
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
             {filtered.map(tag => (
-              <Txt
-                as="button"
-                variant="caption"
-                tone="muted"
+              <button
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="w-full rounded px-2 py-1 text-left hover:bg-fill-subtle"
+                className={cn('text-muted-foreground', 'w-full rounded px-2 py-1 text-left hover:bg-fill-subtle')}
               >
-                {tag}
-              </Txt>
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
+              </button>
             ))}
             {canCreate && (
-              <Txt
-                as="button"
-                variant="caption"
+              <button
                 type="button"
                 onClick={() => addTag(search.trim())}
                 className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
               >
-                Create &quot;{search.trim()}&quot;
-              </Txt>
+                <Txt as="span" variant="caption" className="block">
+                  Create &quot;{search.trim()}&quot;
+                </Txt>
+              </button>
             )}
             {filtered.length === 0 && !canCreate && (
               <Txt variant="meta" tone="muted" className="block px-2 py-1">

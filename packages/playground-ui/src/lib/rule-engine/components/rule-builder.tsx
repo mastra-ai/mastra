@@ -75,9 +75,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
         <div key={index} className="border-b border-dashed border-border last:border-b-0">
           <div className={cn('relative', isRule(condition) && 'border-l-4 border-border p-4')}>
             {index > 0 && (
-              <Txt
-                as="button"
-                variant="meta"
+              <button
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
@@ -87,8 +85,10 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                     : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >
-                {group.operator.toLowerCase()}
-              </Txt>
+                <Txt as="span" variant="meta" className="block">
+                  {group.operator.toLowerCase()}
+                </Txt>
+              </button>
             )}
 
             {isRule(condition) ? (
@@ -152,9 +152,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 
   if (!ruleGroup) {
     return (
-      <Txt
-        as="button"
-        variant="caption"
+      <button
         type="button"
         onClick={handleAddFirstRule}
         className={cn(
@@ -166,8 +164,10 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         <Icon>
           <Plus />
         </Icon>
-        Add conditional rule
-      </Txt>
+        <Txt as="span" variant="caption" className="block">
+          Add conditional rule
+        </Txt>
+      </button>
     );
   }
 

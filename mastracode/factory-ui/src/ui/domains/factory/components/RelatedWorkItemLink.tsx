@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
@@ -56,29 +57,29 @@ export function RelatedWorkItemLink({
   if (statusLabel !== undefined) tooltip = `${tooltip} · ${statusLabel}`;
   if (live) tooltip = `${tooltip} · Live session`;
   const link = external ? (
-    <Txt
-      as="a"
-      variant="meta"
-      tone="muted"
+    <a
       href={href}
       target="_blank"
       rel="noreferrer"
       draggable={false}
-      className={RELATED_ITEM_LINK_CLASS}
       aria-label={ariaLabel}
+      className={cn('text-muted-foreground', RELATED_ITEM_LINK_CLASS)}
     >
-      {content}
-    </Txt>
+      <Txt as="span" variant="meta">
+        {content}
+      </Txt>
+    </a>
   ) : (
-    <Txt
-      as="span"
-      variant="meta"
-      tone="muted"
-      render={<Link to={href} draggable={false} aria-label={ariaLabel} />}
-      className={RELATED_ITEM_LINK_CLASS}
+    <Link
+      to={href}
+      draggable={false}
+      aria-label={ariaLabel}
+      className={cn('text-muted-foreground', RELATED_ITEM_LINK_CLASS)}
     >
-      {content}
-    </Txt>
+      <Txt as="span" variant="meta" className="block">
+        {content}
+      </Txt>
+    </Link>
   );
 
   return (

@@ -50,9 +50,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
     <span>
       {parseRecordSegments(text).map((segment, index) =>
         segment.type === 'wikilink' ? (
-          <Txt
-            as="button"
-            variant="label"
+          <button
             key={index}
             type="button"
             className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1"
@@ -61,8 +59,10 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
               onNodeRef?.(segment.value);
             }}
           >
-            {segment.value}
-          </Txt>
+            <Txt as="span" variant="label" className="block">
+              {segment.value}
+            </Txt>
+          </button>
         ) : (
           <span key={index}>{segment.value}</span>
         ),
@@ -141,27 +141,32 @@ function RecordCard({
           }
         }}
       >
-        <Txt as="div" variant="caption" tone="ink">
+        <div className="text-foreground">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
             <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
-        </Txt>
-        <Txt as="div" variant="meta" tone="muted" className="mt-1.5 flex items-center gap-2">
+        </div>
+        <div className="text-muted-foreground mt-1.5 flex items-center gap-2">
           <RungBadge rung={record.rung} />
-          {record.relation === 'mentions' ? <span className="text-muted-foreground">mentions</span> : null}
-          <span>captured {relativeTime(record.capturedAt)}</span>
-        </Txt>
+          {record.relation === 'mentions' ? (
+            <Txt as="span" variant="meta" tone="muted">
+              mentions
+            </Txt>
+          ) : null}
+          <Txt as="span" variant="meta">
+            captured {relativeTime(record.capturedAt)}
+          </Txt>
+        </div>
       </div>
       {expanded ? (
-        <Txt
-          as="div"
-          variant="body-sm"
-          data-testid="knowledge-record-detail"
-          className="border-border border-t px-3 py-2.5"
-        >
+        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5">
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
-            <dt>Captured in session</dt>
+            <dt>
+              <Txt as="span" variant="body-sm" className="block">
+                Captured in session
+              </Txt>
+            </dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
@@ -169,38 +174,72 @@ function RecordCard({
                   className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
-                  <span className="max-w-40 truncate">{record.sourceThreadId}</span>
+                  <Txt as="span" variant="body-sm" className="max-w-40 truncate">
+                    {record.sourceThreadId}
+                  </Txt>
                   <ExternalLink size={10} />
                 </button>
               ) : (
                 '—'
               )}
             </dd>
-            <dt>Captured at</dt>
-            <dd>{new Date(record.capturedAt).toLocaleString()}</dd>
+            <dt>
+              <Txt as="span" variant="body-sm" className="block">
+                Captured at
+              </Txt>
+            </dt>
+            <dd>
+              <Txt as="span" variant="body-sm" className="block">
+                {new Date(record.capturedAt).toLocaleString()}
+              </Txt>
+            </dd>
             {record.when ? (
               <>
-                <dt>When</dt>
-                <dd>{record.when}</dd>
+                <dt>
+                  <Txt as="span" variant="body-sm" className="block">
+                    When
+                  </Txt>
+                </dt>
+                <dd>
+                  <Txt as="span" variant="body-sm" className="block">
+                    {record.when}
+                  </Txt>
+                </dd>
               </>
             ) : null}
-            <dt>Scope chain</dt>
-            <dd className="break-all">{record.scope.join(' → ')}</dd>
-            <dt>Pinned</dt>
-            <dd>{record.pinned ? 'yes' : 'no'}</dd>
+            <dt>
+              <Txt as="span" variant="body-sm" className="block">
+                Scope chain
+              </Txt>
+            </dt>
+            <dd className="break-all">
+              <Txt as="span" variant="body-sm" className="block">
+                {record.scope.join(' → ')}
+              </Txt>
+            </dd>
+            <dt>
+              <Txt as="span" variant="body-sm" className="block">
+                Pinned
+              </Txt>
+            </dt>
+            <dd>
+              <Txt as="span" variant="body-sm" className="block">
+                {record.pinned ? 'yes' : 'no'}
+              </Txt>
+            </dd>
           </dl>
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
               className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
             >
-              <Txt
-                as="div"
-                variant="meta"
-                className="text-badge-amber-foreground mb-1 flex items-center gap-1 uppercase"
-              >
-                <Sparkles size={10} /> Reasoning
-              </Txt>
+              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 uppercase">
+                <Sparkles size={10} />
+                <Txt as="span" variant="meta" className="block">
+                  {' '}
+                  Reasoning
+                </Txt>
+              </div>
               <Txt as="p" variant="body-sm" tone="ink" className="italic">
                 {reason}
               </Txt>
@@ -211,16 +250,24 @@ function RecordCard({
             </Txt>
           )}
           {otherMetadata.length > 0 ? (
-            <Txt as="dl" variant="meta" tone="muted" className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
-                  <dt>{key}</dt>
-                  <dd className="break-all">{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+                  <dt>
+                    <Txt as="span" variant="meta" className="block">
+                      {key}
+                    </Txt>
+                  </dt>
+                  <dd className="break-all">
+                    <Txt as="span" variant="meta" className="block">
+                      {typeof value === 'string' ? value : JSON.stringify(value)}
+                    </Txt>
+                  </dd>
                 </div>
               ))}
-            </Txt>
+            </dl>
           ) : null}
-        </Txt>
+        </div>
       ) : null}
     </div>
   );
@@ -258,9 +305,11 @@ export function KnowledgeFlyout({
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
-        <Txt as="div" variant="body" tone="muted" className="p-4">
-          Loading knowledge node…
-        </Txt>
+        <div className="text-muted-foreground p-4">
+          <Txt as="span" variant="body" className="block">
+            Loading knowledge node…
+          </Txt>
+        </div>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
@@ -304,27 +353,58 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <Txt
-                  as="dl"
-                  variant="caption"
-                  tone="muted"
-                  className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3"
-                >
-                  <dt>Kind</dt>
-                  <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
-                  <dt>Scope</dt>
-                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
-                  <dt>Created</dt>
+                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3">
+                  <dt>
+                    <Txt as="span" variant="caption" className="block">
+                      Kind
+                    </Txt>
+                  </dt>
                   <dd className="text-foreground text-right">
-                    {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
+                    <Txt as="span" variant="caption" className="block">
+                      {nodeQuery.data.node.kind}
+                    </Txt>
                   </dd>
-                  <dt>Updated</dt>
+                  <dt>
+                    <Txt as="span" variant="caption" className="block">
+                      Scope
+                    </Txt>
+                  </dt>
+                  <dd className="text-foreground text-right break-all">
+                    <Txt as="span" variant="caption" className="block">
+                      {nodeQuery.data.node.scope.join(' → ')}
+                    </Txt>
+                  </dd>
+                  <dt>
+                    <Txt as="span" variant="caption" className="block">
+                      Created
+                    </Txt>
+                  </dt>
                   <dd className="text-foreground text-right">
-                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
+                    <Txt as="span" variant="caption" className="block">
+                      {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
+                    </Txt>
                   </dd>
-                  <dt>Knowledge records</dt>
-                  <dd className="text-foreground text-right">{nodeQuery.data.records.length}</dd>
-                </Txt>
+                  <dt>
+                    <Txt as="span" variant="caption" className="block">
+                      Updated
+                    </Txt>
+                  </dt>
+                  <dd className="text-foreground text-right">
+                    <Txt as="span" variant="caption" className="block">
+                      {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
+                    </Txt>
+                  </dd>
+                  <dt>
+                    <Txt as="span" variant="caption" className="block">
+                      Knowledge records
+                    </Txt>
+                  </dt>
+                  <dd className="text-foreground text-right">
+                    <Txt as="span" variant="caption" className="block">
+                      {nodeQuery.data.records.length}
+                    </Txt>
+                  </dd>
+                </dl>
               </CollapsibleContent>
             </Collapsible>
 

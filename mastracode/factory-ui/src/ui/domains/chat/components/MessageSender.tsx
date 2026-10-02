@@ -13,19 +13,13 @@ const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
 export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
-    <Txt
-      as="div"
-      variant="meta"
-      tone="muted"
-      className="mt-1 flex items-center gap-1"
-      aria-label={`Sent from ${label}`}
-    >
+    <div aria-label={`Sent from ${label}`} className="text-muted-foreground mt-1 flex items-center gap-1">
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
-      <span>
+      <Txt as="span" variant="meta">
         via {label}
         {origin.authorName ? ` · ${origin.authorName}` : ''}
-      </span>
-    </Txt>
+      </Txt>
+    </div>
   );
 }
 

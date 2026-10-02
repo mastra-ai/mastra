@@ -182,7 +182,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <Txt as="div" variant="body" className="relative overflow-hidden rounded-md border border-border">
+      <div className="relative overflow-hidden rounded-md border border-border">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -198,13 +198,15 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               line.type === 'equal' && 'text-muted-foreground',
             )}
           >
-            <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
-              {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
-            </span>
-            {line.text || '\u00A0'}
+            <Txt as="span" variant="body" className="block">
+              <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+                {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+              </span>
+              {line.text || '\u00A0'}
+            </Txt>
           </div>
         ))}
-      </Txt>
+      </div>
     );
   }
 
@@ -220,30 +222,20 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <Txt
-              as="div"
-              variant="body"
-              key={idx}
-              className="rounded-md border border-success-edge bg-success-subtle p-3"
-            >
+            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3">
               <Txt variant="meta" className="mb-1 text-success-subtle-foreground">
                 + Added block
               </Txt>
               <Txt variant="caption" className="whitespace-pre-wrap text-success-subtle-foreground">
                 {newStr}
               </Txt>
-            </Txt>
+            </div>
           );
         }
 
         if (prevBlock && !currBlock) {
           return (
-            <Txt
-              as="div"
-              variant="body"
-              key={idx}
-              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3"
-            >
+            <div key={idx} className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3">
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
               </div>
@@ -253,7 +245,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <Txt variant="caption" className="whitespace-pre-wrap text-destructive-subtle-foreground">
                 {oldStr}
               </Txt>
-            </Txt>
+            </div>
           );
         }
 
@@ -274,7 +266,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <Txt as="div" variant="body" key={idx} className="relative overflow-hidden rounded-md border border-border">
+          <div key={idx} className="relative overflow-hidden rounded-md border border-border">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -290,13 +282,15 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                   line.type === 'equal' && 'text-muted-foreground',
                 )}
               >
-                <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
-                  {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
-                </span>
-                {line.text || '\u00A0'}
+                <Txt as="span" variant="body" className="block">
+                  <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+                    {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
+                  </span>
+                  {line.text || '\u00A0'}
+                </Txt>
               </div>
             ))}
-          </Txt>
+          </div>
         );
       })}
     </div>

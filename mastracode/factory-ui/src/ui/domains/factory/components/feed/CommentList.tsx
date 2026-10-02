@@ -188,18 +188,17 @@ export function CommentList({
           {/* Chat anchoring: a short stream sits against the composer, not the description. */}
           <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
             {!showSkeleton && leading !== undefined && (
-              <Txt
-                as="div"
-                variant="meta"
-                tone="muted"
+              <div
                 aria-hidden
-                className="stream-landing flex items-center gap-2 px-3 pb-1"
                 style={landingStyle(1)}
+                className="text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
               >
-                <span className="bg-border h-px flex-1" />
-                Activity
-                <span className="bg-border h-px flex-1" />
-              </Txt>
+                <Txt as="span" variant="meta" className="bg-border h-px flex-1"></Txt>
+                <Txt as="span" variant="meta" className="block">
+                  Activity
+                </Txt>
+                <Txt as="span" variant="meta" className="bg-border h-px flex-1"></Txt>
+              </div>
             )}
             {showSkeleton ? (
               <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
@@ -209,24 +208,23 @@ export function CommentList({
               </div>
             ) : null}
             {comments.isError ? (
-              <Txt as="div" variant="caption" tone="muted" className="flex items-center gap-2 px-2 py-2">
-                <span>Unable to load comments.</span>
+              <div className="text-muted-foreground flex items-center gap-2 px-2 py-2">
+                <Txt as="span" variant="caption">
+                  Unable to load comments.
+                </Txt>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
                 </Button>
-              </Txt>
+              </div>
             ) : null}
             {!showSkeleton && !comments.isError && rows.length === 0 ? (
-              <Txt
-                as="div"
-                variant="caption"
-                tone="muted"
-                className="flex items-center justify-center gap-1.5 px-2 py-6"
-              >
+              <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
                 <MessageCircle size={14} aria-hidden />
-                <span>No activity yet</span>
-              </Txt>
+                <Txt as="span" variant="caption">
+                  No activity yet
+                </Txt>
+              </div>
             ) : null}
             {/* Mounted through loading so the live region exists before the first addition. */}
             <Comment

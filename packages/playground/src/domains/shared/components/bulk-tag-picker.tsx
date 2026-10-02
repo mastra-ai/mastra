@@ -56,14 +56,11 @@ export function BulkTagPicker({
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <Txt
-              as="div"
-              variant="caption"
-              key={tag}
-              className="flex items-center justify-between rounded px-2 py-1 hover:bg-fill-subtle"
-            >
+            <div key={tag} className="flex items-center justify-between rounded px-2 py-1 hover:bg-fill-subtle">
               <button type="button" onClick={() => onApplyTag(tag)} className="flex-1 text-left text-muted-foreground">
-                {tag}
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
               </button>
               <button
                 type="button"
@@ -72,12 +69,10 @@ export function BulkTagPicker({
               >
                 <X className="h-3 w-3" />
               </button>
-            </Txt>
+            </div>
           ))}
           {canCreate && (
-            <Txt
-              as="button"
-              variant="caption"
+            <button
               type="button"
               onClick={() => {
                 onNewTag(search.trim());
@@ -85,8 +80,10 @@ export function BulkTagPicker({
               }}
               className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
             >
-              Create &amp; apply &quot;{search.trim()}&quot;
-            </Txt>
+              <Txt as="span" variant="caption" className="block">
+                Create &amp; apply &quot;{search.trim()}&quot;
+              </Txt>
+            </button>
           )}
         </div>
       </PopoverContent>

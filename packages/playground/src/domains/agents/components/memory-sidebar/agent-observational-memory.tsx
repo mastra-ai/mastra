@@ -96,41 +96,53 @@ const ProgressBar = ({
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            <Txt as="div" variant="caption" className="space-y-1.5">
-              <Txt as="div" variant="column" tone="ink">
-                {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
-              </Txt>
+            <div className="space-y-1.5">
+              <div className="text-foreground">
+                <Txt as="span" variant="column" className="block">
+                  {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
+                </Txt>
+              </div>
               <div className="space-y-0.5">
                 <div>
-                  <span className="text-muted-foreground">Model:</span>{' '}
-                  <span className="text-foreground">{model || 'not configured'}</span>
+                  <Txt as="span" variant="caption" className="block">
+                    <span className="text-muted-foreground">Model:</span>{' '}
+                    <span className="text-foreground">{model || 'not configured'}</span>
+                  </Txt>
                 </div>
                 {modelRouting?.length ? (
                   <div>
-                    <span className="text-muted-foreground">Routing:</span>
+                    <Txt as="span" variant="caption" tone="muted">
+                      Routing:
+                    </Txt>
                     <div className="mt-0.5 space-y-0.5 pl-2">
                       {modelRouting.map(route => (
                         <div key={`${route.upTo}-${route.model}`} className="text-foreground">
-                          ≤{formatTokens(route.upTo)} → {route.model}
+                          <Txt as="span" variant="caption" className="block">
+                            ≤{formatTokens(route.upTo)} → {route.model}
+                          </Txt>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <span className="text-muted-foreground">Threshold:</span>{' '}
-                    <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
+                    <Txt as="span" variant="caption" className="block">
+                      <span className="text-muted-foreground">Threshold:</span>{' '}
+                      <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
+                    </Txt>
                   </div>
                 )}
                 {isAdaptive && totalBudget && (
                   <div>
-                    <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-badge-amber-indicator">Adaptive</span>{' '}
-                    <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
+                    <Txt as="span" variant="caption" className="block">
+                      <span className="text-muted-foreground">Mode:</span>{' '}
+                      <span className="text-badge-amber-indicator">Adaptive</span>{' '}
+                      <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
+                    </Txt>
                   </div>
                 )}
               </div>
-            </Txt>
+            </div>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -177,30 +189,43 @@ const ProgressBar = ({
           </Txt>
         </div>
 
-        <Txt
-          as="span"
-          variant="meta"
+        <span
           className={` ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
-          {formatTokens(value)}
-          <span className={isProcessing ? 'text-info-indicator' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
+          <Txt as="span" variant="meta">
+            {formatTokens(value)}
+          </Txt>
+          <Txt
+            as="span"
+            variant="meta"
+            tone={isProcessing ? undefined : 'muted'}
+            className={isProcessing ? 'text-info-indicator' : undefined}
+          >
+            /{formatTokens(max)}
+          </Txt>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-badge-amber-indicator">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-badge-amber-indicator">
+                  <Txt as="span" variant="meta">
+                    ({formatTokens(baseThreshold)})
+                  </Txt>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <Txt as="div" variant="caption">
-                  <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
-                  <span className="text-muted-foreground"> is the configured threshold. </span>
-                  <span className="text-foreground">
-                    Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
-                  </span>
-                </Txt>
+                <div>
+                  <Txt as="span" variant="caption" className="block">
+                    <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
+                    <span className="text-muted-foreground"> is the configured threshold. </span>
+                    <span className="text-foreground">
+                      Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
+                    </span>
+                  </Txt>
+                </div>
               </TooltipContent>
             </Tooltip>
           )}
-        </Txt>
+        </span>
       </div>
     </div>
   );
@@ -228,9 +253,7 @@ const ObservationalMemoryDisabled = () => (
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </Txt>
-      <Txt
-        as="a"
-        variant="body"
+      <a
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
@@ -239,9 +262,11 @@ const ObservationalMemoryDisabled = () => (
           controlStateColorTransition,
         )}
       >
-        Learn about Observational Memory
+        <Txt as="span" variant="body" className="block">
+          Learn about Observational Memory
+        </Txt>
         <ExternalLink className="h-3 w-3" />
-      </Txt>
+      </a>
     </div>
   </div>
 );

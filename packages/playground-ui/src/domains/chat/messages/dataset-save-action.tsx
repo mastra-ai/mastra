@@ -117,9 +117,11 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <Txt as="div" variant="body" tone="muted" className="px-2 py-4 text-center">
-                    No datasets available
-                  </Txt>
+                  <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
+                    <Txt as="span" variant="body" className="block">
+                      No datasets available
+                    </Txt>
+                  </div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -250,9 +252,7 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
 
   return (
     <>
-      <Txt
-        as="button"
-        variant="meta"
+      <button
         type="button"
         onClick={handleClick}
         disabled={isFetching}
@@ -263,8 +263,10 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         )}
       >
         {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
-        Save full conversation to dataset
-      </Txt>
+        <Txt as="span" variant="meta" className="block">
+          Save full conversation to dataset
+        </Txt>
+      </button>
       <DatasetSaveDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

@@ -216,7 +216,7 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <Txt as="div" variant="caption" tone="muted" className="flex max-w-full items-center justify-center gap-1.5">
+    <div className="text-muted-foreground flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
         <FolderIcon size={13} className="text-placeholder shrink-0" />
         <Txt as="span" variant="column" className="shrink-0">
@@ -224,26 +224,28 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
         </Txt>
         {projectPath && (
           <>
-            <span className="text-placeholder shrink-0">·</span>
-            <span className="text-placeholder min-w-0 truncate" title={projectPath}>
+            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
+              ·
+            </Txt>
+            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
               {projectPath}
-            </span>
+            </Txt>
           </>
         )}
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="text-placeholder shrink-0">
+          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
             ·
-          </span>
+          </Txt>
           <div className="flex min-w-0 items-center gap-1.5">
             <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <span className="min-w-0 truncate" title={gitBranch}>
+            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
               {gitBranch}
-            </span>
+            </Txt>
           </div>
         </>
       )}
-    </Txt>
+    </div>
   );
 }

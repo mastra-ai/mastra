@@ -33,15 +33,18 @@ export function ExperimentTraceTimelineExpandCol({
     >
       {numOfChildren && numOfChildren > 0 ? (
         <div className="flex gap-1">
-          <ExpandButton onClick={() => toggleChildren?.()}>
-            {allDescendantsExpanded ? totalDescendants : numOfChildren}{' '}
-            {isExpanded ? allDescendantsExpanded ? <ChevronsUpIcon /> : <ChevronUpIcon /> : <ChevronDownIcon />}
-          </ExpandButton>
+          <ExpandButton
+            onClick={() => toggleChildren?.()}
+            count={allDescendantsExpanded ? totalDescendants : numOfChildren}
+            icon={isExpanded ? allDescendantsExpanded ? <ChevronsUpIcon /> : <ChevronUpIcon /> : <ChevronDownIcon />}
+          />
 
           {totalDescendants > (numOfChildren ?? 0) && !allDescendantsExpanded && (
-            <ExpandButton onClick={() => expandAllDescendants?.()}>
-              {totalDescendants} <ChevronsDownIcon />
-            </ExpandButton>
+            <ExpandButton
+              onClick={() => expandAllDescendants?.()}
+              count={totalDescendants}
+              icon={<ChevronsDownIcon />}
+            />
           )}
         </div>
       ) : null}
@@ -51,26 +54,28 @@ export function ExperimentTraceTimelineExpandCol({
 
 type ExpandButtonProps = {
   onClick?: () => void;
-  children?: React.ReactNode;
+  count: number;
+  icon: React.ReactNode;
   className?: string;
 };
 
-function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
+function ExpandButton({ onClick, count, icon, className }: ExpandButtonProps) {
   return (
     <button onClick={onClick} className={cn('h-full', className)}>
-      <Txt
-        as="div"
-        variant="caption"
-        tone="ink"
+      <div
         className={cn(
+          'text-foreground',
           'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2',
           controlStateColorTransition,
           'hover:text-badge-amber-indicator',
           '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
-        {children}
-      </Txt>
+        <Txt as="span" variant="caption">
+          {count}
+        </Txt>
+        {icon}
+      </div>
     </button>
   );
 }

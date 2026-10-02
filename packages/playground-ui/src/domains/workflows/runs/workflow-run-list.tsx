@@ -155,7 +155,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <Txt as="span" variant="caption" className="flex w-full min-w-0 items-center gap-2">
+                              <span className="flex w-full min-w-0 items-center gap-2">
                                 <Txt
                                   as="span"
                                   variant="column"
@@ -165,7 +165,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                                 >
                                   {run.runId}
                                 </Txt>
-                              </Txt>
+                              </span>
                               <WorkflowRunMeta
                                 timestamp={getRunTimestamp(snapshot?.timestamp)}
                                 resourceId={getRunResourceId(run)}

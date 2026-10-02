@@ -115,20 +115,32 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               </div>
 
               <div className="mb-6 text-muted-foreground">
-                <Txt
-                  as="div"
-                  variant="body"
-                  tone="faint"
-                  className={cn('flex items-baseline gap-2', '[&>svg]:size-5 [&>svg]:translate-y-1')}
+                <div
+                  className={cn(
+                    'text-placeholder',
+                    'flex items-baseline gap-2',
+                    '[&>svg]:size-5 [&>svg]:translate-y-1',
+                  )}
                 >
                   <GaugeIcon />
-                  <span>Score:</span>
-                  <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
-                </Txt>
-                <Txt as="div" variant="body-sm" className="mt-2">
-                  {score.reason ||
-                    (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
-                </Txt>
+                  <Txt as="span" variant="body">
+                    Score:
+                  </Txt>
+                  <Txt
+                    as="b"
+                    variant="body"
+                    tone="muted"
+                    className="tabular-nums"
+                  >{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</Txt>
+                </div>
+                <div className="mt-2">
+                  <Txt as="span" variant="body-sm" className="block">
+                    {score.reason ||
+                      (isCodeBased
+                        ? 'N/A — code-based scorer does not generate a reason'
+                        : 'N/A — step not configured')}
+                  </Txt>
+                </div>
               </div>
 
               <div className="grid gap-4">

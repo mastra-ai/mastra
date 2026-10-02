@@ -1,13 +1,3 @@
-/**
- * Connect / reconnect controls for Platform-managed provider accounts,
- * completed headlessly in the Factory SPA.
- *
- * OAuth providers open the provider's own consent popup; API-key providers
- * collect the key in a dialog and submit it directly — the same UX as Mastra
- * Platform's own settings, with no Nango-branded screens and no Platform
- * round trip.
- */
-
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,

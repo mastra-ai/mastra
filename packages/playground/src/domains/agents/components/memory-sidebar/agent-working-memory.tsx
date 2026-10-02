@@ -103,11 +103,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     <>
                       <div className={cn(raisedSurfaceStyle, 'rounded-lg')} style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <Txt
-                            as="div"
-                            variant="meta"
-                            className="group relative cursor-pointer p-3 hover:bg-fill-subtle"
-                          >
+                          <div className="group relative cursor-pointer p-3 hover:bg-fill-subtle">
                             <button
                               type="button"
                               onClick={handleCopy}
@@ -134,16 +130,18 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                             >
                               Click to copy
                             </Txt>
-                          </Txt>
+                          </div>
                         </ScrollArea>
                       </div>
                     </>
                   )}
                 </>
               ) : (
-                <Txt as="div" variant="body" tone="muted">
-                  No working memory content yet. Click "Edit Working Memory" to add content.
-                </Txt>
+                <div className="text-muted-foreground">
+                  <Txt as="span" variant="body" className="block">
+                    No working memory content yet. Click "Edit Working Memory" to add content.
+                  </Txt>
+                </div>
               )}
             </>
           ) : (
@@ -220,9 +218,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           <Txt tone="muted" className="mb-3">
             Working memory is not enabled for this agent. Enable it to maintain context across conversations.
           </Txt>
-          <Txt
-            as="a"
-            variant="body"
+          <a
             href="https://mastra.ai/en/docs/memory/working-memory"
             target="_blank"
             rel="noopener noreferrer"
@@ -231,9 +227,11 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               controlStateColorTransition,
             )}
           >
-            Learn about working memory
+            <Txt as="span" variant="body" className="block">
+              Learn about working memory
+            </Txt>
             <ExternalLink className="h-3 w-3" />
-          </Txt>
+          </a>
         </div>
       )}
     </div>

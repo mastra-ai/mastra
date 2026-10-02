@@ -64,7 +64,9 @@ function Row({ icon: Icon, label, value }: { icon: LucideIcon; label: string; va
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <span className="flex flex-col gap-2">
-      <span className="text-foreground">{title}</span>
+      <Txt as="span" variant="caption" tone="ink">
+        {title}
+      </Txt>
       <span className="grid grid-cols-[auto_auto] items-baseline gap-x-4 gap-y-1">{children}</span>
     </span>
   );
@@ -137,12 +139,8 @@ function ArmDetail({ step, entered }: { step: FunnelStage; entered: number }) {
 function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) {
   const shift = (flip: boolean) => (flip ? `calc(-100% - ${CURSOR_GAP}px)` : `${CURSOR_GAP}px`);
   return (
-    <Txt
-      as="div"
-      variant="caption"
-      tone="ink"
+    <div
       role="tooltip"
-      className="bg-card shadow-overlay animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -150,9 +148,10 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
         translate: `${shift(cursor.flipX)} ${shift(cursor.flipY)}`,
         transformOrigin: `${cursor.flipX ? 'right' : 'left'} ${cursor.flipY ? 'bottom' : 'top'}`,
       }}
+      className="text-foreground bg-card shadow-overlay animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
     >
       {children}
-    </Txt>
+    </div>
   );
 }
 

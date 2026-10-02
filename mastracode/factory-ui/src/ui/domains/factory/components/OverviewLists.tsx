@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -124,23 +125,20 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
 
   return (
     <li>
-      <Txt
-        as="button"
-        variant="meta"
-        tone="muted"
+      <button
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} hover:text-foreground w-full cursor-pointer`}
+        className={cn('text-muted-foreground', `${PANEL_ROW_LINK} hover:text-foreground w-full cursor-pointer`)}
       >
-        <span className="flex-1 text-left">
+        <Txt as="span" variant="meta" className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}
-        </span>
+        </Txt>
         {expanded && total > EXPANDED_ROWS ? (
           <Txt as="span" variant="meta" tone="muted">
             {EXPANDED_ROWS} of {total}
           </Txt>
         ) : null}
-      </Txt>
+      </button>
     </li>
   );
 }

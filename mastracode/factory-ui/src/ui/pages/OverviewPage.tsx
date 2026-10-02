@@ -119,15 +119,15 @@ export function OverviewContent({
         action={
           <div className="flex items-center gap-3">
             {supervisorHealth.data?.findings.length ? (
-              <Txt
-                as="span"
-                variant="meta"
-                render={<Link to={`/factories/${factoryProjectId ?? ''}/supervisor`} />}
+              <Link
+                to={`/factories/${factoryProjectId ?? ''}/supervisor`}
                 className="text-badge-green-indicator hover:text-badge-red-indicator"
               >
-                {supervisorHealth.data.findings.length} supervisor{' '}
-                {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
-              </Txt>
+                <Txt as="span" variant="meta" className="block">
+                  {supervisorHealth.data.findings.length} supervisor{' '}
+                  {supervisorHealth.data.findings.length === 1 ? 'finding' : 'findings'}
+                </Txt>
+              </Link>
             ) : null}
             <ViewAll to={`/factories/${factoryProjectId ?? ''}/attention`} />
           </div>
@@ -141,25 +141,26 @@ export function OverviewContent({
 
 function ViewAll({ to }: { to: string }) {
   return (
-    <Txt as="span" variant="meta" tone="muted" render={<Link to={to} />} className="hover:text-foreground">
-      View all
-    </Txt>
+    <Link to={to} className="text-muted-foreground hover:text-foreground">
+      <Txt as="span" variant="meta" className="block">
+        View all
+      </Txt>
+    </Link>
   );
 }
 
 function ViewOnGithub({ slug }: { slug: string }) {
   return (
-    <Txt
-      as="a"
-      variant="meta"
-      tone="muted"
+    <a
       href={`https://github.com/${slug}/commits`}
       target="_blank"
       rel="noreferrer"
-      className="hover:text-foreground"
+      className="text-muted-foreground hover:text-foreground"
     >
-      {slug}
-    </Txt>
+      <Txt as="span" variant="meta">
+        {slug}
+      </Txt>
+    </a>
   );
 }
 

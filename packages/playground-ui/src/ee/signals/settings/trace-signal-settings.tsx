@@ -209,9 +209,11 @@ function TraceSignalSettingsContent() {
 
       {archived.length > 0 ? (
         <details>
-          <Txt as="summary" variant="caption" tone="muted" className="cursor-pointer">
-            Archived definitions ({archived.length})
-          </Txt>
+          <summary className="cursor-pointer text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              Archived definitions ({archived.length})
+            </Txt>
+          </summary>
           <div className="mt-2 divide-y divide-border">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">

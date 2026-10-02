@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { useState } from 'react';
@@ -41,25 +42,27 @@ export function PwaInstallBanner() {
                 Get faster access from your home screen
               </Txt>
             </div>
-            <Txt
-              as="button"
-              variant="caption"
-              tone="muted"
+            <button
               type="button"
               onClick={dismiss}
-              className={`hover:text-foreground shrink-0 rounded-md px-3 py-1.5 ${focusRing}`}
+              className={cn(
+                'text-muted-foreground',
+                `hover:text-foreground shrink-0 rounded-md px-3 py-1.5 ${focusRing}`,
+              )}
             >
-              Not now
-            </Txt>
-            <Txt
-              as="button"
-              variant="column"
+              <Txt as="span" variant="caption" className="block">
+                Not now
+              </Txt>
+            </button>
+            <button
               type="button"
               onClick={onInstall}
               className={`bg-brand-green shrink-0 rounded-md px-3 py-1.5 text-black ${focusRing}`}
             >
-              Install
-            </Txt>
+              <Txt as="span" variant="column" className="block">
+                Install
+              </Txt>
+            </button>
           </div>
         </div>
       )}

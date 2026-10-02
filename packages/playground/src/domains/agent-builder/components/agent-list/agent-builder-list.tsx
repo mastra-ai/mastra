@@ -112,9 +112,11 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <Txt as="div" variant="body" tone="ink" className="truncate">
-                  {agent.name}
-                </Txt>
+                <div className="truncate text-foreground">
+                  <Txt as="span" variant="body" className="block">
+                    {agent.name}
+                  </Txt>
+                </div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
               <div className="mt-0.5 flex items-center gap-2">

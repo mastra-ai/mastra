@@ -26,9 +26,11 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
       <Txt variant="meta" tone="muted" className="uppercase">
         {label}
       </Txt>
-      <Txt as="div" variant="body">
-        {children}
-      </Txt>
+      <div>
+        <Txt as="span" variant="body" className="block">
+          {children}
+        </Txt>
+      </div>
     </div>
   );
 }

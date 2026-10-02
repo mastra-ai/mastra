@@ -55,37 +55,43 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
 
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
-        <Txt as="details" variant="caption">
+        <details>
           <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>
-            Show Validation Issues ({validationErrors.length})
+            <Txt as="span" variant="caption" className="block">
+              Show Validation Issues ({validationErrors.length})
+            </Txt>
           </summary>
-          <Txt
-            as="div"
-            variant="caption"
-            className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left"
-          >
+          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left">
             {validationErrors.map((error, index) => (
               <div key={index} className="border-l-2 border-destructive-indicator pl-2">
-                <Txt as="div" variant="column" className="text-destructive-foreground">
-                  {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
-                </Txt>
+                <div className="text-destructive-foreground">
+                  <Txt as="span" variant="column" className="block">
+                    {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
+                  </Txt>
+                </div>
                 <Txt as="pre" variant="caption" tone="muted" className="mt-1 wrap-break-word whitespace-pre-wrap">
                   {error.message}
                 </Txt>
               </div>
             ))}
-          </Txt>
-        </Txt>
+          </div>
+        </details>
       )}
 
       {/* General Error Details */}
       {errorString && !isValidationError && (
-        <Txt as="details" variant="caption">
-          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>Show Details</summary>
-          <Txt as="div" variant="caption" className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
-            <pre className="wrap-break-word whitespace-pre-wrap">{errorString}</pre>
-          </Txt>
-        </Txt>
+        <details>
+          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>
+            <Txt as="span" variant="caption" className="block">
+              Show Details
+            </Txt>
+          </summary>
+          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left">
+            <Txt as="pre" variant="caption" className="wrap-break-word whitespace-pre-wrap">
+              {errorString}
+            </Txt>
+          </div>
+        </details>
       )}
     </Container>
   );

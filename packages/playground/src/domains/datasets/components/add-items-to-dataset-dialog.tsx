@@ -16,6 +16,7 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 
@@ -106,9 +107,11 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <Txt as="div" variant="body" tone="muted" className="px-2 py-4 text-center">
-                      No other datasets available
-                    </Txt>
+                    <div className={cn('text-muted-foreground', 'px-2 py-4 text-center')}>
+                      <Txt as="span" variant="body" className="block">
+                        No other datasets available
+                      </Txt>
+                    </div>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>

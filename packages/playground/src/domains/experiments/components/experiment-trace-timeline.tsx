@@ -32,17 +32,19 @@ export function ExperimentTraceTimeline({
   return (
     <>
       {isLoading ? (
-        <Txt
-          as="div"
-          variant="body"
-          tone="muted"
+        <div
           className={cn(
+            'text-muted-foreground',
             'flex items-center justify-center gap-4 rounded-md bg-card/50 p-4',
             '[&_svg]:h-[1.25em] [&_svg]:w-[1.25em] [&_svg]:opacity-50',
           )}
         >
-          <Spinner /> Loading Trace Timeline ...
-        </Txt>
+          <Spinner />
+          <Txt as="span" variant="body" className="block">
+            {' '}
+            Loading Trace Timeline ...
+          </Txt>
+        </div>
       ) : (
         <div
           // className={cn('grid items-start content-start gap-y-0.5 overflow-hidden grid-cols-[1fr_10rem] xl:py-4', {

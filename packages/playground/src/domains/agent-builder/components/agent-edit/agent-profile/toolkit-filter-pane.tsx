@@ -227,7 +227,7 @@ export const ToolkitFilterPane = ({
         onValueChange={setSearch}
       />
 
-      <Txt as="div" variant="meta" className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
@@ -235,11 +235,13 @@ export const ToolkitFilterPane = ({
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
           className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
-          Select all
+          <Txt as="span" variant="meta" className="block">
+            Select all
+          </Txt>
         </button>
-        <span className="text-placeholder" aria-hidden>
+        <Txt as="span" variant="meta" tone="faint" aria-hidden>
           ·
-        </span>
+        </Txt>
         <button
           type="button"
           onClick={onClearAll}
@@ -247,9 +249,11 @@ export const ToolkitFilterPane = ({
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
           className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
-          Clear all
+          <Txt as="span" variant="meta" className="block">
+            Clear all
+          </Txt>
         </button>
-      </Txt>
+      </div>
 
       <ScrollArea className="min-h-0 flex-1">
         <ScrollAreaViewport className="pr-2">

@@ -122,15 +122,17 @@ function FindingsContent({
       </div>
 
       {findings.length > 0 && factoryId && (
-        <Txt
-          as="span"
-          variant="caption"
-          render={<Link to={`/factories/${factoryId}/attention`} />}
-          tone="muted"
-          className="border-border hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors"
+        <Link
+          to={`/factories/${factoryId}/attention`}
+          className={cn(
+            'text-muted-foreground',
+            'border-border hover:text-foreground shrink-0 border-t px-4 py-3 text-center transition-colors',
+          )}
         >
-          View all in Attention
-        </Txt>
+          <Txt as="span" variant="caption" className="block">
+            View all in Attention
+          </Txt>
+        </Link>
       )}
     </div>
   );

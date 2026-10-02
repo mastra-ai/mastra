@@ -53,17 +53,19 @@ export type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'size'> &
     variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
     textVariant?: TextStyleProps['variant'];
+    font?: TextStyleProps['font'];
+    tone?: TextStyleProps['tone'];
     /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
   };
 
-function Textarea({ className, size, testId, variant, textVariant, error, ...props }: TextareaProps) {
+function Textarea({ className, size, testId, variant, textVariant, font, tone, error, ...props }: TextareaProps) {
   return (
     <TextareaControl
       className={cn(
         textareaVariants({ variant: resolveFieldVariant(variant), size }),
         fieldErrorRim,
-        textStyle({ variant: textVariant }),
+        textStyle({ variant: textVariant, font, tone }),
         className,
       )}
       data-testid={testId}

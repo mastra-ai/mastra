@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { isAuditAction, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
@@ -177,15 +178,11 @@ function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factory
     );
 
   return (
-    <Txt
-      as="span"
-      variant="column"
-      tone="ink"
-      render={<Link to={boardItemPath(factoryProjectId, target)} />}
-      className={`${shape} hover:underline`}
-    >
-      {entry.title}
-    </Txt>
+    <Link to={boardItemPath(factoryProjectId, target)} className={cn('text-foreground', `${shape} hover:underline`)}>
+      <Txt as="span" variant="column" className="block">
+        {entry.title}
+      </Txt>
+    </Link>
   );
 }
 
@@ -251,14 +248,14 @@ function Block({
 
   return (
     <RailRow mark={<Node entry={first} />} connected={connected}>
-      <Txt as="div" variant="caption" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
+      <div className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
         <Txt as="span" variant="column" tone="ink" className="shrink-0">
           {name}
         </Txt>
-        <span className="text-muted-foreground shrink-0">
+        <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
-        </span>
+        </Txt>
         {grouped && first.kind === 'move' ? (
           <Txt as="span" variant="column" tone="ink" className="shrink-0">
             {block.entries.length} cards
@@ -275,12 +272,14 @@ function Block({
         )}
         {first.kind === 'move' ? (
           <>
-            <span className="text-muted-foreground shrink-0">to</span>
+            <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+              to
+            </Txt>
             <StageChain stages={first.stages} />
           </>
         ) : null}
         <Time at={first.at} className="ml-auto pl-2" />
-      </Txt>
+      </div>
       {grouped ? <EntryPanel entries={block.entries} factoryProjectId={factoryProjectId} /> : null}
     </RailRow>
   );

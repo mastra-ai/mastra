@@ -75,7 +75,7 @@ function ObservationItem({ observation }: { observation: string }) {
   const { severity, kind, text } = parseTraceObservation(observation);
 
   return (
-    <Txt as="li" variant="body" className={`rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
+    <li className={`rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
         <Txt variant="meta" tone="muted" className="uppercase">
           {severity === 'problem' && (
@@ -87,8 +87,10 @@ function ObservationItem({ observation }: { observation: string }) {
           <span>{kind}</span>
         </Txt>
       )}
-      <p className={`text-foreground ${kind === undefined ? '' : 'mt-1'}`}>{text}</p>
-    </Txt>
+      <Txt as="p" variant="body" tone="ink" className={kind === undefined ? '' : 'mt-1'}>
+        {text}
+      </Txt>
+    </li>
   );
 }
 
@@ -107,10 +109,18 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             {insight.summary.summary}
           </Txt>
           {insight.summary.currentTask !== undefined && (
-            <Txt as="dl" variant="body" className="mt-4">
-              <dt className="text-muted-foreground">Current task</dt>
-              <dd className="mt-1 text-foreground">{insight.summary.currentTask}</dd>
-            </Txt>
+            <dl className="mt-4">
+              <dt className="text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  Current task
+                </Txt>
+              </dt>
+              <dd className="mt-1 text-foreground">
+                <Txt as="span" variant="body" className="block">
+                  {insight.summary.currentTask}
+                </Txt>
+              </dd>
+            </dl>
           )}
           {insight.summary.degenerate === true && (
             <Txt className="mt-4 text-destructive-foreground">This trace was flagged as degenerate or looping.</Txt>
@@ -143,10 +153,14 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
           </Txt>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (
-              <Txt as="li" variant="body" key={signal.signalName} className={cn(raisedSurfaceStyle, 'rounded-md p-3')}>
-                <p className="text-muted-foreground">{signalLabel(signalCatalog, signal.signalName)}</p>
-                <p className="mt-1 text-foreground">{signal.signalText}</p>
-              </Txt>
+              <li key={signal.signalName} className={cn(raisedSurfaceStyle, 'rounded-md p-3')}>
+                <Txt as="p" variant="body" tone="muted">
+                  {signalLabel(signalCatalog, signal.signalName)}
+                </Txt>
+                <Txt as="p" variant="body" tone="ink" className="mt-1">
+                  {signal.signalText}
+                </Txt>
+              </li>
             ))}
           </ul>
         </section>

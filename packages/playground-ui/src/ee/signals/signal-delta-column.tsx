@@ -58,9 +58,11 @@ export function SignalDeltaColumn({
       </Txt>
       <ul className="mt-2 space-y-1.5">
         {deltas.length === 0 ? (
-          <Txt as="li" variant="caption" tone="muted">
-            No themes in either snapshot.
-          </Txt>
+          <li className="text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              No themes in either snapshot.
+            </Txt>
+          </li>
         ) : null}
         {deltas.map(delta => {
           const themeId = delta.themeId;

@@ -107,12 +107,16 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <Txt as="div" variant="body">
-              <span className="text-muted-foreground">{"Don't have an account? "}</span>
+            <div>
+              <Txt as="span" variant="body" tone="muted">
+                {"Don't have an account? "}
+              </Txt>
               <button type="button" onClick={handleSignUp} className="text-foreground hover:underline">
-                Sign up
+                <Txt as="span" variant="body" className="block">
+                  Sign up
+                </Txt>
               </button>
-            </Txt>
+            </div>
           )}
       </div>
     </div>

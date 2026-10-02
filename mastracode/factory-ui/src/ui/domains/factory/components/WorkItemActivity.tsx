@@ -122,19 +122,21 @@ export function WorkItemActivity({
         delay={150}
         closeDelay={100}
         render={
-          <Txt
-            as="button"
-            variant="meta"
-            tone="muted"
+          <button
             type="button"
             draggable={false}
-            className={`hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`}
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
+            className={cn(
+              'text-muted-foreground',
+              `hover:text-foreground relative flex min-w-0 items-center gap-1.5 rounded-full ${focusRing}`,
+            )}
           >
-            <span className="max-w-32 truncate">{worker.name}</span>
+            <Txt as="span" variant="meta" className="max-w-32 truncate">
+              {worker.name}
+            </Txt>
             <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
-          </Txt>
+          </button>
         }
       />
       <HoverCardContent

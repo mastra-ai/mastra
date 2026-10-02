@@ -15,9 +15,7 @@ export const ExampleList = ({ onExampleClick }: ExampleListProps) => {
       {EXAMPLES.map((example, i) => {
         const Icon = example.icon;
         return (
-          <Txt
-            as="button"
-            variant="caption"
+          <button
             key={example.title}
             type="button"
             onClick={() => onExampleClick(example.prompt)}
@@ -30,8 +28,10 @@ export const ExampleList = ({ onExampleClick }: ExampleListProps) => {
             )}
           >
             <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
-            {example.title}
-          </Txt>
+            <Txt as="span" variant="caption" className="block">
+              {example.title}
+            </Txt>
+          </button>
         );
       })}
     </div>

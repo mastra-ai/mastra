@@ -2,7 +2,6 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -70,7 +69,7 @@ export function ComparisonSideHeader({
       </div>
 
       {experiment && (
-        <Txt as="div" variant="caption" tone="muted" className="flex flex-wrap gap-x-4 gap-y-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
           {experiment.name && (
             <TextAndIcon>
               <HashIcon /> {shortId}
@@ -95,7 +94,7 @@ export function ComparisonSideHeader({
               <CalendarIcon /> {formatDate(createdAt, 'date-time')}
             </TextAndIcon>
           )}
-        </Txt>
+        </div>
       )}
 
       {scorerSummary.length > 0 && (

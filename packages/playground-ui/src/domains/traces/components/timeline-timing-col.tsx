@@ -53,11 +53,11 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <Txt as="div" variant="meta" tone="muted" className={cn('flex justify-end')}>
+        <div className={cn('text-muted-foreground', 'flex justify-end')}>
           <Txt as="span" variant="meta" font="mono">
             {formatDurationPrecise(span.latency)}
           </Txt>
-        </Txt>
+        </div>
       </HoverCardTrigger>
       <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
     </HoverCard>

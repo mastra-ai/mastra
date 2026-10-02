@@ -8,9 +8,11 @@ import { Txt } from '@/ds/components/Txt';
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {
   return (
-    <Txt as="div" variant="meta" tone="faint" className="uppercase">
-      {children}
-    </Txt>
+    <div className="text-placeholder uppercase">
+      <Txt as="span" variant="meta" className="block">
+        {children}
+      </Txt>
+    </div>
   );
 }
 
@@ -25,9 +27,9 @@ export function SpanPayloadField({ label, children }: { label: ReactNode; childr
 
 export function SpanPayloadMarkdown({ children }: { children: string }) {
   return (
-    <Txt as="div" variant="body" tone="ink" data-slot="span-payload-markdown">
+    <div data-slot="span-payload-markdown" className="text-foreground">
       <MarkdownRenderer>{children}</MarkdownRenderer>
-    </Txt>
+    </div>
   );
 }
 

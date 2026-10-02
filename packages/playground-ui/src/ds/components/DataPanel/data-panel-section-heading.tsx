@@ -22,14 +22,11 @@ export function DataPanelSectionHeading({
   variant = 'eyebrow',
 }: DataPanelSectionHeadingProps) {
   return (
-    <Txt
-      as="div"
-      variant={variant}
-      tone="faint"
-      className={cn('flex items-center gap-1.5 [&>svg]:size-3.5', className)}
-    >
+    <div className={cn('flex items-center gap-1.5 text-placeholder [&>svg]:size-3.5', className)}>
       {icon}
-      {children}
-    </Txt>
+      <Txt as="span" variant={variant} tone="faint">
+        {children}
+      </Txt>
+    </div>
   );
 }

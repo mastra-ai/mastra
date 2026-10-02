@@ -1,3 +1,4 @@
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -35,9 +36,9 @@ export function ProposalTag({
   if (isEditing) {
     return (
       <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1">
-        <Txt
-          as="input"
-          variant="caption"
+        <Input
+          variant="unstyled"
+          textVariant="caption"
           tone="muted"
           ref={inputRef}
           value={editValue}
@@ -53,7 +54,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="w-20 bg-transparent py-0.5 outline-hidden"
+          className="h-auto w-20 bg-transparent px-0 py-0.5 outline-hidden"
         />
         <button
           type="button"
@@ -70,13 +71,10 @@ export function ProposalTag({
   }
 
   return (
-    <Txt
-      as="span"
-      variant="caption"
-      tone="muted"
-      className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5"
-    >
-      {tag}
+    <span className="group inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+      <Txt as="span" variant="caption">
+        {tag}
+      </Txt>
       <button
         type="button"
         onClick={() => {
@@ -96,6 +94,6 @@ export function ProposalTag({
       >
         <X className="h-3 w-3" />
       </button>
-    </Txt>
+    </span>
   );
 }

@@ -22,41 +22,53 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   // All rows valid
   if (invalidCount === 0) {
     return (
-      <Txt as="div" variant="body" className={cn('flex items-center gap-2 text-success-indicator', className)}>
+      <div className={cn('flex items-center gap-2 text-success-indicator', className)}>
         <CheckCircleIcon className="h-4 w-4" />
-        All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
-      </Txt>
+        <Txt as="span" variant="body" className="block">
+          All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
+        </Txt>
+      </div>
     );
   }
 
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <Txt as="div" variant="body" className="flex items-center gap-2 text-warning-foreground">
+      <div className="flex items-center gap-2 text-warning-foreground">
         <AlertTriangleIcon className="h-4 w-4" />
-        {invalidCount} of {totalRows} rows will be skipped (validation failed)
-      </Txt>
+        <Txt as="span" variant="body" className="block">
+          {invalidCount} of {totalRows} rows will be skipped (validation failed)
+        </Txt>
+      </div>
 
       {validCount > 0 && (
-        <Txt as="div" variant="body" tone="muted">
-          {validCount} rows will be imported
-        </Txt>
+        <div className="text-muted-foreground">
+          <Txt as="span" variant="body" className="block">
+            {validCount} rows will be imported
+          </Txt>
+        </div>
       )}
 
       {/* Failing rows table */}
       <div className="max-h-48 overflow-y-auto rounded-md border">
-        <Txt as="table" variant="caption" className="w-full">
+        <table className="w-full">
           <thead className="sticky top-0 bg-muted">
             <tr>
-              <Txt as="th" variant="column" className="px-2 py-1 text-left">
-                Row
-              </Txt>
-              <Txt as="th" variant="column" className="px-2 py-1 text-left">
-                Field
-              </Txt>
-              <Txt as="th" variant="column" className="px-2 py-1 text-left">
-                Error
-              </Txt>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Row
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Field
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Error
+                </Txt>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -66,12 +78,14 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
             {invalidCount > invalidRows.length && (
               <tr>
                 <td colSpan={3} className="px-2 py-1 text-muted-foreground italic">
-                  ... and {invalidCount - invalidRows.length} more
+                  <Txt as="span" variant="caption" className="block">
+                    ... and {invalidCount - invalidRows.length} more
+                  </Txt>
                 </td>
               </tr>
             )}
           </tbody>
-        </Txt>
+        </table>
       </div>
     </div>
   );

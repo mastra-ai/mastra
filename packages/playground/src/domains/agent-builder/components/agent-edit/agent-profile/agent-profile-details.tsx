@@ -1,4 +1,5 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -36,9 +37,9 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         className,
       )}
     >
-      <Txt
-        as="input"
-        variant="subheading"
+      <Input
+        variant="unstyled"
+        textVariant="subheading"
         tone="ink"
         type="text"
         value={draftName}
@@ -50,9 +51,9 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         className="w-full max-w-sm rounded-lg px-3 py-1.5 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-name' }}
       />
-      <Txt
-        as="textarea"
-        variant="body"
+      <Textarea
+        variant="unstyled"
+        textVariant="body"
         tone="ink"
         value={draftDescription}
         onChange={e => handleDraftDescriptionChange(e.target.value)}
@@ -61,7 +62,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="field-sizing-content w-full resize-none rounded-lg px-3 py-2 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
+        className="field-sizing-content min-h-0 w-full resize-none rounded-lg px-3 py-2 placeholder:text-placeholder hover:bg-fill-subtle focus:bg-fill-subtle focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-description' }}
       />
     </div>

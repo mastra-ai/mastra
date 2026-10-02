@@ -14,12 +14,16 @@ const emptyThreadClass =
 function FactoryMetadata({ label, value, font }: { label: string; value: string; font?: 'mono' }) {
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
-      <Txt as="dt" variant="caption" tone="muted">
-        {label}
-      </Txt>
-      <Txt as="dd" variant="caption" tone="ink" font={font} className="min-w-0 truncate">
-        {value}
-      </Txt>
+      <dt className="text-muted-foreground">
+        <Txt as="span" variant="caption" className="block">
+          {label}
+        </Txt>
+      </dt>
+      <dd className="text-foreground min-w-0 truncate">
+        <Txt as="span" variant="caption" font={font} className="block">
+          {value}
+        </Txt>
+      </dd>
     </div>
   );
 }
@@ -69,16 +73,16 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <Txt as="details" variant="caption" tone="muted" className="group mt-8 w-full max-w-lg min-w-0">
+      <details className="text-muted-foreground group mt-8 w-full max-w-lg min-w-0">
         <summary
           className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
         >
-          <span>
+          <Txt as="span" variant="caption">
             Working in{' '}
             <Txt as="span" variant="column" tone="ink">
               {activeFactory.name}
             </Txt>
-          </span>
+          </Txt>
           <ChevronDown
             aria-hidden="true"
             size={14}
@@ -91,7 +95,7 @@ export function EmptyThreadState() {
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} font="mono" />}
           {projectPath && <FactoryMetadata label="Workspace" value={projectPath} font="mono" />}
         </dl>
-      </Txt>
+      </details>
     </section>
   );
 }

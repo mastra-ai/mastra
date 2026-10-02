@@ -57,9 +57,11 @@ export const EntityName = ({
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="div" variant="caption" tone="muted" className={className}>
-      {children}
-    </Txt>
+    <div className={cn('text-muted-foreground', className)}>
+      <Txt as="span" variant="caption" className="block">
+        {children}
+      </Txt>
+    </div>
   );
 };
 

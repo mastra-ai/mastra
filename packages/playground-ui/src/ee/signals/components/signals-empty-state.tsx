@@ -75,28 +75,40 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <Txt as="dt" variant="caption" tone="muted">
-          Traces analyzed
-        </Txt>
-        <Txt as="dd" variant="heading" tone="ink" className="mt-1">
-          {formatNumber(progress.traceCount)}
-        </Txt>
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Traces analyzed
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground">
+          <Txt as="span" variant="heading" className="block">
+            {formatNumber(progress.traceCount)}
+          </Txt>
+        </dd>
       </div>
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <Txt as="dt" variant="caption" tone="muted">
-          Trace signal types ready
-        </Txt>
-        <Txt as="dd" variant="heading" tone="ink" className="mt-1">
-          {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
-        </Txt>
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Trace signal types ready
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground">
+          <Txt as="span" variant="heading" className="block">
+            {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
+          </Txt>
+        </dd>
       </div>
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <Txt as="dt" variant="caption" tone="muted">
-          Status
-        </Txt>
-        <Txt as="dd" variant="heading" tone="ink" className="mt-1 capitalize">
-          {progress.status}
-        </Txt>
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Status
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground capitalize">
+          <Txt as="span" variant="heading" className="block">
+            {progress.status}
+          </Txt>
+        </dd>
       </div>
     </dl>
   );
@@ -159,30 +171,24 @@ export function PendingSignalProgress({
         {pendingSignals.map(signal => {
           const value = progress?.signals[signal.name] ?? { generated: 0, embedded: 0 };
           return (
-            <Txt
-              as="li"
-              variant="body-sm"
-              font="body"
-              className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}
-              key={signal.name}
-            >
+            <li className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')} key={signal.name}>
               <div className="flex items-center justify-between gap-2">
-                <Txt as="span" variant="subheading" style={signalStyle(signal.name)}>
+                <Txt font="body" as="span" variant="subheading" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
                 </Txt>
-                <Txt as="span" variant="caption" tone="muted" className="capitalize">
+                <Txt font="body" as="span" variant="caption" tone="muted" className="capitalize">
                   {signal.status}
                 </Txt>
               </div>
               {signalDescription(catalog, signal.name) ? (
-                <Txt variant="caption" tone="muted" className="mt-1">
+                <Txt font="body" variant="caption" tone="muted" className="mt-1">
                   {signalDescription(catalog, signal.name)}
                 </Txt>
               ) : null}
-              <Txt variant="caption" tone="muted" className="mt-1">
+              <Txt font="body" variant="caption" tone="muted" className="mt-1">
                 {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
               </Txt>
-            </Txt>
+            </li>
           );
         })}
       </ul>
@@ -242,16 +248,17 @@ export const SignalsEmptyState = ({
             </Txt>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
-                <Txt
-                  as="div"
-                  variant="meta"
-                  font="mono"
+                <div
                   className={cn(raisedSurfaceStyle, 'flex items-center justify-between rounded px-3 py-1.5')}
                   key={name}
                 >
-                  <span className="text-muted-foreground">{name}</span>
-                  <span className="text-muted-foreground">{duration}</span>
-                </Txt>
+                  <Txt as="span" variant="meta" font="mono" tone="muted">
+                    {name}
+                  </Txt>
+                  <Txt as="span" variant="meta" font="mono" tone="muted">
+                    {duration}
+                  </Txt>
+                </div>
               ))}
             </div>
           </div>

@@ -56,9 +56,11 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Txt as="div" variant="body" tone="ink" className="min-w-0 truncate">
-            {title}
-          </Txt>
+          <div className="min-w-0 truncate text-foreground">
+            <Txt as="span" variant="body" className="block">
+              {title}
+            </Txt>
+          </div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -85,40 +87,40 @@ export const SkillWorkspaceLayout = ({
                 activeTab === 'configure' && 'translate-x-full',
               )}
             />
-            <Txt
-              as="button"
-              variant="subheading"
-              tone="ink"
+            <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'chat'}
               data-testid="skill-edit-tab-chat"
               onClick={() => setActiveTab('chat')}
               className={cn(
+                'text-foreground',
                 'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
                 activeTab === 'chat' ? '' : quietTextHover,
               )}
             >
-              Chat
-            </Txt>
-            <Txt
-              as="button"
-              variant="subheading"
-              tone="ink"
+              <Txt as="span" variant="subheading" className="block">
+                Chat
+              </Txt>
+            </button>
+            <button
               type="button"
               role="tab"
               aria-selected={activeTab === 'configure'}
               data-testid="skill-edit-tab-configure"
               onClick={() => setActiveTab('configure')}
               className={cn(
+                'text-foreground',
                 'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
                 activeTab === 'configure' ? '' : quietTextHover,
               )}
             >
-              Configuration
-            </Txt>
+              <Txt as="span" variant="subheading" className="block">
+                Configuration
+              </Txt>
+            </button>
           </div>
         </div>
       )}

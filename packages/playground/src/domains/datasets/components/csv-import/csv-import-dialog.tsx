@@ -302,9 +302,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'preview':
         return parsedCSV ? (
           <>
-            <Txt as="div" variant="body" tone="muted">
-              Preview of your CSV data. Click Next to map columns.
-            </Txt>
+            <div className="text-muted-foreground">
+              <Txt as="span" variant="body" className="block">
+                Preview of your CSV data. Click Next to map columns.
+              </Txt>
+            </div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </>
         ) : null;
@@ -321,9 +323,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             {validationErrors.length > 0 && <ValidationSummary errors={validationErrors} />}
 
             <div className="border-t border-border pt-4">
-              <Txt as="div" variant="caption" tone="muted" className="mb-2">
-                Data Preview
-              </Txt>
+              <div className="mb-2 text-muted-foreground">
+                <Txt as="span" variant="caption" className="block">
+                  Data Preview
+                </Txt>
+              </div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </>
@@ -332,32 +336,38 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'validation':
         return schemaValidation ? (
           <>
-            <Txt as="div" variant="body" tone="muted">
-              {dataset?.inputSchema || dataset?.groundTruthSchema
-                ? 'Rows have been validated against the dataset schema.'
-                : 'Ready to import. No schema validation required.'}
-            </Txt>
+            <div className="text-muted-foreground">
+              <Txt as="span" variant="body" className="block">
+                {dataset?.inputSchema || dataset?.groundTruthSchema
+                  ? 'Rows have been validated against the dataset schema.'
+                  : 'Ready to import. No schema validation required.'}
+              </Txt>
+            </div>
 
             {schemaValidation.invalidCount > 0 ? (
               <div className="rounded-md border border-warning-edge bg-warning-subtle p-3">
-                <Txt as="div" variant="label" className="flex items-center gap-2 text-warning-subtle-foreground">
+                <div className="flex items-center gap-2 text-warning-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ⚠
                   </Txt>
-                  {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
-                </Txt>
+                  <Txt as="span" variant="label" className="block">
+                    {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
+                  </Txt>
+                </div>
                 <Txt tone="muted" className="mt-1">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </Txt>
               </div>
             ) : (
               <div className="rounded-md border border-success-edge bg-success-subtle p-3">
-                <Txt as="div" variant="label" className="flex items-center gap-2 text-success-subtle-foreground">
+                <div className="flex items-center gap-2 text-success-subtle-foreground">
                   <Txt as="span" variant="heading">
                     ✓
                   </Txt>
-                  All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
-                </Txt>
+                  <Txt as="span" variant="label" className="block">
+                    All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
+                  </Txt>
+                </div>
               </div>
             )}
 
@@ -378,12 +388,16 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           <div className="flex flex-col items-center gap-4 py-5">
             <Spinner />
             <div className="text-center">
-              <Txt as="div" variant="heading" tone="faint">
-                Importing items...
-              </Txt>
-              <Txt as="div" variant="body" tone="muted" className="mt-1">
-                {importProgress.current} of {importProgress.total}
-              </Txt>
+              <div className="text-placeholder">
+                <Txt as="span" variant="heading" className="block">
+                  Importing items...
+                </Txt>
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  {importProgress.current} of {importProgress.total}
+                </Txt>
+              </div>
             </div>
           </div>
         );
@@ -391,22 +405,28 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       case 'complete':
         return (
           <div className="flex flex-col items-center gap-4 py-5">
-            <Txt as="div" variant="display">
-              {importResult && importResult.errors === 0 ? '✓' : '⚠'}
-            </Txt>
+            <div>
+              <Txt as="span" variant="display" className="block">
+                {importResult && importResult.errors === 0 ? '✓' : '⚠'}
+              </Txt>
+            </div>
             <div className="text-center">
-              <Txt as="div" variant="heading" tone="faint">
-                Import Complete
-              </Txt>
-              <Txt as="div" variant="body" tone="muted" className="mt-1">
-                {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
-                {importResult && importResult.errors > 0 && (
-                  <span className="text-destructive-foreground">
-                    {' '}
-                    ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
-                  </span>
-                )}
-              </Txt>
+              <div className="text-placeholder">
+                <Txt as="span" variant="heading" className="block">
+                  Import Complete
+                </Txt>
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
+                  {importResult && importResult.errors > 0 && (
+                    <span className="text-destructive-foreground">
+                      {' '}
+                      ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
+                    </span>
+                  )}
+                </Txt>
+              </div>
             </div>
           </div>
         );

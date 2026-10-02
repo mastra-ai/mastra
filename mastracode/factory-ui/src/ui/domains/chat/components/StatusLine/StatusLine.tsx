@@ -1,4 +1,3 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
@@ -36,12 +35,9 @@ export function StatusLine() {
   const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
 
   return (
-    <Txt
-      as="div"
-      variant="caption"
-      tone="muted"
+    <div
       aria-label="Session status line"
-      className="flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+      className="text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModesSelection />
       <ModelPicker />
@@ -53,6 +49,6 @@ export function StatusLine() {
       {!workItemsPending && (!currentItem || !isPullRequestSource(currentItem.source)) ? (
         <PullRequestLinks repository={repository} threadId={threadId} />
       ) : null}
-    </Txt>
+    </div>
   );
 }

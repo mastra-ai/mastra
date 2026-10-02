@@ -92,19 +92,18 @@ export function VcsFactoryStep({
             <ProviderHeading>
               {selectedProvider === 'github' ? 'GitHub repositories' : 'GitLab repositories'}
             </ProviderHeading>
-            <Txt
-              as="button"
-              variant="meta"
-              tone="muted"
+            <button
               type="button"
-              className="hover:text-foreground cursor-pointer transition-colors"
               onClick={() => {
                 setQuery('');
                 setSelectedProvider(null);
               }}
+              className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
             >
-              Choose another provider
-            </Txt>
+              <Txt as="span" variant="meta" className="block">
+                Choose another provider
+              </Txt>
+            </button>
           </div>
           <SearchInput
             label="Search repositories"

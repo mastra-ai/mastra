@@ -49,7 +49,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   const overflow = dependents.length - visible.length;
 
   return (
-    <Txt as="div" variant="caption" tone="muted" data-testid="agent-impact-warnings">
+    <div data-testid="agent-impact-warnings" className="text-muted-foreground">
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
           <Txt as="p" variant="column">
@@ -58,22 +58,29 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
           <ul className="mt-1 list-disc pl-5">
             {visible.map(dep => (
               <li key={dep.id} data-testid="agent-impact-dependent">
-                {dep.name}
+                <Txt as="span" variant="caption" className="block">
+                  {dep.name}
+                </Txt>
               </li>
             ))}
           </ul>
           {overflow > 0 && (
-            <p data-testid="agent-impact-dependents-more" className="text-icon-3 mt-1">
+            <Txt as="p" variant="caption" data-testid="agent-impact-dependents-more" className="text-icon-3 mt-1">
               and {overflow} more
-            </p>
+            </Txt>
           )}
         </div>
       )}
       {hiddenCount > 0 && (
-        <p data-testid="agent-impact-hidden-warning" className={dependents.length > 0 ? 'mt-2' : ''}>
+        <Txt
+          as="p"
+          variant="caption"
+          data-testid="agent-impact-hidden-warning"
+          className={dependents.length > 0 ? 'mt-2' : ''}
+        >
           {copy.hidden(hiddenCount)}
-        </p>
+        </Txt>
       )}
-    </Txt>
+    </div>
   );
 };

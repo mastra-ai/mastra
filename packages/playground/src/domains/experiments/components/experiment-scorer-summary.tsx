@@ -60,11 +60,15 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     }
 
     return (
-      <Txt as="div" variant="caption" tone="muted" className="flex items-center gap-2">
+      <div className="flex items-center gap-2 text-muted-foreground">
         <GaugeIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">{title}</span>
-        <span className="truncate">{description}</span>
-      </Txt>
+        <Txt as="span" variant="caption" tone="muted">
+          {title}
+        </Txt>
+        <Txt as="span" variant="caption" className="truncate">
+          {description}
+        </Txt>
+      </div>
     );
   }
 
@@ -75,19 +79,18 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
 
         return (
           <MetricsKpiCard key={scorerId} className="min-w-0 p-3">
-            <Txt
-              as="span"
-              variant="caption"
-              tone="muted"
-              render={<LinkComponent href={paths.scorerLink(scorerId)} />}
-              className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
+            <LinkComponent
+              href={paths.scorerLink(scorerId)}
+              className="flex min-w-0 items-center gap-1.5 text-muted-foreground hover:underline [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
             >
               <Tooltip>
                 <TooltipTrigger render={<ScorersIcon role="img" aria-label="Scorer" />} />
                 <TooltipContent>Scorer</TooltipContent>
               </Tooltip>
-              <span className="truncate">{scorerName}</span>
-            </Txt>
+              <Txt as="span" variant="caption" className="truncate">
+                {scorerName}
+              </Txt>
+            </LinkComponent>
             <Txt as="strong" variant="subheading" tone="muted">
               {avg.toFixed(3)}
               <Txt as="span" variant="caption" tone="muted" className="ml-1.5">
