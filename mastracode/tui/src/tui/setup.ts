@@ -394,11 +394,10 @@ function detectFdPath(): string | null {
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
-    { name: 'fork', description: 'Fork the current thread' },
-    { name: 'clone', description: 'Alias for /fork' },
+    { name: 'clone', description: 'Clone the current thread' },
     { name: 'thread', description: 'Show current thread info' },
-    { name: 'resume', description: 'Resume an existing thread' },
-    { name: 'threads', description: 'Alias for /resume' },
+    { name: 'threads', description: 'Switch between threads' },
+    { name: 'resume', description: 'Alias for /threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'packs', description: 'Alias for /models' },
     { name: 'model', description: 'Change the current mode model' },
@@ -416,8 +415,8 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'context', description: 'Audit what is using the context window' },
     { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
-    { name: 'rename', description: 'Rename current thread' },
-    { name: 'name', description: 'Alias for /rename' },
+    { name: 'name', description: 'Rename current thread' },
+    { name: 'rename', description: 'Alias for /name' },
     {
       name: 'resource',
       description: 'Show/switch resource ID (tag for sharing)',

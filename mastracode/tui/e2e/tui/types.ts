@@ -201,6 +201,8 @@ export type ScenarioName =
   | 'task-progress-events'
   | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
+  | 'resume-locked-thread'
+  | 'resume-missing-thread'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'

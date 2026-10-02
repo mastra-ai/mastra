@@ -42,9 +42,10 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('reports an unknown requested thread', async () => {
+  it('reports an unknown requested thread and leaves a new thread pending', async () => {
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
       session: {
         thread: {
           getId: vi.fn(() => null),
@@ -53,7 +54,55 @@ describe('resumeThreadOnStartup', () => {
       },
     } as any;
 
-    await expect(resumeThreadOnStartup(state, 'missing-thread')).rejects.toThrow('Thread not found: missing-thread');
+    await expect(resumeThreadOnStartup(state, 'missing-thread')).resolves.toEqual({
+      kind: 'missing',
+      threadId: 'missing-thread',
+    });
+    expect(state.pendingNewThread).toBe(true);
+  });
+
+  it('reports a locked requested thread instead of throwing', async () => {
+    const requested = createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z');
+    const switchThread = vi.fn().mockRejectedValue(new ThreadLockError('thread-requested', 4321));
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      controller: { setResourceId: vi.fn() },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([requested]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toEqual({
+      kind: 'locked',
+      threadId: 'thread-requested',
+      title: 'Requested',
+      ownerPid: 4321,
+    });
+    expect(state.controller.setResourceId).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
+  });
+
+  it('rethrows unexpected errors when switching to the requested thread', async () => {
+    const requested = createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z');
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([requested]),
+          switch: vi.fn().mockRejectedValue(new Error('storage offline')),
+        },
+      },
+    } as any;
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).rejects.toThrow('storage offline');
   });
 
   it('keeps an active persisted thread without deleting it', async () => {

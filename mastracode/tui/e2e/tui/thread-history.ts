@@ -13,8 +13,8 @@ function quoteSql(value: string): string {
 
 export const threadHistoryScenario: McE2eScenario = {
   name: 'thread-history',
-  description: 'Resume a persisted thread, then fork and rename it through the real TUI.',
-  testName: 'supports /resume, /fork, and /rename',
+  description: 'Resume a persisted thread, then clone and rename it through the real TUI.',
+  testName: 'supports /threads, /clone, /name, and their /resume and /rename aliases',
   inProcessApp({ startMastraCodeApp }) {
     return startMastraCodeApp({ tui: { resumeThreadId: 'thread-mc-e2e-seeded-history' } });
   },
@@ -75,14 +75,15 @@ values
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
     await runtime.waitForScreenText(/Recovered prior user request from a sanitized fixture/i, terminal);
 
-    terminal.submit(
-      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("RESUMED_ACTIVE_PACK="+s.models.activeModelPackId);\'',
-    );
-    await runtime.waitForScreenText(/RESUMED_ACTIVE_PACK=custom:Thread Resume E2E/i, terminal, 8_000);
+    terminal.submit('/models');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Thread Resume E2E.*\(current\)/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
-    terminal.submit('/resume');
+    terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
-    runtime.printScreen('after /resume', terminal);
+    runtime.printScreen('after /threads', terminal);
 
     terminal.write('seeded history');
     await runtime.waitForScreenText(/E2E seeded history fixture/i, terminal);
@@ -92,28 +93,28 @@ values
     await runtime.waitForScreenText(/Recovered assistant answer from sanitized history/i, terminal);
     runtime.printScreen('after seeded thread switch', terminal);
 
-    terminal.submit('/clone');
-    await runtime.waitForScreenText(/Fork the current thread\?/i, terminal);
-    terminal.write('\x1b');
-    await runtime.waitForScreenTextAbsent(/Fork the current thread\?/i, terminal);
-
-    terminal.submit('/threads');
+    terminal.submit('/resume');
     await runtime.waitForScreenText(/Select Thread/i, terminal);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Select Thread/i, terminal);
 
     terminal.submit('/fork');
-    await runtime.waitForScreenText(/Fork the current thread\?/i, terminal);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Give the forked thread a name\?/i, terminal);
-    terminal.write('\x1b');
-    await runtime.waitForScreenText(/Forked thread: Clone of E2E seeded history fixture/i, terminal);
+    await runtime.waitForScreenText(/Unknown command: fork/i, terminal);
 
-    terminal.submit('/rename Forked demo thread');
-    await runtime.waitForScreenText(/Thread renamed to: Forked demo thread/i, terminal);
-    terminal.submit('/resume');
-    await runtime.waitForScreenText(/Forked demo thread/i, terminal);
+    terminal.submit('/clone');
+    await runtime.waitForScreenText(/Clone the current thread\?/i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Give the cloned thread a name\?/i, terminal);
     terminal.write('\x1b');
-    runtime.printScreen('after /fork and /rename', terminal);
+    await runtime.waitForScreenText(/Cloned thread: Clone of E2E seeded history fixture/i, terminal);
+
+    terminal.submit('/name Cloned demo thread');
+    await runtime.waitForScreenText(/Thread renamed to: Cloned demo thread/i, terminal);
+    terminal.submit('/rename Renamed demo thread');
+    await runtime.waitForScreenText(/Thread renamed to: Renamed demo thread/i, terminal);
+    terminal.submit('/threads');
+    await runtime.waitForScreenText(/Renamed demo thread/i, terminal);
+    terminal.write('\x1b');
+    runtime.printScreen('after /clone and renames', terminal);
   },
 };

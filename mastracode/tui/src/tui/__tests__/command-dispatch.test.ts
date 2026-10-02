@@ -178,7 +178,7 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleModelCommand).not.toHaveBeenCalled();
   });
 
-  it('routes /fork and /clone to the thread clone handler', async () => {
+  it('routes /clone to the thread clone handler and does not register /fork', async () => {
     const state = {
       customSlashCommands: [],
       session: {
@@ -189,14 +189,16 @@ describe('dispatchSlashCommand routing', () => {
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
 
-    expect(await dispatchSlashCommand('/fork', state, () => ctx)).toBe(true);
     expect(await dispatchSlashCommand('/clone', state, () => ctx)).toBe(true);
-    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(2);
-    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(1, ctx);
-    expect(mocks.handleCloneCommand).toHaveBeenNthCalledWith(2, ctx);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledWith(ctx);
+
+    await dispatchSlashCommand('/fork', state, () => ctx);
+    expect(mocks.handleCloneCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: fork');
   });
 
-  it('routes /resume and /threads to the thread selector', async () => {
+  it('routes /threads and its /resume alias to the thread selector', async () => {
     const state = {
       customSlashCommands: [],
       session: {
@@ -214,7 +216,7 @@ describe('dispatchSlashCommand routing', () => {
     expect(mocks.handleThreadsCommand).toHaveBeenNthCalledWith(2, ctx);
   });
 
-  it('routes /rename and /name to the thread name handler', async () => {
+  it('routes /name and its /rename alias to the thread name handler', async () => {
     const state = {
       customSlashCommands: [],
       session: {

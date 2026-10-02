@@ -4,19 +4,40 @@ import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 
-export async function resumeThreadOnStartup(state: TUIState, requestedThreadId?: string): Promise<void> {
+export type StartupResumeIssue =
+  | { kind: 'missing'; threadId: string }
+  | { kind: 'locked'; threadId: string; title: string; ownerPid: number };
+
+/**
+ * Selects the thread to open at startup. A requested thread that is missing or
+ * locked does not throw; the session is left pending a new thread and the issue
+ * is returned so the caller can tell the user once the UI is ready.
+ */
+export async function resumeThreadOnStartup(
+  state: TUIState,
+  requestedThreadId?: string,
+): Promise<StartupResumeIssue | undefined> {
   const currentPath = state.projectInfo.rootPath;
   const allThreads = await state.session.thread.list(requestedThreadId ? { allResources: true } : undefined);
   const activeThreadId = state.session.thread.getId();
 
   if (requestedThreadId) {
     const thread = allThreads.find(candidate => candidate.id === requestedThreadId);
-    if (!thread) throw new Error(`Thread not found: ${requestedThreadId}`);
+    if (!thread) {
+      state.pendingNewThread = true;
+      return { kind: 'missing', threadId: requestedThreadId };
+    }
     if (thread.resourceId !== state.session.identity.getResourceId()) {
       await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
     }
     if (requestedThreadId !== activeThreadId) {
-      await state.session.thread.switch({ threadId: requestedThreadId });
+      try {
+        await state.session.thread.switch({ threadId: requestedThreadId });
+      } catch (error) {
+        if (!(error instanceof ThreadLockError)) throw error;
+        state.pendingNewThread = true;
+        return { kind: 'locked', threadId: thread.id, title: thread.title || thread.id, ownerPid: error.ownerPid };
+      }
     }
     state.pendingNewThread = false;
     return;

@@ -45,7 +45,7 @@ import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
 import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
-
+import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { BackgroundActivitySelectorComponent } from './components/background-activity-selector.js';
@@ -766,7 +766,7 @@ export class MastraTUI {
     this.state.ui.start();
 
     // Resume the latest unlocked thread for this directory.
-    await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
     await this.syncThreadActivePackMetadata();
 
     // Subscribe to controller events
@@ -824,6 +824,20 @@ export class MastraTUI {
     }
 
     await this.showQuietModePreferencePromptIfNeeded();
+
+    if (startupResumeIssue?.kind === 'missing') {
+      showError(
+        this.state,
+        `Thread not found: ${startupResumeIssue.threadId}. Started a new thread; use /threads to pick an existing one.`,
+      );
+    } else if (startupResumeIssue?.kind === 'locked') {
+      showThreadLockPrompt(
+        this.buildCommandContext(),
+        startupResumeIssue.title,
+        startupResumeIssue.ownerPid,
+        startupResumeIssue.threadId,
+      );
+    }
 
     // Check for updates after first render so network latency never blocks startup.
     void this.checkForUpdate().catch(() => {});

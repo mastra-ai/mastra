@@ -12,12 +12,12 @@ describe('buildHelpText', () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const text = buildHelpText(baseOpts);
     expect(text).toContain('/new');
-    expect(text).toMatch(/\/fork\s+Fork the current thread/);
-    expect(text).toMatch(/\/clone\s+Alias for \/fork/);
-    expect(text).toMatch(/\/resume\s+Resume an existing thread/);
-    expect(text).toMatch(/\/threads\s+Alias for \/resume/);
-    expect(text).toMatch(/\/rename\s+Rename current thread/);
-    expect(text).toMatch(/\/name\s+Alias for \/rename/);
+    expect(text).toMatch(/\/clone\s+Clone the current thread/);
+    expect(text).toMatch(/\/threads\s+Switch between threads/);
+    expect(text).toMatch(/\/resume\s+Alias for \/threads/);
+    expect(text).toMatch(/\/name\s+Rename current thread/);
+    expect(text).toMatch(/\/rename\s+Alias for \/name/);
+    expect(text).not.toMatch(/\/fork\b/);
     expect(text).toContain('/settings');
     expect(text).toMatch(/\/model\s+Change the current mode model/);
     expect(text).toMatch(/\/models\s+Switch model pack/);

@@ -267,17 +267,23 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
-    expect(commandNames).toContain('fork');
+    expect(commandNames).not.toContain('fork');
     expect(commandNames).toContain('resume');
     expect(commandNames).toContain('rename');
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'name')?.description).toBe(
-      'Alias for /rename',
+      'Rename current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'rename')?.description).toBe(
+      'Alias for /name',
     );
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'clone')?.description).toBe(
-      'Alias for /fork',
+      'Clone the current thread',
     );
     expect(autocompleteProviders[0]?.commands.find(command => command.name === 'threads')?.description).toBe(
-      'Alias for /resume',
+      'Switch between threads',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'resume')?.description).toBe(
+      'Alias for /threads',
     );
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');

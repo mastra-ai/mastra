@@ -2,4 +2,10 @@
 'mastracode': minor
 ---
 
-Added `/fork`, `/resume`, and `/rename` commands. Mastra Code resumes a requested thread or the latest unlocked thread for the current directory, and `mastracode resume <thread-id>` resumes a specific thread.
+Added `mastracode resume <thread-id>` to open a specific thread from the terminal. When you exit, Mastra Code prints the command to resume the current thread.
+
+```sh
+mastracode resume thread_abc123
+```
+
+Added `/resume` as an alias for `/threads` and `/rename` as an alias for `/name`.
