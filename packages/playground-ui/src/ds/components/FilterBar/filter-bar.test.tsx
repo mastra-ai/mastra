@@ -550,6 +550,20 @@ describe('FilterBar', () => {
       expect(valueSegment.getAttribute('title')).toBe('Running, Error');
     });
 
+    it('serializes chip field and operator options as strings', () => {
+      const { container } = render(
+        <Harness initial={[{ id: 'f', fieldId: 'status', operatorId: 'in', value: ['running', 'error'] }]} />,
+      );
+
+      const values = Array.from(
+        container.querySelectorAll<HTMLInputElement>('input[aria-hidden="true"]'),
+        input => input.value,
+      );
+      expect(values).toContain('Status');
+      expect(values).toContain('in');
+      expect(values).not.toContain('[object Object]');
+    });
+
     it('does not commit free text for strict fields', async () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);
