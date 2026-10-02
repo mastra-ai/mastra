@@ -4,6 +4,8 @@
 
 Added a storage API for querying individual completed spans with filters, cursors, bounded previews, and model cost.
 
+Shared cursor, timeout, and resource-limit errors now say "query" so they also describe span queries accurately. Error codes are unchanged.
+
 ```typescript
 import { planSpanQuery } from '@mastra/core/storage';
 

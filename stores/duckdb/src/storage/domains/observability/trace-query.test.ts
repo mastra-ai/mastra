@@ -56,7 +56,7 @@ describe('DuckDB advanced trace query', () => {
     await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
         code: 'TRACE_QUERY_RESOURCE_LIMIT',
-        message: 'The trace query exceeded its resource limit',
+        message: 'The query exceeded its resource limit',
       }),
     );
   });
