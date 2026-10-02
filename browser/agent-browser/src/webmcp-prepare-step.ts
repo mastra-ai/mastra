@@ -20,29 +20,18 @@
  * page emit the same tool bytes.
  */
 
+import type { PrepareStepFunction } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from './agent-browser';
 
 type MastraTool = ReturnType<typeof createTool>;
 
 /**
- * Minimal shape of a Mastra `prepareStep` function. Mirrors the public
- * contract without pulling in internal core types.
+ * Alias for Mastra's `prepareStep` function type. Re-exported so consumers of
+ * `@mastra/agent-browser` don't have to reach into `@mastra/core` just to
+ * reference the type.
  */
-export type WebMcpPrepareStepFn = (
-  args: WebMcpPrepareStepArgs,
-) => Promise<WebMcpPrepareStepResult | undefined | void> | WebMcpPrepareStepResult | undefined | void;
-
-export interface WebMcpPrepareStepArgs {
-  stepNumber: number;
-  tools?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-export interface WebMcpPrepareStepResult {
-  tools?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type WebMcpPrepareStepFn = PrepareStepFunction;
 
 export interface WebMcpPrepareStepConfig {
   mode: 'auto' | 'manual';

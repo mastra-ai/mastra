@@ -262,6 +262,95 @@ describe('Agent browser integration', () => {
       expect(browser.getSessionId('thread-456')).toBe('browser-123:thread-456');
     });
 
+    describe('getPrepareStep auto-injection', () => {
+      it('uses the browser prepareStep as the default when the user has none', async () => {
+        const browser = createMockBrowser();
+        const browserPrepareStep = vi.fn().mockReturnValue({ tools: {} });
+        (browser as any).getPrepareStep = () => browserPrepareStep;
+
+        const agent = new Agent({
+          id: 'with-browser-prepare-step' as const,
+          name: 'with-browser-prepare-step',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+        });
+
+        const defaults = await agent.getDefaultOptions();
+        expect(defaults.prepareStep).toBe(browserPrepareStep);
+      });
+
+      it('keeps the user prepareStep when defaultOptions already sets one', async () => {
+        const browser = createMockBrowser();
+        const browserPrepareStep = vi.fn();
+        (browser as any).getPrepareStep = () => browserPrepareStep;
+
+        const userPrepareStep = vi.fn();
+        const agent = new Agent({
+          id: 'user-prepare-step-wins' as const,
+          name: 'user-prepare-step-wins',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+          defaultOptions: { prepareStep: userPrepareStep },
+        });
+
+        const defaults = await agent.getDefaultOptions();
+        expect(defaults.prepareStep).toBe(userPrepareStep);
+        expect(browserPrepareStep).not.toHaveBeenCalled();
+      });
+
+      it('leaves prepareStep undefined when the browser does not expose one', async () => {
+        const browser = createMockBrowser();
+        // No getPrepareStep method defined
+        const agent = new Agent({
+          id: 'no-browser-prepare-step' as const,
+          name: 'no-browser-prepare-step',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+        });
+
+        const defaults = await agent.getDefaultOptions();
+        expect(defaults.prepareStep).toBeUndefined();
+      });
+
+      it('leaves prepareStep undefined when the browser returns undefined', async () => {
+        const browser = createMockBrowser();
+        (browser as any).getPrepareStep = () => undefined;
+
+        const agent = new Agent({
+          id: 'browser-prepare-step-off' as const,
+          name: 'browser-prepare-step-off',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+        });
+
+        const defaults = await agent.getDefaultOptions();
+        expect(defaults.prepareStep).toBeUndefined();
+      });
+
+      it('merges with dynamic defaultOptions resolved from a function', async () => {
+        const browser = createMockBrowser();
+        const browserPrepareStep = vi.fn();
+        (browser as any).getPrepareStep = () => browserPrepareStep;
+
+        const agent = new Agent({
+          id: 'dynamic-default-options' as const,
+          name: 'dynamic-default-options',
+          instructions: 'test',
+          model: createMockModel(),
+          browser,
+          defaultOptions: () => ({ maxSteps: 3 }),
+        });
+
+        const defaults = await agent.getDefaultOptions();
+        expect(defaults.prepareStep).toBe(browserPrepareStep);
+        expect(defaults.maxSteps).toBe(3);
+      });
+    });
+
     it('continues when browser state lookup fails', async () => {
       const browser = createMockBrowser();
       browser.isBrowserRunning = vi.fn().mockReturnValue(true);

@@ -3179,8 +3179,16 @@ export class Agent<
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | AgentExecutionOptions<TOutput>
     | Promise<AgentExecutionOptions<TOutput>> {
+    // Browsers can expose a prepareStep (e.g. WebMCP page tools). Treat it as a
+    // default: user-provided prepareStep (per-call or in defaultOptions) wins.
+    const withBrowserPrepareStep = <T extends AgentExecutionOptions<TOutput>>(options: T): T => {
+      const browserPrepareStep = this.#browser?.getPrepareStep?.();
+      if (!browserPrepareStep || options.prepareStep) return options;
+      return { ...options, prepareStep: browserPrepareStep };
+    };
+
     if (typeof this.#defaultOptions !== 'function') {
-      return this.#defaultOptions;
+      return withBrowserPrepareStep(this.#defaultOptions);
     }
 
     const result = this.#defaultOptions({
@@ -3203,7 +3211,7 @@ export class Agent<
         throw mastraError;
       }
 
-      return options;
+      return withBrowserPrepareStep(options);
     });
   }
 

@@ -18,12 +18,7 @@ export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
 export type { BrowserToolName } from './tools';
 
 // WebMCP mid-turn tool discovery types
-export type {
-  WebMcpPrepareStepFn,
-  WebMcpPrepareStepArgs,
-  WebMcpPrepareStepResult,
-  AttachedPageTool,
-} from './webmcp-prepare-step';
+export type { WebMcpPrepareStepFn, AttachedPageTool } from './webmcp-prepare-step';
 export type { WebmcpOptions, WebmcpProtocol, WebmcpToolDiscovery } from './types';
 
 // Schema exports

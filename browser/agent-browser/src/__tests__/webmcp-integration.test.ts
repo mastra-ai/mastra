@@ -420,7 +420,7 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       }
     }, 60_000);
 
-    it('an Agent calls first-class page tools via browser.prepareStep (auto mode)', async () => {
+    it('new Agent({ browser }) auto-wires prepareStep so page tools surface without any extra wiring (auto mode)', async () => {
       const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
 
       // Note: no discover tool. In auto mode, page tools are auto-merged every
@@ -518,18 +518,19 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
         },
       };
 
+      // No `tools` and no `prepareStep` wiring — just `browser`. The Agent
+      // pulls `browser.getTools()` and `browser.getPrepareStep()` on its own.
       const agent = new Agent({
         id: 'webmcp-prepare-step-test-agent',
         name: 'WebMCP prepareStep test agent',
         instructions: 'Use the available page_* tools to update the cart.',
         model: scriptedModel as never,
-        tools: browser.getTools() as never,
+        browser,
       });
 
       try {
         const result = await agent.generate('Add 2 of sku-9 to the cart.', {
           maxSteps: 8,
-          prepareStep: browser.prepareStep as never,
         });
         expect(result.text).toBe('Added 2x sku-9 to the cart.');
 

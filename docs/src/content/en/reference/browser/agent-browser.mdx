@@ -108,7 +108,7 @@ then interact with elements using their refs (e.g., @e5).`,
     name: 'webmcp',
     type: 'WebmcpOptions',
     description:
-      "Beta WebMCP settings. WebMCP is opt-in: pass { enabled: true } to have AgentBrowser inject an in-page bridge. Pass `browser.prepareStep` to agent.generate / agent.stream for page tools to surface as first-class `page_*` tools. `toolDiscovery: 'auto'` (default) auto-attaches every page tool each step; `'manual'` adds a browser_webmcp_discover tool so the agent attaches tools on demand. `protocols` restricts which surfaces the bridge listens for ('mcpb', 'w3c'); omit for all. `allowedOrigins` restricts which page origins can expose callable tools; omit to allow any origin. `toolPrefix` overrides the default `page_` tool id prefix.",
+      "Beta WebMCP settings. WebMCP is opt-in: pass { enabled: true } to have AgentBrowser inject an in-page bridge. When the browser is attached to an agent with `new Agent({ browser })`, page tools surface automatically as first-class `page_*` tools — no explicit `prepareStep` wiring needed. `toolDiscovery: 'auto'` (default) auto-attaches every page tool each step; `'manual'` adds a browser_webmcp_discover tool so the agent attaches tools on demand. `protocols` restricts which surfaces the bridge listens for ('mcpb', 'w3c'); omit for all. `allowedOrigins` restricts which page origins can expose callable tools; omit to allow any origin. `toolPrefix` overrides the default `page_` tool id prefix.",
     isOptional: true,
   },
 ]}
@@ -124,11 +124,26 @@ When `webmcp: { enabled: true, toolDiscovery: 'manual' }` is configured, `AgentB
 
 ## WebMCP surface
 
-`AgentBrowser` exposes a single `prepareStep` function. Pass it to `agent.generate` / `agent.stream`, and page WebMCP tools surface as first-class Mastra tools (`page_<tool_name>`) the agent can call directly.
+When WebMCP is enabled, page WebMCP tools surface as first-class Mastra tools (`page_<tool_name>`) the agent can call directly. Attach the browser to an agent and that's it:
+
+```typescript
+const browser = new AgentBrowser({ webmcp: { enabled: true } })
+
+const agent = new Agent({
+  name: 'shop',
+  instructions: '…',
+  model,
+  browser,
+})
+
+await agent.generate(input)
+```
+
+`new Agent({ browser })` calls `browser.getTools()` to pull in the browser's deterministic tools (already wired before this change) and `browser.getPrepareStep()` to pull in the step hook that merges page tools each step.
 
 ### `browser.prepareStep`
 
-A property, not a factory — one stable reference per browser instance. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is disabled, it's a no-op that returns `undefined`.
+A property, not a factory — one stable reference per browser instance. The Agent uses it automatically via `getPrepareStep()`; you only need to touch it directly to compose with other step logic or wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is disabled, it's a no-op that returns `undefined`.
 
 The tool list is memoized by the current page URL inside the function, so repeat steps on the same page produce the same tool bytes. Base `browser_*` tools win on name collision.
 

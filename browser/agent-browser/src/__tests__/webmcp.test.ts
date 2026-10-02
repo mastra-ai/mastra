@@ -72,6 +72,36 @@ describe('WebMCP: tool registration gating', () => {
   });
 });
 
+describe('WebMCP: getPrepareStep (Agent auto-wiring)', () => {
+  it('returns undefined when WebMCP is disabled', () => {
+    const browser = new AgentBrowser({ scope: 'shared' });
+    expect(browser.getPrepareStep()).toBeUndefined();
+  });
+
+  it('returns undefined when webmcp is an empty object', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
+    expect(browser.getPrepareStep()).toBeUndefined();
+  });
+
+  it('returns undefined when webmcp.enabled is false', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
+    expect(browser.getPrepareStep()).toBeUndefined();
+  });
+
+  it('returns the same prepareStep as browser.prepareStep when WebMCP is enabled', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    expect(browser.getPrepareStep()).toBe(browser.prepareStep);
+  });
+
+  it('returns the prepareStep in manual mode too', () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    expect(browser.getPrepareStep()).toBe(browser.prepareStep);
+  });
+});
+
 describe('WebMCP: bridge installation', () => {
   afterEach(async () => {
     vi.clearAllMocks();

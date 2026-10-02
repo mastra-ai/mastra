@@ -83,10 +83,14 @@ export class AgentBrowser extends MastraBrowser {
   /** Per-thread set of manually-attached WebMCP tools (`toolDiscovery: 'manual'`). */
   private readonly manualAttached = new Map<string, Map<string, AttachedPageTool>>();
   /**
-   * Pass this to `agent.generate(..., { prepareStep })` to make page WebMCP
-   * tools visible to the agent each step. In `auto` mode it merges all page
-   * tools; in `manual` mode it merges only the tools the agent attached via
-   * `browser_webmcp_discover`. When WebMCP is disabled it's a no-op.
+   * The step hook that makes page WebMCP tools visible to the agent. In `auto`
+   * mode it merges all page tools; in `manual` mode it merges only the tools
+   * the agent attached via `browser_webmcp_discover`. When WebMCP is disabled
+   * it's a no-op.
+   *
+   * You rarely need this directly: `new Agent({ browser })` auto-wires it via
+   * {@link getPrepareStep}. Pass it to `agent.generate(..., { prepareStep })`
+   * only if you want to compose it with other logic yourself.
    */
   readonly prepareStep: WebMcpPrepareStepFn;
 
@@ -407,6 +411,15 @@ export class AgentBrowser extends MastraBrowser {
       }
     }
     return tools;
+  }
+
+  /**
+   * Called by `new Agent({ browser })` so page WebMCP tools surface each step
+   * without the user wiring `prepareStep` themselves. Returns `undefined` when
+   * WebMCP is disabled so no step hook is attached.
+   */
+  getPrepareStep(): WebMcpPrepareStepFn | undefined {
+    return this.webMcpSettings ? this.prepareStep : undefined;
   }
 
   // ---------------------------------------------------------------------------

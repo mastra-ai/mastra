@@ -85,21 +85,28 @@ Breaking changes may occur without a major version bump until the API is stable.
 
 AgentBrowser can call tools that web pages expose through WebMCP, so a site can offer first-class actions (checkout, create order, assign ticket) directly to an agent instead of making it work through the DOM.
 
-WebMCP is opt-in. With `enabled: true`, AgentBrowser injects a small in-page bridge before any page script runs. To make the page's tools visible to the agent, pass `browser.prepareStep` to `generate` or `stream`:
+WebMCP is opt-in. With `enabled: true`, AgentBrowser injects a small in-page bridge before any page script runs. Attach the browser to an agent with `new Agent({ browser })` and page tools surface automatically — the Agent pulls the tools and the step hook from the browser itself:
 
 ```typescript
 const browser = new AgentBrowser({ webmcp: { enabled: true } })
 
-await agent.generate('Add 2 of sku-9 to the cart', {
-  prepareStep: browser.prepareStep,
+const agent = new Agent({
+  name: 'shop',
+  instructions: '…',
+  model,
+  browser,
 })
+
+await agent.generate('Add 2 of sku-9 to the cart')
 ```
 
 Page tools surface as first-class agent tools named `page_<tool_name>`. The wrapper calls through the host-side `callWebMcpTool`, so page execution, origin checks, and TOCTOU protection stay in place. Base `browser_*` tools win on name collision.
 
+If you prefer to compose things yourself, `browser.prepareStep` is a stable property you can pass to `agent.generate` / `agent.stream` or set in `defaultOptions.prepareStep`. A user-supplied `prepareStep` always wins over the browser's auto-injected one.
+
 ### Discovery modes
 
-`webmcp.toolDiscovery` chooses when page tools appear in the agent's toolset. `browser.prepareStep` must be wired in either mode for anything to surface.
+`webmcp.toolDiscovery` chooses when page tools appear in the agent's toolset.
 
 - `'auto'` (default): every tool the current page exposes is merged into the toolset each step. The agent can call `page_<tool>` immediately after `browser_goto` resolves.
 - `'manual'`: no page tools are attached until the agent calls the `browser_webmcp_discover` tool. Pass no arguments to attach every tool, or pass `names` to attach a subset:
