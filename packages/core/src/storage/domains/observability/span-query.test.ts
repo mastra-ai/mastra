@@ -77,14 +77,21 @@ describe('span query contract prototype', () => {
     { timeRange: { from: timeRange.from, to: timeRange.from } },
     { timeRange: { from: timeRange.from, to: '2026-11-02T00:00:00Z' } },
     { where: { spans: { some: where } } },
-    { where: { op: 'eq', left: { path: 'durationMs' }, right: { literal: '1000' } } },
-    { where: { op: 'gt', left: { path: 'name' }, right: { literal: 'a' } } },
-    { where: { op: 'eq', left: { path: 'attributes.retry.count' }, right: { literal: 2 } } },
-    { where: { op: 'eq', left: { path: 'metadata.customer' }, right: { literal: 'a' } } },
-    { where: { op: 'eq', left: { path: 'input' }, right: { literal: 'a' } } },
-    { where: { op: 'exists', path: '__proto__' } },
   ])('rejects unsupported or invalid request fields: %j', overrides => {
     expect(spanQueryRequestSchema.safeParse({ timeRange, ...overrides }).success).toBe(false);
+  });
+
+  it.each([
+    [{ op: 'eq', left: { path: 'durationMs' }, right: { literal: '1000' } }, 'invalid_literal'],
+    [{ op: 'gt', left: { path: 'name' }, right: { literal: 'a' } }, 'operator_not_allowed'],
+    [{ op: 'eq', left: { path: 'attributes.retry.count' }, right: { literal: 2 } }, 'field_not_allowed'],
+    [{ op: 'eq', left: { path: 'metadata.customer' }, right: { literal: 'a' } }, 'field_not_allowed'],
+    [{ op: 'eq', left: { path: 'input' }, right: { literal: 'a' } }, 'field_not_allowed'],
+    [{ op: 'exists', path: '__proto__' }, 'field_not_allowed'],
+  ])('preserves the planner issue for invalid span predicate %j', (predicate, code) => {
+    expect(() => planSpanQuery({ timeRange, where: predicate })).toThrowError(
+      expect.objectContaining({ issues: expect.arrayContaining([expect.objectContaining({ code })]) }),
+    );
   });
 
   it('guards recursive grammar before parsing, including cyclic objects', () => {

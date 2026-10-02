@@ -50,13 +50,7 @@ const requestSchema = z
       .strict()
       .default({ limit: 100 }),
   })
-  .strict()
-  .superRefine((request, context) => {
-    if (!request.where) return;
-    const issues: TraceQueryIssue[] = [];
-    planSpanQuerySelectionPredicate(request.where, issues);
-    for (const issue of issues) context.addIssue({ code: 'custom', path: issue.path, message: issue.message });
-  });
+  .strict();
 
 export const spanQueryRequestSchema = z.preprocess((input, context) => {
   const path = findPredicateComplexityIssue(input, [['where']]);
