@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMetricsFilters } from './use-metrics-filters';
-import { formatCompactNumber } from '@/lib/cost';
-import { getOrCreate } from '@/lib/map';
+import { formatCompactNumber } from '../shared/cost';
+import { getOrCreate } from '../shared/map';
+import type { MetricsQueryFilters } from './metrics-query-filters';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface ModelUsageRow {
   model: string;
@@ -14,9 +14,9 @@ export interface ModelUsageRow {
   costUnit: string | null;
 }
 
-export function useModelUsageCostMetrics() {
+export function useModelUsageCostMetrics(params: MetricsQueryFilters) {
   const client = useMastraClient();
-  const { filters, filterKey } = useMetricsFilters();
+  const { filters, filterKey } = params;
 
   return useQuery({
     queryKey: ['metrics', 'model-usage-cost', filterKey],

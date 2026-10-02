@@ -1,4 +1,4 @@
-import { formatDate, formatShortDate } from '../../utils/date-format';
+import { formatDate, formatShortDate } from '../shared/date-format';
 
 export type MetricsInterval = '1h' | '1d';
 

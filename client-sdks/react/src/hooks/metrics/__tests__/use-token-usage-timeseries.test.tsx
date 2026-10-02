@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
+import type { GetMetricTimeSeriesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
-import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
-import type { ReactNode } from 'react';
-import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 
+import type { MetricsDatePreset as DatePreset } from '../metrics-query-filters';
+import { useTokenUsageTimeSeries } from '../use-token-usage-timeseries';
 import {
   costlessInputTokenSeries,
   emptyTokenSeries,
@@ -19,14 +19,10 @@ import {
   outputTokenSeries,
   partlyUnstampedInputTokenSeries,
   unpricedUnitOutputTokenSeries,
-} from './__tests__/fixtures/token-usage-timeseries';
-import { MetricsProvider } from './use-metrics';
-import type { DatePreset, DateRange } from './use-metrics';
-import { useTokenUsageTimeSeries } from './use-token-usage-timeseries';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
-
-const BASE_URL = 'http://localhost:4111';
-const server = setupServer();
+} from './fixtures/token-usage-timeseries';
+import { makeMetricsWrapper, useTestMetricsFilters } from '@/test/metrics-wrapper';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL } from '@/test/render';
 
 type RequestBody = {
   name?: string[];
@@ -39,54 +35,19 @@ type RequestBody = {
   };
 };
 
-function makeWrapper({
-  preset = '3d',
-  filterTokens = [],
-  customRange,
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-}: {
-  preset?: DatePreset;
-  filterTokens?: PropertyFilterToken[];
-  customRange?: DateRange;
-  queryClient?: QueryClient;
-} = {}) {
-  return ({ children }: { children: ReactNode }) => (
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <MetricsProvider
-          preset={preset}
-          filterTokens={filterTokens}
-          customRange={customRange}
-          onPresetChange={() => {}}
-          onFilterTokensChange={() => {}}
-        >
-          {children}
-        </MetricsProvider>
-      </QueryClientProvider>
-    </MastraReactProvider>
-  );
-}
-
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-
-afterEach(() => {
-  cleanup();
-  server.resetHandlers();
-});
-
-afterAll(() => server.close());
-
 describe('useTokenUsageTimeSeries', () => {
   it('merges input and output points by bucket and keeps cost units', async () => {
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         const body = (await request.json()) as RequestBody;
         if (body.name?.[0] === 'mastra_model_total_input_tokens') return HttpResponse.json(inputTokenSeries);
         return HttpResponse.json(outputTokenSeries);
       }),
     );
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper({ preset: '3d' }) });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({ preset: '3d' }),
+    });
 
     await waitFor(() => {
       expect(result.current.data?.data).toHaveLength(3);
@@ -128,14 +89,16 @@ describe('useTokenUsageTimeSeries', () => {
   it('uses hourly buckets for the 24h preset', async () => {
     const onTimeseries = vi.fn<(body: RequestBody) => void>();
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         const body = (await request.json()) as RequestBody;
         onTimeseries(body);
         return HttpResponse.json(emptyTokenSeries);
       }),
     );
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper({ preset: '24h' }) });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({ preset: '24h' }),
+    });
 
     await waitFor(() => {
       expect(result.current.data?.interval).toBe('1h');
@@ -148,15 +111,15 @@ describe('useTokenUsageTimeSeries', () => {
   it('uses hourly buckets for a custom range of 48h or less', async () => {
     const onTimeseries = vi.fn<(body: RequestBody) => void>();
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         onTimeseries((await request.json()) as RequestBody);
         return HttpResponse.json(emptyTokenSeries);
       }),
     );
     const customRange = { from: new Date('2026-06-01T00:00:00.000Z'), to: new Date('2026-06-02T12:00:00.000Z') };
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), {
-      wrapper: makeWrapper({ preset: 'custom', customRange }),
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({ preset: 'custom', customRange }),
     });
 
     await waitFor(() => {
@@ -167,10 +130,12 @@ describe('useTokenUsageTimeSeries', () => {
 
   it('returns an empty list for empty series', async () => {
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, () => HttpResponse.json(emptyTokenSeries)),
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, () => HttpResponse.json(emptyTokenSeries)),
     );
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper({ preset: '7d' }) });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({ preset: '7d' }),
+    });
 
     await waitFor(() => {
       expect(result.current.data?.data).toEqual([]);
@@ -180,20 +145,17 @@ describe('useTokenUsageTimeSeries', () => {
   it('passes dimensional filters through with the timestamp filter', async () => {
     const onTimeseries = vi.fn<(body: RequestBody) => void>();
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         const body = (await request.json()) as RequestBody;
         onTimeseries(body);
         return HttpResponse.json(emptyTokenSeries);
       }),
     );
 
-    renderHook(() => useTokenUsageTimeSeries(), {
-      wrapper: makeWrapper({
+    renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({
         preset: '3d',
-        filterTokens: [
-          { fieldId: 'rootEntityType', value: EntityType.AGENT },
-          { fieldId: 'entityName', value: 'research-agent' },
-        ],
+        dimensionalFilter: { rootEntityType: EntityType.AGENT, entityName: 'research-agent' },
       }),
     });
 
@@ -212,9 +174,9 @@ describe('useTokenUsageTimeSeries', () => {
     expect(inputRequest.filters?.entityName).toBe('research-agent');
   });
 
-  const serveSeries = (input: unknown, output: unknown) =>
+  const serveSeries = (input: GetMetricTimeSeriesResponse, output: GetMetricTimeSeriesResponse) =>
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         const body = (await request.json()) as RequestBody;
         return HttpResponse.json(body.name?.[0] === 'mastra_model_total_input_tokens' ? input : output);
       }),
@@ -223,13 +185,15 @@ describe('useTokenUsageTimeSeries', () => {
   it('asks for the token metrics it charts, summed', async () => {
     const onTimeseries = vi.fn<(body: RequestBody) => void>();
     server.use(
-      http.post(`${BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, async ({ request }) => {
         onTimeseries((await request.json()) as RequestBody);
         return HttpResponse.json(emptyTokenSeries);
       }),
     );
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data).toBeDefined());
 
@@ -243,7 +207,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('labels hourly buckets by their time of day, in order', async () => {
     serveSeries(hourlyInputTokenSeries, emptyTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper({ preset: '24h' }) });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper({ preset: '24h' }),
+    });
 
     await waitFor(() => expect(result.current.data?.data).toHaveLength(2));
 
@@ -254,7 +220,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('drops the cost unit when two series disagree on it', async () => {
     serveSeries(inputTokenSeries, eurOutputTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data.length).toBeGreaterThan(0));
 
@@ -270,7 +238,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('drops the cost unit when a priced series does not name one', async () => {
     serveSeries(emptyTokenSeries, unpricedUnitOutputTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
 
@@ -283,7 +253,9 @@ describe('useTokenUsageTimeSeries', () => {
     // in nothing at all. Adding them up gives a number in no known currency.
     serveSeries(inputTokenSeries, unpricedUnitOutputTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data.length).toBeGreaterThan(0));
 
@@ -298,7 +270,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('leaves cost empty when the provider prices nothing', async () => {
     serveSeries(costlessInputTokenSeries, emptyTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
 
@@ -308,7 +282,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('skips a bucket the backend could not stamp', async () => {
     serveSeries(partlyUnstampedInputTokenSeries, emptyTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
 
@@ -323,12 +299,12 @@ describe('useTokenUsageTimeSeries', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    const wrapperWith = (preset: DatePreset) => makeWrapper({ preset, queryClient });
+    const wrapperWith = (preset: DatePreset) => makeMetricsWrapper({ preset, queryClient });
 
-    const daily = renderHook(() => useTokenUsageTimeSeries(), { wrapper: wrapperWith('3d') });
+    const daily = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), { wrapper: wrapperWith('3d') });
     await waitFor(() => expect(daily.result.current.data?.interval).toBe('1d'));
 
-    const hourly = renderHook(() => useTokenUsageTimeSeries(), { wrapper: wrapperWith('24h') });
+    const hourly = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), { wrapper: wrapperWith('24h') });
     await waitFor(() => expect(hourly.result.current.data?.interval).toBe('1h'));
 
     expect(hourly.result.current.data?.data.map(point => point.time)).toEqual(['12:05 AM', '1:45 PM']);
@@ -347,7 +323,9 @@ describe('useTokenUsageTimeSeries', () => {
   it('returns an empty list when a response carries no series', async () => {
     serveSeries(noTokenSeries, noTokenSeries);
 
-    const { result } = renderHook(() => useTokenUsageTimeSeries(), { wrapper: makeWrapper() });
+    const { result } = renderHook(() => useTokenUsageTimeSeries(useTestMetricsFilters()), {
+      wrapper: makeMetricsWrapper(),
+    });
 
     await waitFor(() => expect(result.current.data?.data).toEqual([]));
   });

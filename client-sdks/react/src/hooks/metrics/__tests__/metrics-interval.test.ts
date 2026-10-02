@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chooseMetricsInterval, formatMetricsBucketLabel } from './metrics-interval';
+import { chooseMetricsInterval, formatMetricsBucketLabel } from '../metrics-interval';
 
 const HOUR = 60 * 60 * 1000;
 const end = new Date('2026-09-24T12:00:00.000Z');

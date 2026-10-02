@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMetricsFilters } from './use-metrics-filters';
-import { getOrCreate } from '@/lib/map';
-import { formatDate } from '@/utils/date-format';
+import { formatDate } from '../shared/date-format';
+import { getOrCreate } from '../shared/map';
+import type { MetricsQueryFilters } from './metrics-query-filters';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface ScorerSummary {
   scorer: string;
@@ -17,9 +17,9 @@ export interface ScoresOverTimePoint {
   [scorer: string]: string | number;
 }
 
-export function useScoresMetrics() {
+export function useScoresMetrics(params: MetricsQueryFilters) {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { datePreset, customRange, timestamp } = params;
 
   return useQuery({
     queryKey: ['metrics', 'scores-card', datePreset, customRange],

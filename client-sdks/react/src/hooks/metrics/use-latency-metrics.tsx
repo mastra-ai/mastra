@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { chooseMetricsInterval, formatMetricsBucketLabel } from '../metrics-interval';
-import type { MetricsInterval } from '../metrics-interval';
-import { useMetricsFilters } from './use-metrics-filters';
+import { chooseMetricsInterval, formatMetricsBucketLabel } from './metrics-interval';
+import type { MetricsInterval } from './metrics-interval';
+import type { MetricsQueryFilters } from './metrics-query-filters';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface LatencyPoint {
   [key: string]: unknown;
@@ -46,9 +46,9 @@ async function fetchPercentiles(
   });
 }
 
-export function useLatencyMetrics() {
+export function useLatencyMetrics(params: MetricsQueryFilters) {
   const client = useMastraClient();
-  const { timestamp, filters, filterKey } = useMetricsFilters();
+  const { timestamp, filters, filterKey } = params;
   const interval = chooseMetricsInterval(timestamp);
 
   return useQuery({

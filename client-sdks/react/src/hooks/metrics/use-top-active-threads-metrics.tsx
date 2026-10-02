@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useMetricsFilters } from './use-metrics-filters';
-import { getOrCreate } from '@/lib/map';
+import { getOrCreate } from '../shared/map';
+import type { MetricsQueryFilters } from './metrics-query-filters';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface ActiveThreadRow {
   threadId: string;
@@ -21,9 +21,9 @@ const TOP_N = 20;
  *
  *  Tokens + cost are joined in from parallel breakdowns on the same `threadId`
  *  grouping so we don't need any new backend aggregation support. */
-export function useTopActiveThreadsMetrics() {
+export function useTopActiveThreadsMetrics(params: MetricsQueryFilters) {
   const client = useMastraClient();
-  const { filters, filterKey } = useMetricsFilters();
+  const { filters, filterKey } = params;
 
   return useQuery({
     queryKey: ['metrics', 'top-active-threads', filterKey],

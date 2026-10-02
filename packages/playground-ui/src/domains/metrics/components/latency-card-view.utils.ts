@@ -1,4 +1,4 @@
-import type { LatencyPoint } from '../hooks/use-latency-metrics';
+import type { LatencyPoint } from '@mastra/react/hooks';
 
 export type LatencyTab = 'agents' | 'workflows' | 'tools';
 

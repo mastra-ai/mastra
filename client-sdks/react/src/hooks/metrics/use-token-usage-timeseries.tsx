@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { chooseMetricsInterval, formatMetricsBucketLabel } from '../metrics-interval';
-import type { MetricsInterval } from '../metrics-interval';
-import { useMetricsFilters } from './use-metrics-filters';
+import { chooseMetricsInterval, formatMetricsBucketLabel } from './metrics-interval';
+import type { MetricsInterval } from './metrics-interval';
+import type { MetricsQueryFilters } from './metrics-query-filters';
+import { useMastraClient } from '@/mastra-client-context';
 
 export type TokenUsageTimeSeriesInterval = MetricsInterval;
 
@@ -79,9 +79,9 @@ function toCostUnit(entry: TokenTimelineAccumulator): string | null {
   return [...entry.costUnits][0] ?? null;
 }
 
-export function useTokenUsageTimeSeries() {
+export function useTokenUsageTimeSeries(params: MetricsQueryFilters) {
   const client = useMastraClient();
-  const { timestamp, filters, filterKey } = useMetricsFilters();
+  const { timestamp, filters, filterKey } = params;
   const interval = chooseMetricsInterval(timestamp);
 
   return useQuery({
