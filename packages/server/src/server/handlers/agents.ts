@@ -2820,6 +2820,9 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
       sanitizeBody(params, ['tools', 'actor']);
       stripClientCredentialHeaders(params);
+      if (params.streamOptions && typeof params.streamOptions === 'object' && !Array.isArray(params.streamOptions)) {
+        stripClientCredentialHeaders(params.streamOptions as Record<string, unknown>);
+      }
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,

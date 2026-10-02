@@ -2493,6 +2493,60 @@ describe('Agent Routes Authorization', () => {
       expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
     });
 
+    it.each([true, false])(
+      'should strip nested credential headers from tool approval (approved=%s)',
+      async approved => {
+        const sendToolApproval = vi.fn(async params => ({
+          accepted: true,
+          runId: 'run-123',
+          toolCallId: params.toolCallId,
+        }));
+        (mockAgent as any).sendToolApproval = sendToolApproval;
+        const requestContext = new RequestContext();
+        const streamOptions = {
+          maxSteps: 4,
+          modelSettings: {
+            temperature: 0.3,
+            headers: {
+              aUtHoRiZaTiOn: 'Bearer client-token',
+              'Proxy-Authorization': 'Basic proxy-token',
+              'X-API-Key': 'client-key',
+              'Api-Key': 'client-key',
+              'X-Goog-Api-Key': 'client-key',
+              COOKIE: 'session=client-token',
+              'X-Trace-Id': 'trace-123',
+            },
+          },
+        };
+
+        const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          ...sendToolApprovalBodySchema.parse({
+            resourceId: 'resource-123',
+            threadId: 'thread-123',
+            toolCallId: 'tool-call-123',
+            approved,
+            streamOptions,
+          }),
+        });
+
+        expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+        expect(sendToolApproval).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            approved,
+            streamOptions: {
+              maxSteps: 4,
+              modelSettings: { temperature: 0.3, headers: { 'X-Trace-Id': 'trace-123' } },
+              requestContext,
+            },
+          }),
+        );
+      },
+    );
+
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
