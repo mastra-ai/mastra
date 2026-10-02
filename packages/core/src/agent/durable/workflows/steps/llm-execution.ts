@@ -2,6 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
+import { serializeError } from '../../../../events/codec/error';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
@@ -274,14 +275,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             from: ChunkFrom.AGENT,
             // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
             // transports, which destroys the producer stack and makes crashes
-            // unattributable on the consumer side.
-            payload: {
-              error: {
-                message: fatalError.message,
-                stack: fatalError.stack,
-                name: fatalError.name,
-              },
-            },
+            // unattributable on the consumer side. Own fields (statusCode, ...)
+            // are kept so the caller sees the full provider error.
+            payload: { error: serializeError(fatalError) },
           });
 
           // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
@@ -1812,6 +1808,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'error': {
                     const payload = rawChunk.payload as any;
+                    // Pass the provider error through unchanged (keeps statusCode,
+                    // isRetryable, responseBody, ...) so error processors and the
+                    // caller see the same error the regular engine surfaces.
+                    if (payload?.error instanceof Error) {
+                      throw payload.error;
+                    }
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
                     const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
                     // Keep the producer's stack so crashes stay attributable to their real throw site.

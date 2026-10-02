@@ -224,6 +224,7 @@ type AgentThreadRunSuspension = {
 type AgentThreadRunContinuation<OUTPUT = unknown> = {
   sourceOutput: MastraModelOutput<OUTPUT>;
   canContinue: () => boolean;
+  didPublishTerminal: () => boolean;
 };
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
@@ -1965,6 +1966,7 @@ export class AgentThreadStreamRuntime {
     let done = false;
     let cancelled = false;
     let failed = false;
+    let publishedTerminal = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
     let suspensionBoundaryHandler: (() => Promise<void>) | undefined;
@@ -2032,6 +2034,15 @@ export class AgentThreadStreamRuntime {
           ? { pinned: true }
           : {}),
       });
+      const typedPart = part as { type?: string; finishReason?: string; payload?: { finishReason?: string } };
+      const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+      if (
+        typedPart.type === 'error' ||
+        typedPart.type === 'abort' ||
+        (typedPart.type === 'finish' && finishReason !== 'tool-calls')
+      ) {
+        publishedTerminal = true;
+      }
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
@@ -2245,6 +2256,7 @@ export class AgentThreadStreamRuntime {
       setSuspensionBoundaryHandler: (handler: () => Promise<void>) => {
         suspensionBoundaryHandler = handler;
       },
+      didPublishTerminal: () => publishedTerminal,
       broadcastFinished,
     };
   }
@@ -2399,6 +2411,11 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** Capture whether the currently registered continuation publishes its terminal stream part. */
+  captureThreadRunTerminalPublish(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.didPublishTerminal;
   }
 
   getResumableThreadRunSuspension(
@@ -2860,6 +2877,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       canContinueBroadcast,
       setSuspensionBoundaryHandler,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
@@ -2885,7 +2903,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -2978,6 +2996,7 @@ export class AgentThreadStreamRuntime {
       cancelBroadcast,
       canContinueBroadcast,
       setSuspensionBoundaryHandler,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const record: AgentThreadRunRecord<OUTPUT> = {
@@ -2996,7 +3015,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -3965,7 +3984,12 @@ export class AgentThreadStreamRuntime {
       orderBy: { field: 'createdAt', direction: 'DESC' },
       hideSignals: options.hideSignals,
     });
-    return { messages: [...result.messages].reverse(), hasMore: result.hasMore };
+    // DESC selects the newest page; implementations differ in the order they
+    // return it (Memory sorts chronologically, storage-backed mocks keep DESC).
+    const messages = [...result.messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    return { messages, hasMore: result.hasMore };
   }
 
   async subscribeToThread<OUTPUT = unknown>(

@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 1.30.0-alpha.0
+
+### Minor Changes
+
+- Added `aggregateTraces()` support to the PostgreSQL observability store. The store now advertises the `trace-aggregate` capability and returns grouped counts, error rates, duration statistics, and time-bucketed series over the same traces that `queryTraces()` selects. ([#25722](https://github.com/mastra-ai/mastra/pull/25722))
+
+  ```ts
+  const plan = planTraceAggregate(
+    parseTraceAggregateRequest({
+      timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'errorRate'],
+    }),
+  );
+  const { rows, truncated } = await observability.aggregateTraces(plan);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e)]:
+  - @mastra/core@1.75.0-alpha.1
+
 ## 1.29.0
 
 ### Minor Changes

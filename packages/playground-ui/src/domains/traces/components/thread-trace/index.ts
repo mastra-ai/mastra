@@ -2,13 +2,12 @@ import { ThreadTraceDetails, ThreadTraceDetailsActions, ThreadTraceDetailsHeader
 import { ThreadTraceList } from './thread-trace-list';
 import {
   ThreadTraceMessages,
-  ThreadTraceMessagesHeader,
   ThreadTraceTab,
   ThreadTraceTabContent,
   ThreadTraceTabList,
 } from './thread-trace-messages';
 import { ThreadTraceRoot } from './thread-trace-root';
-import { ThreadTraceRow } from './thread-trace-row';
+import { ThreadTraceDivider, ThreadTraceRow, ThreadTraceRowBody } from './thread-trace-row';
 import { ThreadTraceSpanPanel } from './thread-trace-span-panel';
 import { ThreadTraceSpans } from './thread-trace-spans';
 
@@ -23,20 +22,22 @@ import { ThreadTraceSpans } from './thread-trace-spans';
  *   <ThreadTrace.List>
  *     {ids.map((traceId, i) => (
  *       <ThreadTrace.Row key={traceId} traceId={traceId}>
- *         <ThreadTrace.Messages>
- *           <ThreadTrace.MessagesHeader>
- *             <ThreadTrace.TabList>
- *               <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
- *             </ThreadTrace.TabList>
- *           </ThreadTrace.MessagesHeader>
- *           <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
- *         </ThreadTrace.Messages>
- *         <ThreadTrace.Details>
- *           <ThreadTrace.DetailsHeader>
- *             <ThreadTrace.DetailsActions>…</ThreadTrace.DetailsActions>
- *           </ThreadTrace.DetailsHeader>
- *           <ThreadTrace.Spans />
- *         </ThreadTrace.Details>
+ *         <ThreadTrace.Divider label={`Turn ${i + 1}`}>
+ *           <ThreadTrace.TabList>
+ *             <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+ *           </ThreadTrace.TabList>
+ *         </ThreadTrace.Divider>
+ *         <ThreadTrace.RowBody>
+ *           <ThreadTrace.Messages>
+ *             <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
+ *           </ThreadTrace.Messages>
+ *           <ThreadTrace.Details>
+ *             <ThreadTrace.DetailsHeader>
+ *               <ThreadTrace.DetailsActions>…</ThreadTrace.DetailsActions>
+ *             </ThreadTrace.DetailsHeader>
+ *             <ThreadTrace.Spans />
+ *           </ThreadTrace.Details>
+ *         </ThreadTrace.RowBody>
  *       </ThreadTrace.Row>
  *     ))}
  *   </ThreadTrace.List>
@@ -46,8 +47,9 @@ import { ThreadTraceSpans } from './thread-trace-spans';
 export const ThreadTrace = Object.assign(ThreadTraceRoot, {
   List: ThreadTraceList,
   Row: ThreadTraceRow,
+  Divider: ThreadTraceDivider,
+  RowBody: ThreadTraceRowBody,
   Messages: ThreadTraceMessages,
-  MessagesHeader: ThreadTraceMessagesHeader,
   TabList: ThreadTraceTabList,
   Tab: ThreadTraceTab,
   TabContent: ThreadTraceTabContent,
@@ -65,10 +67,9 @@ export type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 export { THREAD_TRACE_MESSAGES_TAB } from './thread-trace-row';
 export type { ThreadTraceRootProps } from './thread-trace-root';
 export type { ThreadTraceListProps } from './thread-trace-list';
-export type { ThreadTraceRowProps } from './thread-trace-row';
+export type { ThreadTraceRowProps, ThreadTraceRowBodyProps, ThreadTraceDividerProps } from './thread-trace-row';
 export type {
   ThreadTraceMessagesProps,
-  ThreadTraceMessagesHeaderProps,
   ThreadTraceTabListProps,
   ThreadTraceTabProps,
   ThreadTraceTabContentProps,

@@ -2087,6 +2087,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext,
             processorStates,
             requestContext,
+            abortSignal: options?.abortSignal,
           },
         });
 
