@@ -421,6 +421,9 @@ async function startMastraCodeApp(
       stopped = true;
       tui.stop();
       result.threadScheduler.stop();
+      // As in the production asyncCleanup(): stop delivering notifications and
+      // release the dispatch leases before storage and the pubsub close.
+      await result.stopNotificationDispatch?.().catch(() => {});
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
