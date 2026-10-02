@@ -28,11 +28,13 @@ import { RequestContext } from '../../../request-context';
 import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import {
   DurableExecutionFenceError,
+  EXECUTION_ABANDONED_ERROR_ID,
   EXECUTION_CONFLICT_ERROR_ID,
   EXECUTION_LEASE_TTL_MS,
   ExecutionFence,
@@ -521,6 +523,89 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       await vi.waitFor(async () => expect(await assistantText(memory)).toContain('recovered answer'));
       expect(await assistantText(memory)).not.toContain('stale answer');
       expect(recovering.calls()).toBe(1);
+      recovered.cleanup();
+    });
+
+    it('shutdown() stops an execution still running at the drain deadline without writing, and releases the run so the next boot recovers it without force', async () => {
+      const storage = createStorage(backend);
+      const memory = new MockMemory({ storage });
+      const stuck = gatedModel('stale answer from the process that shut down');
+      const durableAgent = createDurableAgent({
+        agent: new Agent({
+          id: 'fence-agent',
+          name: 'Fence Agent',
+          instructions: 'You are a helpful agent.',
+          model: stuck.model as LanguageModelV2,
+          memory,
+        }),
+        pubsub,
+      });
+      const mastra = new Mastra({
+        agents: { 'fence-agent': durableAgent as any },
+        logger: false,
+        storage,
+        pubsub,
+        recovery: { durableAgents: 'auto' },
+      });
+
+      const started = await durableAgent.stream('What is the answer?', {
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      const { runId } = started;
+      const stream = collect(started.fullStream);
+      const events: string[] = [];
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
+      });
+      await stuck.entered;
+      await waitForCheckpoint(storage, runId);
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const { signal } = globalRunRegistry.get(runId)!.abortController!;
+      const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+
+      // ---- The model call outlives the drain deadline.
+      await mastra.shutdown({ drainTimeout: 50 });
+
+      expect(signal.aborted).toBe(true);
+      expect(signal.reason).toMatchObject({ id: EXECUTION_ABANDONED_ERROR_ID });
+      expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+      expect(await fence.settle(async () => {})).toBe('superseded');
+      expect(await foreign.owner(fence.agentId, runId)).toBeUndefined();
+
+      // ---- The model call returns after shutdown: nothing it produces lands.
+      stuck.release();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(await assistantText(memory)).not.toContain('stale answer');
+      const workflows = (await storage.getStore('workflows'))!;
+      const checkpoint = await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+      expect(checkpoint?.status).toBe('running');
+      expect(events).not.toContain('finish');
+      expect(events).not.toContain('error');
+      expect(events).not.toContain('chunk:finish');
+      expect(events).not.toContain('chunk:error');
+      await stream.stop();
+      started.cleanup();
+
+      // ---- The next boot recovers the run without forcing it.
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+      const next = gatedModel('recovered answer');
+      next.release();
+      const agentB = buildAgent({ model: next.model, storage, memory });
+      if (backend === 'lease') {
+        // A pubsub lease leaves no record of the released run, so its thread
+        // lease marks it live until that lapses once the process exits.
+        const refusal = await agentB.recover(runId).catch(error => error);
+        const refusedBy = Date.now();
+        expect(refusal).toMatchObject({ id: RUN_ACTIVE_ERROR_ID, details: { runId, liveBy: 'thread-lease' } });
+        expect(refusal.details.retryAt).toBeLessThanOrEqual(refusedBy + agentThreadStreamRuntime.threadLeaseTtlMs);
+        vi.spyOn(agentThreadStreamRuntime, 'isRunHoldingThreadLease').mockResolvedValue(false);
+      }
+      const recovered = await agentB.recover(runId);
+      const chunks = await drain(recovered.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      await vi.waitFor(async () => expect(await assistantText(memory)).toContain('recovered answer'));
+      expect(await assistantText(memory)).not.toContain('stale answer');
       recovered.cleanup();
     });
 

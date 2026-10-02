@@ -10,6 +10,7 @@ import {
   __resetExecutionFencesForTests,
   assertExecutionOwned,
   DurableExecutionFenceError,
+  EXECUTION_ABANDONED_ERROR_ID,
   EXECUTION_CONFLICT_ERROR_ID,
   EXECUTION_LEASE_RENEW_INTERVAL_MS,
   EXECUTION_LEASE_TTL_MS,
@@ -233,6 +234,39 @@ describe('ExecutionFence.settle', () => {
 
     expect(await fence.settle(async () => {})).toBe('orphaned');
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBe('foreign');
+  });
+});
+
+describe('ExecutionFence.abandon', () => {
+  it('stops the execution, releases the lease, and settles silently', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    const lost = vi.fn();
+    fence.onLost(lost);
+
+    await fence.abandon();
+
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_ABANDONED_ERROR_ID }));
+    expect(fence.isLost()).toBe(true);
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_ABANDONED_ERROR_ID });
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
+    expect(ExecutionFence.getLocalActive('run-1')).toBeUndefined();
+    const writes = vi.fn(async () => {});
+    expect(await fence.settle(writes)).toBe('superseded');
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op once the execution settled', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    expect(await fence.settle(async () => {})).toBe('owned');
+    const next = await claim(pubsub, 'run-1');
+
+    await fence.abandon();
+
+    expect(fence.isLost()).toBe(false);
+    expect(await pubsub.getLeaseOwner(key('run-1'))).toBe(next.executionId);
+    await next.settle(async () => {});
   });
 });
 
@@ -597,6 +631,80 @@ describe('storage-backed ExecutionFence', () => {
       id: EXECUTION_SUPERSEDED_ERROR_ID,
     });
   });
+
+  it('abandon moves the run past the execution and releases it: stale writes fail, recovery claims it at once', async () => {
+    const { workflowsStore, memoryStore } = await stores();
+    const abandoned = await storageClaim(workflowsStore, 'run-1');
+    await abandoned.coverMemory(memoryStore);
+    const staleFence = { runId: 'run-1', generation: 1, ownerId: abandoned.executionId };
+
+    await abandoned.abandon();
+
+    const record = await workflowsStore.getRunOwnership({ runId: 'run-1' });
+    expect(record).toMatchObject({ generation: 2, leaseExpiresAt: null, live: false });
+    expect(record?.ownerId).not.toBe(abandoned.executionId);
+    await expect(
+      workflowsStore.updateWorkflowState({
+        workflowName: 'wf',
+        runId: 'run-1',
+        opts: { status: 'failed' },
+        fence: staleFence,
+      }),
+    ).rejects.toSatisfy(isRunFenceConflictError);
+    const thread = { id: 't-1', resourceId: 'r-1', title: '', createdAt: new Date(), updatedAt: new Date() };
+    await expect(memoryStore.saveThread({ thread, fence: staleFence })).rejects.toSatisfy(isRunFenceConflictError);
+    expect(await abandoned.settle(async () => {})).toBe('superseded');
+
+    // No untracked liveness check runs for a run with an owner record.
+    const untrackedRun = { isLive: vi.fn(async () => true), ttlMs: 15_000 };
+    const recovered = await ExecutionFence.claim({
+      leaseProvider: NoopLeaseProvider,
+      workflowsStore,
+      agentId,
+      runId: 'run-1',
+      mode: 'recover',
+      untrackedRun,
+    });
+    expect(recovered.generation).toBe(3);
+    expect(untrackedRun.isLive).not.toHaveBeenCalled();
+    await recovered.coverMemory(memoryStore);
+    await recovered.settle(async () => {});
+  });
+
+  it('abandon leaves a run that was already taken over to its new owner', async () => {
+    const { workflowsStore } = await stores();
+    const original = await storageClaim(workflowsStore, 'run-1');
+    const recovered = await storageClaim(workflowsStore, 'run-1', 'takeover');
+
+    await original.abandon();
+
+    expect(original.isLost()).toBe(true);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      generation: 2,
+      ownerId: recovered.executionId,
+      live: true,
+    });
+    await expect(recovered.verify()).resolves.toBeUndefined();
+    await recovered.settle(async () => {});
+  });
+
+  it('abandon still stops and settles the execution when storage fails', async () => {
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    vi.spyOn(workflowsStore, 'claimRunOwnership').mockRejectedValueOnce(new Error('connection closed'));
+
+    await expect(fence.abandon()).resolves.toBeUndefined();
+
+    expect(fence.isLost()).toBe(true);
+    expect(ExecutionFence.getLocalActive('run-1')).toBeUndefined();
+    expect(await fence.settle(async () => {})).toBe('superseded');
+    // The claim stays until it expires.
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      generation: 1,
+      ownerId: fence.executionId,
+      live: true,
+    });
+  });
 });
 
 describe('execution claim carrier', () => {
@@ -634,6 +742,7 @@ describe('isExecutionFenceError', () => {
     });
     expect(isExecutionFenceError(new Error('wrapped', { cause: fenceError }))).toBe(true);
     expect(isExecutionFenceError({ message: 'x', id: EXECUTION_UNVERIFIED_ERROR_ID })).toBe(true);
+    expect(isExecutionFenceError({ message: 'x', id: EXECUTION_ABANDONED_ERROR_ID })).toBe(true);
     // What a JSON pubsub transport delivers to a remote engine.
     expect(isExecutionFenceError(JSON.parse(JSON.stringify(fenceError)))).toBe(true);
     expect(isExecutionFenceError(new Error('other'))).toBe(false);

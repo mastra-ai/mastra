@@ -116,6 +116,18 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
 }
 
 /**
+ * Abandon the durable-agent executions `mastra` is still running: each stops
+ * without writing and releases its run, so recovery can take it right away.
+ * Executions that already settled are left alone.
+ */
+export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
+  const fences = Array.from(globalRunRegistry.values()).flatMap(entry =>
+    entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
+  );
+  await Promise.all(fences.map(fence => fence.abandon()));
+}
+
+/**
  * End a run's root spans (MODEL_GENERATION then AGENT_RUN) with an error so the trace
  * still exports — stores persist only span-end events. After a resume the fresh resume
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,

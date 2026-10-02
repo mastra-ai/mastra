@@ -51,13 +51,26 @@ export const MASTRA_DURABLE_EXECUTIONS_KEY = 'mastra__durableExecutions';
 
 export const EXECUTION_SUPERSEDED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_SUPERSEDED';
 export const EXECUTION_UNVERIFIED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_UNVERIFIED';
+export const EXECUTION_ABANDONED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_ABANDONED';
 export const EXECUTION_CONFLICT_ERROR_ID = 'DURABLE_AGENT_EXECUTION_CONFLICT';
 export const RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY';
 export const RUN_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RUN_ACTIVE';
 /** Shortest delay {@link RUN_ACTIVE_ERROR_ID} suggests before retrying, so a skewed clock can't cause a tight loop. */
 const MIN_RETRY_DELAY_MS = 1_000;
 
-type ExecutionLossErrorId = typeof EXECUTION_SUPERSEDED_ERROR_ID | typeof EXECUTION_UNVERIFIED_ERROR_ID;
+type ExecutionLossErrorId =
+  | typeof EXECUTION_SUPERSEDED_ERROR_ID
+  | typeof EXECUTION_UNVERIFIED_ERROR_ID
+  | typeof EXECUTION_ABANDONED_ERROR_ID;
+
+const EXECUTION_LOSS_MESSAGES: Record<ExecutionLossErrorId, (runId: string) => string> = {
+  [EXECUTION_SUPERSEDED_ERROR_ID]: runId =>
+    `Durable run ${runId} lost its execution lease (taken over by another execution, or expired); this execution stopped without writing.`,
+  [EXECUTION_UNVERIFIED_ERROR_ID]: runId =>
+    `Durable run ${runId}: could not verify that this execution still owns the run; stopping without writing.`,
+  [EXECUTION_ABANDONED_ERROR_ID]: runId =>
+    `Durable run ${runId}: the process shut down before this execution finished; it stopped without writing and released the run for recovery.`,
+};
 type ExecutionDetails = { agentId: string; runId: string; executionId: string };
 
 /**
@@ -72,12 +85,7 @@ export class DurableExecutionFenceError extends MastraNonRetryableError {
   readonly details: ExecutionDetails;
 
   constructor(id: ExecutionLossErrorId, details: ExecutionDetails, cause?: unknown) {
-    super(
-      id === EXECUTION_SUPERSEDED_ERROR_ID
-        ? `Durable run ${details.runId} lost its execution lease (taken over by another execution, or expired); this execution stopped without writing.`
-        : `Durable run ${details.runId}: could not verify that this execution still owns the run; stopping without writing.`,
-      cause === undefined ? undefined : { cause },
-    );
+    super(EXECUTION_LOSS_MESSAGES[id](details.runId), cause === undefined ? undefined : { cause });
     this.name = 'DurableExecutionFenceError';
     this.id = id;
     this.details = details;
@@ -127,7 +135,7 @@ export function isExecutionFenceError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth++) {
     const id = (current as { id?: unknown }).id;
-    if (id === EXECUTION_SUPERSEDED_ERROR_ID || id === EXECUTION_UNVERIFIED_ERROR_ID) return true;
+    if (typeof id === 'string' && Object.hasOwn(EXECUTION_LOSS_MESSAGES, id)) return true;
     current = (current as { cause?: unknown }).cause;
   }
   return false;
@@ -257,6 +265,12 @@ interface OwnershipBackend {
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
   isSuperseded(claim: DurableExecutionClaim): Promise<boolean>;
   release(claim: DurableExecutionClaim): Promise<void>;
+  /**
+   * Release `claim` so the run can be recovered at once, and make storage
+   * reject its remaining writes. Returns the claim that superseded it, when
+   * ownership lives in storage and `claim` was still current.
+   */
+  abandon(claim: DurableExecutionClaim): Promise<RunFence | undefined>;
 }
 
 function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): OwnershipBackend {
@@ -299,6 +313,11 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
     },
     async release(claim) {
       await provider.releaseLease(key, claim.executionId);
+    },
+    // A lease has no generation to move past: releasing is all it can do.
+    async abandon(claim) {
+      await provider.releaseLease(key, claim.executionId);
+      return undefined;
     },
   };
 }
@@ -370,6 +389,26 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     },
     async release(claim) {
       await store.releaseRunOwnership(fence(claim));
+    },
+    // Releasing alone keeps accepting the claim's writes until the next claim.
+    // Claiming under a fresh owner first moves the generation past them; the
+    // pinned generation leaves a claim made in between to its claimant.
+    async abandon(claim) {
+      const successor = await store.claimRunOwnership({
+        runId,
+        ownerId: crypto.randomUUID(),
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: claim.generation,
+      });
+      if (!successor.acquired) return undefined;
+      const successorFence: RunFence = {
+        runId,
+        generation: successor.record.generation,
+        ownerId: successor.record.ownerId,
+      };
+      await store.releaseRunOwnership(successorFence);
+      return successorFence;
     },
   };
 }
@@ -670,6 +709,30 @@ export class ExecutionFence implements RunFenceScope {
     return this.#settledAs;
   }
 
+  /**
+   * Stop this execution without finishing the run, for a process that is
+   * shutting down. The execution loses the run at once, so it aborts and
+   * writes nothing more, and the claim is released so recovery can take the
+   * run right away instead of waiting for it to expire. With ownership in
+   * storage, the run is first claimed past this execution, so storage rejects
+   * writes that were already on their way. Settles as `superseded`.
+   *
+   * A no-op once the execution has settled or lost the run.
+   */
+  async abandon(): Promise<void> {
+    if (this.#settlement || this.#lossError) return;
+    this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
+    try {
+      const successor = await this.#backend.abandon(this.claim);
+      if (successor && this.#memoryStore) await this.#memoryStore.raiseRunFence(successor);
+    } catch (error) {
+      this.#logger?.warn?.(
+        `[DurableAgent] run ${this.runId}: failed to release the abandoned run; it can be recovered once its claim expires: ${error}`,
+      );
+    }
+    await this.settle(async () => {});
+  }
+
   async #release(): Promise<void> {
     try {
       await this.#backend.release(this.claim);
@@ -686,8 +749,9 @@ export class ExecutionFence implements RunFenceScope {
       // Fall through: find out whether someone else took the run.
     }
     // The new owner may already have finished and released the run; a
-    // takeover seen earlier still means this execution must stay silent.
-    if (this.#takenOver) return 'superseded';
+    // takeover seen earlier still means this execution must stay silent. An
+    // abandoned run belongs to whichever execution recovers it.
+    if (this.#takenOver || this.#lossError?.id === EXECUTION_ABANDONED_ERROR_ID) return 'superseded';
     try {
       return (await this.#backend.isSuperseded(this.claim)) ? 'superseded' : 'orphaned';
     } catch {

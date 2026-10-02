@@ -1,6 +1,6 @@
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -7425,7 +7425,8 @@ export class Mastra<
    * through this instance are given up to `drainTimeout` milliseconds
    * (default 5000) to reach a terminal or suspended state before workers and
    * pubsub subscriptions are torn down. Runs that do not settle within the
-   * window are abandoned with a warning.
+   * window are abandoned with a warning. An abandoned durable agent run stops
+   * without writing and is released, so the next boot recovers it right away.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7480,6 +7481,11 @@ export class Mastra<
         }
       });
     }
+
+    // A durable-agent execution still running now would keep its run claimed
+    // until the claim expires. Stop it without writing and release the run, so
+    // the next boot recovers it right away. Storage must still be open.
+    await abandonDurableAgentExecutions(this);
 
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
