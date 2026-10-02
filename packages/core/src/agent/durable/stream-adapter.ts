@@ -170,6 +170,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -590,9 +592,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Every delivery has to be acked, including the events this consumer filters
   // out, or a durable backend (Redis consumer groups) keeps them pending for the
-  // life of the subscription. The EventCallback is a stable reference because
-  // `unsubscribe` has to be handed the same callback that was subscribed.
-  const subscribedCallback: EventCallback = withAck(handleEvent);
+  // life of the subscription. Track deliveries because in-process pubsub invokes
+  // callbacks synchronously but does not await their promises.
+  const inFlightDeliveries = new Set<Promise<void>>();
+  const ackingHandleEvent = withAck(handleEvent);
+  const subscribedCallback: EventCallback = (event, ack, nack) => {
+    const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    inFlightDeliveries.add(delivery);
+    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    return delivery;
+  };
+  const waitForEventDelivery = async () => {
+    while (inFlightDeliveries.size > 0) {
+      await Promise.allSettled([...inFlightDeliveries]);
+    }
+  };
 
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -703,6 +717,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     output,
     cleanup,
     detach,
+    waitForEventDelivery,
     ready,
   };
 }

@@ -2708,6 +2708,8 @@ export class DurableAgent<
     const {
       output,
       cleanup: createdStreamCleanup,
+      detach: detachResumeStream,
+      waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2732,7 +2734,10 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: resolvedOptions.onSuspended,
-      closeOnSuspend,
+      // Resume segments settle at the persisted workflow result below. A sibling
+      // that was already suspended may not emit another SUSPENDED event, while
+      // evented execution may emit one before its snapshot is safe to resume.
+      closeOnSuspend: false,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       requestContext: resolvedOptions.requestContext,
@@ -2782,6 +2787,16 @@ export class DurableAgent<
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           this.emitErrorInBackground(runId, error);
+        }
+        if (result?.status === 'suspended' && closeOnSuspend) {
+          // The workflow result is the authoritative persisted suspension boundary.
+          // Flush transport buffers, then wait for callbacks already delivered to
+          // this observer before closing only the resume segment. This preserves
+          // onSuspended delivery without advancing queued resumes against a stale
+          // sibling snapshot.
+          await this.pubsub.flush();
+          await waitForEventDelivery();
+          detachResumeStream();
         }
         // Same snapshot cleanup as the initial `start()` path: once resume
         // settles on any non-suspended terminal status the persisted rows are

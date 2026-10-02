@@ -733,6 +733,44 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should wait for delivered pubsub callbacks to finish', async () => {
+    const { createDurableAgentStream, emitChunkEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      await callbackBlocked;
+    });
+    const { cleanup, ready, waitForEventDelivery } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-delivery-barrier',
+      messageId: 'msg-delivery-barrier',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+    });
+    await ready;
+
+    await emitChunkEvent(pubsub, 'test-delivery-barrier', {
+      type: 'text-delta',
+      payload: { text: 'test' },
+    } as any);
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+    let settled = false;
+    const delivery = waitForEventDelivery().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseCallback();
+    await delivery;
+    expect(settled).toBe(true);
+    cleanup();
+  });
+
   it('should terminate when subscription setup fails', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
     const subscribeError = new Error('subscription failed');
