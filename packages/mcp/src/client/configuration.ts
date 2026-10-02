@@ -16,9 +16,22 @@ import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type {
+  MCPServerMap,
+  MCPClientServers,
+  MCPClientTools,
+  MCPClientToolsets,
+  SerializableMCPToolCatalog,
+  SerializableMCPToolDefinition,
+} from './types';
 
-const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
+// Client snapshots are erased in the shared runtime cache.
+const mcpClientInstances = new Map<string, object>();
+
+/** Reads the shared cache without promising the snapshot shape it was created with. */
+function cachedClient<TServers extends MCPClientServers<TServers>>(id: string): MCPClient<TServers> | undefined {
+  return mcpClientInstances.get(id) as MCPClient<TServers> | undefined;
+}
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
 // Outcome of a single server's discovery within discoverAcrossServers(). An
@@ -52,13 +65,25 @@ function isLoopbackHostname(hostname: string): boolean {
 /**
  * Configuration options for creating an MCPClient instance.
  */
-export interface MCPClientOptions {
+export interface MCPClientOptions<
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
+> {
   /** Optional unique identifier to prevent memory leaks when creating multiple instances with identical configurations */
   id?: string;
-  /** Map of server names to their connection configurations (stdio or HTTP-based) */
-  servers: Record<string, MastraMCPServerDefinition>;
+  /**
+   * Map of server names to their connection configurations (stdio or HTTP-based).
+   *
+   * Broad when no snapshot generic is supplied, so ordinary object literals stay contextually
+   * typed (a mapped type over an unresolved type parameter suppresses that); exact keys once the
+   * caller supplies a generated server map.
+   */
+  servers: string extends keyof TServers
+    ? Record<string, MastraMCPServerDefinition>
+    : Record<keyof NoInfer<TServers> & string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /** Optional output path for the package's generate command, relative to its working directory. */
+  typegen?: { outFile: string };
 }
 
 /**
@@ -87,7 +112,10 @@ export interface MCPClientOptions {
  * @see [MCP client documentation](https://mastra.ai/reference/tools/mcp-client)
  * if packaged docs are unavailable.
  */
-export class MCPClient extends MastraBase {
+export class MCPClient<
+  TServers extends MCPClientServers<TServers> = MCPServerMap,
+> extends MastraBase {
+  readonly typegen?: Readonly<{ outFile: string }>;
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
@@ -131,7 +159,7 @@ export class MCPClient extends MastraBase {
    * });
    * ```
    */
-  constructor(args: MCPClientOptions) {
+  constructor(args: MCPClientOptions<NoInfer<TServers>>) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     this.serverConfigs = args.servers;
@@ -139,21 +167,18 @@ export class MCPClient extends MastraBase {
 
     if (args.id) {
       this.id = args.id;
-      const cached = mcpClientInstances.get(this.id);
+      const cached = cachedClient<TServers>(this.id);
 
       if (cached && !equal(cached.serverConfigs, args.servers)) {
-        const existingInstance = mcpClientInstances.get(this.id);
-        if (existingInstance) {
-          void existingInstance.disconnect();
-          mcpClientInstances.delete(this.id);
-        }
+        void cached.disconnect();
+        mcpClientInstances.delete(this.id);
       }
     } else {
       this.id = this.makeId();
     }
 
     // to prevent memory leaks return the same MCP server instance when configured the same way multiple times
-    const existingInstance = mcpClientInstances.get(this.id);
+    const existingInstance = cachedClient<TServers>(this.id);
     if (existingInstance) {
       if (!args.id) {
         throw new Error(`MCPClient was initialized multiple times with the same configuration options.
@@ -169,6 +194,13 @@ To fix this you have three different options:
       return existingInstance;
     }
 
+    const { typegen } = args;
+    if (typegen !== undefined) {
+      // Runtime guard for untyped callers; the option is typed as `{ outFile: string }`.
+      if (!typegen || typeof typegen.outFile !== 'string' || !typegen.outFile.trim() || typegen.outFile.includes('\0'))
+        throw new Error('typegen.outFile must be a nonempty file path');
+      this.typegen = Object.freeze({ outFile: typegen.outFile });
+    }
     mcpClientInstances.set(this.id, this);
     this.addToInstanceCache();
     return this;
@@ -938,7 +970,7 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
+  public async listTools(): Promise<MCPClientTools<TServers>> {
     const result = await this.listToolsWithErrors();
     return result.tools;
   }
@@ -961,8 +993,14 @@ To fix this you have three different options:
    * }
    * ```
    */
+  public listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    tools: MCPClientTools<TServers>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }>;
   public async listToolsWithErrors(options?: MCPDiscoveryOptions): Promise<{
-    tools: Record<string, Tool<any, any, any, any>>;
+    tools: Partial<Record<string, Tool<any, any, any, any>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
@@ -1021,7 +1059,7 @@ To fix this you have three different options:
    * });
    * ```
    */
-  public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
+  public async listToolsets(): Promise<MCPClientToolsets<TServers>> {
     const result = await this.listToolsetsWithErrors();
     return result.toolsets;
   }
@@ -1043,8 +1081,14 @@ To fix this you have three different options:
    * }
    * ```
    */
+  public listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
+    toolsets: MCPClientToolsets<TServers>;
+    errors: Record<string, string>;
+    errorDetails: Record<string, MCPDiscoveryErrorDetails>;
+    durations?: Record<string, number>;
+  }>;
   public async listToolsetsWithErrors(options?: MCPDiscoveryOptions): Promise<{
-    toolsets: Record<string, Record<string, Tool<any, any, any, any>>>;
+    toolsets: Partial<Record<string, Partial<Record<string, Tool<any, any, any, any>>>>>;
     errors: Record<string, string>;
     errorDetails: Record<string, MCPDiscoveryErrorDetails>;
     durations?: Record<string, number>;
