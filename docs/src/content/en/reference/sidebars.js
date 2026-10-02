@@ -171,6 +171,7 @@ const sidebars = {
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
         { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
+        { type: 'doc', id: 'client-js/react-hooks', label: 'React hooks' },
 
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },

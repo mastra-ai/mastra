@@ -1,0 +1,81 @@
+---
+title: "Reference: React hooks | Client SDK"
+description: "React Query hooks from @mastra/react/hooks for reading and updating Mastra agents, workflows, traces, datasets, memory and more."
+packages:
+  - "@mastra/react"
+---
+
+# React hooks
+
+`@mastra/react/hooks` exports React Query hooks built on the [Mastra Client SDK](/reference/client-js/mastra-client). Use them in React apps to read and update Mastra data without writing your own fetching layer.
+
+## Installation
+
+The hooks need `@tanstack/react-query` as a peer dependency:
+
+```bash npm2yarn
+npm install @mastra/react @tanstack/react-query
+```
+
+## Setup
+
+Wrap your app in `MastraReactProvider` and a React Query provider. `MastraQueryClientProvider` creates a `QueryClient` with Mastra's retry defaults. You can also use your own `QueryClientProvider`.
+
+```tsx title="src/main.tsx"
+import { MastraReactProvider } from '@mastra/react'
+import { MastraQueryClientProvider } from '@mastra/react/hooks'
+
+export function Root() {
+  return (
+    <MastraQueryClientProvider>
+      <MastraReactProvider baseUrl="http://localhost:4111">
+        <App />
+      </MastraReactProvider>
+    </MastraQueryClientProvider>
+  )
+}
+```
+
+## Usage example
+
+```tsx title="src/agents-list.tsx"
+import { useAgents } from '@mastra/react/hooks'
+
+export function AgentsList() {
+  const { data: agents, isLoading } = useAgents()
+
+  if (isLoading) return <p>Loading…</p>
+
+  return (
+    <ul>
+      {Object.entries(agents ?? {}).map(([id, agent]) => (
+        <li key={id}>{agent.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+Query hooks return a React Query `UseQueryResult`, and mutation hooks return a `UseMutationResult`. Hooks don't show toasts or redirect. Handle success and errors with `onSuccess`/`onError` or `try`/`catch` around `mutateAsync`.
+
+## Hooks by domain
+
+| Domain | Examples |
+| - | - |
+| Agents | `useAgents`, `useAgent`, `useAgentMessages`, `useStoredAgents`, `useChannelPlatforms` |
+| Auth | `useAuthCapabilities`, `useCurrentUser`, `useCredentialsLogin`, `useLogout` |
+| Datasets | `useDatasets`, `useDatasetItems`, `useDatasetMutations`, `useDatasetVersions` |
+| Experiments | `useInfiniteExperiments`, `useExperimentMetrics`, `useExperimentTrace` |
+| Logs | `useLogs` |
+| MCP | `useMCPServers`, `useMCPServerTools`, `useExecuteMCPTool` |
+| Memory | `useMemory`, `useThreads`, `useThread`, `useMemoryThreadMessages` |
+| Metrics | `useLatencyMetrics`, `useTraceVolumeMetrics`, `useModelUsageCostMetrics` |
+| Processors | `useProcessors`, `useExecuteProcessor` |
+| Schedules | `useSchedules`, `useSchedule`, `useToggleSchedule` |
+| Scores | `useScorers`, `useStoredScorer`, `useScorerVersions` |
+| Tools | `useTools`, `useExecuteTool`, `useToolProviders` |
+| Traces | `useTraceQuery`, `useTraceSpans`, `useSpanDetail` |
+| Workflows | `useWorkflows`, `useWorkflow`, `useWorkflowRuns` |
+| Workspace | `useWorkspaces`, `useWorkspaceInfo`, `useStoredWorkspaces` |
+
+Other domains include capabilities, configuration, embedders, feedback, LLM providers, prompt blocks, review, templates, vectors and voice.
