@@ -100,7 +100,7 @@ const controlTintHover =
 const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
 
 export const raisedControlSurfaceStyle =
-  'bg-card shadow-raised text-foreground ' + controlTintHover + ' ' + controlTintActive + ' ' + surfaceRimFocus;
+  'bg-field shadow-input text-foreground ' + controlTintHover + ' ' + controlTintActive + ' ' + surfaceRimFocus;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been
 // removed from the variant set. An unknown value makes cva emit nothing for the
