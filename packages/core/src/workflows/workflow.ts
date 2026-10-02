@@ -111,6 +111,7 @@ import type {
   WorkflowResult,
   WorkflowType,
   WorkflowRunState,
+  NestedWorkflowParent,
   WorkflowRunStatus,
   WorkflowState,
   WorkflowStateField,
@@ -2888,6 +2889,7 @@ export class Workflow<
     shouldPersistSnapshot?: WorkflowOptions['shouldPersistSnapshot'];
     /** Overrides the workflow-wide tracing policy for this run only. */
     tracingPolicy?: TracingPolicy;
+    parentWorkflow?: NestedWorkflowParent;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -2916,6 +2918,7 @@ export class Workflow<
         inputSchema: this.inputSchema,
         requestContextSchema: this.requestContextSchema,
         runId: runIdToUse,
+        parentWorkflow: options?.parentWorkflow,
         resourceId: options?.resourceId,
         isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
@@ -2962,6 +2965,9 @@ export class Workflow<
     // This fixes the issue where createRun checks storage but doesn't use the stored data
     if (existsInStorage && existingRun.status) {
       run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
+      run.parentWorkflow = storedSnapshot?.parentWorkflow;
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
@@ -2969,6 +2975,7 @@ export class Workflow<
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
         status: 'pending',
+        parentWorkflow: options?.parentWorkflow,
         value: {},
         // @ts-expect-error - context type mismatch
         context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
@@ -3036,6 +3043,7 @@ export class Workflow<
     restart,
     resume,
     timeTravel,
+    parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
     mastra,
     requestContext,
@@ -3064,6 +3072,7 @@ export class Workflow<
       nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
       resumeData?: any;
     };
+    parentWorkflow?: NestedWorkflowParent;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -3143,8 +3152,8 @@ export class Workflow<
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     const run = isResume
-      ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub })
-      : await this.createRun({ runId, resourceId, pubsub: nestedPubsub });
+      ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
+      : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
     const nestedAbortCb = () => {
       abort();
     };
@@ -3729,6 +3738,8 @@ export class Run<
 
   workflowRunStatus: WorkflowRunStatus;
 
+  parentWorkflow?: NestedWorkflowParent;
+
   readonly workflowEngineType: WorkflowEngineType;
 
   /**
@@ -3759,6 +3770,7 @@ export class Run<
   constructor(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     isInternalWorkflow?: boolean;
     stateSchema?: StandardSchemaWithJSON<TState>;
@@ -3783,6 +3795,7 @@ export class Run<
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.parentWorkflow = params.parentWorkflow;
     this.resourceId = params.resourceId;
     this.isInternalWorkflow = params.isInternalWorkflow ?? false;
     this.serializedStepGraph = params.serializedStepGraph;
@@ -3809,6 +3822,29 @@ export class Run<
     }
 
     return this.#abortController;
+  }
+
+  #wakeParentWorkflow(): void {
+    if (!this.parentWorkflow || !this.#mastra) {
+      return;
+    }
+
+    const parent = this.parentWorkflow;
+    void (async () => {
+      const parentWorkflow = this.#mastra?.getWorkflowById(parent.workflowId);
+      if (!parentWorkflow) {
+        throw new Error(`Parent workflow ${parent.workflowId} is not registered`);
+      }
+      const parentState = await parentWorkflow.getWorkflowRunById(parent.runId, { withNestedWorkflows: false });
+      if (parentState?.status !== 'suspended') {
+        return;
+      }
+
+      const parentRun = await parentWorkflow.createRun({ runId: parent.runId });
+      await parentRun.resume({ step: parent.stepId, forEachIndex: parent.foreachIndex });
+    })().catch(error => {
+      this.#mastra?.getLogger()?.error('Failed to resume parent workflow after nested child completion.', error);
+    });
   }
 
   /**
@@ -4101,6 +4137,7 @@ export class Run<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      parentWorkflow: this.parentWorkflow,
       resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
@@ -4122,6 +4159,9 @@ export class Run<
     this.workflowRunStatus = result.status;
     if (result.status !== 'suspended') {
       this.cleanup?.();
+    }
+    if (result.status === 'success') {
+      this.#wakeParentWorkflow();
     }
 
     result.traceId = traceId;
@@ -5140,6 +5180,7 @@ export class Run<
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
         resourceId: this.resourceId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -5172,6 +5213,9 @@ export class Run<
         this.workflowRunStatus = result.status;
         if (result.status !== 'suspended') {
           this.cleanup?.();
+        }
+        if (result.status === 'success') {
+          this.#wakeParentWorkflow();
         }
         result.traceId = traceId;
         result.spanId = spanId;
@@ -5302,6 +5346,7 @@ export class Run<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      parentWorkflow: this.parentWorkflow,
       resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
@@ -5438,6 +5483,7 @@ export class Run<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      parentWorkflow: this.parentWorkflow,
       resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,

@@ -215,6 +215,7 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: import('./types').NestedWorkflowParent;
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
