@@ -4234,20 +4234,24 @@ export class AgentThreadStreamRuntime {
     };
 
     const resolveTerminalEventStreamId = (runId: string, streamId?: string) => {
-      if (streamId) return streamId;
+      if (streamId) {
+        terminalEventStreamIds.add(streamId);
+        return streamId;
+      }
 
       const registered = registeredSeqsByRunId.get(runId);
       let resolved: { streamId: string; streamSeq: number } | undefined;
       for (const [registeredStreamId, streamSeq] of registered ?? []) {
-        const tracked =
-          remoteRuns.has(registeredStreamId) ||
-          deferredRunsByStreamId.has(registeredStreamId) ||
-          remoteRunLeaseWatchTokens.has(registeredStreamId);
-        if (tracked && (resolved === undefined || streamSeq < resolved.streamSeq)) {
+        if (
+          !terminalEventStreamIds.has(registeredStreamId) &&
+          (resolved === undefined || streamSeq < resolved.streamSeq)
+        ) {
           resolved = { streamId: registeredStreamId, streamSeq };
         }
       }
-      return resolved?.streamId ?? runId;
+      const resolvedStreamId = resolved?.streamId ?? runId;
+      terminalEventStreamIds.add(resolvedStreamId);
+      return resolvedStreamId;
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
@@ -4472,6 +4476,8 @@ export class AgentThreadStreamRuntime {
     const suspendedStreamIdsByRunId = new Map<string, string>();
     /** streamSeq of each registered stream, per run. */
     const registeredSeqsByRunId = new Map<string, Map<string, number>>();
+    /** Registered streams already matched to an explicit or legacy terminal event. */
+    const terminalEventStreamIds = new Set<string>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
     // A run registering a later stream means its suspension was answered. A
