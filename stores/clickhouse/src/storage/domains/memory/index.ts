@@ -1275,9 +1275,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 date_time_input_format: 'best_effort',
                 use_client_time_zone: 1,
                 output_format_json_quote_64bit_integers: 0,
-                // Wait for the mutation (on every replica) so the verify read
-                // below sees it, instead of rewriting the table with OPTIMIZE FINAL.
-                mutations_sync: '2',
+                // Wait for the mutation on the replica that ran it, so the verify
+                // read below sees it, instead of rewriting the table with OPTIMIZE
+                // FINAL. Not '2': with any replica down it throws UNFINISHED even
+                // though the update was applied.
+                mutations_sync: '1',
               },
             }),
           );
