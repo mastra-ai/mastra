@@ -783,8 +783,7 @@ describe('TraceDataPanelView — messages column', () => {
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
       expect(columns().contains(messagesPanel)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
-      expect(columns().className).toContain('transition-[grid-template-columns]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
 
     it('orders the columns messages → trace → span', () => {
@@ -793,7 +792,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(2);
     });
 
     it('keeps the side column while the timeline view is active', () => {
@@ -824,7 +823,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
   });
 
@@ -834,7 +833,7 @@ describe('TraceDataPanelView — messages column', () => {
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
+      expect(within(columns()).queryAllByRole('separator', { hidden: true })).toHaveLength(0);
     });
   });
 });
@@ -854,7 +853,7 @@ describe('TraceDataPanelView — timeline view', () => {
     expect(
       tree
         .closest('[data-slot="buttons-group"]')
-        ?.parentElement?.contains(screen.getByRole('textbox', { name: 'Search spans' })),
+        ?.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' })),
     ).toBe(true);
 
     fireEvent.click(timeline);
@@ -1035,7 +1034,7 @@ describe('TraceDataPanelView — side column views', () => {
 });
 
 describe('TraceDataPanelView — span search', () => {
-  const searchField = () => screen.getByRole('textbox', { name: /search spans/i }) as HTMLInputElement;
+  const searchField = () => screen.getByRole('searchbox', { name: /search spans/i }) as HTMLInputElement;
 
   const typeSearch = (value: string) => {
     fireEvent.change(searchField(), { target: { value } });
@@ -1058,7 +1057,7 @@ describe('TraceDataPanelView — span search', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 
     expect(screen.getByText(/no spans found for this trace/i)).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: /search spans/i })).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: /search spans/i })).toBeNull();
   });
 
   const renderDeep = (props: Partial<TraceDataPanelViewProps> = {}) =>

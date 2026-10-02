@@ -182,6 +182,11 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
       mountOptions.push(`url=${shellQuote(endpoint)}`, 'use_path_request_style', 'sigv4', 'nomultipart');
     }
 
+    // s3fs's `endpoint` option sets the AWS region used for sigv4 signing
+    // (confusingly named — distinct from the `url` option above). s3fs
+    // defaults to us-east-1 and does not infer the region from the URL.
+    mountOptions.push(`endpoint=${shellQuote(config.region)}`);
+
     if (config.readOnly) {
       mountOptions.push('ro');
       logger.debug(`${LOG_PREFIX} Mounting as read-only`);
@@ -192,6 +197,8 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     if (config.prefix) {
       const normalizedPrefix = validatePrefix(config.prefix);
       bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+      // Allow mounting prefixes that have no placeholder object at the prefix key.
+      mountOptions.push('compat_dir');
     }
 
     // Run s3fs as the sandbox user (not root) so the FUSE connection is registered

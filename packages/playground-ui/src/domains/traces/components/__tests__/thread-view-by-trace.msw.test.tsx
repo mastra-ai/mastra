@@ -96,6 +96,66 @@ const stubIntersectionObserver = () => {
   return { intersect };
 };
 
+const viewportOf = () => {
+  const viewport = screen
+    .getByTestId('thread-view-by-trace')
+    .querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+  if (!viewport) throw new Error('viewport not found');
+  return viewport;
+};
+
+const scrollReaderTo = (viewport: HTMLElement, scrollTop: number) => {
+  viewport.scrollTop = scrollTop;
+  fireEvent.scroll(viewport);
+};
+
+// The scroller only asks for older turns once the reader moves back up, never on mount.
+const scrollUpToOldest = () => {
+  const viewport = viewportOf();
+  act(() => scrollReaderTo(viewport, 1));
+  act(() => scrollReaderTo(viewport, 0));
+};
+
+// jsdom has no layout: give scroll viewports a 400px window over `scrollHeight` of content, make
+// `scrollTo` move them, and let the test grow the content as rows load their messages and spans.
+const stubScrollLayout = () => {
+  let scrollHeight = 1000;
+  const isViewport = (el: HTMLElement) => el.dataset.slot === 'message-scroller-viewport';
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return isViewport(this) ? scrollHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return isViewport(this) ? 400 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(function (
+    this: HTMLElement,
+    options?: ScrollToOptions | number,
+  ) {
+    if (typeof options === 'object' && typeof options.top === 'number') this.scrollTop = options.top;
+  });
+  const resized: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(cb: ResizeObserverCallback) {
+        resized.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  return {
+    setScrollHeight: (height: number) => {
+      scrollHeight = height;
+    },
+    grow: (height: number) => {
+      scrollHeight = height;
+      resized.forEach(cb => cb([], {} as ResizeObserver));
+    },
+  };
+};
+
 const installScore = () => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, ({ params }) =>
@@ -123,17 +183,17 @@ const installScore = () => {
 };
 
 const renderView = ({
-  search = '',
   withFeedback = true,
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
+  pageSize,
 }: {
-  search?: string;
   withFeedback?: boolean;
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+  pageSize?: number;
 } = {}) =>
   renderWithProviders(
     <TestLinkProvider paths={paths}>
@@ -143,7 +203,7 @@ const renderView = ({
             threadId={THREAD_ID}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
-            anchorTraceId={new URLSearchParams(search).get('traceId') ?? undefined}
+            pageSize={pageSize}
             onOpenScore={onOpenScore}
           />
         </ActivatedSkillsProvider>
@@ -157,10 +217,11 @@ describe('ThreadViewByTrace', () => {
       focusManager.setFocused(undefined);
       vi.useRealTimers();
       vi.unstubAllGlobals();
+      vi.restoreAllMocks();
     });
 
     it('preserves paginated turns across refresh intervals and window focus', async () => {
-      const { intersect } = stubIntersectionObserver();
+      stubScrollLayout();
       installHandlers();
       const requested = vi.fn();
       server.use(
@@ -171,7 +232,7 @@ describe('ThreadViewByTrace', () => {
           return HttpResponse.json({
             ...queryPageFromList({
               ...threadTracesList,
-              spans: [threadTracesList.spans[next ? 1 : 0]],
+              spans: [threadTracesList.spans[next ? 0 : 1]],
             }),
             page: { next: next ? null : 'thread-next' },
           });
@@ -179,11 +240,10 @@ describe('ThreadViewByTrace', () => {
       );
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
       const { queryClient } = renderView();
-      await screen.findByText('Chef agent run');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      const list = screen.getByTestId('thread-view-by-trace');
-      act(() => intersect(list.querySelector('[data-trace-id]')?.nextElementSibling as Element));
       await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      scrollUpToOldest();
+      await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls[1]?.[0]).toMatchObject({ page: { after: 'thread-next' } });
       await act(async () => {
@@ -248,7 +308,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('underlines each turn and separates the messages column from the trace with a right border', async () => {
+  it('announces each turn with a divider holding its tabs and shows the trace in a card', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -259,10 +319,11 @@ describe('ThreadViewByTrace', () => {
       .getAllByTestId('trace-row-timeline')
       .map(el => el.closest<HTMLElement>('[data-trace-id]') as HTMLElement);
     expect(rows).toHaveLength(2);
-    for (const row of rows) {
-      expect(row.className).toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
-      expect((row.children[1] as HTMLElement).className).not.toMatch(/border|rounded/);
+    for (const [index, row] of rows.entries()) {
+      const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
+      expect(within(divider).getByRole('tab', { name: /Scores/ })).not.toBeNull();
+      expect(row.className).not.toContain('border-b');
+      expect(row.querySelector('[data-slot=thread-trace-details]')?.className).toContain('rounded-xl');
     }
   });
 
@@ -271,6 +332,78 @@ describe('ThreadViewByTrace', () => {
     renderView();
 
     expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+  });
+
+  describe('loading the first page', () => {
+    it('shows only the loading status until every turn has its spans, then renders them complete', async () => {
+      installHandlers();
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, async ({ params }) => {
+          await gate;
+          return HttpResponse.json(params.traceId === 'trace-b' ? traceBSpans : traceASpans);
+        }),
+      );
+      const { queryClient } = renderView();
+
+      await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0));
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      expect(document.querySelector('[data-trace-id]')).toBeNull();
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+
+      release();
+      await screen.findByText('Chef agent run');
+      expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading thread' })).toBeNull();
+    });
+
+    it('never shows the empty state before the list resolves', async () => {
+      installHandlers({ list: emptyThreadTracesList });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      renderView();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByText('No traces found for this thread.')).toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
+
+    it("never shows the previous thread's turns after switching threads", async () => {
+      installHandlers();
+      const view = (threadId: string) => (
+        <TestLinkProvider>
+          <BrowserToolCallsProvider>
+            <ActivatedSkillsProvider>
+              <ThreadViewByTrace threadId={threadId} withQueryTrace />
+            </ActivatedSkillsProvider>
+          </BrowserToolCallsProvider>
+        </TestLinkProvider>
+      );
+      const { rerender } = renderWithProviders(view(THREAD_ID));
+      await screen.findByText('Chef agent follow-up');
+
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          await gate;
+          return HttpResponse.json(queryPageFromList(emptyThreadTracesList));
+        }),
+      );
+      rerender(view('other-thread'));
+      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
+      release();
+      expect(await screen.findByText('No traces found for this thread.')).not.toBeNull();
+    });
   });
 
   it('opens the span details beside the conversation when a span is clicked, and closes it', async () => {
@@ -288,78 +421,6 @@ describe('ThreadViewByTrace', () => {
     // Re-clicking the selected span toggles the span panel off.
     fireEvent.click(screen.getByText('Chef agent run'));
     await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-  });
-
-  describe('arriving from a trace with ?traceId', () => {
-    it('scrolls to that row and shows its trace in full', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      installHandlers();
-      const { queryClient } = renderView({ search: '?traceId=trace-b' });
-
-      await screen.findByText('Chef agent follow-up');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-      const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-b"]');
-      await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
-      // The row is expanded so the whole trace is readable; nothing else was scrolled to.
-      expect(scrollIntoView.mock.instances.filter(el => el === row)).toHaveLength(1);
-      expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
-      expect(screen.getAllByRole('button', { name: 'Show more' })).toHaveLength(1);
-      vi.restoreAllMocks();
-    });
-
-    it('does nothing when the trace is not in the loaded page', async () => {
-      installHandlers();
-      const { queryClient } = renderView({ search: '?traceId=trace-missing' });
-
-      await screen.findByText('Chef agent follow-up');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(scrollIntoView).not.toHaveBeenCalled();
-    });
-
-    it('does not scroll to the row when it only arrives on a later page', async () => {
-      const { intersect } = stubIntersectionObserver();
-      // Query pages append newer turns in ascending order.
-      const pages = [
-        { spans: [threadTracesList.spans[0]], pagination: { total: 2, page: 0, perPage: 1, hasMore: true } },
-        { spans: [threadTracesList.spans[1]], pagination: { total: 2, page: 1, perPage: 1, hasMore: false } },
-      ];
-      const requested = vi.fn();
-      installHandlers();
-      server.use(
-        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-          const body = await request.json();
-          expect(body).toMatchObject({ orderBy: [{ field: 'startedAt', direction: 'asc' }] });
-          requested(body);
-          const next = requested.mock.calls.length === 2;
-          expect(body).toMatchObject({ page: next ? { after: 'thread-next' } : { limit: 25 } });
-          return HttpResponse.json({
-            ...queryPageFromList(pages[next ? 1 : 0]),
-            page: { next: next ? null : 'thread-next' },
-          });
-        }),
-      );
-      const { queryClient } = renderView({ search: '?traceId=trace-b' });
-
-      await screen.findByText('Chef agent run');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByText('Chef agent follow-up')).toBeNull();
-
-      const list = screen.getByTestId('thread-view-by-trace');
-      const sentinel = list.querySelector('[data-trace-id]')?.nextElementSibling as Element;
-      act(() => intersect(sentinel));
-
-      expect(await screen.findByText('Chef agent follow-up')).not.toBeNull();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(requested).toHaveBeenCalledTimes(2);
-      expect([...list.querySelectorAll('[data-trace-id]')].map(row => row.getAttribute('data-trace-id'))).toEqual([
-        'trace-a',
-        'trace-b',
-      ]);
-      expect(scrollIntoView).not.toHaveBeenCalled();
-      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
-      vi.unstubAllGlobals();
-    });
   });
 
   it('keeps the row of the selected span highlighted while its details are open', async () => {
@@ -509,35 +570,43 @@ describe('ThreadViewByTrace', () => {
         .getByTestId('thread-view-by-trace')
         .querySelector<HTMLElement>(`[data-trace-id="${traceId}"] [data-testid="trace-row-timeline"]`);
 
-    it('clamps the timeline to the messages height and reveals it with Show more / Show less', async () => {
+    it('clamps the timeline to the messages height and reveals it with Expand / Collapse', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
       const { queryClient } = renderView();
 
-      const [showMore] = await screen.findAllByRole('button', { name: 'Show more' });
-      if (!showMore) throw new Error('expected a Show more button');
+      const [showMore] = await screen.findAllByRole('button', { name: 'Expand' });
+      if (!showMore) throw new Error('expected an Expand button');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
 
       fireEvent.click(showMore);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      const showLess = screen.getByRole('button', { name: 'Show less' });
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
+      const showLess = screen.getByRole('button', { name: 'Collapse' });
 
       fireEvent.click(showLess);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
-    it('does not offer Show more when the timeline already fits', async () => {
+    it('does not offer Expand when the timeline already fits', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 200 });
       installHandlers();
       const { queryClient } = renderView();
 
       await screen.findByText('Chef agent run');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull();
       // The clamp stays on so the cell never grows past the messages column while the
       // timeline remeasures after a tab switch; a shorter timeline is unaffected by it.
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
@@ -545,19 +614,23 @@ describe('ThreadViewByTrace', () => {
       installHandlers();
       const { queryClient } = renderView();
 
-      await screen.findAllByRole('button', { name: 'Show more' });
+      await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
       await screen.findByRole('heading', { name: /^Span/ });
 
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
-      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
-      expect(screen.getByRole('button', { name: 'Show less' })).not.toBeNull();
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
+      expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
     });
   });
 
@@ -642,6 +715,29 @@ describe('ThreadViewByTrace', () => {
       expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
+    it('fetches scores only once a Scores tab is opened', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const scoreRequests: string[] = [];
+      server.events.on('request:start', ({ request }) => {
+        if (new URL(request.url).pathname.endsWith('/scores')) scoreRequests.push(request.url);
+      });
+      renderView();
+
+      const row = (await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement;
+      // Give the per-row span queries time to resolve (the old badge query fired right after).
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(scoreRequests).toHaveLength(0);
+
+      fireEvent.click(within(row).getByRole('tab', { name: /Scores/ }));
+      expect(await within(row).findByText('No scores yet')).not.toBeNull();
+      expect(scoreRequests.every(url => url.includes(`/traces/${row.getAttribute('data-trace-id')}/`))).toBe(true);
+      expect(scoreRequests.length).toBeGreaterThan(0);
+      expect(within(row).getByRole('tab', { name: /Scores/ }).textContent).toBe('Scores');
+
+      server.events.removeAllListeners('request:start');
+    });
+
     it('hands the trace and score ids to onOpenScore when a score is selected', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -657,26 +753,26 @@ describe('ThreadViewByTrace', () => {
       expect(onOpenScore).toHaveBeenCalledWith(traceId, 'score-1');
     });
 
-    it('shows the feedback count on the Feedback tab', async () => {
+    it('does not fetch feedback until the Feedback tab is opened', async () => {
       installHandlers();
-      installFeedbackHandlers(
-        listFeedbackResponse([
-          feedbackRecord({ feedbackId: 'trace-a-fb-1', traceId: 'trace-a', reviewStatus: 'needs-review' }),
-        ]),
+      const onFeedbackRequest = vi.fn();
+      server.use(
+        http.get(FEEDBACK_URL, () => {
+          onFeedbackRequest();
+          return HttpResponse.json(traceAFeedback);
+        }),
       );
       renderView();
 
-      await screen.findByText('Chef agent run');
-      expect((await screen.findAllByRole('tab', { name: /^Feedback \(1\)/ })).length).toBeGreaterThan(0);
-    });
+      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      // Both rows are rendered with their tabs, yet no row fetched feedback for a badge.
+      expect(screen.getAllByRole('tab', { name: 'Feedback' }).length).toBeGreaterThan(1);
+      expect(onFeedbackRequest).not.toHaveBeenCalled();
 
-    it('shows a zero count on the Feedback tab when there is no feedback', async () => {
-      installHandlers();
-      installFeedbackHandlers(listFeedbackResponse([]));
-      renderView();
+      fireEvent.click(firstRow.getByRole('tab', { name: 'Feedback' }));
 
-      await screen.findByText('Chef agent run');
-      expect((await screen.findAllByRole('tab', { name: /^Feedback \(0\)/ })).length).toBeGreaterThan(0);
+      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      await waitFor(() => expect(onFeedbackRequest).toHaveBeenCalled());
     });
 
     it('submits trace-level feedback from the Feedback tab', async () => {
@@ -726,43 +822,147 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  describe("when listing the thread's traces", () => {
-    it('scopes the trace query to the thread', async () => {
+  describe.each([true, false])('as a chat (withQueryTrace=%s)', withQueryTrace => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    // trace-b is the newest turn, trace-a the oldest; each page holds one of them.
+    const pages = [threadTracesList.spans[1], threadTracesList.spans[0]];
+
+    type Request = { order: string | undefined; size: number; next: boolean; params: Record<string, unknown> };
+
+    const installPagedHandlers = ({ lastPage = 1, overlap = false } = {}) => {
       installHandlers();
-      const onQuery = vi.fn();
+      const requests: Request[] = [];
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-          onQuery(await request.json());
-          return HttpResponse.json(queryPageFromList(newestFirstList));
+          const body = (await request.json()) as {
+            orderBy: Array<{ direction: string }>;
+            page: { limit: number; after?: string };
+          };
+          const index = body.page.after ? 1 : 0;
+          requests.push({ order: body.orderBy[0]?.direction, size: body.page.limit, next: index > 0, params: body });
+          return HttpResponse.json({
+            ...queryPageFromList({ ...threadTracesList, spans: [pages[index]] }),
+            page: { next: index < lastPage ? 'older' : null },
+          });
         }),
-      );
-      renderView();
-
-      await screen.findByText('Chef agent run');
-
-      expect(onQuery).toHaveBeenCalled();
-      expect(onQuery.mock.calls[0][0]).toMatchObject({
-        where: { op: 'eq', left: { path: 'threadId' }, right: { literal: THREAD_ID } },
-      });
-    });
-
-    it('scopes the legacy trace list to the thread when trace query is disabled', async () => {
-      installHandlers();
-      const onList = vi.fn();
-      server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) => {
-          onList(new URL(request.url).searchParams);
-          return HttpResponse.json(newestFirstList);
+          const params = Object.fromEntries(new URL(request.url).searchParams);
+          const index = Number(params.page ?? 0);
+          requests.push({ order: params.direction, size: Number(params.perPage), next: index > 0, params });
+          // An offset page can repeat the last row of the previous one when a turn lands mid-paging.
+          const spans = overlap && index > 0 ? [pages[0], pages[index]] : [pages[index]];
+          return HttpResponse.json({
+            spans,
+            pagination: { total: 2, page: index, perPage: 1, hasMore: index < lastPage },
+          } satisfies typeof threadTracesList);
         }),
       );
-      renderView({ withQueryTrace: false });
+      return requests;
+    };
 
+    const rowIds = () =>
+      [...screen.getByTestId('thread-view-by-trace').querySelectorAll<HTMLElement>('[data-trace-id]')].map(
+        row => row.dataset.traceId,
+      );
+
+    it('requests the newest turns first and reads them oldest to newest', async () => {
+      const requests = installPagedHandlers();
+      stubScrollLayout();
+      renderView({ withQueryTrace });
+      await screen.findByText('Chef agent follow-up');
+
+      expect(requests[0]?.order).toBe(withQueryTrace ? 'desc' : 'DESC');
+      scrollUpToOldest();
       await screen.findByText('Chef agent run');
-
-      expect(onList).toHaveBeenCalled();
-      const params: URLSearchParams = onList.mock.calls[0][0];
-      expect(params.get('threadId')).toBe(THREAD_ID);
-      expect(params.get('startedAt')).not.toBeNull();
+      expect(rowIds()).toEqual(['trace-a', 'trace-b']);
     });
+
+    it('loads 10 turns per page by default, or the given pageSize', async () => {
+      const requests = installPagedHandlers();
+      const { unmount } = renderView({ withQueryTrace });
+      await screen.findByText('Chef agent follow-up');
+      expect(requests[0]?.size).toBe(10);
+      unmount();
+
+      renderView({ withQueryTrace, pageSize: 4 });
+      await waitFor(() => expect(requests).toHaveLength(2));
+      expect(requests[1]?.size).toBe(4);
+    });
+
+    it('searches the last 31 days (the trace query maximum) and the whole thread with the legacy list', async () => {
+      const requests = installPagedHandlers();
+      renderView({ withQueryTrace });
+      await screen.findByText('Chef agent follow-up');
+
+      if (withQueryTrace) {
+        const { from, to } = (requests[0]?.params as { timeRange: { from: string; to: string } }).timeRange;
+        const days = (Date.parse(to) - Date.parse(from)) / (24 * 60 * 60 * 1000);
+        expect(days).toBe(31);
+      } else {
+        expect(requests[0]?.params.threadId).toBe(THREAD_ID);
+        expect(requests[0]?.params).not.toHaveProperty('startedAt');
+      }
+    });
+
+    it('opens at the latest turn and stays there while rows grow, until the reader scrolls up', async () => {
+      installPagedHandlers();
+      const { grow } = stubScrollLayout();
+      renderView({ withQueryTrace });
+      await screen.findByText('Chef agent follow-up');
+      const viewport = viewportOf();
+
+      await waitFor(() => expect(viewport.scrollTop).toBe(600));
+
+      act(() => grow(1200));
+      expect(viewport.scrollTop).toBe(800);
+
+      // The reader scrolls up: growth no longer pulls them back down.
+      act(() => scrollReaderTo(viewport, 300));
+      act(() => grow(1500));
+      expect(viewport.scrollTop).toBe(300);
+    });
+
+    it('loads older turns above when the reader reaches the top, keeping their place, and stops at the end', async () => {
+      const requests = installPagedHandlers();
+      const { setScrollHeight } = stubScrollLayout();
+      const { queryClient } = renderView({ withQueryTrace });
+      await screen.findByText('Chef agent follow-up');
+      const viewport = viewportOf();
+      await waitFor(() => expect(viewport.scrollTop).toBe(600));
+
+      act(() => scrollReaderTo(viewport, 0));
+      // The older row adds 500px above the reader.
+      setScrollHeight(1500);
+      await screen.findByText('Chef agent run');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(requests.map(request => request.next)).toEqual([false, true]);
+      expect(rowIds()).toEqual(['trace-a', 'trace-b']);
+      expect(viewport.scrollTop).toBe(500);
+
+      // No older page: reaching the top again requests nothing.
+      act(() => scrollReaderTo(viewport, 200));
+      act(() => scrollReaderTo(viewport, 0));
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requests).toHaveLength(2);
+    });
+
+    if (!withQueryTrace) {
+      it('renders a turn repeated across offset pages once', async () => {
+        installPagedHandlers({ overlap: true });
+        stubScrollLayout();
+        const { queryClient } = renderView({ withQueryTrace });
+        await screen.findByText('Chef agent follow-up');
+
+        scrollUpToOldest();
+        await screen.findByText('Chef agent run');
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        expect(rowIds()).toEqual(['trace-a', 'trace-b']);
+      });
+    }
   });
 });

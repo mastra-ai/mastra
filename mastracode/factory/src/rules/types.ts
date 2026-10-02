@@ -295,7 +295,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
-  repository: { id: number; fullName: string };
+  /** `installationId` is the GitHub App installation the delivery arrived through. */
+  repository: { id: number; fullName: string; installationId?: number };
   issue?: {
     number: number;
     title: string;
@@ -339,7 +340,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   /** Present when a PR comment uses Factory's exact review command. */
   reviewCommand?: { command: 'review' | 're-review'; target: string };
   /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
-  review?: { id: number; state: string; url: string };
+  review?: { id: number; state: string; url: string; author?: string; body?: string };
 }
 
 /**
@@ -609,8 +610,23 @@ export interface FactoryNotifyDecision extends FactoryCommitDecisionBase {
   level?: 'info' | 'warning' | 'error';
 }
 
+/**
+ * Dismisses Factory change requests an approval has superseded on a GitHub
+ * pull request. Only reviews carrying Factory's `Verdict: request changes`
+ * marker from an identity other than the approving one are dismissed.
+ */
+export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisionBase {
+  type: 'dismissStaleReviews';
+  installationId: number;
+  repository: string;
+  pullRequestNumber: number;
+  approvingReviewId: string;
+  approvingAuthor: string;
+}
+
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
+  | FactoryDismissStaleReviewsDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision
   | FactorySendMessageDecision

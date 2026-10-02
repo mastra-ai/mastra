@@ -2,6 +2,7 @@ import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -108,6 +109,7 @@ export function SegmentedControl<T extends string = string>({
           if (isItemValue(next)) onValueChange(next);
         }}
         aria-label={ariaLabel}
+        {...keepOwnAccessibleName({ 'aria-label': ariaLabel, 'aria-labelledby': props['aria-labelledby'] })}
         data-slot="segmented-control"
         data-size={size}
         className={cn(
@@ -162,6 +164,7 @@ export function SegmentedControlItem({
   return (
     <RadioPrimitive.Root
       {...props}
+      render={<span aria-labelledby={props['aria-labelledby']} />}
       ref={itemRef}
       value={value}
       disabled={disabled}

@@ -144,7 +144,6 @@ export function TraceSpanPanel({
       <TraceThreadPanel
         title={title}
         threadId={threadId}
-        anchorTraceId={traceId}
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
@@ -204,6 +203,7 @@ export function TraceSpanPanel({
             isLoading={isLoadingSpanDetail}
             onPrevious={handlePreviousSpan}
             onNext={handleNextSpan}
+            onClose={() => onSpanSelect(undefined)}
             activeTab={spanActiveTab}
             onTabChange={onSpanTabChange}
             feedbackTabBadge={spanFeedbackTabBadge}

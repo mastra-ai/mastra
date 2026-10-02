@@ -160,6 +160,7 @@ describe('DurableAgent abort signal', () => {
     }
 
     expect(abortPayload?.text).toBe('Hello');
+    expect(await output.text).toBe('Hello');
 
     cleanup();
   });

@@ -31,9 +31,14 @@ function createMockObservabilityStorage(options?: {
   inputCost?: number;
   outputCost?: number;
   costUnit?: string;
+  incomplete?: boolean;
 }): ObservabilityStorage {
   return {
-    getMetricAggregate: vi.fn().mockImplementation(async (args: { name: string[] }) => {
+    getMetricAggregate: vi.fn().mockImplementation(async (args: { name: string[]; aggregation: string }) => {
+      if (args.aggregation === 'count') {
+        return { value: options?.incomplete ? 1 : 0, estimatedCost: null, costUnit: null };
+      }
+
       // The guard queries both token totals in one call; sum the configured costs.
       let estimatedCost: number | null = null;
       if (args.name.includes('mastra_model_total_input_tokens') && options?.inputCost !== undefined) {
@@ -160,6 +165,30 @@ describe('TokenCostControl', () => {
 
       // Total: 0.08 < 1.00
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+    });
+
+    it('allows incomplete usage when the known lower-bound cost is under maxCost', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.25,
+        outputCost: 0.15,
+        costUnit: 'usd',
+        incomplete: true,
+      });
+      const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run' });
+      guard.__registerMastra(createMockMastra(obsStorage));
+
+      const args = createInputStepArgs({
+        stepNumber: 2,
+        tracing: createMockTracing('trace-incomplete') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aggregation: 'count',
+          filters: expect.objectContaining({ labels: { usageIncomplete: 'true' } }),
+        }),
+      );
     });
 
     it('queries with traceId filter for run scope', async () => {
@@ -1126,6 +1155,31 @@ describe('TokenCostControl', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('80%'));
     });
 
+    it('soft threshold evaluates the known lower-bound cost when usage is incomplete', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.25,
+        outputCost: 0.2,
+        costUnit: 'usd',
+        incomplete: true,
+      });
+      const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run', strategy: 'block', warnAtPercent: 80 });
+      guard.__registerMastra(createMockMastra(obsStorage));
+      const onViolation = vi.fn();
+      guard.onViolation = onViolation;
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        tracing: createMockTracing('trace-soft-incomplete') as any,
+      });
+
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(onViolation.mock.calls[0]![0].detail).toMatchObject({
+        threshold: 'soft',
+        totalUsage: { incomplete: true },
+      });
+    });
+
     it('soft threshold fires onViolation with threshold soft and does not abort (warn strategy)', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.25, outputCost: 0.2, costUnit: 'usd' });
       const guard = new TokenCostControl({ maxCost: 0.5, scope: 'run', strategy: 'warn', warnAtPercent: 80 });
@@ -1676,8 +1730,8 @@ describe('TokenCostControl', () => {
     });
   });
 
-  describe('hardening (single query, logger, precision)', () => {
-    it('queries both token metric names in a single getMetricAggregate call', async () => {
+  describe('hardening (queries, logger, precision)', () => {
+    it('queries cost and incomplete usage for both token metric names', async () => {
       const obsStorage = createMockObservabilityStorage({ inputCost: 0.1, outputCost: 0.1, costUnit: 'usd' });
       const guard = createRunScopeGuard(10.0, obsStorage);
 
@@ -1688,11 +1742,18 @@ describe('TokenCostControl', () => {
 
       await guard.processInputStep(args);
 
-      expect(obsStorage.getMetricAggregate).toHaveBeenCalledTimes(1);
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledTimes(2);
       expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
         expect.objectContaining({
           name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
           aggregation: 'sum',
+        }),
+      );
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+          aggregation: 'count',
+          filters: expect.objectContaining({ labels: { usageIncomplete: 'true' } }),
         }),
       );
     });

@@ -1,5 +1,324 @@
 # @mastra/playground-ui
 
+## 60.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6)]:
+  - @mastra/core@1.75.0-alpha.0
+  - @mastra/memory@1.36.0-alpha.0
+  - @mastra/ai-sdk@1.10.7-alpha.0
+  - @mastra/client-js@1.51.3-alpha.0
+  - @mastra/react@1.7.3-alpha.0
+
+## 60.2.0
+
+### Minor Changes
+
+- Added `Field` components for building form fields: `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldContent`, `FieldItem`, `Fieldset` and `FieldsetLegend`, from `@mastra/playground-ui/components/Field`. They are built on Base UI Field and Fieldset. Put a label and any control inside a `Field`, and the label names the control. The description and error are linked to it too, and the control is marked invalid, with no ids to pass around. The part names follow shadcn/ui, but unlike shadcn, `FieldLabel` needs no `htmlFor` and the control no `id`. Code copied from shadcn that still passes them keeps working. ([#25317](https://github.com/mastra-ai/mastra/pull/25317))
+
+  ```tsx
+  // Before
+  <TextFieldBlock name="email" label="Email" helpText="Used to sign in." errorMsg={errors.email?.message} required />
+
+  // After
+  <Field invalid={Boolean(errors.email)}>
+    <FieldLabel required>Email</FieldLabel>
+    <Input {...register('email')} />
+    <FieldDescription>Used to sign in.</FieldDescription>
+    <FieldError>{errors.email?.message}</FieldError>
+  </Field>
+  ```
+
+  This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. For a control that is not built on Base UI, such as a custom popover trigger, spread `useFieldControlAria()` on it to get the same label, description and invalid wiring. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`: the row is centred, and when the label comes first the control sits at the far end, so a settings toggle needs no extra classes. Use `orientation="responsive"` to stack it on small screens. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
+
+  A `Field` holds one control. When one title covers several controls, use a `Fieldset` with a `FieldsetLegend` (it takes `required` like `FieldLabel`), and name each control with its own `aria-label`. For a settings row, use the new `SettingsFieldsetRow`:
+
+  ```tsx
+  <SettingsFieldsetRow label="Releases" description="Where new issues go.">
+    <SelectTrigger aria-label="Factory for Releases">…</SelectTrigger>
+    <SelectTrigger aria-label="Board for Releases">…</SelectTrigger>
+  </SettingsFieldsetRow>
+  ```
+
+  A control that has its own `aria-label` keeps that name inside a `Field` too, the same way `aria-label` wins over a native `<label>`.
+
+  Labels are styled by the `Field`: a label beside a `Checkbox`, `Switch` or radio shows a pointer cursor, so no `cursor-*` or color classes are needed. To disable a field, put `disabled` on the `Field`, `FieldItem` or `Fieldset` rather than on the control: the control is disabled through it, and only then does the label show it can't be clicked. For compact rows, use `<FieldLabel size="smaller">`.
+
+  Added `Form` (`@mastra/playground-ui/components/Form`), built on Base UI Form, with one standard gap between fields. Put a `<FieldError />` with no children in a field that uses `required`, `type="email"`, `min` or `max`: when a user submits an invalid value, the form stops, focuses that field and shows the browser's message there.
+
+  Added `SearchInput` (`@mastra/playground-ui/components/SearchInput`), a search box with a hidden label, a search icon and a clear button that puts focus back in the field. It updates on every keystroke. Pass `onClose` for a search that collapses: the button then reads "Close search", stays visible and calls `onClose` after clearing. `ListSearch` is now built on it and adds the 300 ms debounce and the Cmd/Ctrl+Shift+F shortcut. Emptying a `ListSearch`, by typing or with the clear button, now calls `onSearch('')` right away. Both render `<input type="search">`, so tests find them by role `searchbox` instead of `textbox`.
+
+  `TimePicker` takes an optional `label` (default "Time") that names its group, and its hour, minute and AM/PM selects now have names. `DateTimeRangePicker` labels its pickers "Start time" and "End time".
+
+  `InputGroupInput` now types in the same text style as `Input` (`text-label`, 13px medium) at every size, instead of a lighter body style that shrank to 12px at `sm`. Search boxes, environment variable rows and comment inputs now match the text fields around them.
+
+  **Why**
+
+  Before, there were three ways to build a field: the `*FieldBlock` components, `FieldBlock` parts with hand-built ids, and `Label` with `htmlFor`. Mistakes in the id wiring left fields without an accessible name, such as hidden labels that were dropped and radio labels pointing at a `div`. Now there is one way to build a field, and it links the label, description and error for you.
+
+  **Deprecated**
+
+  These still work as before, so existing code keeps building. Studio and Factory no longer use them. They stay until no consumer does, then a later release removes them:
+
+  - `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `SearchInput`, which keeps `SearchFieldBlock`'s immediate updates, or `ListSearch` for a list filter. `ListSearch` calls `onSearch` 300 ms after typing stops, and needs `shortcutDisabled` on a second search box on the same page.
+  - `FieldBlock.ErrorMsg` for a message that belongs to no single control, such as a server error under a form: `FieldError` throws outside a `Field`, so wrap it in `<Field invalid>`.
+  - `Label` (`@mastra/playground-ui/components/Label`): use `FieldLabel` inside a `Field`. For a group title, use `FieldsetLegend` inside a `Fieldset`.
+  - The `error` prop on `Input`, `Textarea`, `InputGroupInput` and `InputGroupTextarea`: use `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`.
+  - The `error` and `name` props on `Combobox`, and the `root` and `error` keys of `comboboxStyles`: wrap the combobox in `<Field invalid>` with a `FieldError`.
+  - The `htmlFor` prop on `SettingsRow`: pass the control as a child without an `id`, and the row's label names it.
+
+  **Changed**
+
+  - `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. `FieldName` and `FieldDescription` take `label`, `labelIsHidden` and the props of their input. `FieldType` takes `label`, `labelIsHidden`, `placeholder`, `size`, `disabled` and `className`.
+
+### Patch Changes
+
+- Added a `repeat` option to `useKeydown`. Set it to `false` so holding a key runs the handler once instead of on every key repeat, which suits toggles: ([#25438](https://github.com/mastra-ai/mastra/pull/25438))
+
+  ```tsx
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
+  ```
+
+- Fixed `SelectTrigger` and `Combobox` triggers shrinking to their content instead of filling their field. Pickers in settings rows and forms line up with the container edge again. Combobox triggers with `iconOnlyValue` stay compact. ([#25591](https://github.com/mastra-ai/mastra/pull/25591))
+
+- Made `SettingsRow` give select and combobox controls one shared width (16rem) beside the label, so pickers line up across rows without each call site sizing them. A width class on the trigger still overrides it, and stacked rows on small screens keep full-width controls. Added a `SettingsRow` Storybook story. ([#25635](https://github.com/mastra-ai/mastra/pull/25635))
+
+- Fixed the thread view firing repeated scores requests for every trace. Scores now load only when a trace's Scores tab is open, and the tab no longer shows a count. ([#25683](https://github.com/mastra-ai/mastra/pull/25683))
+
+- The trace thread view now reads like a chat. It opens on the latest turns, stays on the newest turn while messages and spans load, and loads older turns as you scroll up without moving what you are reading. It now searches the last 31 days of traces, up from 30 (no limit when trace query is unavailable), and the new `pageSize` prop sets how many turns load at a time (default 10). ([#25693](https://github.com/mastra-ai/mastra/pull/25693))
+
+  **Breaking:** `anchorTraceId` was removed from `ThreadViewByTrace`, `TraceThreadPanel` and `ThreadTrace`, and `ThreadTrace.LoadMoreSentinel` was removed. Pass `onLoadOlder` to `ThreadTrace` to load older turns.
+
+  ```tsx
+  // Before
+  <ThreadViewByTrace threadId={threadId} anchorTraceId={traceId} />
+
+  // After
+  <ThreadViewByTrace threadId={threadId} pageSize={20} />
+  ```
+
+- Reduce observability polling in Studio: ([#25705](https://github.com/mastra-ai/mastra/pull/25705))
+
+  - Thread view: stop fetching and polling feedback for every trace row just to show a count on the Feedback tab. Feedback is now only loaded while a row's Feedback tab is open, matching the Messages and Scores tabs.
+  - Slow down the default refetch intervals: feedback polls every 30s (was 3s), scores and trace span scores every 15s (was 5s / 3s).
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.74.0
+  - @mastra/memory@1.35.0
+  - @mastra/client-js@1.51.2
+  - @mastra/ai-sdk@1.10.6
+  - @mastra/react@1.7.2
+
+## 60.2.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.73.1-alpha.1
+  - @mastra/client-js@1.51.2-alpha.1
+  - @mastra/react@1.7.2-alpha.1
+
+## 60.2.0-alpha.0
+
+### Minor Changes
+
+- Added `Field` components for building form fields: `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldContent`, `FieldItem`, `Fieldset` and `FieldsetLegend`, from `@mastra/playground-ui/components/Field`. They are built on Base UI Field and Fieldset. Put a label and any control inside a `Field`, and the label names the control. The description and error are linked to it too, and the control is marked invalid, with no ids to pass around. The part names follow shadcn/ui, but unlike shadcn, `FieldLabel` needs no `htmlFor` and the control no `id`. Code copied from shadcn that still passes them keeps working. ([#25317](https://github.com/mastra-ai/mastra/pull/25317))
+
+  ```tsx
+  // Before
+  <TextFieldBlock name="email" label="Email" helpText="Used to sign in." errorMsg={errors.email?.message} required />
+
+  // After
+  <Field invalid={Boolean(errors.email)}>
+    <FieldLabel required>Email</FieldLabel>
+    <Input {...register('email')} />
+    <FieldDescription>Used to sign in.</FieldDescription>
+    <FieldError>{errors.email?.message}</FieldError>
+  </Field>
+  ```
+
+  This works for `Input`, `Textarea`, `InputGroupInput`, `InputGroupTextarea`, `Select`, `Combobox`, `Checkbox`, `Switch`, `RadioGroup` and `CodeEditor`. For a control that is not built on Base UI, such as a custom popover trigger, spread `useFieldControlAria()` on it to get the same label, description and invalid wiring. To hide a label and keep it for screen readers, use `<FieldLabel className="sr-only">`. To put the label beside the control, use `<Field orientation="horizontal">`: the row is centred, and when the label comes first the control sits at the far end, so a settings toggle needs no extra classes. Use `orientation="responsive"` to stack it on small screens. For a radio group, use `<Fieldset render={<RadioGroup />}>` with a `FieldsetLegend`, and wrap each option in a `FieldItem`.
+
+  A `Field` holds one control. When one title covers several controls, use a `Fieldset` with a `FieldsetLegend` (it takes `required` like `FieldLabel`), and name each control with its own `aria-label`. For a settings row, use the new `SettingsFieldsetRow`:
+
+  ```tsx
+  <SettingsFieldsetRow label="Releases" description="Where new issues go.">
+    <SelectTrigger aria-label="Factory for Releases">…</SelectTrigger>
+    <SelectTrigger aria-label="Board for Releases">…</SelectTrigger>
+  </SettingsFieldsetRow>
+  ```
+
+  A control that has its own `aria-label` keeps that name inside a `Field` too, the same way `aria-label` wins over a native `<label>`.
+
+  Labels are styled by the `Field`: a label beside a `Checkbox`, `Switch` or radio shows a pointer cursor, so no `cursor-*` or color classes are needed. To disable a field, put `disabled` on the `Field`, `FieldItem` or `Fieldset` rather than on the control: the control is disabled through it, and only then does the label show it can't be clicked. For compact rows, use `<FieldLabel size="smaller">`.
+
+  Added `Form` (`@mastra/playground-ui/components/Form`), built on Base UI Form, with one standard gap between fields. Put a `<FieldError />` with no children in a field that uses `required`, `type="email"`, `min` or `max`: when a user submits an invalid value, the form stops, focuses that field and shows the browser's message there.
+
+  Added `SearchInput` (`@mastra/playground-ui/components/SearchInput`), a search box with a hidden label, a search icon and a clear button that puts focus back in the field. It updates on every keystroke. Pass `onClose` for a search that collapses: the button then reads "Close search", stays visible and calls `onClose` after clearing. `ListSearch` is now built on it and adds the 300 ms debounce and the Cmd/Ctrl+Shift+F shortcut. Emptying a `ListSearch`, by typing or with the clear button, now calls `onSearch('')` right away. Both render `<input type="search">`, so tests find them by role `searchbox` instead of `textbox`.
+
+  `TimePicker` takes an optional `label` (default "Time") that names its group, and its hour, minute and AM/PM selects now have names. `DateTimeRangePicker` labels its pickers "Start time" and "End time".
+
+  `InputGroupInput` now types in the same text style as `Input` (`text-label`, 13px medium) at every size, instead of a lighter body style that shrank to 12px at `sm`. Search boxes, environment variable rows and comment inputs now match the text fields around them.
+
+  **Why**
+
+  Before, there were three ways to build a field: the `*FieldBlock` components, `FieldBlock` parts with hand-built ids, and `Label` with `htmlFor`. Mistakes in the id wiring left fields without an accessible name, such as hidden labels that were dropped and radio labels pointing at a `div`. Now there is one way to build a field, and it links the label, description and error for you.
+
+  **Deprecated**
+
+  These still work as before, so existing code keeps building. Studio and Factory no longer use them. They stay until no consumer does, then a later release removes them:
+
+  - `TextFieldBlock`, `TextareaFieldBlock`, `SelectFieldBlock`, `SearchFieldBlock`, `FieldBlock`, `FieldBlocksLayout` and `fieldErrorId` (`@mastra/playground-ui/components/FormFieldBlocks`): build fields with the `Field` components. A select without a visible label, such as a toolbar filter, needs no `Field`: name it with `<SelectTrigger aria-label="…">`. For a search box, use `SearchInput`, which keeps `SearchFieldBlock`'s immediate updates, or `ListSearch` for a list filter. `ListSearch` calls `onSearch` 300 ms after typing stops, and needs `shortcutDisabled` on a second search box on the same page.
+  - `FieldBlock.ErrorMsg` for a message that belongs to no single control, such as a server error under a form: `FieldError` throws outside a `Field`, so wrap it in `<Field invalid>`.
+  - `Label` (`@mastra/playground-ui/components/Label`): use `FieldLabel` inside a `Field`. For a group title, use `FieldsetLegend` inside a `Fieldset`.
+  - The `error` prop on `Input`, `Textarea`, `InputGroupInput` and `InputGroupTextarea`: use `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`.
+  - The `error` and `name` props on `Combobox`, and the `root` and `error` keys of `comboboxStyles`: wrap the combobox in `<Field invalid>` with a `FieldError`.
+  - The `htmlFor` prop on `SettingsRow`: pass the control as a child without an `id`, and the row's label names it.
+
+  **Changed**
+
+  - `JSONSchemaForm.FieldName`, `JSONSchemaForm.FieldDescription` and `JSONSchemaForm.FieldType` no longer accept the old `TextFieldBlock` or `SelectFieldBlock` props. `FieldName` and `FieldDescription` take `label`, `labelIsHidden` and the props of their input. `FieldType` takes `label`, `labelIsHidden`, `placeholder`, `size`, `disabled` and `className`.
+
+### Patch Changes
+
+- Added a `repeat` option to `useKeydown`. Set it to `false` so holding a key runs the handler once instead of on every key repeat, which suits toggles: ([#25438](https://github.com/mastra-ai/mastra/pull/25438))
+
+  ```tsx
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
+  ```
+
+- Fixed `SelectTrigger` and `Combobox` triggers shrinking to their content instead of filling their field. Pickers in settings rows and forms line up with the container edge again. Combobox triggers with `iconOnlyValue` stay compact. ([#25591](https://github.com/mastra-ai/mastra/pull/25591))
+
+- Made `SettingsRow` give select and combobox controls one shared width (16rem) beside the label, so pickers line up across rows without each call site sizing them. A width class on the trigger still overrides it, and stacked rows on small screens keep full-width controls. Added a `SettingsRow` Storybook story. ([#25635](https://github.com/mastra-ai/mastra/pull/25635))
+
+- Fixed the thread view firing repeated scores requests for every trace. Scores now load only when a trace's Scores tab is open, and the tab no longer shows a count. ([#25683](https://github.com/mastra-ai/mastra/pull/25683))
+
+- The trace thread view now reads like a chat. It opens on the latest turns, stays on the newest turn while messages and spans load, and loads older turns as you scroll up without moving what you are reading. It now searches the last 31 days of traces, up from 30 (no limit when trace query is unavailable), and the new `pageSize` prop sets how many turns load at a time (default 10). ([#25693](https://github.com/mastra-ai/mastra/pull/25693))
+
+  **Breaking:** `anchorTraceId` was removed from `ThreadViewByTrace`, `TraceThreadPanel` and `ThreadTrace`, and `ThreadTrace.LoadMoreSentinel` was removed. Pass `onLoadOlder` to `ThreadTrace` to load older turns.
+
+  ```tsx
+  // Before
+  <ThreadViewByTrace threadId={threadId} anchorTraceId={traceId} />
+
+  // After
+  <ThreadViewByTrace threadId={threadId} pageSize={20} />
+  ```
+
+- Reduce observability polling in Studio: ([#25705](https://github.com/mastra-ai/mastra/pull/25705))
+
+  - Thread view: stop fetching and polling feedback for every trace row just to show a count on the Feedback tab. Feedback is now only loaded while a row's Feedback tab is open, matching the Messages and Scores tabs.
+  - Slow down the default refetch intervals: feedback polls every 30s (was 3s), scores and trace span scores every 15s (was 5s / 3s).
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99)]:
+  - @mastra/core@1.73.1-alpha.0
+  - @mastra/client-js@1.51.2-alpha.0
+  - @mastra/react@1.7.2-alpha.0
+
+## 60.1.0
+
+### Minor Changes
+
+- Added `SegmentedControl`, a pill-shaped control for picking one of a few options. The selected option is marked by a thumb that slides between segments. Items can hold text, an icon and text, or only an icon (`iconOnly`). It supports the `sm`/`md`/`lg` control sizes, and disabled options with an optional tooltip. ([#25570](https://github.com/mastra-ai/mastra/pull/25570))
+
+  ```tsx
+  import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+
+  <SegmentedControl aria-label="Permission" value={policy} onValueChange={setPolicy}>
+    <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
+    <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
+    <SegmentedControlItem value="deny">Deny</SegmentedControlItem>
+  </SegmentedControl>;
+  ```
+
+  `ThemeToggle` is now built on `SegmentedControl`, so both look the same. It uses the shared control sizes, so the default size is slightly taller and lines up with buttons and selects. `size="xs"` is deprecated and renders as `sm`. Keyboard focus is now visible.
+
+- Improved warning and error colors so alerts, status dots, badges, buttons, charts, and usage values read as one family in light and dark mode. ([#25587](https://github.com/mastra-ai/mastra/pull/25587))
+
+  - The `yellow` ramp is now `amber`. It warms as it darkens, so warnings read as gold instead of mustard or olive.
+  - Red uses one hue across every step, so error text, badges, charts, and destructive buttons match.
+  - Added `--warning-foreground` and `--destructive-foreground` for colored text and icons. `*-indicator` is the fill for dots, bars, chart marks, and borders. The warning fill is too light to read as text in light mode, so text needs its own token.
+  - Dark-mode red surfaces (alerts, red badges, error washes) use a clear red instead of a brownish maroon, with a softer border.
+  - Destructive and warning badges use the same text color as the values beside them.
+  - Badge fills are translucent tints, so a badge follows the card or row under it on hover instead of sitting on it as a solid patch. On a resting surface they look the same as before. Product avatars stay solid.
+  - The disabled destructive button uses a softer fill with muted text, so it no longer looks like an enabled button in a darker red.
+
+  **Removed**
+
+  | Removed                                                                                                                | Replacement                                              |
+  | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `--yellow-50` … `--yellow-950` and `*-yellow-*` utilities                                                              | `--amber-*`, `*-amber-*`                                 |
+  | `--yellow-soft-*` and `*-yellow-soft-*` utilities                                                                      | `--amber-soft-*`, `*-amber-soft-*`                       |
+  | `--badge-yellow-strong`, `-subtle`, `-edge`, `-indicator`, `-foreground`                                               | `--badge-amber-*`                                        |
+  | `--chart-yellow`                                                                                                       | `--chart-amber`                                          |
+  | Badge `variant="yellow"`                                                                                               | `variant="amber"`                                        |
+  | `'yellow'` in `categoricalHues` and `CategoricalHue`                                                                   | `'amber'`                                                |
+  | `yellow-*`, `yellow-soft-*`, `badge-yellow-*`, and `chart-yellow` keys in `Colors` from `@mastra/playground-ui/tokens` | The matching `amber` keys                                |
+  | `text-warning-indicator` and `text-destructive-indicator` for text and icons (the tokens remain for fills)             | `text-warning-foreground`, `text-destructive-foreground` |
+
+  `--color-brand-yellow` is part of the fixed Mastra palette and is unchanged.
+
+  ```tsx
+  // Before
+  <Badge variant="yellow">Pinned</Badge>
+  <span className="text-warning-indicator">870K</span>
+  <i className="bg-badge-yellow-indicator" />
+
+  // After
+  <Badge variant="amber">Pinned</Badge>
+  <span className="text-warning-foreground">870K</span>
+  <i className="bg-badge-amber-indicator" />
+  ```
+
+### Patch Changes
+
+- Fixed pasting a single KEY=value line into an environment variable value field importing it as a new row instead of keeping it as the value. ([#25640](https://github.com/mastra-ai/mastra/pull/25640))
+
+- Fixed the thread view of a trace: resumed runs no longer show an empty user message, and long tool calls no longer cause horizontal scrolling. ([#25586](https://github.com/mastra-ai/mastra/pull/25586))
+
+- Include `threadId` and `resourceId` on lightweight trace list rows so the Thread ID and Resource ID columns render when the trace query API is unavailable. ([#25433](https://github.com/mastra-ai/mastra/pull/25433))
+
+- Removed the "Primitive ID" filter from the metrics dashboard. The metrics API ignored it, so the filter looked active but had no effect. ([#25627](https://github.com/mastra-ai/mastra/pull/25627))
+
+- Fixed the Studio trace thread view showing observational memory's internal output (such as the observer's capture JSON) as the agent's reply. Observational memory processor runs and their observer/reflector agents are now left out of the reconstructed conversation. ([#25565](https://github.com/mastra-ai/mastra/pull/25565))
+
+- The trace thread view no longer shows empty rows for task and working-memory tool calls, which the chat already hides. ([#25565](https://github.com/mastra-ai/mastra/pull/25565))
+
+- Fixed system messages in trace previews showing raw markdown (like `#` and `**`). They are now rendered as formatted text, like user and assistant messages. Long span input and output boxes (Preview and JSON) are now collapsed with an Expand button instead of scrolling inside a fixed height. ([#25571](https://github.com/mastra-ai/mastra/pull/25571))
+
+  Added `CollapsibleBox` and `useCollapsibleBox`: a box that clips content past a measured height with a fade, while you place the expand control anywhere. The `Plan` component now uses it.
+
+- Thread view now only lists traces from the selected thread when trace query is disabled. ([#25593](https://github.com/mastra-ai/mastra/pull/25593))
+
+- The "Highlight spans" action for tool calls in the trace thread view now sits on the same line as the tool call instead of below it. ([#25593](https://github.com/mastra-ai/mastra/pull/25593))
+
+- Fixed variable autocomplete in the code editor leaving leftover text and duplicate closing braces when a suggestion was picked inside an existing {{placeholder}}. ([#25638](https://github.com/mastra-ai/mastra/pull/25638))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`d777c00`](https://github.com/mastra-ai/mastra/commit/d777c0041c127f3223ecb69e479f0fde6453a085), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`f4222ca`](https://github.com/mastra-ai/mastra/commit/f4222ca1c6c95269e6a2b88cf4d7ee01d89956dd), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`3f770ee`](https://github.com/mastra-ai/mastra/commit/3f770eeba5234b3610516fae0c0b7ce5965523ea), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`d777c00`](https://github.com/mastra-ai/mastra/commit/d777c0041c127f3223ecb69e479f0fde6453a085), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`2ab4149`](https://github.com/mastra-ai/mastra/commit/2ab4149d0b752a6dc404d6e1c0a8a7c539fa80d6), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0
+  - @mastra/memory@1.34.0
+  - @mastra/react@1.7.1
+  - @mastra/ai-sdk@1.10.6
+  - @mastra/client-js@1.51.1
+
+## 60.1.0-alpha.1
+
+### Patch Changes
+
+- Fixed pasting a single KEY=value line into an environment variable value field importing it as a new row instead of keeping it as the value. ([#25640](https://github.com/mastra-ai/mastra/pull/25640))
+
+- Removed the "Primitive ID" filter from the metrics dashboard. The metrics API ignored it, so the filter looked active but had no effect. ([#25627](https://github.com/mastra-ai/mastra/pull/25627))
+
+- Fixed variable autocomplete in the code editor leaving leftover text and duplicate closing braces when a suggestion was picked inside an existing {{placeholder}}. ([#25638](https://github.com/mastra-ai/mastra/pull/25638))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`2ab4149`](https://github.com/mastra-ai/mastra/commit/2ab4149d0b752a6dc404d6e1c0a8a7c539fa80d6), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0-alpha.1
+  - @mastra/ai-sdk@1.10.6-alpha.0
+  - @mastra/client-js@1.51.1-alpha.1
+  - @mastra/react@1.7.1-alpha.1
+  - @mastra/memory@1.34.0-alpha.1
+
 ## 60.1.0-alpha.0
 
 ### Minor Changes

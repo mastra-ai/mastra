@@ -302,7 +302,7 @@ describe('Board card buttons move the card', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     const user = userEvent.setup();
-    const search = within(dialog).getByRole('textbox', { name: 'Search repositories' });
+    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
     expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
     expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
 
@@ -343,7 +343,7 @@ describe('Board card buttons move the card', () => {
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search repositories' }), 'not-linked');
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
     expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
@@ -352,7 +352,7 @@ describe('Board card buttons move the card', () => {
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
     const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    expect(within(reopened).getByRole('textbox', { name: 'Search repositories' })).toHaveValue('');
+    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
     expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
     expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
     expect(patches).toHaveLength(0);
@@ -389,7 +389,7 @@ describe('Board card buttons move the card', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
     const user = userEvent.setup();
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search repositories' }), 'OTHER');
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
     await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
     expect(created).toHaveLength(0);
     expect(transitions).toHaveLength(0);

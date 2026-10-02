@@ -11,13 +11,14 @@ import {
   SaveIcon,
   WrenchIcon,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Panel } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
-import type { SearchableSpan } from '../types';
+import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
@@ -28,14 +29,16 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { Notice } from '@/ds/components/Notice';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
+import { PanelGroup } from '@/lib/resize/panel-group';
+import { PanelSeparator } from '@/lib/resize/separator';
 import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
@@ -49,7 +52,7 @@ export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: SearchableSpan[] | undefined;
+  spans: LightSpanRecord[] | undefined;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
@@ -252,7 +255,6 @@ export function TraceDataPanelView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, spans, isLoading]);
 
-  const searchFieldName = useId();
   const { query, setQuery, results, payloadOnlyMatchIds } = useTraceSearch(spans ?? []);
 
   const hierarchicalSpans = useMemo(
@@ -327,7 +329,6 @@ export function TraceDataPanelView({
   const sideColumn =
     traceId && sideView ? (
       <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-        {/* Same chrome as the trace column's Spans/Timeline header, so the two tab rows line up. */}
         <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
           <DataPanel.Header className="border-b border-border">
             <TabList variant="pill-ghost" size="sm">
@@ -339,7 +340,6 @@ export function TraceDataPanelView({
             </TabList>
           </DataPanel.Header>
         </Tabs>
-        {/* The turn view brings its own padding; feedback and scores use the panel's. */}
         {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
         {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
         {sideView === 'scores' && (
@@ -414,15 +414,12 @@ export function TraceDataPanelView({
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
                   <DataPanel.Header className="gap-2 border-b border-border">
-                    <SearchFieldBlock
-                      name={searchFieldName}
+                    <SearchInput
                       label="Search spans"
-                      labelIsHidden
                       placeholder="Search spans..."
-                      value={query}
-                      onChange={e => setQuery(e.target.value)}
-                      onReset={() => setQuery('')}
                       size="sm"
+                      value={query}
+                      onValueChange={setQuery}
                       className="w-full"
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
@@ -495,10 +492,8 @@ export function TraceDataPanelView({
 /**
  * Lays out the card body as three columns — `[side] [trace] [span]` — inside the
  * same card. The side column (messages / feedback / scores) is independent of the
- * Spans/Timeline tabs, so it sits beside them rather than inside a tab. The span
- * cell always exists and collapses to zero when hidden, so opening/closing it
- * animates via `grid-template-columns` rather than mounting/unmounting a DOM
- * column (which cannot be transitioned).
+ * Spans/Timeline tabs, so it sits beside them rather than inside a tab. The side
+ * and span columns are resizable (down to a minimum width); the trace column takes the rest.
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
@@ -509,7 +504,7 @@ function TracePanelColumns({
   spanPanelKey,
   children,
 }: {
-  /** Fixed-width column on the left; the trace and span tracks share the remaining space. */
+  /** Resizable column on the left (messages / feedback / scores). */
   sideColumnSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
@@ -527,35 +522,34 @@ function TracePanelColumns({
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
   return (
-    <div
-      ref={highlightRef}
-      data-trace-columns
-      className={cn(
-        'grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out',
-        sideColumnSlot
-          ? spanPanelSlot
-            ? 'grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]'
-            : 'grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]'
-          : spanPanelSlot
-            ? 'grid-cols-[0px_1fr_1fr]'
-            : 'grid-cols-[0px_1fr_0fr]',
-      )}
-    >
-      <div className={cn('flex min-h-0 min-w-0 flex-col overflow-hidden', sideColumnSlot && 'border-r border-border')}>
-        {sideColumnSlot}
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
-      {/* Searchable: the span detail is where a match hides inside a large payload. */}
-      <div
-        ref={scrollToMatchRef}
-        data-highlight
-        className={cn(
-          'flex min-h-0 min-w-0 flex-col overflow-hidden',
-          spanPanelSlot && 'animate-in border-l border-border duration-300 fade-in-0',
+    <div ref={highlightRef} data-trace-columns className="flex min-h-0 flex-1">
+      <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        {sideColumnSlot && (
+          <>
+            <Panel id="trace-side" minSize={280} defaultSize="40%">
+              <div className="flex h-full min-h-0 flex-col border-r border-border">{sideColumnSlot}</div>
+            </Panel>
+            <PanelSeparator variant="pill" />
+          </>
         )}
-      >
-        {spanPanelSlot}
-      </div>
+        <Panel id="trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+          {children}
+        </Panel>
+        {spanPanelSlot && (
+          <>
+            <PanelSeparator variant="pill" />
+            <Panel id="trace-span" minSize={320} defaultSize="35%">
+              <div
+                ref={scrollToMatchRef}
+                data-highlight
+                className="flex h-full min-h-0 animate-in flex-col border-l border-border duration-300 fade-in-0"
+              >
+                {spanPanelSlot}
+              </div>
+            </Panel>
+          </>
+        )}
+      </PanelGroup>
     </div>
   );
 }

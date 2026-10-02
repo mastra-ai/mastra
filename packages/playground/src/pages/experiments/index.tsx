@@ -87,7 +87,10 @@ export default function Experiments() {
 
   // Max 2 selected: keep the oldest pick, replace the most recent one.
   const toggleExperimentSelection = (experimentId: string) => {
-    setSelectedExperimentIds(prev => {
+    const knownIds = new Set(experiments.map(exp => exp.id));
+    setSelectedExperimentIds(current => {
+      // Drop ids whose experiment disappeared so they don't occupy a compare slot.
+      const prev = current.filter(id => knownIds.has(id));
       if (prev.includes(experimentId)) return prev.filter(id => id !== experimentId);
       if (prev.length >= 2) return [prev[0], experimentId];
       return [...prev, experimentId];
