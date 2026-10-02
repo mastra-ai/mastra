@@ -43,7 +43,7 @@ const workspace = new Workspace({
 // Files the model reads itself keep going to the model; everything else is uploaded to the sandbox.
 const fileUploadProcessor = new FileUploadProcessor({
   workspace,
-  extensions: ['.xlsx', '.xls'],
+  excludeMimeTypes: ['image/*', 'application/pdf', 'audio/*', 'video/*', 'text/*'],
 });
 
 const memory = new Memory({
