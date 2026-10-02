@@ -344,6 +344,77 @@ describe('Agent.streamUntilIdle', () => {
     },
   );
 
+  it('aborts a continuation while its stream is being created', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('initial response')]);
+    const agent = new Agent({
+      id: 'abort-pending-continuation',
+      name: 'abort-pending-continuation',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'abort-pending-continuation');
+
+    const originalStream = agent.stream.bind(agent);
+    let streamCalls = 0;
+    let markCreationStarted!: () => void;
+    const creationStarted = new Promise<void>(resolve => {
+      markCreationStarted = resolve;
+    });
+    let creationWasAborted = false;
+    vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
+      streamCalls += 1;
+      if (streamCalls === 1) return originalStream(messages, options) as any;
+
+      return new Promise((_, reject) => {
+        markCreationStarted();
+        const abort = () => {
+          creationWasAborted = true;
+          reject(new Error('Continuation creation aborted'));
+        };
+        if (options.abortSignal.aborted) abort();
+        else options.abortSignal.addEventListener('abort', abort, { once: true });
+      }) as any;
+    });
+
+    const runId = 'pending-continuation-run';
+    const threadId = 'pending-continuation-thread';
+    const resourceId = 'user-1';
+    const result = await agent.streamUntilIdle('hi', {
+      runId,
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const drainPromise = drain(result.fullStream as ReadableStream<any>);
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: string) =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'pending-continuation-task',
+        toolName: 'dummy',
+        toolCallId: 'pending-continuation-task',
+        runId: 'background-run',
+        agentId: 'abort-pending-continuation',
+        threadId,
+        resourceId,
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+    await creationStarted;
+
+    expect(agent.abortRunStream(runId)).toBe(true);
+    await drainPromise;
+    expect(creationWasAborted).toBe(true);
+  });
+
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
     const memory = new MockMemory();
     const { model } = makeScriptedModel([

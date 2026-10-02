@@ -364,6 +364,7 @@ export async function runIdleLoop<
   let outerController!: ReadableStreamDefaultController<any>;
   let wrapperRunId = restStreamOptions.runId as string | undefined;
   let activeInnerRunId: string | undefined;
+  let continuationAbort: AbortController | undefined;
   let aborting = false;
   const outerAbort = new AbortController();
 
@@ -390,6 +391,7 @@ export async function runIdleLoop<
     aborting = true;
     releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
     initialAbort.abort();
+    continuationAbort?.abort();
     hooks?.onAbortActive?.();
     if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
     forceClose();
@@ -460,10 +462,23 @@ export async function runIdleLoop<
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      const segmentAbort = new AbortController();
+      continuationAbort = segmentAbort;
+      activeInnerRunId = undefined;
+      const existingAbortSignal = continuationOpts.abortSignal as AbortSignal | undefined;
+      continuationOpts.abortSignal = existingAbortSignal
+        ? AbortSignal.any([existingAbortSignal, segmentAbort.signal])
+        : segmentAbort.signal;
       const inner = await streamForContinuation(continuationOpts);
       activeInnerRunId = inner.runId;
       hooks?.onInnerResult?.(inner);
+      if (closed) {
+        hooks?.onAbortActive?.();
+        if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
+        return;
+      }
       await pipeInner(inner.fullStream);
+      if (continuationAbort === segmentAbort) continuationAbort = undefined;
     } catch (err) {
       try {
         outerController.error(err);
