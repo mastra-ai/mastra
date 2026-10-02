@@ -1,10 +1,13 @@
+import type { RouteResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { SkillsShInstallResponse, SkillsShRemoveResponse, SkillsShUpdateResponse } from '../types';
 
 // =============================================================================
 // Skill Management Hooks (via server proxy)
 // =============================================================================
+
+const skillsShPath = (workspaceId: string, route: 'install' | 'update' | 'remove') =>
+  `/workspaces/${encodeURIComponent(workspaceId)}/skills-sh/${route}`;
 
 export interface InstallSkillParams {
   workspaceId: string;
@@ -24,32 +27,19 @@ export const useInstallSkill = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: InstallSkillParams): Promise<SkillsShInstallResponse> => {
+    mutationFn: (params: InstallSkillParams) => {
       const [owner, repo] = params.repository.split('/');
       if (!owner || !repo) {
         throw new Error('Invalid repository format. Expected owner/repo');
       }
-
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
-      const body: Record<string, string> = { owner, repo, skillName: params.skillName };
-      if (params.mount) {
-        body.mount = params.mount;
-      }
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || error.message || `Failed to install skill: ${response.statusText}`);
-      }
-
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
+      return client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/install'>>(
+        skillsShPath(params.workspaceId, 'install'),
+        {
+          method: 'POST',
+          body: { owner, repo, skillName: params.skillName, ...(params.mount ? { mount: params.mount } : {}) },
+          retries: 0,
+        },
+      );
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
@@ -70,24 +60,11 @@ export const useUpdateSkills = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: UpdateSkillsParams): Promise<SkillsShUpdateResponse> => {
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/update`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skillName: params.skillName }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || error.message || `Failed to update skill: ${response.statusText}`);
-      }
-
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
-    },
+    mutationFn: (params: UpdateSkillsParams) =>
+      client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/update'>>(
+        skillsShPath(params.workspaceId, 'update'),
+        { method: 'POST', body: { skillName: params.skillName }, retries: 0 },
+      ),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
@@ -107,24 +84,11 @@ export const useRemoveSkill = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: RemoveSkillParams): Promise<SkillsShRemoveResponse> => {
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/remove`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skillName: params.skillName }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || error.message || `Failed to remove skill: ${response.statusText}`);
-      }
-
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
-    },
+    mutationFn: (params: RemoveSkillParams) =>
+      client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/remove'>>(
+        skillsShPath(params.workspaceId, 'remove'),
+        { method: 'POST', body: { skillName: params.skillName }, retries: 0 },
+      ),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },

@@ -206,8 +206,13 @@ function FolderChildren({
   const { data, isLoading, error } = useWorkspaceDirectory(workspaceId, path);
 
   const create = async (name: string) => {
+    try {
+      await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
+    } catch {
+      // The caller reports the failure; keep the input open so the user can retry or cancel.
+      return;
+    }
     onCreated();
-    await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
     await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', path] });
   };
 

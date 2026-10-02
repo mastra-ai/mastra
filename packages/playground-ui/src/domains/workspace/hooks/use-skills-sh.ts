@@ -1,47 +1,29 @@
+import type { RouteResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 
-export interface SkillsShSkill {
-  id: string;
-  name: string;
-  installs: number;
-  topSource: string;
-}
+export type SkillsShSearchResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/search'>;
+export type SkillsShListResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/popular'>;
+export type SkillsShPreviewResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/preview'>;
 
-interface SkillsShSearchResponse {
-  query: string;
-  searchType: string;
-  skills: SkillsShSkill[];
-  count: number;
-}
+export type SkillsShSkill = SkillsShListResponse['skills'][number];
 
-interface SkillsShListResponse {
-  skills: SkillsShSkill[];
-  count: number;
-  limit: number;
-  offset: number;
-}
+const skillsShPath = (workspaceId: string, route: string, params: Record<string, string>) =>
+  `/workspaces/${encodeURIComponent(workspaceId)}/skills-sh/${route}?${new URLSearchParams(params)}`;
 
 /**
  * Search skills on skills.sh (via server proxy)
  */
-export const useSearchSkillsSh = (workspaceId: string | undefined) => {
+export const useSearchSkillsSh = (
+  workspaceId: string | undefined,
+): UseMutationResult<SkillsShSearchResponse, Error, string> => {
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: async (query: string): Promise<SkillsShSearchResponse> => {
-      if (!workspaceId) {
-        throw new Error('Workspace ID is required');
-      }
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/search?q=${encodeURIComponent(query)}&limit=10`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to search skills: ${response.statusText}`);
-      }
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
+    mutationFn: (query: string): Promise<SkillsShSearchResponse> => {
+      if (!workspaceId) throw new Error('Workspace ID is required');
+      return client.request<SkillsShSearchResponse>(skillsShPath(workspaceId, 'search', { q: query, limit: '10' }));
     },
   });
 };
@@ -49,26 +31,16 @@ export const useSearchSkillsSh = (workspaceId: string | undefined) => {
 /**
  * Get popular skills from skills.sh (via server proxy, cached for 5 minutes)
  */
-export const usePopularSkillsSh = (workspaceId: string | undefined) => {
+export const usePopularSkillsSh = (workspaceId: string | undefined): UseQueryResult<SkillsShListResponse> => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['skills-sh', 'popular', workspaceId],
-    queryFn: async (): Promise<SkillsShListResponse> => {
-      if (!workspaceId) {
-        throw new Error('Workspace ID is required');
-      }
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/popular?limit=10&offset=0`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch popular skills: ${response.statusText}`);
-      }
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
+    queryFn: (): Promise<SkillsShListResponse> => {
+      if (!workspaceId) throw new Error('Workspace ID is required');
+      return client.request<SkillsShListResponse>(skillsShPath(workspaceId, 'popular', { limit: '10', offset: '0' }));
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
     enabled: !!workspaceId,
   });
 };
@@ -87,20 +59,14 @@ export const useSkillPreview = (
 
   return useQuery({
     queryKey: ['skills-sh', 'preview', workspaceId, owner, repo, skillPath],
-    queryFn: async (): Promise<string> => {
+    queryFn: async () => {
       if (!workspaceId || !owner || !repo || !skillPath) {
         throw new Error('workspaceId, owner, repo, and skillPath are required');
       }
-      const baseUrl = client.options.baseUrl || '';
-      const params = new URLSearchParams({ owner, repo, path: skillPath });
-      const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/preview?${params}`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch preview: ${response.statusText}`);
-      }
-      const data = await response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
+      const data = await client.request<SkillsShPreviewResponse>(
+        skillsShPath(workspaceId, 'preview', { owner, repo, path: skillPath }),
+        { retries: 0 },
+      );
       return data.content;
     },
     enabled: options?.enabled !== false && !!workspaceId && !!owner && !!repo && !!skillPath,
