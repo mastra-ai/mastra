@@ -564,7 +564,8 @@ function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
 
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
- * assistant messages. Returns `undefined` if no changes were necessary.
+ * assistant messages, dropping any assistant message left with no content.
+ * Returns `undefined` if no changes were necessary.
  *
  * `skipIndex` excludes one message from stripping — used to protect the
  * trailing assistant message of an active tool-use continuation, which
@@ -601,12 +602,11 @@ function stripReasoningFromPrompt(
       continue;
     }
     mutated = true;
-    if (filtered.length === 0) {
-      // Stripping all reasoning parts left this assistant message with no content.
-      // Emitting an empty content array causes provider API errors on replay (e.g. Anthropic
-      // "messages: text content blocks must be non-empty").
-      continue;
-    }
+    // A reasoning-only turn is emptied by the strip. Processors run after
+    // conversion, so the empty-content filter in MessageList no longer
+    // applies — Anthropic rejects empty assistant content, so drop the
+    // message itself (same idiom as anthropicStripForeignSignedReasoning).
+    if (filtered.length === 0) continue;
     next.push({ ...message, content: filtered });
   }
   return mutated ? next : undefined;
