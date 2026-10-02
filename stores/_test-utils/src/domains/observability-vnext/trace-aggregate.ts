@@ -234,17 +234,31 @@ function computeMeasures(
       case 'cost.avg':
         values.set(measure.name, costSum === null ? null : costSum / priced.length);
         break;
-      default: {
-        const metricNames = TRACE_AGGREGATE_MEASURE_REGISTRY[measure.name].metricNames!;
+      case 'tokens.input.sum':
+      case 'tokens.input.avg':
+      case 'tokens.output.sum':
+      case 'tokens.output.avg':
+      case 'tokens.total.sum':
+      case 'tokens.total.avg':
+      case 'tokens.reasoning.sum':
+      case 'tokens.reasoning.avg':
+      case 'tokens.cached.sum':
+      case 'tokens.cached.avg': {
         if (usageBearing.length === 0) {
           values.set(measure.name, null);
           break;
         }
+        const rule = TRACE_AGGREGATE_MEASURE_REGISTRY[measure.name];
         let sum = 0;
         for (const trace of usageBearing) {
-          for (const name of metricNames) sum += trace.tokens.get(name) ?? 0;
+          for (const name of rule.metricNames!) sum += trace.tokens.get(name) ?? 0;
         }
-        values.set(measure.name, measure.name.endsWith('.avg') ? sum / usageBearing.length : sum);
+        values.set(measure.name, rule.statistic === 'avg' ? sum / usageBearing.length : sum);
+        break;
+      }
+      default: {
+        const unhandled: never = measure;
+        throw new Error(`Unhandled measure: ${JSON.stringify(unhandled)}`);
       }
     }
   }
@@ -350,7 +364,7 @@ function projectValues(
   plan: TrustedTraceAggregatePlan,
 ): Pick<TraceAggregateRow, 'measures' | 'cost'> {
   const measures = Object.fromEntries(plan.measures.map(measure => [measure.name, values.measures.get(measure.name)!]));
-  return { measures, ...(values.cost && { cost: values.cost }) };
+  return { measures: measures as TraceAggregateRow['measures'], ...(values.cost && { cost: values.cost }) };
 }
 
 function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggregateRow['dimensions'] {
