@@ -1,8 +1,9 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useInView } from '@/hooks/use-in-view';
+import { useMastraClient } from '../../mastra-client-context';
+import { useInView } from '../shared/use-in-view';
 
 /**
  * Hook to fetch a single dataset item by ID
@@ -19,6 +20,17 @@ export const useDatasetItem = (datasetId: string, itemId: string) => {
 
 const PER_PAGE = 10;
 
+type ListDatasetItemsResponse = Awaited<ReturnType<MastraClient['listDatasetItems']>>;
+
+export type UseDatasetItemsResult = Omit<
+  UseInfiniteQueryResult<InfiniteData<ListDatasetItemsResponse>, Error>,
+  'data'
+> & {
+  data: ListDatasetItemsResponse['items'];
+  total: number | undefined;
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+};
+
 /**
  * Hook to list items in a dataset with infinite scroll pagination and optional search
  * @param version - Optional version timestamp to view historical snapshot
@@ -30,7 +42,7 @@ export const useDatasetItems = (
   search?: string,
   version?: number | null,
   orderBy?: DatasetItemsOrderBy,
-) => {
+): UseDatasetItemsResult => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 

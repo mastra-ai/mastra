@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { UpdateExperimentResultParams } from '@mastra/client-js';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { MastraReactProvider } from '@mastra/react';
+import { useDatasetMutations } from '@mastra/react/hooks';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

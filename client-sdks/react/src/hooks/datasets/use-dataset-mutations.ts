@@ -9,8 +9,8 @@ import type {
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
 } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 type DatasetItemMutationVariables = {
   datasetId: string;

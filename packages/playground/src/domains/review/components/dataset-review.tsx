@@ -21,11 +21,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
+import { useDatasetMutations, useDataset } from '@mastra/react/hooks';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';

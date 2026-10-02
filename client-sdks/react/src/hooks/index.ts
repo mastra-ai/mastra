@@ -11,3 +11,4 @@ export * from './workspace';
 export * from './memory';
 export * from './mcps';
 export * from './agents';
+export * from './datasets';

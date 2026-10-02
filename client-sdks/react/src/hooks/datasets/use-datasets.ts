@@ -1,8 +1,9 @@
-import type { ExperimentTargetType, ListDatasetsParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
+import type { ExperimentTargetType, ListDatasetsParams, MastraClient } from '@mastra/client-js';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useInView } from '@/hooks/use-in-view';
+import { useMastraClient } from '../../mastra-client-context';
+import { useInView } from '../shared/use-in-view';
 
 /**
  * Hook to list all datasets with optional pagination
@@ -25,10 +26,19 @@ export interface DatasetTargetFilter {
 
 export type DatasetsOrderBy = NonNullable<ListDatasetsParams['orderBy']>;
 
+type DatasetRecord = Awaited<ReturnType<MastraClient['listDatasets']>>['datasets'][number];
+
+export type UseInfiniteDatasetsResult = UseInfiniteQueryResult<DatasetRecord[], Error> & {
+  setEndOfListElement: (element: HTMLDivElement | null) => void;
+};
+
 /**
  * Hook to list datasets with infinite scroll pagination, optionally scoped server-side to a target.
  */
-export const useInfiniteDatasets = (filter?: DatasetTargetFilter, orderBy?: DatasetsOrderBy) => {
+export const useInfiniteDatasets = (
+  filter?: DatasetTargetFilter,
+  orderBy?: DatasetsOrderBy,
+): UseInfiniteDatasetsResult => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
   const targetType = filter?.targetType || undefined;
