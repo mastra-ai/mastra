@@ -3,6 +3,7 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { HTTPException } from '../http-exception';
 
 import {
   canAccessPublicly,
@@ -733,6 +734,58 @@ describe('auth helpers', () => {
       token: 'valid-token',
       buildAuthorizeContext: () => null,
     };
+
+    it.each([400, 401, 403, 429, 500, 502, 503, 504] as const)(
+      'preserves an explicit HTTPException with status %s from authentication',
+      async status => {
+        const error = new HTTPException(status, {
+          message: 'Authentication service unavailable',
+          cause: new Error('Private backend details'),
+        });
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          mastra: createMockMastra(),
+          authConfig: {
+            protected: ['/api/*'],
+            authenticateToken: vi.fn().mockRejectedValue(error),
+          },
+          requestContext: createRequestContext(),
+          rawRequest: createRawRequest(),
+        });
+
+        expect(result).toEqual({
+          action: 'error',
+          status,
+          body: { error: 'Authentication service unavailable' },
+          headers: undefined,
+        });
+      },
+    );
+
+    it.each([
+      new Error('Private backend details'),
+      { status: 503, message: 'Private backend details' },
+      new HTTPException(200, { message: 'Not an error status' }),
+      new HTTPException(302, { message: 'Not an error status' }),
+    ])('does not expose untrusted authentication failures: %s', async error => {
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: vi.fn().mockRejectedValue(error),
+        },
+        requestContext: createRequestContext(),
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 401,
+        body: { error: 'Invalid or expired token' },
+        headers: undefined,
+      });
+    });
 
     it('should transparently refresh expired session and proceed', async () => {
       let callCount = 0;
