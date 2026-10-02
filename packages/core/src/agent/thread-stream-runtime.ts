@@ -2385,6 +2385,12 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).threadRunsById.has(runId);
   }
 
+  /** Capture whether the currently registered record later reaches its terminal completion path. */
+  captureThreadRunCompletion(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
+    const record = this.#getState(pubsub).threadRunsById.get(runId);
+    return record ? () => record.lifecycle === 'completed' : undefined;
+  }
+
   getResumableThreadRunSuspension(
     options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
     pubsub?: PubSub,

@@ -176,9 +176,11 @@ describe('suspended run in-memory TTL', () => {
   it('evicts a suspended run once it has been parked past the TTL', async () => {
     const watcher = await watchThread(pubsub, 'thread-1');
     await registerSuspendedRun('run-1', 'thread-1', watcher);
+    const didComplete = runtime.captureThreadRunCompletion('run-1', pubsub);
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
 
+    expect(didComplete?.()).toBe(false);
     expect(
       runtime.getResumableThreadRun({ threadId: 'thread-1', resourceId: RESOURCE_ID, runId: 'run-1' }, pubsub),
     ).toBeUndefined();
@@ -263,6 +265,7 @@ describe('suspended run in-memory TTL', () => {
       { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
       pubsub,
     );
+    const didComplete = runtime.captureThreadRunCompletion('run-1', pubsub);
 
     await sweepAfter(SUSPENDED_RUN_TTL_MS * 10);
 
@@ -272,8 +275,11 @@ describe('suspended run in-memory TTL', () => {
     expect(runtime.getThreadState({ threadId: 'thread-1', resourceId: RESOURCE_ID }, pubsub)).toBe('active');
     expect(releaseLease).not.toHaveBeenCalledWith(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
     expect(watcher.has('run-completed', 'run-1')).toBe(false);
+    expect(didComplete?.()).toBe(false);
 
     longRun.settle('success');
+    await watcher.waitFor('run-completed', 'run-1');
+    expect(didComplete?.()).toBe(true);
   });
 
   it('evicts every stale suspended run in one sweep', async () => {
