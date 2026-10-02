@@ -452,6 +452,18 @@ describe('attachment download recovery', () => {
         'image/heic',
       ],
       ['AVIF data that is not an AVIF', 'input', 'data:image/avif;base64,aGVsbG8=', 'image/avif'],
+      ['an extensionless relative path labelled SVG', 'input', '/api/attachments/123', 'image/svg+xml'],
+      ['an extensionless relative path labelled text', 'input', '/api/files/abc1234', 'text/plain'],
+      ['a relative path labelled JSON', 'input', 'uploads/abc', 'application/json'],
+      ['an extensionless relative path labelled MP3', 'input', '/api/attachments/123', 'audio/mpeg'],
+      [
+        'a stored text data URL wrapping a relative path',
+        'stored',
+        'data:text/plain;base64,/api/files/abc1234',
+        'text/plain',
+      ],
+      ['SVG data that is not markup', 'input', 'data:image/svg+xml;base64,aGVsbG8=', 'image/svg+xml'],
+      ['WAV data that is not audio', 'input', 'data:audio/wav;base64,aGVsbG8=', 'audio/wav'],
     ] as const)(
       'gives %s the placeholder when the model accepts data URLs',
       async (_label, source, data, mediaType) => {
@@ -503,6 +515,19 @@ describe('attachment download recovery', () => {
       ['HEIC', 'AAAAGGZ0eXBoZWljAAAAAG1pZjFoZWlj', 'image/heic'],
       ['AVIF', 'AAAAHGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZg==', 'image/avif'],
       ['PDF', 'JVBERi0xLjQK', 'application/pdf'],
+      ['PDF with bytes before its header', 'DQoNCiVQREYtMS43Cg==', 'application/pdf'],
+      [
+        'SVG with an XML declaration',
+        'PD94bWwgdmVyc2lvbj0iMS4wIj8+CjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIi8+',
+        'image/svg+xml',
+      ],
+      ['plain text', 'aGVsbG8gd29ybGQK', 'text/plain'],
+      ['UTF-8 text', 'R3LDvMOfZSwg5LiW55WMIPCfkYsK', 'text/plain'],
+      ['JSON', 'eyJvayI6dHJ1ZX0=', 'application/json'],
+      ['MP3 with ID3 tags', 'SUQzBAAAAAAAAA==', 'audio/mpeg'],
+      ['MP3 frame', '//uQZAAAAAA=', 'audio/mpeg'],
+      ['WAV', 'UklGRiQAAABXQVZFZm10IA==', 'audio/wav'],
+      ['M4A', 'AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==', 'audio/mp4'],
     ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
       const dataUrlModel = makeModel('data-urls');
       const { run } = setup({ durable, models: [dataUrlModel.model] });
