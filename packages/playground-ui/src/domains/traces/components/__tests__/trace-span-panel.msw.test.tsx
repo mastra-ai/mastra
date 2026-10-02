@@ -58,6 +58,7 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
       HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
     ),
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
   );
 };
 
@@ -370,5 +371,37 @@ describe('TraceSpanPanel', () => {
     // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
     expect(screen.getByText('Session Id')).not.toBeNull();
     expect(screen.getByText('session-42')).not.toBeNull();
+  });
+
+  describe('resizable columns', () => {
+    // Resize handles are direct children of the column group; nested decorative separators are excluded.
+    const resizeHandles = () => {
+      const group = document.querySelector('[data-trace-columns]')?.firstElementChild;
+      return Array.from(group?.children ?? []).filter(el => el.getAttribute('role') === 'separator');
+    };
+    const columns = () => Array.from(document.querySelectorAll('[data-trace-columns] [data-panel]'));
+
+    it('when the trace has a thread, then one resize handle splits Messages and trace', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByTestId('messages-panel');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.getAllByRole('separator')).toHaveLength(1);
+      expect(resizeHandles()).toHaveLength(1);
+      expect(columns()).toHaveLength(2);
+    });
+
+    it('when a span is selected, then a third column appears behind a second resize handle', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true, initialSpanId: 'span-root' });
+
+      await screen.findByTestId('messages-panel');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => expect(screen.getAllByRole('separator')).toHaveLength(2));
+      expect(resizeHandles()).toHaveLength(2);
+      expect(columns()).toHaveLength(3);
+      expect(document.querySelector('[data-panel][id="trace-span"]')).not.toBeNull();
+    });
   });
 });

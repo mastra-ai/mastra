@@ -5,6 +5,7 @@ import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
 import { MessageScrollerProvider } from '@/ds/components/MessageScroller';
+import { PanelGroup } from '@/lib/resize/panel-group';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
@@ -19,8 +20,8 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
 /**
  * Owns the interaction state of a thread rendered as its traces: the selected span, the
  * highlighted spans, which rows are expanded, and which rows are on screen. Layout parts read it
- * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the outer grid that gains a
- * side column while a span is selected.
+ * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the resizable panel group that
+ * gains a span column while a span is selected.
  */
 export function ThreadTraceRoot({
   traceIds,
@@ -123,18 +124,10 @@ export function ThreadTraceRoot({
         preserveScrollOnPrepend
         onReachStart={onLoadOlder}
       >
-        <div
-          data-slot="thread-trace"
-          className={cn(
-            // The span cell always exists and collapses to zero so opening/closing it animates
-            // via `grid-template-columns`, like the trace panel's columns.
-            'grid h-full min-h-0 transition-[grid-template-columns] duration-300 ease-in-out',
-            selected ? 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,2fr)_minmax(0,0fr)]',
-            className,
-          )}
-          {...props}
-        >
-          {children}
+        <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
+          <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+            {children}
+          </PanelGroup>
         </div>
       </MessageScrollerProvider>
     </ThreadTraceContext.Provider>

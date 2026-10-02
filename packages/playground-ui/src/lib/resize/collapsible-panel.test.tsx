@@ -56,6 +56,11 @@ vi.mock('react-resizable-panels', () => ({
           data-testid="resize-shrinking"
           onClick={() => onResize?.({ inPixels: 290 }, undefined, { inPixels: 320 })}
         />
+        <button
+          type="button"
+          data-testid="resize-drag-collapsed"
+          onClick={() => onResize?.({ inPixels: collapsedSize ?? 0 }, undefined, { inPixels: 290 })}
+        />
         {children}
       </section>
     );
@@ -193,13 +198,27 @@ describe('CollapsiblePanel', () => {
       expect(panelMocks.handle.expand).not.toHaveBeenCalled();
     });
 
-    it('reopens at the default size when the collapse came from the panel itself (persisted layout, drag)', () => {
+    it('reopens at the default size when the collapse came from the panel itself (persisted layout)', () => {
       const handle = renderWithHandle();
       fireEvent.click(screen.getByTestId('resize-collapsed'));
 
       act(() => handle.current?.expand());
 
       expect(panelMocks.handle.resize).toHaveBeenCalledWith(300);
+    });
+
+    it('reopens at the width it had before a separator was dragged all the way to the edge', () => {
+      const handle = renderWithHandle();
+      panelMocks.state.size = 350;
+
+      fireEvent.pointerDown(window);
+      fireEvent.click(screen.getByTestId('resize-shrinking'));
+      fireEvent.click(screen.getByTestId('resize-drag-collapsed'));
+      fireEvent.pointerUp(window);
+
+      act(() => handle.current?.expand());
+
+      expect(panelMocks.handle.resize).toHaveBeenCalledWith(350);
     });
 
     it('falls back to the library expand when nothing better is known', () => {

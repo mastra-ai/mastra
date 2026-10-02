@@ -1,5 +1,5 @@
 import type { CSSProperties, Ref } from 'react';
-import { useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
@@ -48,6 +48,10 @@ export const CollapsiblePanel = ({
   // relies on its own "most recent size", which is unreliable when the panel
   // mounts already collapsed from a persisted layout (it opens at `minSize`).
   const sizeBeforeCollapseRef = useRef<number | null>(null);
+  // Width the panel had when the current pointer gesture started, so collapsing it
+  // by dragging a separator to the edge reopens at that width rather than `minSize`.
+  const settledSizeRef = useRef<number | null>(null);
+  const isPointerDownRef = useRef(false);
   const internalPanelRef = usePanelRef();
   const panelRef = externalPanelRef ?? internalPanelRef;
 
@@ -84,6 +88,23 @@ export const CollapsiblePanel = ({
 
   useImperativeHandle(ref, () => ({ collapse, expand, toggle }));
 
+  useEffect(() => {
+    const onPointerDown = () => {
+      isPointerDownRef.current = true;
+      const panel = panelRef.current;
+      if (panel && !isPanelCollapsed(panel)) settledSizeRef.current = panel.getSize().inPixels;
+    };
+    const onPointerUp = () => {
+      isPointerDownRef.current = false;
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointerup', onPointerUp, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointerup', onPointerUp, true);
+    };
+  });
+
   const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
   return (
@@ -105,7 +126,14 @@ export const CollapsiblePanel = ({
       onResize={(size, id, previousSize) => {
         onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
-        setIsCollapsed(size.inPixels <= collapsedSize);
+        const nowCollapsed = size.inPixels <= collapsedSize;
+        const wasCollapsed = previousSize !== undefined && previousSize.inPixels <= collapsedSize;
+        if (!nowCollapsed && !isPointerDownRef.current) settledSizeRef.current = size.inPixels;
+        // Collapsed by a drag or keyboard resize rather than `collapse()`: remember where it was.
+        if (nowCollapsed && !wasCollapsed && previousSize !== undefined) {
+          sizeBeforeCollapseRef.current = settledSizeRef.current ?? previousSize.inPixels;
+        }
+        setIsCollapsed(nowCollapsed);
       }}
     >
       <div
