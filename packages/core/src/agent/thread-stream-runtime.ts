@@ -354,6 +354,9 @@ type AgentThreadRuntimeState = {
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  // Signal IDs this runtime queued locally before publishing them. Retained replays of these are
+  // echoes; signals this runtime only forwarded to another owner must not be listed here.
+  locallyQueuedSignalIdsByThread: Map<string, Set<string>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -524,6 +527,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspendedRunIds: new Set(),
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
+    locallyQueuedSignalIdsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -759,7 +763,11 @@ export class AgentThreadStreamRuntime {
       if (!active) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (data?.type === 'signal-enqueued') {
-        if (data.sourceId === this.#id || subscription.admittedSignalIds.has(data.signal.id)) return;
+        if (
+          (data.sourceId === this.#id && state.locallyQueuedSignalIdsByThread.get(key)?.has(data.signal.id)) ||
+          subscription.admittedSignalIds.has(data.signal.id)
+        )
+          return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
         if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
           return;
@@ -1746,6 +1754,12 @@ export class AgentThreadStreamRuntime {
         this.#releaseUnusedThreadControlSubscription(state, key);
       }
     }
+  }
+
+  #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Set<string>();
+    ids.add(signalId);
+    state.locallyQueuedSignalIdsByThread.set(key, ids);
   }
 
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
@@ -4945,6 +4959,7 @@ export class AgentThreadStreamRuntime {
           const queue = state.pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId,
@@ -4991,6 +5006,7 @@ export class AgentThreadStreamRuntime {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
