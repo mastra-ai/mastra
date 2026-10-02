@@ -25,7 +25,7 @@ import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
-import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID } from '../../../storage';
+import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
@@ -871,3 +871,103 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
     });
   },
 );
+
+describe.each(['durable', 'evented'] as const)('%s agent: the storage fence covers every run write', kind => {
+  /** Records whether each `workflows` event left this process. */
+  class RecordingPubSub extends EventEmitterPubSub {
+    workflowEvents: Array<{ topic: string; localOnly: boolean }> = [];
+    override publish(topic: string, event: any, options?: { localOnly?: boolean }) {
+      if (topic.startsWith('workflows')) this.workflowEvents.push({ topic, localOnly: !!options?.localOnly });
+      return super.publish(topic, event, options);
+    }
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
+  });
+
+  it("every workflows write carries the claim of the segment that makes it, including the evented engine's nested runs", async () => {
+    const pubsub = new RecordingPubSub();
+    const storage = new InMemoryStore();
+    const workflows = storage.stores.workflows!;
+    let segment = 0;
+    const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
+    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+      const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
+      vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
+        writes.push({
+          segment,
+          workflowName: args.workflowName,
+          runId: args.runId,
+          fence: resolveRunFence(workflows, args.fence, args.runId),
+        });
+        return write(args);
+      });
+    }
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look something up',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      execute: async () => ({ found: true }),
+    });
+    const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+      agent: new Agent({
+        id: 'fence-agent',
+        name: 'Fence Agent',
+        instructions: 'You are a helpful agent.',
+        model: toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up').model as LanguageModelV2,
+        tools: { lookup },
+        memory: new MockMemory({ storage }),
+      }),
+    });
+    new Mastra({ agents: { 'fence-agent': agent as any }, logger: false, storage, pubsub });
+
+    // Segment 0 suspends on the approval; segment 1 resumes the stored nested
+    // run under a new claim.
+    let suspended = false;
+    const started = await agent.stream('Look it up', {
+      requireToolApproval: true,
+      memory: { thread: THREAD, resource: RESOURCE },
+      onSuspended: () => {
+        suspended = true;
+      },
+    });
+    const { runId } = started;
+    const claims = [ExecutionFence.getLocalActive(runId)!];
+    await vi.waitFor(() => expect(suspended).toBe(true));
+    await claims[0]!.whenSettled;
+
+    segment = 1;
+    const resumed = await agent.resume(runId, { approved: true });
+    claims.push(ExecutionFence.getLocalActive(runId)!);
+    expect(await resumed.output.text).toBe('looked it up');
+    await claims[1]!.whenSettled;
+
+    expect(new Set(writes.filter(write => write.segment === 0).map(write => write.workflowName))).toEqual(
+      new Set([DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]),
+    );
+    if (kind === 'evented') {
+      // The evented engine stores each loop iteration under its own run id: a
+      // fresh one in the first segment, and in the resumed segment the stored
+      // one, read back from the parent's step metadata.
+      for (const n of [0, 1]) {
+        expect(writes.some(write => write.segment === n && write.runId !== runId)).toBe(true);
+      }
+    }
+    for (const write of writes) {
+      const claim = claims[write.segment]!;
+      expect(write).toMatchObject({ fence: { runId, generation: claim.generation, ownerId: claim.executionId } });
+    }
+    expect(claims.map(claim => claim.generation)).toEqual([1, 2]);
+    // The fence reaches the evented engine's writes through the async context
+    // of the publish, so the run's events must not leave this process.
+    expect(pubsub.workflowEvents.filter(event => !event.localOnly)).toEqual([]);
+
+    resumed.cleanup();
+    started.cleanup();
+    await pubsub.close();
+  });
+});

@@ -434,6 +434,8 @@ export class ExecutionFence implements RunFenceScope {
   /** The workflows store holding the claim, when ownership lives in storage. */
   readonly #workflowsStore?: WorkflowsStorage;
   #memoryStore?: MemoryStorage;
+  /** Workflow runs the evented engine nests under this run, each under its own runId. */
+  readonly #nestedRunIds = new Set<string>();
   /**
    * Whether {@link fenceFor} hands out the fence. An owned settlement disarms
    * it so the execution's late background writes stay unfenced, as before
@@ -607,11 +609,22 @@ export class ExecutionFence implements RunFenceScope {
     return runInRunFenceScope(this, fn);
   }
 
-  /** {@link RunFenceScope.fenceFor}: covers this run's workflows rows and the memory store raised to the claim. */
+  /**
+   * {@link RunFenceScope.fenceFor}: covers the workflows rows of this run and
+   * its nested runs, and the memory store raised to the claim.
+   */
   fenceFor(store: object, runId?: string): RunFence | undefined {
     if (!this.#armed || this.generation === undefined) return undefined;
-    const covered = store === this.#workflowsStore ? runId === this.runId : store === this.#memoryStore;
+    const covered =
+      store === this.#workflowsStore
+        ? runId !== undefined && (runId === this.runId || this.#nestedRunIds.has(runId))
+        : store === this.#memoryStore;
     return covered ? { runId: this.runId, generation: this.generation, ownerId: this.executionId } : undefined;
+  }
+
+  /** {@link RunFenceScope.coverNestedRun} */
+  coverNestedRun(parentRunId: string, nestedRunId: string): void {
+    if (parentRunId === this.runId || this.#nestedRunIds.has(parentRunId)) this.#nestedRunIds.add(nestedRunId);
   }
 
   /**

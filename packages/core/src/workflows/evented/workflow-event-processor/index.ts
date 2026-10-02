@@ -9,6 +9,7 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
+import { coverNestedRun } from '../../../storage/run-fencing';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -667,6 +668,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Track parent-child relationship if this is a nested workflow
     if (parentWorkflow?.runId) {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
+      coverNestedRun(parentWorkflow.runId, runId);
     }
     // Preserve resourceId from an existing snapshot if present (resume /
     // timeTravel / restart keep their original attribution); otherwise fall
@@ -1866,6 +1868,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } else {
         const nestedRunId = globalThis.crypto.randomUUID();
+        coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
             stepResults: {},

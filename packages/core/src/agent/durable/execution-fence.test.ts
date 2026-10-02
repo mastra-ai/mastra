@@ -632,6 +632,28 @@ describe('storage-backed ExecutionFence', () => {
     });
   });
 
+  it('covers the workflows rows of runs nested under the run, which storage checks against the run claim', async () => {
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const runFence = { runId: 'run-1', generation: 1, ownerId: fence.executionId };
+
+    fence.coverNestedRun('run-1', 'child');
+    fence.coverNestedRun('child', 'grandchild');
+    fence.coverNestedRun('run-2', 'unrelated');
+
+    expect(fence.fenceFor(workflowsStore, 'child')).toEqual(runFence);
+    expect(fence.fenceFor(workflowsStore, 'grandchild')).toEqual(runFence);
+    expect(fence.fenceFor(workflowsStore, 'unrelated')).toBeUndefined();
+
+    await workflowsStore.claimRunOwnership({ runId: 'run-1', ownerId: 'foreign', leaseMs: 60_000, force: true });
+    await expect(
+      fence.run(() =>
+        workflowsStore.updateWorkflowState({ workflowName: 'nested', runId: 'grandchild', opts: { status: 'failed' } }),
+      ),
+    ).rejects.toSatisfy(isRunFenceConflictError);
+    expect(await fence.settle(async () => {})).toBe('superseded');
+  });
+
   it('abandon moves the run past the execution and releases it: stale writes fail, recovery claims it at once', async () => {
     const { workflowsStore, memoryStore } = await stores();
     const abandoned = await storageClaim(workflowsStore, 'run-1');

@@ -109,8 +109,14 @@ export function __resetRunRegistryActivityForTests(): void {
   }
 }
 
+// `values()` can yield undefined: with `updateAgeOnGet`, `get()` on a missing
+// runId schedules an expiration for a key that has no value.
+function registryEntries(): RunRegistryEntry[] {
+  return Array.from(globalRunRegistry.values()).filter(entry => entry !== undefined);
+}
+
 export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
-  return Array.from(globalRunRegistry.values()).flatMap(entry =>
+  return registryEntries().flatMap(entry =>
     entry.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
   );
 }
@@ -121,7 +127,7 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  * Executions that already settled are left alone.
  */
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
-  const fences = Array.from(globalRunRegistry.values()).flatMap(entry =>
+  const fences = registryEntries().flatMap(entry =>
     entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
   );
   await Promise.all(fences.map(fence => fence.abandon()));

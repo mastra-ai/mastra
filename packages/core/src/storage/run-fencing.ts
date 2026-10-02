@@ -12,6 +12,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
  * {@link resolveRunFence}.
  */
 export interface RunFence {
+  /**
+   * The run whose claim the write is checked against. A nested workflow run
+   * the engine stores under its own runId carries its parent run's fence.
+   */
   runId: string;
   /** Monotonic claim counter for the run. Every claim increments it. */
   generation: number;
@@ -120,6 +124,11 @@ export interface RunFenceScope {
   fenceFor(store: object, runId?: string): RunFence | undefined;
   /** Storage rejected a write carrying `fence`. */
   onConflict?(fence: RunFence): void;
+  /**
+   * The engine started `nestedRunId` under `parentRunId`. A scope covering
+   * the parent covers the nested run too.
+   */
+  coverNestedRun?(parentRunId: string, nestedRunId: string): void;
 }
 
 /** The async context that carries the current {@link RunFenceScope}. */
@@ -156,6 +165,18 @@ export function setRunFenceContext(context: RunFenceContext): RunFenceContext {
 export function runOutsideRunFenceScope<T>(fn: () => T): T {
   const context = getRunFenceContext();
   return context?.current() ? context.run(undefined, fn) : fn();
+}
+
+/**
+ * Tell the current run fence scope that `nestedRunId` runs under
+ * `parentRunId`. Engines that store a nested workflow run under its own runId
+ * call this before the nested run's first write, so those writes carry the
+ * parent run's fence.
+ *
+ * @internal
+ */
+export function coverNestedRun(parentRunId: string, nestedRunId: string): void {
+  getRunFenceContext()?.current()?.coverNestedRun?.(parentRunId, nestedRunId);
 }
 
 /**
