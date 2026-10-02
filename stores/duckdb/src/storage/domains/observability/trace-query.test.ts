@@ -24,6 +24,8 @@ import {
 } from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
+// Bound first by the root_trace_ids narrowing scan, before root_scope binds the window again.
+const ROOT_SCAN_WINDOW = [TIME_RANGE.from, TIME_RANGE.to];
 
 function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
   return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
@@ -160,6 +162,7 @@ describe('DuckDB advanced trace query', () => {
       `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
     );
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
       TIME_RANGE.from,
       TIME_RANGE.to,
       `$.${JSON.stringify(key)}`,
@@ -191,7 +194,17 @@ describe('DuckDB advanced trace query', () => {
     const compiled = compileDuckDBTraceQuery(ordered);
 
     expect(compiled.sql).not.toContain(key);
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      path,
+      path,
+      path,
+      path,
+      '10',
+      101,
+    ]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
@@ -227,15 +240,15 @@ describe('DuckDB advanced trace query', () => {
       }),
     );
 
-    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
     expect(traceOnly.sql).not.toContain('score_events');
     expect(traceOnly.sql).not.toContain('current_spans AS');
 
-    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
     expect(scoreOnly.sql.match(/current_scores AS/g)).toHaveLength(1);
     expect(scoreOnly.sql).not.toContain('current_spans AS');
 
-    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
+    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
     expect(spanOnly.sql.match(/current_spans AS/g)).toHaveLength(1);
     expect(spanOnly.sql).not.toContain('score_events');
 
@@ -313,6 +326,9 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toMatch(/root_scope AS \([\s\S]*?r\.organizationId = \?\s+AND r\.resourceId = \?/);
     expect(compiled.sql).toMatch(/current_scores AS \([\s\S]*?WHERE s\.organizationId = \? AND s\.resourceId = \?/);
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
+      'org-a',
+      'res-a',
       TIME_RANGE.from,
       TIME_RANGE.to,
       'org-a',
@@ -334,7 +350,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).not.toContain('organizationId = ?');
     expect(compiled.sql).not.toContain('resourceId = ?');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
   });
 
   it('uses total null semantics for negative predicates', () => {
@@ -384,7 +400,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
     expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
     expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
   });
 
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
@@ -436,6 +452,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).not.toContain(metadataKey);
     expect(compiled.sql).not.toContain(metadataValue);
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
       TIME_RANGE.from,
       TIME_RANGE.to,
       'medication_lookup',
@@ -461,7 +478,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).toContain('FROM qualified_threads\nWHERE threadId > ?');
     expect(compiled.sql).toContain('ORDER BY threadId ASC');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
@@ -486,7 +503,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain(`(len(${members}) > 0)`);
     expect(compiled.sql).toContain(`(len(${members}) = 0)`);
     expect(compiled.sql).not.toContain('r.tags IS');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
   });
 
   it('discovers tag values as one row per current root and distinct tag', () => {
@@ -500,7 +517,7 @@ describe('DuckDB advanced trace query', () => {
       'SELECT unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[]))) AS value FROM root_scope r WHERE r.tags IS NOT NULL',
     );
     expect(compiled.sql).toContain('GROUP BY value\nORDER BY count DESC, value ASC\nLIMIT ?');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
   });
 
   it('fails closed when a trusted plan contains an unmapped field', () => {

@@ -29,8 +29,7 @@
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router": "^8.0.0",
-    "shiki": "^1.29.2"
+    "react-router": "^8.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.2.2",
