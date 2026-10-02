@@ -77,9 +77,19 @@ export class ObservationStep {
     let didThresholdCleanup = false;
     let observerExchange: StepContext['observerExchange'];
 
+    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    const isObservationBufferInFlight = () => om.buffering.isAsyncBufferingInProgress(observationBufferKey);
+
     // ── Step 0: Activate buffered chunks ──────────────────────
-    if (this.stepNumber === 0) {
-      const step0Messages = getObservableMessages(messageList);
+    // activate() waits for an in-flight observation buffer op. In the threshold→blockAfter
+    // band that wait must not block the turn, so leave activation to a later step.
+    const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
+    const deferStep0Activation =
+      this.stepNumber === 0 &&
+      isObservationBufferInFlight() &&
+      (await om.getStatus({ threadId, resourceId, record: this.turn.record, messages: step0Messages }))
+        .inAsyncObservationBand;
+    if (this.stepNumber === 0 && !deferStep0Activation) {
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -157,11 +167,38 @@ export class ObservationStep {
       messages: getObservableMessages(messageList),
     });
 
+    if (
+      statusSnapshot.inAsyncObservationBand &&
+      !statusSnapshot.canActivate &&
+      !hasIncompleteToolCalls &&
+      !isObservationBufferInFlight()
+    ) {
+      // In the band without a chunk per the turn's cached record. A background buffer op
+      // may have completed since the record was cached; refresh once so a ready chunk is
+      // activated instead of lingering behind a newly started buffer op.
+      await this.turn.refreshRecord();
+      statusSnapshot = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: getObservableMessages(messageList),
+      });
+    }
+
+    // In the threshold→blockAfter band with a chunk ready and no buffer op in flight,
+    // activate this step instead of starting another buffer op: a new op would be
+    // in flight by the activation check below and defer the ready chunk.
+    const activateBeforeBuffering =
+      statusSnapshot.inAsyncObservationBand &&
+      statusSnapshot.canActivate &&
+      !hasIncompleteToolCalls &&
+      !isObservationBufferInFlight();
+
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
     // A pending tool call on the newest message doesn't block the whole batch:
     // admit only the safe prefix before it — the same policy idle buffering
     // applies at turn end (see selectSafeBufferPrefix).
-    if (statusSnapshot.shouldBuffer) {
+    if (statusSnapshot.shouldBuffer && !activateBeforeBuffering) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -231,7 +268,7 @@ export class ObservationStep {
 
     // ── Save messages + threshold observation ──────
     // Historically gated to step > 0 (pre-async-buffering relic, 27d7398c51). A single
-    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer requires
+    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer then required
     // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
@@ -240,25 +277,9 @@ export class ObservationStep {
     // op is in flight. activate() waits for an in-flight op (that wait is what keeps its
     // read-then-write chunk swap from dropping a concurrently appended chunk), which
     // would turn the swap into a wait on the observer model. Otherwise defer to a later step.
-    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
-    const isObservationBufferInFlight = () => om.buffering.isAsyncBufferingInProgress(observationBufferKey);
-    const bandDefersObservation = (status: typeof statusSnapshot) =>
-      status.inAsyncObservationBand && (!status.canActivate || isObservationBufferInFlight());
-    let willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
-    if (willObserveNow && bandDefersObservation(statusSnapshot)) {
-      if (!statusSnapshot.canActivate && !isObservationBufferInFlight()) {
-        // A background buffer op may have completed since the turn's record was cached.
-        // Refresh once so a ready chunk gets activated instead of lingering.
-        await this.turn.refreshRecord();
-        statusSnapshot = await om.getStatus({
-          threadId,
-          resourceId,
-          record: this.turn.record,
-          messages: getObservableMessages(messageList),
-        });
-      }
-      willObserveNow = statusSnapshot.shouldObserve && !bandDefersObservation(statusSnapshot);
-    }
+    const bandDefersObservation =
+      statusSnapshot.inAsyncObservationBand && (!statusSnapshot.canActivate || isObservationBufferInFlight());
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
     /** In-flight message ids the step-0 cleanup must never remove from live context. */
     let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {

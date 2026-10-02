@@ -12632,53 +12632,52 @@ describe('Full Async Buffering Flow', () => {
         observerGate: () => holdObserver,
       });
 
-    // Step 0 buffers a chunk in the background (observer not held).
-    const list = await step(0);
+    // Turn 1, step 0 buffers a chunk in the background (observer not held).
+    await step(0);
     await waitForAsyncOps();
     expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
 
-    // New messages cross the next buffer interval, still inside the band, so step 1
-    // starts another buffer op — whose observer call is held open.
+    // More messages arrive, still inside the band, and a background buffer op for them
+    // is still running when the next turn starts.
     const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-    for (let i = 0; i < 3; i++) {
-      list.add(
-        {
-          id: `band-msg-${i}`,
-          role: i % 2 === 0 ? 'user' : 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: `Band ${i}: ${filler}` }] },
-          type: 'text',
-          createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-          threadId,
-          resourceId,
-        } as any,
-        'memory',
-      );
-    }
-    const status = await om.getStatus({ threadId, resourceId, messages: list.get.all.db() });
+    const bandMessages = Array.from({ length: 3 }, (_, i) => ({
+      id: `band-msg-${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Band ${i}: ${filler}` }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+      threadId,
+      resourceId,
+    }));
+    await storage.saveMessages({ messages: bandMessages });
+    const status = await om.getStatus({ threadId, resourceId });
     expect(status.inAsyncObservationBand).toBe(true);
-    expect(status.shouldBuffer).toBe(true);
+    expect(status.canActivate).toBe(true);
 
     let releaseObserver!: () => void;
     holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
-    const callsBeforeStep1 = observerCalls.length;
+    const callsBeforeOp = observerCalls.length;
+    const inFlightOp = om.buffer({ threadId, resourceId, messages: bandMessages, pendingTokens: status.pendingTokens });
     try {
-      const step1 = await Promise.race([
-        step(1).then(() => 'completed' as const),
+      await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeOp + 1));
+      expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
+
+      // Turn 2, step 0: a chunk is ready, but activating now would wait on the held op.
+      const turn2Step0 = await Promise.race([
+        step(0, { freshState: true }).then(() => 'completed' as const),
         new Promise<'blocked'>(resolve => setTimeout(() => resolve('blocked'), 1000)),
       ]);
-      expect(step1).toBe('completed');
-      expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
-      await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeStep1 + 1));
-      // Activation was deferred, not performed under the in-flight op.
+      expect(turn2Step0).toBe('completed');
       expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations ?? '').toBe('');
     } finally {
       holdObserver = undefined;
       releaseObserver();
     }
+    await inFlightOp;
     await waitForAsyncOps();
 
     // With no op in flight, the next step activates the buffered chunks.
-    await step(2);
+    await step(1);
     expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
   });
 
