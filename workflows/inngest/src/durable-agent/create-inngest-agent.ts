@@ -1101,6 +1101,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         output,
         (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
         agent.getPubSub(),
+        streamOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
       );
 
       // 4. Return stream result - attach extra properties to output for compatibility
@@ -1372,6 +1373,26 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         if (!notResumable) void emitError(runId, error);
       });
       existingEntry.workflowExecution = workflowExecution;
+
+      const resumeStreamOptions = {
+        ...(resumeOptions ?? {}),
+        runId,
+      } as AgentExecutionOptions<TOutput>;
+      const continued = agentThreadStreamRuntime.continueRun(
+        proxyRef as unknown as Agent<any, any, any, any>,
+        output,
+        resumeStreamOptions,
+        agent.getPubSub(),
+      );
+      if (!continued) {
+        await agentThreadStreamRuntime.registerRun(
+          proxyRef as unknown as Agent<any, any, any, any>,
+          output,
+          resumeStreamOptions,
+          agent.getPubSub(),
+          resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+        );
+      }
 
       // Await the dispatch itself (not workflow completion) so a failure to hand the
       // resume event to Inngest rejects the caller. Previously it was fire-and-forget:

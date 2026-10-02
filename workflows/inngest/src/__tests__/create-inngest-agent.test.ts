@@ -722,6 +722,89 @@ describe('InngestAgent parity surface', () => {
     await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
   }
 
+  it.each([
+    { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
+    { closeOnSuspend: true, registrationOptions: undefined },
+  ])(
+    'registers stream() with continuation options when closeOnSuspend=$closeOnSuspend',
+    async ({ closeOnSuspend, registrationOptions }) => {
+      const durableAgent = makeIsolatedAgent(`thread-registration-${closeOnSuspend}`);
+      const sendSpy = stubInngestSend();
+      const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
+
+      const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { closeOnSuspend });
+      try {
+        expect(registerSpy).toHaveBeenCalledWith(
+          durableAgent,
+          result.output,
+          expect.objectContaining({ closeOnSuspend }),
+          durableAgent.agent.getPubSub(),
+          registrationOptions,
+        );
+      } finally {
+        result.cleanup();
+        registerSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    },
+  );
+
+  it('continues the existing thread run when resume() finds a live continuation', async () => {
+    const durableAgent = makeIsolatedAgent('resume-thread-continuation');
+    setSuspendedSnapshot(durableAgent);
+    const sendSpy = stubInngestSend();
+    const continueSpy = vi.spyOn(agentThreadStreamRuntime, 'continueRun').mockReturnValue(true);
+    const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
+    const runId = 'resume-thread-continuation-run';
+
+    const result = await durableAgent.resume(runId, { approved: true }, { threadId: 'thread-1', resourceId: 'user-1' });
+    try {
+      expect(continueSpy).toHaveBeenCalledWith(
+        durableAgent,
+        result.output,
+        expect.objectContaining({ runId, threadId: 'thread-1', resourceId: 'user-1' }),
+        durableAgent.agent.getPubSub(),
+      );
+      expect(registerSpy).not.toHaveBeenCalled();
+    } finally {
+      result.cleanup();
+      registerSpy.mockRestore();
+      continueSpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
+    { closeOnSuspend: true, registrationOptions: undefined },
+  ])(
+    'registers a replacement thread run when resume() cannot continue and closeOnSuspend=$closeOnSuspend',
+    async ({ closeOnSuspend, registrationOptions }) => {
+      const durableAgent = makeIsolatedAgent(`resume-thread-replacement-${closeOnSuspend}`);
+      setSuspendedSnapshot(durableAgent);
+      const sendSpy = stubInngestSend();
+      const continueSpy = vi.spyOn(agentThreadStreamRuntime, 'continueRun').mockReturnValue(false);
+      const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
+      const runId = `resume-thread-replacement-${closeOnSuspend}-run`;
+
+      const result = await durableAgent.resume(runId, { approved: true }, { closeOnSuspend });
+      try {
+        expect(registerSpy).toHaveBeenCalledWith(
+          durableAgent,
+          result.output,
+          expect.objectContaining({ runId, closeOnSuspend }),
+          durableAgent.agent.getPubSub(),
+          registrationOptions,
+        );
+      } finally {
+        result.cleanup();
+        registerSpy.mockRestore();
+        continueSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    },
+  );
+
   it('threads widened execution options through prepare() into workflow input', async () => {
     // Slice 1: prove the widened option surface actually flows to
     // prepareForDurableExecution. We use prepare() instead of stream() because
