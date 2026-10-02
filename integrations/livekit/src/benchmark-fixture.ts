@@ -9,6 +9,9 @@ import type { VoiceReplyChunk } from './turn-metrics';
  * Controlled reply source for CI audio-pipeline tests. No model or provider is called.
  * Pair with MastraVoiceAgent and a fake TTS/output, or use real providers separately.
  * The fixture does not measure model quality; real-audio benchmarks should run the application agent.
+ * For interruptAfterMs, the adapter must cancel the stream after that delay from the unfinished reply.
+ * The fixture leaves an extra second for cancellation, then completes normally if it never arrives.
+ * A completed reply fails a scenario whose expectedOutcome is interrupted.
  */
 export function createVoiceBenchmarkReplyGenerator(
   scenario: RunVoiceBenchmarksOptions['scenarios'][number],
@@ -46,6 +49,7 @@ export function createVoiceBenchmarkReplyGenerator(
           if (fixture.interruptAfterMs !== undefined) {
             controller.enqueue('This is a deliberately unfinished answer. ');
             controller.enqueue(VOICE_TEXT_FLUSH);
+            // Keep generation open for the adapter to exercise cancellation; do not simulate it here.
             await delay(fixture.interruptAfterMs + 1000);
           }
           if (!cancelled) {

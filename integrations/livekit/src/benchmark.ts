@@ -8,6 +8,11 @@ export const voiceBenchmarkScenarioSchema = z.object({
   expectedTools: z.array(z.string().min(1)).default([]),
   expectedOutcome: z.enum(['completed', 'interrupted', 'failed']).default('completed'),
   toolDelayMs: duration.default(0),
+  /**
+   * Adapter-owned delay from the start of assistant output to injecting an interruption.
+   * Use the first unfinished reply chunk for the CI fixture, or first audio for real-audio trials.
+   * Neither the runner nor the reply fixture triggers the interruption.
+   */
   interruptAfterMs: duration.optional(),
   injectFailure: z.boolean().default(false),
 });

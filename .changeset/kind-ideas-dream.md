@@ -22,3 +22,5 @@ const summary = summarizeVoiceBenchmarks(results);
 ```
 
 Reports distinguish first audio, first useful answer, and completed playback. Failures and timeouts remain in the success-rate denominator; missing measurements remain unavailable.
+
+Interruption scenarios require the trial adapter to trigger cancellation. The controlled fixture keeps the reply open for interruption; a reply that finishes instead is scored unsuccessful.

@@ -722,6 +722,10 @@ Your `run(scenario, { signal, attempt })` adapter owns each trial's input and ou
 
 The supplied scenarios cover a simple answer, a lookup, a slow lookup, interruption, an injected failure, and a grounded follow-up. The lookup fixture's answer is `42`. For controlled pipeline tests, `createVoiceBenchmarkReplyGenerator(scenario)` from `@mastra/livekit/worker` implements fake replies, tool delay, cancellation, and failure injection. Pass it as `generate` to `MastraVoiceAgent`, with a fake TTS node and audio output. This fixture tests transport behavior, not model quality or actual business-tool execution.
 
+For the interruption scenario, your adapter triggers the interruption; `interruptAfterMs` doesn't cancel the reply by itself. In a controlled CI trial, start the delay when the fixture emits its unfinished reply, then cancel the stream through the pipeline under test. The fixture waits `interruptAfterMs + 1000` milliseconds after emitting that reply and completes normally if no cancellation arrives. With `expectedOutcome: 'interrupted'`, that completed trial has `success: false`. Use a fake clock for deterministic CI timing and assert that cancellation clears pending timers.
+
+In a real-audio trial, start the interruption delay when assistant audio begins and send the scenario's second utterance as caller audio. Report the observed playback outcome; don't mark a trial interrupted just because the interruption was scheduled.
+
 For opt-in real-audio trials, select `mode: 'audio'` and either `measurement: 'server-playout'` or `'client-playout'`. Supply an adapter that sends synthetic caller audio through your application and its actual providers. The adapter must return the same measurement source as the run configuration; simulated results cannot pass as real audio. Run grounded follow-ups against the application agent, not the controlled reply fixture. Record the package, model, speech-provider, adapter, region, and configuration versions, and run cold and warm trials separately. The runner records these labels; it doesn't restart workers or warm models for you.
 
 Use three separate latency values, each anchored to caller speech ending:
