@@ -16,3 +16,5 @@ export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
 export * as workflows from './handlers/workflows';
 export * as dynamicWorkflows from './handlers/dynamic-workflows';
+
+export * as studio from './handlers/studio';

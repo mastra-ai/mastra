@@ -10,6 +10,7 @@ import {
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
 } from '../../handlers/mcp';
+import { STUDIO_MCP_ROUTE } from '../../handlers/studio';
 
 /**
  * MCP Routes
@@ -18,6 +19,7 @@ import {
  * Transport routes handle the MCP protocol communication (HTTP and SSE).
  */
 export const MCP_ROUTES = [
+  STUDIO_MCP_ROUTE,
   // ============================================================================
   // MCP Server Registry Routes
   // ============================================================================

@@ -85,6 +85,33 @@ It'll create a `.mastra/output/studio` folder with the built Studio assets. By d
 MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs
 ```
 
+## Open the trace list as an MCP App
+
+Mastra Server includes a Studio [MCP App](/reference/tools/mcp-server#mcp-apps-appresources) at `/api/studio/mcp`. It serves the connection screen and a filterable trace list to MCP Apps hosts, including ChatGPT plugin extensions. The HTML, JavaScript, and styles are bundled into `@mastra/server`, so you don't need a separate UI deployment or the `--studio` build flag.
+
+This preview connects to public servers without authentication. It includes time ranges, filters, sorting, column preferences, pagination, and automatic refresh. Trace details, usage metrics, and the Studio sidebar aren't included.
+
+1. Deploy your Mastra server at a public HTTPS URL with trace storage and browser access through CORS enabled.
+1. Connect the host to `https://your-server.example/api/studio/mcp`. If you configure a different API prefix, replace `/api` in this URL.
+1. Open **Mastra Studio** through the `open_studio` tool or the extension's global entry point.
+1. Confirm the **Mastra instance URL** and select **Connect**. Run an agent or workflow in your Mastra application to create traces, then verify that they appear in the list.
+
+The MCP endpoint serves the UI shell. The UI reads the existing observability API directly with browser credentials omitted. API authentication remains enforced. Servers that require authentication display a connection error in this preview.
+
+The app's Content Security Policy (CSP) allows connections to the server hosting its MCP endpoint. To use another server, add that server's MCP endpoint to your host and open its Studio app. Entering an unrelated server domain in the connection screen isn't supported.
+
+### Set the public URL behind a proxy
+
+By default, the app derives its server origin from the HTTP request. If your reverse proxy terminates HTTPS or mounts the server under a path, set `MASTRA_STUDIO_PUBLIC_URL` to the externally reachable base URL before starting the server:
+
+```bash
+MASTRA_STUDIO_PUBLIC_URL=https://agents.example.com node .mastra/output/index.mjs
+```
+
+Include any proxy mount path in this value, but don't include the API prefix. The app uses the server adapter's configured API prefix automatically. The public URL also determines the app's CSP connection origin.
+
+For ChatGPT, follow the [plugin extension setup](https://developers.openai.com/plugins/build/extensions) to connect your deployed MCP endpoint. Deploying Mastra Server provides the app endpoint. Distributing a plugin is a separate host-specific step. This preview uses the same MCP protocol revision as `@mastra/mcp` (`2026-07-28`).
+
 ## Using a CDN
 
 ### Automatic

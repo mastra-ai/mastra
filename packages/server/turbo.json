@@ -4,13 +4,25 @@
   "tasks": {
     "generate:api-cli-route-metadata": {
       "cache": false,
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "@internal/core#build",
+        "@internal/voice#build",
+        "@mastra/core#build",
+        "@mastra/schema-compat#build",
+        "@mastra/agent-builder#build"
+      ],
       "inputs": ["src/**", "scripts/generate-api-cli-route-metadata.ts", "package.json"],
       "outputs": ["../cli/src/commands/api/route-metadata.generated.ts"]
     },
     "generate:route-types": {
       "cache": false,
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "@internal/core#build",
+        "@internal/voice#build",
+        "@mastra/core#build",
+        "@mastra/schema-compat#build",
+        "@mastra/agent-builder#build"
+      ],
       "inputs": ["src/**", "scripts/generate-route-types.ts", "package.json"],
       "outputs": ["../../client-sdks/client-js/src/route-types.generated.ts"]
     },

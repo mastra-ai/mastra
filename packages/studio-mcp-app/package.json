@@ -1,0 +1,40 @@
+{
+  "name": "@internal/studio-mcp-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@mastra/client-js": "workspace:*",
+    "@mastra/playground-ui": "workspace:*",
+    "@mastra/react": "workspace:*",
+    "@modelcontextprotocol/ext-apps": "^2.0.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-query": "^5.90.21",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "22.20.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "jsdom": "^26.1.0",
+    "msw": "^2.12.11",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "^8.0.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "catalog:",
+    "vite": "^7.3.1",
+    "vitest": "catalog:"
+  }
+}

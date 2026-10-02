@@ -14007,6 +14007,24 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
 }
 
 // ============================================================================
+// Route: ALL /studio/mcp
+// ============================================================================
+export type AllStudioMcp_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface AllStudioMcp_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: AllStudioMcp_Request;
+  response: unknown;
+  responseType: 'mcp-http';
+}
+
+// ============================================================================
 // Route: GET /mcp/v0/servers
 // ============================================================================
 export type GetMcpV0Servers_QueryParams = {
@@ -23899,6 +23917,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
+  'ALL /studio/mcp': AllStudioMcp_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -25016,6 +25035,9 @@ export interface Client {
     DELETE: DeleteStoredWorkspacesStoredWorkspaceId_RouteContract;
     GET: GetStoredWorkspacesStoredWorkspaceId_RouteContract;
     PATCH: PatchStoredWorkspacesStoredWorkspaceId_RouteContract;
+  };
+  '/studio/mcp': {
+    ALL: AllStudioMcp_RouteContract;
   };
   '/system/api-schema': {
     GET: GetSystemApiSchema_RouteContract;
