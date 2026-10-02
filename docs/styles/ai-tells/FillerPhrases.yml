@@ -1,15 +1,12 @@
 ---
 extends: existence
-message: "AI filler: '%s'. Delete this phrase. It adds no meaning."
+message: "AI filler: '%s'. Delete this phrase. The sentence reads the same without it."
 level: error
 ignorecase: true
 tokens:
   - a wide range of
   - a broad range of
   - a variety of
-  - a myriad of
-  - a plethora of
-  - a wealth of
   - an abundance of
   - a multitude of
   - countless
@@ -40,7 +37,10 @@ tokens:
   - it can be seen that
   - it can be observed that
 
-  # Performative sincerity markers
+  # Performative sincerity markers. "to be honest," overlaps DefensiveHedges'
+  # fuller "To be honest, X, but Y" concessive frame on purpose: this rule owns
+  # the bare filler, DefensiveHedges owns the hedged-concession reading, and a
+  # sentence that is both gets both alerts by design.
   - and honestly
   - and honestly,
   - honestly,

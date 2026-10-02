@@ -3,8 +3,11 @@ extends: sequence
 message: "AI empty modifier: '%s %s'. Delete the modifier and keep the noun."
 level: error
 ignorecase: true
+# "Named" left this list for NamedAdjective (2026-09), which gates it on
+# the definite determiner and keeps the terms of art ("a named pipe,"
+# "named types") quiet; the tagger-driven pair here flagged every one.
 tokens:
-  - pattern: named|various|certain|respective|given|particular
+  - pattern: various|certain|respective|given|particular
     tag: JJ|VBN|DT
   - tag: NN|NNS
 ---

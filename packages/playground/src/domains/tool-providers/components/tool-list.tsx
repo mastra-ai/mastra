@@ -1,11 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -19,6 +18,7 @@ interface ToolListProps {
 }
 
 export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolListProps) {
+  const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedCallback((value: string) => {
     setSearch(value);
@@ -34,18 +34,17 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr] overflow-hidden">
-      <div className="border-border1 border-b px-3 py-2.5">
-        <InputGroup variant="outline" size="sm">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Search tools"
-            placeholder="Search tools..."
-            onChange={event => debouncedSearch(event.target.value)}
-          />
-        </InputGroup>
+      <div className="border-b border-border px-3 py-2.5">
+        <SearchInput
+          label="Search tools"
+          size="sm"
+          placeholder="Search tools..."
+          value={query}
+          onValueChange={value => {
+            setQuery(value);
+            debouncedSearch(value);
+          }}
+        />
       </div>
 
       <ScrollArea className="h-full">
@@ -58,8 +57,8 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
               </div>
             ))
           ) : tools.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <Txt variant="ui-sm" className="text-neutral3">
+            <div className="flex items-center justify-center py-8">
+              <Txt variant="caption" tone="muted">
                 No tools found
               </Txt>
             </div>
@@ -86,9 +85,9 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
                       : undefined
                   }
                   className={cn(
-                    'flex items-start gap-3 rounded-md px-3 py-2.5',
-                    onToggle ? 'cursor-pointer hover:bg-surface4' : 'hover:bg-surface4',
-                    isSelected && 'bg-surface4',
+                    'state-layer flex items-start gap-3 rounded-md px-3 py-2.5',
+                    onToggle && 'cursor-pointer',
+                    isSelected && 'bg-fill-hover',
                   )}
                 >
                   {onToggle && (
@@ -103,13 +102,13 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
                   <div className="flex min-w-0 flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                      <Txt variant="column" tone="ink">
                         {tool.name}
                       </Txt>
                       {toolkit === undefined && tool.toolkit && <Badge>{tool.toolkit}</Badge>}
                     </div>
                     {tool.description && (
-                      <Txt variant="ui-sm" className="text-neutral3 line-clamp-2">
+                      <Txt variant="caption" tone="muted" className="line-clamp-2">
                         {tool.description}
                       </Txt>
                     )}

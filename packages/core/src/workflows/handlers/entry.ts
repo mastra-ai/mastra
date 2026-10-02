@@ -158,6 +158,11 @@ export interface PersistStepUpdateParams {
    * compatibility with external callers.
    */
   phase?: string;
+  /**
+   * Persist the `running` update even if the last persisted status was `suspended`.
+   * Used when a resumed step starts, so its resume data survives a crash mid-step.
+   */
+  recordResumedStepStart?: boolean;
 }
 
 export async function persistStepUpdate(
@@ -177,17 +182,25 @@ export async function persistStepUpdate(
     requestContext,
     tracingContext,
     phase,
+    recordResumedStepStart,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
-  await engine.wrapDurableOperation(operationId, async () => {
-    // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
-    // agent output processor, #19605) wins over the workflow-wide option.
-    const persistencePredicate = engine.getRunPersistenceOverride(runId) ?? engine.options?.shouldPersistSnapshot;
-    const shouldPersistSnapshot = persistencePredicate?.({ stepResults, workflowStatus });
+  // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
+  // agent output processor, #19605) wins over the workflow-wide option and is always
+  // evaluated durably because callers may provide an arbitrary predicate.
+  const runPersistenceOverride = engine.getRunPersistenceOverride(runId);
+  const persistencePredicate = runPersistenceOverride ?? engine.options?.shouldPersistSnapshot;
+  const evaluateBeforeDurableOperation =
+    engine.options?.evaluatePersistencePredicateBeforeDurableOperation && !runPersistenceOverride;
 
-    if (!shouldPersistSnapshot) {
+  if (evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
+    return;
+  }
+
+  await engine.wrapDurableOperation(operationId, async () => {
+    if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
       return;
     }
 
@@ -197,7 +210,7 @@ export async function persistStepUpdate(
     // otherwise clobber the suspend record before the resume actually
     // completes. The engine tracks its own last-persisted status for this
     // run (process-local) so we don't need an extra storage read per step.
-    if (workflowStatus === 'running') {
+    if (workflowStatus === 'running' && !recordResumedStepStart) {
       const lastPersisted = engine.getLastPersistedStatus(runId);
       if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
         return;
@@ -304,11 +317,16 @@ export async function executeEntry(
     // off the entry id and is shared across all single-step kinds.
     const stepId = getSingleStepEntryId(entry);
     const isResumedStep = resume?.steps?.includes(stepId) ?? false;
+    // On crash-restart the running snapshot preserved this step's own payload
+    // (pruneRunningHistory exempts active steps), while terminal predecessors may
+    // have had fields like messageListState pruned. Prefer the step's recorded
+    // payload over the predecessor's pruned output. See #22636.
+    const isRestartedActiveStep = Boolean(restart?.activeStepsPath?.[stepId]);
     if (!isResumedStep) {
       executionContext.stepExecutionPath?.push(stepId);
     }
     const stepPrevOutput = getResumeStepPrevOutput({
-      isResumedStep,
+      isResumedStep: isResumedStep || isRestartedActiveStep,
       stepId,
       stepResults,
       prevOutput,
@@ -340,7 +358,9 @@ export async function executeEntry(
           ? await engine.executeAgent({ ...singleStepParams, entry })
           : entry.type === 'tool'
             ? await engine.executeTool({ ...singleStepParams, entry })
-            : await engine.executeMapping({ ...singleStepParams, entry });
+            : entry.type === 'classifier'
+              ? await engine.executeClassifier({ ...singleStepParams, entry })
+              : await engine.executeMapping({ ...singleStepParams, entry });
 
     // Extract result and apply context changes
     execResults = stepExecResult.result;

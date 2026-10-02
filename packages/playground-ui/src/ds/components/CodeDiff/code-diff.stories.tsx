@@ -36,6 +36,75 @@ export const Default: Story = {
   args: {
     codeA: sampleA,
     codeB: sampleB,
+    filename: 'dataset-item.json',
+  },
+};
+
+export const GitPatch: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/agent.ts b/src/agent.ts',
+      'index 2d4a3b1..b8c31d2 100644',
+      '--- a/src/agent.ts',
+      '+++ b/src/agent.ts',
+      '@@ -1,3 +1,4 @@',
+      ' export function createAgent() {',
+      '-  return { name: "helper" };',
+      '+  return { name: "researcher", tools: ["search"] };',
+      ' }',
+    ].join('\n'),
+  },
+};
+
+export const ObservationHistory: Story = {
+  args: {
+    codeA: 'The user prefers short answers.\nThe project uses TypeScript.\n',
+    codeB: 'The user prefers concise answers with examples.\nThe project uses TypeScript.\n',
+    filename: 'observations.md',
+    layout: 'unified',
+  },
+};
+
+export const RenameOnly: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/old-agent.ts b/src/new-agent.ts',
+      'similarity index 100%',
+      'rename from src/old-agent.ts',
+      'rename to src/new-agent.ts',
+    ].join('\n'),
+  },
+};
+
+const addedRemovedChangedA = JSON.stringify(
+  {
+    input: { query: 'What is the capital of France?' },
+    groundTruth: { answer: 'Paris' },
+    toolMocks: { weather: { temp: 20 } },
+    scorerIds: ['exact-match'],
+    metadata: { difficulty: 'easy' },
+  },
+  null,
+  2,
+);
+
+const addedRemovedChangedB = JSON.stringify(
+  {
+    input: { query: 'What is the capital of France?' },
+    groundTruth: { answer: 'Paris, France' },
+    scorerIds: ['exact-match', 'llm-judge'],
+    requestContext: { locale: 'fr-FR' },
+    metadata: { difficulty: 'easy' },
+  },
+  null,
+  2,
+);
+
+/** Removed key (toolMocks), added key (requestContext), changed values. */
+export const AddedRemovedChanged: Story = {
+  args: {
+    codeA: addedRemovedChangedA,
+    codeB: addedRemovedChangedB,
   },
 };
 

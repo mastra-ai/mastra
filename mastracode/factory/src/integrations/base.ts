@@ -24,10 +24,10 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
-import type { FactoryRules } from '../rules/types.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
@@ -39,6 +39,7 @@ import type { WorkItemFeedPublisher } from '../storage/domains/comments/feed-syn
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -110,6 +111,8 @@ export interface IntegrationContext {
      * Absent when no source-control owner is registered.
      */
     sourceControlOwner?: SourceControlStorageHandle;
+    /** Every registered source-control partition, for project-aware provider selection. */
+    sourceControls: readonly SourceControlStorageHandle[];
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
     /**
@@ -117,6 +120,12 @@ export interface IntegrationContext {
      * adopts the same memory configuration the web kickoff applies.
      */
     memorySettings: MemorySettingsStorage;
+    /**
+     * Saved model packs and their per-user active selection. A channel
+     * integration reads the linked sender's active pack to start a session on
+     * the model that user chose rather than the factory's shared default.
+     */
+    modelPacks: ModelPacksStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
     /**
@@ -127,13 +136,16 @@ export interface IntegrationContext {
     channelIdentity: ChannelIdentityStorage;
   };
   /**
-   * Factory rule runtime available when the work-item domain is ready.
+   * Factory runtime available when the work-item domain is ready.
    * Integrations attach their own provider event rules to their ingress
    * surfaces instead of relying on provider-specific services in the host.
    */
-  rules?: {
-    config: FactoryRules;
+  runtime?: {
+    /** Operator-maintained provenance label stamped on audit rows. */
+    configVersion: string;
     workItems: WorkItemsStorage;
+    /** Installed boards, so integrations read phase semantics instead of matching names. */
+    boards: BoardRegistry;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -188,7 +200,14 @@ export interface FactoryIntegration {
    * agent tools, intake capability calls — reach storage without a service
    * locator. Mirrors `sourceControl.initialize`.
    */
-  initialize?(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void;
+  initialize?(args: {
+    storage: IntegrationStorageHandle;
+    projects: FactoryProjectsStorage;
+    auth: RouteAuth;
+    /** Cross-integration intake selection/binding domain, for per-request authorization. */
+    intake: IntakeStorage;
+    sourceControl?: SourceControlStorageHandle;
+  }): void;
   /**
    * The integration's full HTTP surface (status, OAuth, webhooks, feature
    * routes), as Mastra `apiRoutes`. Called once at boot; the factory folds
@@ -241,8 +260,10 @@ export interface FactoryIntegration {
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
-   * Mirrors web feed comments to the platform thread a work item is bound to.
-   * Collected alongside `channels()`: a publisher posts through the channel SDK.
+   * Mirrors web feed comments outward — to the platform thread a work item is
+   * bound to, a webhook, or an issue tracker. Collected from every READY
+   * integration independent of `channels()`: an integration may publish without
+   * owning a chat channel.
    */
   feedPublisher?(ctx: IntegrationContext): WorkItemFeedPublisher;
   /**

@@ -7,6 +7,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { onTestFinished } from 'vitest';
 
+import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
 import { AuditStorage } from './domains/audit/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
@@ -48,6 +49,8 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const intake = storage.registerDomain(new IntakeStorage());
   const audit = storage.registerDomain(new AuditStorage());
   const workItems = storage.registerDomain(new WorkItemsStorage());
+  const boards = createBoardRegistry();
+  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
   const credentials = storage.registerDomain(new ModelCredentialsStorage());
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());

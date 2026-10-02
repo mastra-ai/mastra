@@ -55,19 +55,26 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
+import type {
+  AgentChunkType,
+  ThreadHistoryChunk,
+  CustomChunkWriter,
+  MastraOnFinishCallbackArgs,
+  ModelManagerModelConfig,
+} from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -160,11 +167,53 @@ export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
   attributes?: AgentSignalAttributes;
+  /** Reject the wake unless an advertised thread owner acknowledges it. */
+  requireClaimedOwner?: boolean;
 };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
+export type AgentThreadPeerInfo = {
+  id: string;
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentClaimThreadPeerOptions = {
+  id?: string;
+  agentId?: string;
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentUpdateThreadPeerOptions = {
+  label?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentThreadPeerAdvertisement = AgentThreadPeerInfo & {
+  sourceId: string;
+  discoveredAt: Date;
+  /**
+   * True when the agent that ran this discovery published the advertisement
+   * itself, so it names one of that agent's own threads rather than a peer's.
+   * Discovery answers with the caller's own advertisements alongside peer
+   * responses; callers listing peers for a human use this to exclude their own.
+   */
+  selfAdvertised?: boolean;
+};
+
+export type DiscoverAgentThreadPeersOptions = {
+  timeoutMs?: number;
+};
+
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;
@@ -198,11 +247,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  *               `output` is the run's `MastraModelOutput` for in-process
  *               consumption. Only the runtime that actually runs the agent
  *               resolves to `wake`.
- * - `deliver` — the signal was handed off rather than started here. This covers
- *               a follow-up signal joining an already-active run and the loser
- *               of a cross-process wake race (whose signal is forwarded to the
- *               winning run). No new run was started locally and no stream is
- *               owned; `runId` is the run the signal joined.
+ * - `deliver` — the signal was admitted by a run rather than started here. This
+ *               covers a follow-up signal joining an already-active run and a
+ *               remote claimed owner acknowledging an idle wake after fencing
+ *               competing owners. No new run was started locally and no stream
+ *               is owned; `runId` is the run the signal joined.
  * - `persist` — the signal was written to memory by a `persist` behavior. To
  *               await the storage write, use the top-level `persisted` promise.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
@@ -231,9 +280,9 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * not reject here; that error surfaces on the `wake` member's `output`.
    *
    * `wake` means this process ran the agent and `output` is its
-   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
-   * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`. `blocked` means the signal targeted a suspended
+   * `MastraModelOutput`. A signal queued onto an existing run, or an idle wake
+   * acknowledged by a remote claimed owner after owner fencing, resolves to
+   * `deliver`. `blocked` means the signal targeted a suspended
    * thread that cannot accept a new idle wake. `runId` is present on
    * `wake`/`deliver`/`blocked` only; for `persist`/`discard`, correlate via
    * {@link signal}'s `id`. To await a `persist` write, use {@link persisted}.
@@ -257,12 +306,53 @@ export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUT
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT> & {
+  /** Local grouping metadata for queue observation and cancellation. It is not serialized or authorization. */
+  queueOwnerId?: string;
+};
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadEventsOptions {
+  resourceId: string;
+  threadId: string;
+  /** Omit to observe all locally pending messages on the shared thread. */
+  queueOwnerId?: string;
+}
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEvent =
+  /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
+  { type: 'queue-count-changed'; count: number };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type CancelQueuedAgentMessagesOptions =
+  /** Cancel selected pending input across all Agents sharing this runtime and thread. */
+  | { resourceId?: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  /** Cancel only the calling Agent's queued messages in this owner group. */
+  | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface CancelQueuedAgentMessagesResult {
+  cancelledSignalIds: string[];
+}
 
 /**
  * @experimental Agent stream resume APIs are experimental and may change in a future release.
@@ -355,20 +445,56 @@ export interface AgentThreadRun<OUTPUT = unknown> {
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentSubscribeToThreadOptions {
+export interface AgentThreadIdentityOptions {
   resourceId?: string;
   threadId: string;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentAbortThreadOptions extends AgentThreadIdentityOptions {
+  /** Clear this runtime's pending signals before aborting. Forwarded aborts also clear the receiving owner's queues. */
+  clearPendingSignals?: boolean;
+  /** Abort only if this run is still the thread's active run. */
+  expectedRunId?: string;
+  /**
+   * Abort only what this process owns. When the active run belongs to a remote
+   * thread owner, an ordinary abort asks that owner to stop the run; a local-only
+   * abort leaves it running and reports `false` instead. Thread lifecycle
+   * transitions (detaching, switching threads) use this so unbinding a thread
+   * never kills another instance's run.
+   */
+  localOnly?: boolean;
+}
+
+/** @experimental Agent signals are experimental and may change in a future release. */
+export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOptions {
+  /** Subscriber-local signal filtering: true hides all recognized types, false hides none, or select types with an array. Defaults to none. */
+  hideSignals?: boolean | AgentSignalType[];
+  /**
+   * Start the stream with one `thread-history` chunk holding the thread's stored
+   * messages (newest `perPage`, default 40, oldest first), then emit only parts
+   * newer than that history, then live parts. Pending approval and suspension
+   * chunks are always emitted.
+   */
+  withInitialHistory?: boolean | { perPage?: number };
+  /** Request context used to resolve the agent's memory when loading initial history. */
+  requestContext?: RequestContext;
 }
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface AgentThreadSubscription<OUTPUT = unknown> {
-  stream: AsyncIterable<AgentChunkType<OUTPUT>>;
+export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+  /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
+  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
-  abort: () => boolean;
+  /**
+   * Abort the active run. Pass `localOnly` to leave a remote owner's run alone,
+   * or `clearPendingSignals` to also drop input queued behind it.
+   */
+  abort: (options?: Pick<AgentAbortThreadOptions, 'clearPendingSignals' | 'localOnly'>) => boolean;
   unsubscribe: () => void;
 }
 
@@ -382,8 +508,17 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
   /**
-   * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * Custom instructions describing the expected output. The meaning depends on the mode:
+   *
+   * - With `model` set (separate structuring pass): instructions for the structuring agent.
+   * - Without `model`, when `jsonPromptInjection` is active: these instructions are injected
+   *   into the prompt **in place of** the generated schema dump, which can cut thousands of
+   *   tokens per model call on large schemas. Adherence then rests on your wording, so keep
+   *   the field list explicit.
+   * - Without `model` and without prompt injection (native response format): no effect.
+   *
+   * If not provided, instructions are generated from the schema. Output is always validated
+   * against `schema` regardless of what this field contains.
    */
   instructions?: string;
 
@@ -519,7 +654,7 @@ export interface GoalConfig {
  *
  * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
  * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
- *   cleanupTimeoutMs, id, name).
+ *   cleanupTimeoutMs, shouldCache, shouldPersistSnapshot, id, name).
  *
  * See `packages/core/src/agent/durable/create-durable-agent.ts`.
  */
@@ -534,6 +669,15 @@ export type AgentDurableOption =
       maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). */
       cleanupTimeoutMs?: number;
+      /** See createDurableAgent options: per-topic opt-out of the replay cache. */
+      shouldCache?: (topic: string) => boolean;
+      /**
+       * See createDurableAgent options: overrides the snapshot-persistence
+       * policy. By default `pending | paused | suspended` are always
+       * persisted and `running` checkpoints only when the Mastra instance
+       * sets `recovery: { durableAgents: 'auto' }`.
+       */
+      shouldPersistSnapshot?: ShouldPersistSnapshotFn;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */
@@ -853,17 +997,31 @@ interface AgentConfigBase<
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent retries with feedback.
-   * Input and output processor retries require this value to be set. When
-   * errorProcessors are configured and it is omitted, their runtime cap is 10.
-   * Set it explicitly to bound every retry path.
+   * Unset by default. Input and output processor retries require this value to be
+   * set. When error processors resolve to a non-empty list and this is omitted,
+   * their runtime cap is 3.
    */
   maxProcessorRetries?: number;
   /**
    * Error processors that handle LLM API rejections.
    * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Defaults to the shared stability processors — `ProviderHistoryCompat`,
+   * `PrefillErrorHandler`, and `StreamErrorRetryProcessor`, in that order. Each default is added only
+   * when no processor in your list carries its `id`. An added default is placed at the position its
+   * `id` gives it, so naming a later default does not invert the order; your processors are never
+   * reordered relative to each other. An empty list is merged the same way, so it
+   * resolves to the defaults; use `errorProcessorDefaults: false` to opt out.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
   errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
+  /**
+   * Set to `false` to run only the error processors you configure, with no shared
+   * stability defaults added. This is the only way to opt out of the defaults:
+   * `errorProcessors` is always a base that the three defaults are merged into,
+   * including when it is empty. With `false` and no `errorProcessors`, the agent
+   * runs no error processors. Defaults to `true` (defaults on).
+   */
+  errorProcessorDefaults?: boolean;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -1032,11 +1190,11 @@ export type AgentGenerateOptions<
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides the agent's default maxProcessorRetries. Input and output processor
-   * retries require an explicit cap; errorProcessors default to a cap of 10 when
-   * configured without one. Set this explicitly to bound every retry path.
+   * retries require an explicit cap; error processors default to a cap of 3 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
-  /** Error processors to use for this generation call (overrides agent's default) */
+  /** Error processors to use for this generation call. Replaces the agent's resolved list, including its defaults. */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
@@ -1180,6 +1338,10 @@ export type AgentExecuteOnFinishOptions = {
     | MastraScorers
     | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /** Writer for emitting a transient `data-thread-title` chunk on stream runs before `finish`. */
+  writer?: CustomChunkWriter;
+  /** Abort signal of the current run; an abort during the title wait releases `finish` immediately. */
+  abortSignal?: AbortSignal;
   /**
    * Optional platform `waitUntil` so detached title generation survives
    * serverless freeze-after-response without blocking `generate()`/`stream()`.
@@ -1208,6 +1370,13 @@ export interface DurableAgentLike {
   readonly id: string;
   /** Agent name */
   readonly name: string;
+  /**
+   * Storage workflow name of this agent's outer agentic-loop snapshot.
+   * Defaults to `DurableStepIds.AGENTIC_LOOP` when omitted; engines that
+   * namespace their workflow ids (e.g. Inngest) must set it so server
+   * handlers and suspended-run discovery can find their runs.
+   */
+  readonly durableLoopWorkflowName?: string;
   /** The underlying Mastra Agent */
   readonly agent: Agent<any, any, any>;
   /**

@@ -86,6 +86,24 @@ describe('killProcessGroup', () => {
     expect(() => killProcessGroup(12345)).not.toThrow();
     killSpy.mockRestore();
   });
+
+  // Defense in depth for issue #23588: a remote browser's PID (e.g. a
+  // container's Chromium at PID 1) must never reach process.kill, because
+  // process.kill(-pid) would signal an unrelated local group — and kill(-1)
+  // broadcasts to every process the user owns.
+  it.each([
+    ['1 (would target init / a container PID 1)', 1],
+    ['0 (would target the caller process group)', 0],
+    ['-1 (would broadcast to all owned processes)', -1],
+    ['a negative PID', -12345],
+    ['a non-integer PID', 1234.5],
+    ['NaN', Number.NaN],
+  ])('refuses to signal for unsafe PID: %s', (_label, pid) => {
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    killProcessGroup(pid as number);
+    expect(killSpy).not.toHaveBeenCalled();
+    killSpy.mockRestore();
+  });
 });
 
 describe('resolveViewportSize', () => {

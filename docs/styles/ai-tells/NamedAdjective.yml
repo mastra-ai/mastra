@@ -1,0 +1,65 @@
+---
+extends: existence
+message: "AI designation adjective: '%s'. Write the identifier itself, or say which one. Disable this rule for API reference prose."
+level: error
+nonword: true
+ignorecase: true
+# "Named" as a pointer adjective: "the named file," "the named recipe,"
+# "the named gate," "each named rule," "its named target." The word
+# stands in for an identifier the writer could repeat, or for "that" or
+# "which one," and it is the same designation BareNames flags as a verb,
+# worn as a modifier. Go and Python documentation reach for it in the
+# API register, where a parameter names what a function opens ("Open
+# opens the named file," "the named type," "import the named package"),
+# and a documentation-corpus audit (2026-09) found the same adjective
+# carrying a back-reference through prose that has no parameter to point
+# at. The maintainer asked for it flagged alongside the verb.
+#
+# EmptyPadding and EmptyPaddingStacked used to carry "named" among their
+# tagger-driven modifiers, which flagged every "named pipe" and "named
+# type" with a message that said to delete the word, and the README
+# listed that as a known cost. The token moved here so the gate and the
+# message fit the word; an optional adjective slot keeps the stacked
+# construction ("the named operational support") covered.
+#
+# The gate is the definite determiner. "A named type," "named pipes,"
+# and "a named tuple" mean a type or a pipe that has a name, as opposed
+# to an anonymous one, and that sense stays out both by article and by a
+# lookahead over the terms of art that keep the compound under a
+# definite determiner too ("the named type," "the named group"). The
+# participle with the name after it ("the file named foo," "a constant
+# named the same as its type") never puts "named" beside the determiner,
+# so it never enters the span. The legal, insurance, and meteorology
+# registers that use the adjective as a term ("the named party," "the
+# named insured," "the named storm") sit in the exceptions.
+#
+# What matches is the API idiom itself, and it is large: about 230 times
+# across the Go and Python standard libraries, most of them "the named
+# file," "the named directory," "the named package," and "the named
+# module," each the designation this rule flags and each flagged on the
+# maintainer's call. That puts it beside BareHolds as one of the loudest
+# rules in the package on ordinary reference prose; a project
+# documenting an API disables it per file.
+exceptions:
+  # Legal and insurance vocabulary
+  - "(?i)part(?:y|ies)"
+  - "(?i)insureds?"
+  - "(?i)plaintiffs?"
+  - "(?i)defendants?"
+  - "(?i)beneficiary|beneficiaries"
+  - "(?i)executors?"
+  - "(?i)trustees?"
+  - "(?i)drivers?"
+  - "(?i)individuals?"
+  - "(?i)persons?"
+  # Meteorology
+  - "(?i)storms?"
+  - "(?i)hurricanes?"
+  - "(?i)cyclones?"
+tokens:
+  # --- The definite determiner and the adjective with the noun inside
+  # the span ("the named file," "each named rule," "its named target,"
+  # "both named gates," "the named operational support"). The lookahead
+  # refuses the terms of art where "named" means having a name rather
+  # than being the one designated.
+  - "\\b(?:the|this|that|these|those|its|their|each|every|both|all|any|only|either|neither) named (?!(?:pipes?|tuples?|groups?|types?|arguments?|args?|parameters?|params?|returns?|constants?|entity|entities|colors?|captures?|ranges?|volumes?|imports?|exports?|placeholders?|semaphores?|mutex(?:es)?|graphs?|functions?|class(?:es)?|fields?|slots?|structs?|values?|results?|keys?|nodes?|queries|query|locations?|shared|memory|and|or|after|for|by|in|as|at|with|to|the|a|an|it|them|so|below|above|here|there)\\b)(?:[a-z][a-z'-]* (?!(?:and|or|but|then|that|which|who|is|are|was|were|be|in|on|at|to|for|by|with|as|of|from|into|has|have|had|can|could|may|might|must|should|will|would|does|did|do|not|also|only|so|if|when|until|before|after)\\b)(?=[a-z]))?[a-z][a-z'-]*\\b"

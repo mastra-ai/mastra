@@ -4,7 +4,10 @@ import * as React from 'react';
 import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
@@ -185,30 +188,31 @@ export function ThreadRail({
         data-testid="thread-rail-scroll-area"
         maxHeight={maxHeight}
         className={cn('w-8', scrollAreaClassName)}
-        viewPortClassName="pr-3"
       >
-        <div className="flex w-4 flex-col items-start gap-2 py-2">
-          {turns.map((turn, index) => {
-            const distance = hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
-            const active = turn.messageId === activeMessageId;
-            const inView = visibleMessageIdSet.has(turn.messageId);
-            const previewActive = hoveredIndex === index;
+        <ScrollAreaViewport className="pr-3">
+          <div className="flex w-4 flex-col items-start gap-2 py-2">
+            {turns.map((turn, index) => {
+              const distance = hoveredIndex === null ? null : Math.abs(index - hoveredIndex);
+              const active = turn.messageId === activeMessageId;
+              const inView = visibleMessageIdSet.has(turn.messageId);
+              const previewActive = hoveredIndex === index;
 
-            return (
-              <ThreadRailItem
-                key={turn.key}
-                turn={turn}
-                index={index}
-                distance={distance}
-                active={active}
-                inView={inView}
-                previewId={previewActive ? previewId : undefined}
-                onHoverChange={showPreview}
-                onSelect={selectTurn}
-              />
-            );
-          })}
-        </div>
+              return (
+                <ThreadRailItem
+                  key={turn.key}
+                  turn={turn}
+                  index={index}
+                  distance={distance}
+                  active={active}
+                  inView={inView}
+                  previewId={previewActive ? previewId : undefined}
+                  onHoverChange={showPreview}
+                  onSelect={selectTurn}
+                />
+              );
+            })}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
 
       {previewState.currentTurn && (
@@ -248,10 +252,10 @@ const getRailItemTone = ({
   active,
   inView,
 }: Pick<ThreadRailItemProps, 'distance' | 'active' | 'inView'>): string => {
-  if (distance === 0 || active) return 'bg-neutral6';
-  if (inView) return 'bg-neutral5';
-  if (distance === 1) return 'bg-neutral4';
-  return 'bg-neutral3/60';
+  if (distance === 0 || active) return 'bg-foreground';
+  if (inView) return 'bg-foreground/85';
+  if (distance === 1) return 'bg-foreground/70';
+  return 'bg-foreground/40';
 };
 
 function ThreadRailItem({
@@ -286,7 +290,7 @@ function ThreadRailItem({
         className={cn(
           'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
-          'focus-visible:ring-2 focus-visible:ring-accent1/40 focus-visible:outline-hidden',
+          focusRing,
           size,
           tone,
         )}
@@ -330,7 +334,8 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute top-0 left-full z-30 ml-3 w-72 overflow-hidden rounded-xl text-left transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
+        overlaySurfaceStyle,
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
@@ -370,18 +375,30 @@ function ThreadRailPreviewContent({
 }: React.HTMLAttributes<HTMLDivElement> & { turn: ThreadRailTurn }) {
   return (
     <div className={className} {...props}>
-      <div className="text-ui-md leading-ui-md text-neutral6 truncate font-medium">{turn.prompt}</div>
-      {turn.reply && <p className="text-ui-sm leading-ui-sm text-neutral4 mt-1.5 line-clamp-3">{turn.reply}</p>}
+      <div className="truncate text-subheading text-foreground">{turn.prompt}</div>
+      {turn.reply && (
+        <Txt variant="caption" tone="muted" className="mt-1.5 line-clamp-3">
+          {turn.reply}
+        </Txt>
+      )}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="border-border1/60 mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
           {turn.files.map(file => (
-            <span key={file} className="text-ui-sm text-neutral4 inline-flex max-w-44 items-center gap-1.5 truncate">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              key={file}
+              className="inline-flex max-w-44 items-center gap-1.5 truncate"
+            >
               <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
-            </span>
+            </Txt>
           ))}
           {turn.hiddenFileCount > 0 && (
-            <span className="text-ui-sm text-neutral4 font-medium">+{turn.hiddenFileCount}</span>
+            <Txt as="span" variant="column" tone="muted">
+              +{turn.hiddenFileCount}
+            </Txt>
           )}
         </div>
       )}

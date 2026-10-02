@@ -1,18 +1,24 @@
+import { Input as InputPrimitive } from '@base-ui/react/input';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { controlHeight } from '@/ds/primitives/control-size';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
-import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
-import { transitions } from '@/ds/primitives/transitions';
+import {
+  deprecatedErrorAria,
+  fieldErrorRimWithin,
+  inputSurfaceAndFocusWithinStyle,
+} from '@/ds/primitives/form-element';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
-// No React context: size flows via `data-size` on the named group root
-// (`group/input-group`) and is read by the control through `group-data-[size=…]`
-// variants — mirrors shadcn's data-slot/data-* convention and removes prop drilling.
+// Size flows down as `data-size` on the named group root (`group/input-group`), read by the
+// control through `group-data-[size=…]` variants — no prop drilling. The one context read is
+// upward: a wrapper that owns the rung (ButtonsGroup) hands it to the field.
 
 const inputGroupBaseClassName = cn(
   // `flex-1` (not `min-w-0`) lets the root fill a flex row while keeping its content-floor
@@ -20,10 +26,11 @@ const inputGroupBaseClassName = cn(
   // h-form-* (2px taller than the root's content box), so stretch would push its text low
   // / overflow the bottom border, while centring overlaps the (transparent) borders cleanly.
   'group/input-group relative flex w-full flex-1 items-center',
-  'border border-border1 text-neutral6',
-  transitions.all,
-  'has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50',
-  'has-[[aria-invalid=true]]:border-error',
+  // The wrapper owns its control's width — a bare control has no width of its own,
+  // so the group is the one that decides the input fills the remaining space.
+  '[&>[data-slot=input-group-control]]:min-w-0 [&>[data-slot=input-group-control]]:flex-1',
+  'text-foreground',
+  'has-[:disabled]:cursor-not-allowed has-[:disabled]:text-muted-foreground',
   // Height is on the root (border-box) so the group matches a same-size sibling control.
   // Auto height when vertical (block-* addon) or wrapping a textarea.
   'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col',
@@ -44,61 +51,53 @@ const inputGroupRoundedTextareaClassName = cn(
   'has-[textarea]:rounded-xl',
 );
 
-// `default` and `filled` are the same filled surface on purpose (the default look IS
-// the filled treatment; `filled` is an explicit alias). Share the string so they can't
-// drift. Focus brightens the border (inputFocusBorderWithin) for WCAG-visible focus.
-const inputGroupFilledVariant = cn(
-  'rounded-full bg-surface-overlay-soft',
-  'hover:bg-surface-overlay-strong',
-  inputHoverBorderWithin,
-  'outline-hidden focus-within:bg-surface-overlay-strong focus-within:outline-hidden',
-  inputFocusBorderWithin,
+// A group wears the field material — the same `bg-card` plus rim an Input wears — so a
+// group and a bare field beside it are one surface. Its states move the rim, and they
+// read the nested control's focus (`focus-within`) because the wrapper never takes focus
+// itself. There is no second look: a transparent `outline` group existed alongside this
+// one and only ever produced two boundary languages for the same control, which is why
+// four of its call sites had wrapped it in a hand-made `bg-card rounded-full` div to get
+// the material back.
+const inputGroupClassName = cn(
+  inputGroupBaseClassName,
+  'rounded-full',
+  inputSurfaceAndFocusWithinStyle,
+  fieldErrorRimWithin,
   inputGroupRoundedTextareaClassName,
 );
 
-const inputGroupVariants = cva(inputGroupBaseClassName, {
-  variants: {
-    variant: {
-      default: inputGroupFilledVariant,
-      filled: inputGroupFilledVariant,
-      outline: cn(
-        'rounded-full bg-transparent',
-        inputHoverBorderWithin,
-        'outline-hidden focus-within:outline-hidden',
-        inputFocusBorderWithin,
-        inputGroupRoundedTextareaClassName,
-      ),
-    },
-  },
-  defaultVariants: {
-    variant: 'default',
-  },
-});
-
-export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
+export type InputGroupProps = React.ComponentProps<'div'> & {
   size?: ControlSize;
-} & VariantProps<typeof inputGroupVariants>;
+};
 
-const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
-  ({ className, size = 'md', variant, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        role="group"
-        data-slot="input-group"
-        data-size={size}
-        className={cn(inputGroupVariants({ variant }), controlHeight[size], className)}
-        {...props}
-      />
-    );
-  },
+function InputGroup({ className, size, ...props }: InputGroupProps) {
+  // A wrapper's rung wins over the field's own: inside a ButtonsGroup the group owns the
+  // height of every segment, so a field that kept its own type scale would sit at one rung
+  // and read at another.
+  const groupSize = React.useContext(ControlSizeContext);
+  const resolved = groupSize ?? size ?? 'md';
+  return (
+    <div
+      role="group"
+      data-slot="input-group"
+      data-size={resolved}
+      className={cn(inputGroupClassName, controlHeight[resolved], className)}
+      {...props}
+    />
+  );
+}
+
+const inputGroupControlTextBySize = cn(
+  'group-data-[size=sm]/input-group:text-caption',
+  'group-data-[size=md]/input-group:text-body-sm',
+  'group-data-[size=lg]/input-group:text-body',
 );
-InputGroup.displayName = 'InputGroup';
 
 const inputGroupAddonVariants = cva(
   cn(
-    'flex items-center justify-center gap-2 text-neutral3 select-none',
-    'group-has-[:disabled]/input-group:opacity-50',
+    'flex items-center justify-center gap-2 text-muted-foreground select-none',
+    inputGroupControlTextBySize,
+    'group-has-[:disabled]/input-group:text-muted-foreground',
     "[&>svg:not([class*='size-'])]:size-4",
   ),
   {
@@ -106,8 +105,8 @@ const inputGroupAddonVariants = cva(
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
-        'block-start': 'order-first w-full justify-start border-b border-border1 px-3 pt-2 pb-1',
-        'block-end': 'order-last w-full justify-start border-t border-border1 px-3 pt-1 pb-2',
+        'block-start': 'order-first w-full justify-start border-b border-border px-3 pt-2 pb-1',
+        'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
     },
     defaultVariants: {
@@ -116,150 +115,125 @@ const inputGroupAddonVariants = cva(
   },
 );
 
-export type InputGroupAddonProps = React.ComponentPropsWithoutRef<'div'> & VariantProps<typeof inputGroupAddonVariants>;
+export type InputGroupAddonProps = React.ComponentProps<'div'> & VariantProps<typeof inputGroupAddonVariants>;
 
-const InputGroupAddon = React.forwardRef<HTMLDivElement, InputGroupAddonProps>(
-  ({ className, align = 'inline-start', onClick, ...props }, ref) => {
-    return (
-      <div
-        ref={ref}
-        role="group"
-        data-slot="input-group-addon"
-        data-align={align}
-        className={cn(inputGroupAddonVariants({ align }), className)}
-        onClick={event => {
-          // Click on non-interactive addon area focuses the control inside the group.
-          // Skip when a button/input handled the click itself.
-          const target = event.target as HTMLElement;
-          if (!target.closest('button, input, textarea, [role="button"]')) {
-            event.currentTarget.parentElement
-              ?.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-slot=input-group-control]')
-              ?.focus();
-          }
-          onClick?.(event);
-        }}
-        {...props}
-      />
-    );
-  },
-);
-InputGroupAddon.displayName = 'InputGroupAddon';
+function InputGroupAddon({ className, align = 'inline-start', onClick, ...props }: InputGroupAddonProps) {
+  return (
+    <div
+      role="group"
+      data-slot="input-group-addon"
+      data-align={align}
+      className={cn(inputGroupAddonVariants({ align }), className)}
+      onClick={event => {
+        // Click on non-interactive addon area focuses the control inside the group.
+        // Skip when a button/input handled the click itself.
+        const target = event.target as HTMLElement;
+        if (!target.closest('button, input, textarea, [role="button"]')) {
+          event.currentTarget.parentElement
+            ?.querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-slot=input-group-control]')
+            ?.focus();
+        }
+        onClick?.(event);
+      }}
+      {...props}
+    />
+  );
+}
 
 // Size flows from the parent group's `data-size` (no React context). All four sizes are
-// written out so Tailwind's scanner emits them. The control mirrors the root height so it
-// doesn't collapse to the line-height in block mode (flex-col + flex-none); the root's
-// explicit border-box height means this never makes the group grow.
+// written out so Tailwind's scanner emits them. The control is sized to the root's
+// content box (token height minus the 1px border on each side) so it never overflows the
+// root — otherwise, in a flex-column parent, the root's content-based minimum would win
+// over its explicit height and the group would render 2px taller than a sibling control.
+// The explicit height also keeps the control from collapsing to the line-height in block
+// mode (flex-col + flex-none).
 const inputGroupControlHeightBySize = cn(
-  'group-data-[size=xs]/input-group:h-form-xs',
-  'group-data-[size=sm]/input-group:h-form-sm',
-  'group-data-[size=md]/input-group:h-form-md',
-  'group-data-[size=default]/input-group:h-form-default',
-  'group-data-[size=lg]/input-group:h-form-lg',
-);
-const inputGroupControlTextBySize = cn(
-  'group-data-[size=xs]/input-group:text-ui-xs',
-  'group-data-[size=sm]/input-group:text-ui-sm',
-  'group-data-[size=md]/input-group:text-ui-md',
-  'group-data-[size=default]/input-group:text-ui-md',
-  'group-data-[size=lg]/input-group:text-ui-lg',
+  'group-data-[size=sm]/input-group:h-[calc(var(--spacing-control-sm)-2px)]',
+  'group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]',
+  'group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]',
 );
 
-export type InputGroupInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
+export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> & {
   testId?: string;
+  /** @deprecated Wrap the group in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
   error?: boolean;
 };
 
-const InputGroupInput = React.forwardRef<HTMLInputElement, InputGroupInputProps>(
-  ({ className, testId, error, type = 'text', ...props }, ref) => {
-    return (
-      <input
-        ref={ref}
-        type={type}
-        data-slot="input-group-control"
-        data-testid={testId}
-        aria-invalid={error}
-        className={cn(
-          // Height matches the root box (which is fixed/border-box, so it doesn't grow);
-          // this also keeps the control from collapsing in block mode (flex-col).
-          'min-w-0 flex-1 bg-transparent px-3 text-neutral6 outline-hidden',
-          inputGroupControlHeightBySize,
-          inputGroupControlTextBySize,
-          'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
-          'focus:placeholder:opacity-70',
-          'disabled:cursor-not-allowed',
-          // Hide native number-spinner arrows so consumers can compose their own
-          // stepper (see the NumberWithStepper story). WebKit uses the spin-button
-          // pseudo-elements; Firefox needs `appearance: textfield` on the input.
-          '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
-          '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
-          '[&[type=number]]:[appearance:textfield]',
-          // type="search": drop WebKit's native clear button so it doesn't double up with a
-          // custom clear control (e.g. the scorers toolbar's InputGroupButton).
-          '[&::-webkit-search-cancel-button]:appearance-none',
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
-InputGroupInput.displayName = 'InputGroupInput';
+function InputGroupInput({ className, testId, error, type = 'text', ...props }: InputGroupInputProps) {
+  return (
+    <InputPrimitive
+      type={type}
+      data-slot="input-group-control"
+      data-testid={testId}
+      className={cn(
+        'min-w-0 flex-1 bg-transparent px-3 text-label text-foreground outline-hidden',
+        inputGroupControlHeightBySize,
+        'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+        'focus:placeholder:opacity-70',
+        'disabled:cursor-not-allowed',
+        // WebKit and Firefox use different selectors for native number spinners.
+        '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
+        '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
+        '[&[type=number]]:[appearance:textfield]',
+        // type="search": drop WebKit's native clear button so it doesn't double up with a
+        // custom clear control (e.g. the scorers toolbar's InputGroupButton).
+        '[&::-webkit-search-cancel-button]:appearance-none',
+        className,
+      )}
+      {...deprecatedErrorAria(error)}
+      {...props}
+      {...keepOwnAccessibleName(props)}
+    />
+  );
+}
 
-export type InputGroupTextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+export type InputGroupTextareaProps = React.ComponentProps<'textarea'> & {
   testId?: string;
+  /** @deprecated Wrap the group in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
   error?: boolean;
 };
 
-const InputGroupTextarea = React.forwardRef<HTMLTextAreaElement, InputGroupTextareaProps>(
-  ({ className, testId, error, ...props }, ref) => {
-    return (
-      <textarea
-        ref={ref}
-        data-slot="input-group-control"
-        data-testid={testId}
-        aria-invalid={error}
-        className={cn(
-          'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-neutral6 outline-hidden',
-          inputGroupControlTextBySize,
-          'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
-          'focus:placeholder:opacity-70',
-          'disabled:cursor-not-allowed',
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
-InputGroupTextarea.displayName = 'InputGroupTextarea';
+function InputGroupTextarea({ className, testId, error, ...props }: InputGroupTextareaProps) {
+  return (
+    <TextareaControl
+      data-slot="input-group-control"
+      data-testid={testId}
+      className={cn(
+        'min-h-15 min-w-0 flex-1 resize-y bg-transparent px-3 py-2 text-foreground outline-hidden',
+        inputGroupControlTextBySize,
+        'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+        'focus:placeholder:opacity-70',
+        'disabled:cursor-not-allowed',
+        className,
+      )}
+      {...deprecatedErrorAria(error)}
+      {...props}
+    />
+  );
+}
 
-export type InputGroupTextProps = React.ComponentPropsWithoutRef<'span'>;
+export type InputGroupTextProps = React.ComponentProps<'span'>;
 
-const InputGroupText = React.forwardRef<HTMLSpanElement, InputGroupTextProps>(({ className, ...props }, ref) => {
+function InputGroupText({ className, ...props }: InputGroupTextProps) {
   return (
     <span
-      ref={ref}
       className={cn(
-        'flex items-center gap-2 text-ui-sm text-neutral3 [&_svg]:pointer-events-none',
+        'flex items-center gap-2 text-caption text-muted-foreground [&_svg]:pointer-events-none',
         "[&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
     />
   );
-});
-InputGroupText.displayName = 'InputGroupText';
+}
 
-export type InputGroupButtonProps = Omit<ButtonProps, 'size' | 'variant'> & {
+export type InputGroupButtonProps = Omit<React.ComponentProps<typeof Button>, 'size' | 'variant'> & {
   size?: ButtonProps['size'];
   variant?: ButtonProps['variant'];
 };
 
-const InputGroupButton = React.forwardRef<HTMLButtonElement, InputGroupButtonProps>(
-  ({ size = 'icon-sm', variant = 'ghost', type = 'button', ...props }, ref) => {
-    return <Button ref={ref} type={type} size={size} variant={variant} {...props} />;
-  },
-);
-InputGroupButton.displayName = 'InputGroupButton';
+function InputGroupButton({ size = 'icon-sm', variant = 'ghost', type = 'button', ...props }: InputGroupButtonProps) {
+  return <Button type={type} size={size} variant={variant} {...props} />;
+}
 
 export { InputGroup, InputGroupAddon, InputGroupInput, InputGroupTextarea, InputGroupText, InputGroupButton };

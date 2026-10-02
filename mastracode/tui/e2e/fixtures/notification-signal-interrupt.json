@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start the originating run before the peer reply.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Originating run text continues streaming until the user interrupts it."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Abort race reply marker: peer work completed",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Reply notification wake response."
+      }
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+---
+extends: existence
+message: "AI anthropomorphic adjective: '%s'. Say what the thing does or measures instead of grading its character. Disable this rule for medical or community prose."
+level: error
+nonword: true
+ignorecase: true
+# Character grades applied to a mechanism: a default that is "benign," a
+# test that is "brittle," a heap target that is "noisy," a timeout that
+# is "generous," a cache that "stays healthy," a claim that is "honest
+# about its limits." AnthropomorphicJustification reads the merit verbs
+# (deserves, earns, pulls its weight) and nothing read the adjectives,
+# which a documentation-corpus census (2026-09) found to be a class of
+# their own. The plain sentence says what the thing does or measures:
+# the default changes nothing, the test breaks on every refactor, the
+# target swings by half, the timeout is thirty seconds.
+#
+# Two tokens. The attributive one gates on a determiner, admits one
+# modifier, and refuses the heads that take the adjective literally: a
+# person, a patient, a tumor, a tip, a room, a signal. The predicative
+# one gates on a copula, which is why "to be honest" never enters it,
+# and "honest" sits only there, since EnforcementMetaphors already reads
+# the honest count and the check that keeps something honest.
+#
+# The census offered sixteen adjectives; the rest measured out. "Naive"
+# is the standard name for the first algorithm, "aggressive" and
+# "conservative" name a policy's direction, "expensive" is the cost
+# word every corpus uses, "fragile" is the design-doc word for a
+# steady state, "greedy" and "smart" are algorithm and pointer terms,
+# "graceful" belongs to shutdown, "elegant" to MicDrop, and "happy" to
+# the path. The six that stayed match fourteen times across the seven
+# pre-LLM corpora: the Go sources' "generous upper limit" and "noisy
+# heap target," the Rust RFCs' "brittle workarounds," and the PEPs'
+# "benign snippet," each the figure and flagged by design. "Healthy"
+# and "honest" never match there, since the corpora apply them to
+# communities and to writers, which the tokens refuse.
+# Prose about medicine, where a growth is benign and a patient is
+# healthy, or about a community, disables the rule.
+tokens:
+  # --- Attributive: the graded mechanism ("a benign default," "the
+  # brittle test," "a generous timeout," "a noisy heap target"). The
+  # heads that take the adjective literally are refused.
+  - "\\b(?:a|an|the|its|their|this|that|each|every|one|no|any|some|another|such a|such an) (?:[a-z]+ )?(?:benign|brittle|noisy|generous|healthy) (?!(?:person|people|patient|patients|user|users|man|men|woman|women|child|children|reader|readers|writer|writers|programmer|programmers|developer|developers|maintainer|maintainers|reviewer|reviewers|author|authors|customer|customers|contributor|contributors|neighbor|neighbors|community|communities|team|teams|prognosis|tumor|tumour|tumors|tumours|lesion|lesions|growth|cyst|cysts|neoplasm|lifestyle|diet|body|bodies|heart|lung|lungs|eating|living|relationship|relationships|tip|tipper|donor|donors|gift|gifts|host|hosts|neighborhood|neighborhoods|channel|channels|signal|signals|environment|environments|data|measurement|measurements|sample|samples|image|images|label|labels|room|rooms|street|streets|crowd|crowds|engine|engines|fan|fans|pump|pumps|bone|bones|material|materials|plastic|plastics|glass|metal|metals|alloy|alloys|rock|rocks|fracture|fractures)\\b)[a-z]+\\b"
+
+  # --- Predicative: the mechanism graded outright ("the default is
+  # benign," "the parser is brittle," "the target was noisy," "that
+  # claim is honest about its limits," "the cache stays healthy"). The
+  # infinitive is left out, so "to be honest" never matches.
+  - "\\b(?:is|are|was|were|remains?|stays?|seems?|looks?|becomes?) (?:[a-z]+ly )?(?:benign|brittle|noisy|generous|healthy|honest)\\b"

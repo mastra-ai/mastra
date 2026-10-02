@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
 const FACTORY_ID = 'fp-1';
@@ -60,8 +60,23 @@ function deferred() {
   return { promise, resolve };
 }
 
-function stubThreadRoute({ gateSession = false } = {}) {
+const USER_SESSION_ID = 'sess-2';
+
+const userSession = {
+  ...workspaceSession,
+  id: 'row-2',
+  sessionId: USER_SESSION_ID,
+  branch: `mastracode/session-${USER_SESSION_ID}`,
+  title: 'salut ca va ?',
+};
+
+function stubThreadRoute({
+  gateSession = false,
+  userSessionTitle = userSession.title as string | undefined,
+  threads = [] as Array<{ id: string; title: string }>,
+} = {}) {
   const sessionGate = deferred();
+  const storedUserSession = { ...userSession, title: userSessionTitle };
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -91,14 +106,17 @@ function stubThreadRoute({ gateSession = false } = {}) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [workItem] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [workspaceSession] }),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({ sessions: [workspaceSession, storedUserSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       if (gateSession) await sessionGate.promise;
       return HttpResponse.json({ session: workspaceSession });
     }),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/${USER_SESSION_ID}`, () =>
+      HttpResponse.json({ session: storedUserSession }),
+    ),
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID }),
     ),
@@ -121,7 +139,7 @@ function stubThreadRoute({ gateSession = false } = {}) {
         }),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
     http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
@@ -147,13 +165,45 @@ describe('ThreadPage header', () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Factory session breadcrumb' });
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
     const header = breadcrumb.closest('header');
     expect(header).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Toggle sidebar' }).closest('header')).toBe(header);
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
     expect(within(header!).getByText('Issue #42: Fix the flaky login test')).toBeInTheDocument();
     expect(within(header!).getByRole('link', { name: 'Work' })).toBeInTheDocument();
+  });
+
+  it('shows the user session title in the breadcrumb', async () => {
+    stubThreadRoute();
+    renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    const header = breadcrumb.closest('header');
+    expect(header).not.toBeNull();
+    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
+    expect(within(breadcrumb).getByText('salut ca va ?')).toBeInTheDocument();
+    expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workspace files' }).closest('header')).toBe(header);
+  });
+
+  it('picks up the generated title once the thread is named', async () => {
+    stubThreadRoute({ userSessionTitle: undefined, threads: [{ id: USER_SESSION_ID, title: 'salut ca va ?' }] });
+    renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    await within(breadcrumb).findByText('salut ca va ?');
+    expect(within(breadcrumb).queryByText('New session')).not.toBeInTheDocument();
+  });
+
+  it('shows the draft breadcrumb on the new session page', async () => {
+    stubThreadRoute();
+    renderRoute(`/factories/${FACTORY_ID}/user/new/draft-1`);
+
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(breadcrumb.closest('header')).not.toBeNull();
+    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
+    expect(within(breadcrumb).getByText('New session')).toBeInTheDocument();
   });
 
   it('carries the sidebar toggle while the session resolves', async () => {

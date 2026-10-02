@@ -53,6 +53,21 @@
   .menuWithAnnouncementBar {
     margin-bottom: var(--docusaurus-announcement-bar-height);
   }
+
+  .scroll-fade {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    height: 3rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0.25rem;
+    color: var(--mastra-text-secondary);
+    background: linear-gradient(transparent, var(--ifm-navbar-background-color) 80%);
+    pointer-events: none;
+  }
 }
 
 @keyframes contextual-pane-enter {

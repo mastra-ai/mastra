@@ -29,7 +29,9 @@ describe('DatasetsList keyboard navigation', () => {
 
     const rows = interactiveRows();
     expect(rows).toHaveLength(3);
-    expect(rows.every(row => row.tagName === 'A')).toBe(true);
+    // The RowWrapper is the focus target; the link inside is out of the tab order.
+    expect(rows.every(row => row.tagName === 'DIV')).toBe(true);
+    expect(rows.every(row => row.querySelector('a')?.tabIndex === -1)).toBe(true);
     expectRovingTabindex(rows);
   });
 
@@ -39,10 +41,10 @@ describe('DatasetsList keyboard navigation', () => {
     expectArrowNavigation(interactiveRows());
   });
 
-  it('keeps row links navigable (href preserved on the focus target)', () => {
+  it('keeps row links navigable (href preserved on the inner link)', () => {
     renderList();
 
-    expect(interactiveRows().map(row => row.getAttribute('href'))).toEqual([
+    expect(interactiveRows().map(row => row.querySelector('a')?.getAttribute('href'))).toEqual([
       '/datasets/ds-a',
       '/datasets/ds-b',
       '/datasets/ds-c',

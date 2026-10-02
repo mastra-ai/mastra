@@ -8,6 +8,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -95,8 +96,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      // Parse request context from query params (GET)
-      if (request.method === 'GET') {
+      // Parse request context from query params.
+      if (request.method === 'GET' || request.method === 'POST') {
         try {
           const query = request.query as Record<string, string>;
           const encodedRequestContext = query.requestContext;
@@ -390,8 +391,23 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     } else if (route.responseType === 'datastream-response') {
       // Handle AI SDK Response objects - pipe Response.body to Fastify response
       const fetchResponse = result as globalThis.Response;
-      fetchResponse.headers.forEach((value, key) => reply.header(key, value));
-      reply.status(fetchResponse.status);
+      // Writing to reply.raw bypasses Fastify's header map, so merge plugin-set
+      // headers (e.g. CORS) with the upstream headers and flush them via writeHead.
+      const headers: Record<string, string | number | string[]> = {};
+      for (const [key, value] of Object.entries(reply.getHeaders())) {
+        if (value === undefined) continue;
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+        headers[lowerKey] = value;
+      }
+      fetchResponse.headers.forEach((value, key) => {
+        if (key.toLowerCase() !== 'set-cookie') headers[key.toLowerCase()] = value;
+      });
+      const setCookies = fetchResponse.headers.getSetCookie();
+      if (setCookies.length > 0) headers['set-cookie'] = setCookies;
+
+      reply.hijack();
+      reply.raw.writeHead(fetchResponse.status, headers);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
         let readerCanceled = false;
@@ -592,7 +608,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
-      if (params.body) {
+      if (params.body !== undefined || route.bodySchema) {
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
@@ -677,15 +693,25 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
-        const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+        const httpStatus =
+          error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
         const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
         if (!isClientError) {
-          this.mastra.getLogger()?.error('Error calling handler', {
+          // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+          const logLevel = httpStatus === 501 ? 'warn' : 'error';
+          this.mastra.getLogger()?.[logLevel]('Error calling handler', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             path: route.path,
             method: route.method,
           });
         }
+        const customResponse = getCustomHTTPExceptionResponse(error);
+        if (customResponse) {
+          customResponse.headers.forEach((value, name) => reply.header(name, value));
+          await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
+          return;
+        }
+
         // Check if it's an HTTPException or MastraError with a status code
         let status = 500;
         if (error && typeof error === 'object') {
@@ -708,14 +734,22 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
     // Fastify enforces body size limits via the route-level `bodyLimit` option,
     // not `config` (which is arbitrary metadata exposed as request.routeOptions.config
     // and is never read by Fastify's body-parsing pipeline).
-    const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
+    const bodyLimit = isBodyMethod ? maxSize : undefined;
+    const bodyLimitErrorHandler =
+      route.maxBodySize !== undefined
+        ? (error: Error & { code?: string }, _request: FastifyRequest, reply: FastifyReply) => {
+            if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+              return reply.status(413).send({ error: 'Request body too large' });
+            }
+            throw error;
+          }
+        : undefined;
 
     // Handle ALL method by registering for each HTTP method
     // Fastify doesn't support 'ALL' method natively like Express
@@ -730,6 +764,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             url: fastifyPath,
             handler,
             bodyLimit,
+            errorHandler: bodyLimitErrorHandler,
           });
         } catch (err) {
           // Skip duplicate route errors - can happen if route is registered multiple times
@@ -745,6 +780,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         url: fastifyPath,
         handler,
         bodyLimit,
+        errorHandler: bodyLimitErrorHandler,
       });
     }
   }

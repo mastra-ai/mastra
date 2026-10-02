@@ -1,5 +1,7 @@
 import { createTransformer } from '../lib/create-transformer';
 
+const runtimeContextImportSources = new Set(['@mastra/core/runtime-context', '@mastra/core/di']);
+
 /**
  * The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
  */
@@ -7,15 +9,16 @@ import { createTransformer } from '../lib/create-transformer';
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
-  // Track whether RuntimeContext was imported from @mastra/core/runtime-context
+  // Track whether RuntimeContext was imported from a Mastra v0 entrypoint
   let hasRuntimeContextImport = false;
 
   // 1. Update import declarations from runtime-context to request-context
   root.find(j.ImportDeclaration).forEach(importPath => {
     const node = importPath.node;
 
-    // Early return: Only process imports from @mastra/core/runtime-context
-    if (node.source.value !== '@mastra/core/runtime-context') return;
+    // Early return: Only process RuntimeContext entrypoints from Mastra v0
+    const source = node.source.value;
+    if (typeof source !== 'string' || !runtimeContextImportSources.has(source)) return;
 
     // Update the import path
     node.source.value = '@mastra/core/request-context';

@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { LogIn } from 'lucide-react';
 import { useSSOLogin } from '../hooks';
 import type { LoginConfig, SSOConfig } from '../types';
 import { withStudioBasePath } from '@/lib/studio-base-path';
@@ -22,6 +23,7 @@ export type LoginButtonProps = {
  * ```tsx
  * import { LoginButton } from '@/domains/auth/components/login-button';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { LogIn } from 'lucide-react';
  *
  * function LoginPage() {
  *   const { data: capabilities } = useAuthCapabilities();
@@ -75,7 +77,7 @@ export function LoginButton({ config, redirectUri, className, loginUrl = '/login
   };
 
   return (
-    <Button onClick={handleCredentialsLogin} className={className}>
+    <Button icon={<LogIn />} onClick={handleCredentialsLogin} className={className}>
       Sign in
     </Button>
   );

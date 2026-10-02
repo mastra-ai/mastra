@@ -5,7 +5,7 @@ level: error
 nonword: true
 ignorecase: true
 # Strategy-deck buzzword metaphors: the flywheel, the moat, the north star. Each
-# term is scoped to its figurative shape so the literal homograph stays clean
+# term is scoped to its figurative sense so the literal homograph stays clean
 # without a domain toggle (the engine's flywheel, a castle's moat, the actual
 # North Star). Network effects and first-mover advantage are the most legitimate
 # as analytical terms; they are here because the deck-speak form is overused, but
@@ -18,7 +18,8 @@ tokens:
   # moat (competitive advantage), not the castle
   - "\\b(?:competitive|economic|defensible|durable|structural|wide|deep|business|data|regulatory|technological|distribution) moats?\\b"
   - "\\b(?:build|building|built|widen|widens|widening|widened|deepen|deepens|deepening|deepened|create|creates|created|creating) (?:a |the |our |its |their |wider |deeper )?moats?\\b"
-  - "\\bmoats? (?:around|against)\\b"
+  # figurative object only, so the literal "moat around the castle" stays clean
+  - "\\bmoats? (?:around|against) (?:the |our |its |their |your )?(?:business|company|product|platform|franchise|market|position|revenue|profits?|margins?|data|ecosystem|core)\\b"
   # north star (guiding metric), not Polaris
   - "\\bnorth[- ]star metric\\b"
   - "\\bnorth-star\\b"

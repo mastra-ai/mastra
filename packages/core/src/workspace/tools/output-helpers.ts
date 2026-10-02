@@ -1,6 +1,7 @@
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
+import { estimateTokenCount } from 'tokenx';
 
 import { isValidationError } from '../../tools/validation';
+import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -60,8 +61,8 @@ export function sandboxToModelOutput(output: unknown): unknown {
  */
 export function applyTail(output: string, tail: number | null | undefined): string {
   if (!output) return output;
-  const n = Math.abs(tail ?? DEFAULT_TAIL_LINES);
-  if (n === 0) return output; // 0 = no limit
+  const n = Math.floor(Math.abs(tail ?? DEFAULT_TAIL_LINES));
+  if (n === 0) return output; // 0 = no limit (also covers |tail| < 1)
   // Strip trailing newline before splitting so it doesn't count as a line
   const trailingNewline = output.endsWith('\n');
   const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
@@ -96,7 +97,7 @@ export async function applyTokenLimit(
   const totalTokens = estimateTokenCount(output);
   if (totalTokens <= limit) return output;
 
-  const kept = from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit);
+  const kept = from === 'start' ? sliceByTokensSafe(output, -limit) : sliceByTokensSafe(output, 0, limit);
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -125,8 +126,8 @@ export async function applyTokenLimitSandwich(
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget) : '';
-  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget) : '';
+  const head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
+  const tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
 
   const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');

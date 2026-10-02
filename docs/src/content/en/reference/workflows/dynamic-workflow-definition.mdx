@@ -63,6 +63,7 @@ Entries in the `graph` run in order. Each entry receives the previous entry's ou
 | Entry type | Description |
 | - | - |
 | `agent` | Invoke a registered agent |
+| `classifier` | Evaluate data with a registered classifier |
 | `tool` | Invoke a registered tool |
 | `mapping` | Reshape data between steps |
 | `workflow` | Invoke a registered workflow as a nested step |
@@ -73,7 +74,7 @@ Entries in the `graph` run in order. Each entry receives the previous entry's ou
 | `sleep` | Pause for a fixed duration |
 | `sleepUntil` | Pause until a fixed date |
 
-Code-defined workflows that use [`.agent()`](/reference/workflows/workflow-methods/agent) and [`.tool()`](/reference/workflows/workflow-methods/tool) produce the same declarative entries when serialized.
+Code-defined workflows that use [`.agent()`](/reference/workflows/workflow-methods/agent), [`.classifier()`](/reference/workflows/workflow-methods/classifier), and [`.tool()`](/reference/workflows/workflow-methods/tool) produce the same declarative entries when serialized.
 
 ### Identity and display fields
 
@@ -147,6 +148,34 @@ Agent entries accept an optional `description` and an `options` object:
 ```
 
 Only `retries` and `metadata` persist. Function-valued options such as `onFinish` and function-valued `toolChoice` are rejected when a code-defined workflow is stored. Other agent call options don't persist.
+
+### Classifier steps
+
+A `classifier` entry evaluates workflow data with a classifier registered on the `Mastra` instance. The classifier must have constructor-configured questions.
+
+```json
+{
+  "type": "classifier",
+  "id": "classify-ticket",
+  "classifierId": "ticket-router",
+  "options": {
+    "maxRetries": 2,
+    "retries": 1,
+    "metadata": { "team": "support" }
+  }
+}
+```
+
+The classifier evaluates the complete entry input. Add a preceding `mapping` entry when the classifier needs a selected or reshaped input.
+
+Classifier output has two stable paths:
+
+- `answers.<question>` contains the typed answer. Route on its `choice`, `score`, or `probability` field according to the question type. Choice and score answers may include distributions.
+- `usage` contains normalized token usage.
+
+Use an existing `conditional` entry to route on classifier output. For example, a following condition can compare `{ "path": "stepResults.classify-ticket.answers.route.choice" }` with `{ "literal": "billing" }`.
+
+The `options` object can contain classifier model-call `maxRetries`, JSON-safe `providerOptions`, workflow step `retries`, and `metadata`. Classifier errors fail the workflow step.
 
 ### Tool steps
 
@@ -226,7 +255,7 @@ A `parallel` entry runs several single steps concurrently and merges their outpu
 }
 ```
 
-Each child must be an `agent`, `tool`, or `workflow` entry. All children receive the parallel entry's input directly.
+Each child must be an `agent`, `classifier`, `tool`, or `workflow` entry. All children receive the parallel entry's input directly.
 
 ### Conditional entries
 
@@ -246,7 +275,7 @@ A `conditional` entry pairs each step with a declarative predicate and runs ever
 }
 ```
 
-Each child must be an `agent`, `tool`, or `workflow` entry, and each child needs a predicate. All children receive the conditional entry's input directly.
+Each child must be an `agent`, `classifier`, `tool`, or `workflow` entry, and each child needs a predicate. All children receive the conditional entry's input directly.
 
 ### Predicates
 

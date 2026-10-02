@@ -8,7 +8,8 @@ import { CardSourceDescription, useSourceDescription } from './BoardCardDetails'
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
-import type { CommentQuoteDraft } from './feed/CommentQuote';
+import type { CommentQuoteDraft } from './feed/quoteDraft';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // One stream in time order, runs and moves and comments alike, the composer under it.
 export function WorkItemTray({
@@ -47,8 +48,10 @@ export function WorkItemTray({
         actors={actors}
         leadingLoaded={description === undefined || !description.isPending}
         leading={
-          <div className="bg-surface4 mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
-            <h3 className="text-ui-smd text-icon6 m-0 font-[550] wrap-anywhere">{item.title}</h3>
+          <div className="bg-fill mx-1 my-2 flex flex-col gap-2 rounded-lg p-3">
+            <Txt as="h3" variant="label" tone="ink" className="m-0 font-[550] wrap-anywhere">
+              {item.title}
+            </Txt>
             <CardSourceDescription
               item={item}
               projectRepositoryId={projectRepositoryId}

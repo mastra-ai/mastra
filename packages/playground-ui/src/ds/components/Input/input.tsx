@@ -1,26 +1,31 @@
+import { Input as InputPrimitive } from '@base-ui/react/input';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
-  inputOutlineAndFocusStyle,
+  deprecatedErrorAria,
+  fieldErrorRim,
   inputSurfaceAndFocusStyle,
+  resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
+import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full border bg-transparent text-neutral6',
-    'duration-normal transition-all ease-out-custom',
-    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
-    'focus:placeholder:opacity-70',
-    // type="number": hide native browser spinner arrows (they clip the pill).
-    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
-    // instead — see the NumberWithStepper story. WebKit uses the spin-button
-    // pseudo-elements; Firefox needs `appearance: textfield` on the input.
+    // A text field is a block control: it fills its field. Content-sized controls (a
+    // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
+    'flex w-full text-ellipsis text-foreground',
+    controlStateColorTransition,
+    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
+    // Native number spinners clip the pill; WebKit and Firefox need different selectors.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
@@ -32,45 +37,40 @@ const inputVariants = cva(
     variants: {
       variant: {
         default: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        filled: cn(inputSurfaceAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
-        outline: cn(inputOutlineAndFocusStyle, 'rounded-full', sharedFormElementDisabledStyle),
         unstyled: unstyledFormElementStyle,
       },
       size: {
-        xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
         sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
         md: cn(controlSizeClasses.md, 'px-[.75em]'),
-        default: cn(controlSizeClasses.default, 'px-[.85em]'),
         lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
       },
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default',
+      size: 'md',
     },
   },
 );
 
-export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
-  VariantProps<typeof inputVariants> & {
+export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
+  Omit<VariantProps<typeof inputVariants>, 'variant'> & {
+    /** `filled` is a deprecated alias for `default`; both render the filled surface. */
+    variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
   };
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, size, testId, variant, type, error, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(inputVariants({ variant, size }), error && 'border-error focus-visible:border-error', className)}
-        data-testid={testId}
-        ref={ref}
-        aria-invalid={error}
-        {...props}
-      />
-    );
-  },
-);
-Input.displayName = 'Input';
+function Input({ className, size, testId, variant, error, ...props }: InputProps) {
+  return (
+    <InputPrimitive
+      className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
+      data-testid={testId}
+      {...deprecatedErrorAria(error)}
+      {...props}
+      {...keepOwnAccessibleName(props)}
+    />
+  );
+}
 
 export { Input };

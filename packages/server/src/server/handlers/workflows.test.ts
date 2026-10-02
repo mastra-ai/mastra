@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
+import { listWorkflowRunsQuerySchema } from '../schemas/workflows';
 import { checkRouteFGA } from '../server-adapter';
 import { WORKFLOWS_ROUTES } from '../server-adapter/routes/workflows';
 import { getWorkflowInfo } from '../utils';
@@ -636,6 +637,16 @@ describe('vNext Workflow Handlers', () => {
   });
 
   describe('GET_WORKFLOW_RUN_BY_ID_ROUTE', () => {
+    it('should describe a fields example that the query schema accepts', () => {
+      const example = GET_WORKFLOW_RUN_BY_ID_ROUTE.openapi?.description?.match(/\?fields=([\w,]+)/)?.[1];
+      expect(example).toBeDefined();
+      expect(GET_WORKFLOW_RUN_BY_ID_ROUTE.queryParamSchema!.safeParse({ fields: example }).success).toBe(true);
+      // status and metadata are always included and are not selectable fields
+      expect(
+        GET_WORKFLOW_RUN_BY_ID_ROUTE.queryParamSchema!.safeParse({ fields: 'status,result,metadata' }).success,
+      ).toBe(false);
+    });
+
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
@@ -1250,6 +1261,32 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result.total).toEqual(1);
+    });
+
+    it('should reduce snapshots to status and timestamp in summary mode', async () => {
+      const run = await mockWorkflow.createRun({ runId: 'test-run-summary' });
+      await run.start({ inputData: {} });
+
+      const summary = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+        summary: true,
+      } as any);
+      expect(summary.total).toEqual(1);
+      expect(summary.runs[0]!.runId).toBe('test-run-summary');
+      expect(summary.runs[0]!.snapshot).toEqual({ status: 'success', timestamp: expect.any(Number) });
+
+      const full = await LIST_WORKFLOW_RUNS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        workflowId: 'test-workflow',
+      } as any);
+      expect(full.runs[0]!.snapshot).toMatchObject({ status: 'success', context: expect.any(Object) });
+    });
+
+    it('should parse the summary query param without treating "false" as true', () => {
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'false' }).summary).toBe(false);
+      expect(listWorkflowRunsQuerySchema.parse({ summary: 'true' }).summary).toBe(true);
+      expect(listWorkflowRunsQuerySchema.parse({}).summary).toBeUndefined();
     });
   });
 

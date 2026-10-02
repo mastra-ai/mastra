@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { createScorer } from '../../evals/base';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -167,6 +171,211 @@ describe('createGoalScorer tool support', () => {
     const instructions = scorer.config.judge?.instructions ?? '';
     expect(instructions).toBe(customPrompt);
   });
+});
+
+describe('createGoalScorer provider history compatibility', () => {
+  it('leaves the judge processor lanes unset so the Agent default applies', () => {
+    const scorer = createGoalScorer({ judgeModel });
+    expect(scorer.config.judge?.inputProcessors).toBeUndefined();
+    expect(scorer.config.judge?.errorProcessors).toBeUndefined();
+  });
+
+  it('keeps caller-supplied judge processors and the defaults opt-out', () => {
+    const custom = new ProviderHistoryCompat();
+    const scorer = createGoalScorer({
+      judgeModel,
+      inputProcessors: [custom],
+      errorProcessors: [],
+      errorProcessorDefaults: false,
+    });
+    expect(scorer.config.judge?.inputProcessors).toEqual([custom]);
+    expect(scorer.config.judge?.errorProcessors).toEqual([]);
+    expect(scorer.config.judge?.errorProcessorDefaults).toBe(false);
+  });
+
+  it('gets ProviderHistoryCompat from the Agent when the judge is built the way the runtime builds it', async () => {
+    // Mirrors the judge construction in `evals/base.ts`: a bare `new Agent` with
+    // only the scorer's configured processor lanes spread in when set. The judge
+    // therefore inherits the Agent's default error processors, which is where
+    // provider-history repair now comes from.
+    const agent = new Agent({
+      id: 'judge',
+      name: 'judge',
+      model: judgeModel,
+      instructions: DEFAULT_GOAL_JUDGE_PROMPT,
+    });
+
+    expect((await agent.listErrorProcessors()).map(processor => processor.id)).toContain('provider-history-compat');
+  });
+});
+
+describe('createGoalScorer native structured output', () => {
+  it.each([undefined, 'Custom judge prompt.'])(
+    'keeps native output on the first attempt without handwritten JSON instructions (prompt: %s)',
+    async prompt => {
+      const model = new MockLanguageModelV2({
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'verdict' },
+            {
+              type: 'text-delta',
+              id: 'verdict',
+              delta: JSON.stringify({ decision: 'continue', reason: 'Tests have not run.' }),
+            },
+            { type: 'text-end', id: 'verdict' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          ]),
+        }),
+      });
+      const stream = vi.spyOn(model, 'doStream');
+      const scorer = createGoalScorer({ judgeModel: model, prompt });
+      const result = await scorer.run({
+        input: { originalTask: 'Update documentation and run tests.', currentText: 'Documentation is updated.' },
+        output: 'Documentation is updated.',
+      });
+
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Tests have not run.');
+      expect(stream).toHaveBeenCalledTimes(1);
+      const request = stream.mock.calls[0]![0];
+      expect(request.responseFormat).toMatchObject({ type: 'json', schema: { required: ['decision', 'reason'] } });
+      const userMessage = request.prompt.findLast(message => message.role === 'user');
+      expect(JSON.stringify(userMessage?.content)).not.toContain('Return your final verdict as a JSON object');
+      expect(JSON.stringify(request.prompt)).not.toContain('Return your response as JSON matching this schema');
+      expect(scorer.config.judge?.instructions).toBe(prompt ?? DEFAULT_GOAL_JUDGE_PROMPT);
+    },
+  );
+});
+
+describe('goal-only JSON fallback placement', () => {
+  const instruction = 'Return your response as JSON matching this schema';
+
+  it.each([
+    { goal: true, withTools: false },
+    { goal: true, withTools: true },
+    { goal: false, withTools: false },
+    { goal: false, withTools: true },
+  ])('keeps native first and scopes inline fallback (goal: $goal, tools: $withTools)', async ({ goal, withTools }) => {
+    let calls = 0;
+    const attemptLength = withTools ? 2 : 1;
+    const model = new MockLanguageModelV2({
+      provider: 'crof',
+      modelId: 'glm-5.3-flash',
+      doStream: async () => {
+        calls++;
+        const toolCall = withTools && calls % 2 === 1;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            ...(toolCall
+              ? [
+                  {
+                    type: 'tool-call' as const,
+                    toolCallId: `view-${calls}`,
+                    toolName: 'view',
+                    input: '{"path":"README.md"}',
+                  },
+                ]
+              : [
+                  { type: 'text-start' as const, id: 'verdict' },
+                  {
+                    type: 'text-delta' as const,
+                    id: 'verdict',
+                    delta:
+                      calls <= attemptLength
+                        ? '**Decision: continue**\nTests have not run.'
+                        : JSON.stringify({ decision: 'continue', reason: 'Tests have not run.' }),
+                  },
+                  { type: 'text-end' as const, id: 'verdict' },
+                ]),
+            {
+              type: 'finish',
+              finishReason: toolCall ? 'tool-calls' : 'stop',
+              usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            },
+          ]),
+        };
+      },
+    });
+    const stream = vi.spyOn(model, 'doStream');
+    const tools = withTools ? { view: viewTool } : undefined;
+    // These cases assert where the fallback prompt is placed. The judge is an Agent, so it picks up
+    // the shared stability error processors; their retry would recover inside the first stream
+    // instead of letting the fallback run. Opt the judge out to keep the fallback path under test.
+    const scorer = goal
+      ? createGoalScorer({ judgeModel: model, prompt: 'Custom judge prompt.', tools, errorProcessorDefaults: false })
+      : createScorer({
+          id: 'ordinary-scorer',
+          description: 'Review documentation',
+          judge: { model, instructions: 'Custom judge prompt.', tools, errorProcessorDefaults: false },
+        })
+          .analyze({
+            description: 'Review the work',
+            outputSchema: z.object({ decision: z.enum(['done', 'continue', 'waiting']), reason: z.string() }),
+            createPrompt: () => 'Review the documentation and tests.',
+          })
+          .generateScore(() => 0);
+
+    const result = await scorer.run({
+      input: { originalTask: 'Update documentation and run tests.', currentText: 'Documentation is updated.' },
+      output: 'Documentation is updated.',
+    });
+    expect(result.score).toBe(0);
+    expect(stream).toHaveBeenCalledTimes(attemptLength * 2);
+    for (const [request] of stream.mock.calls.slice(0, attemptLength)) {
+      expect(request.responseFormat).toMatchObject({ type: 'json' });
+      expect(JSON.stringify(request.prompt)).not.toContain(instruction);
+      expect(JSON.stringify(request.prompt)).not.toContain('Return your final verdict as a JSON object');
+    }
+    for (const [request] of stream.mock.calls.slice(attemptLength)) {
+      expect(request.responseFormat).toBeUndefined();
+      const user = request.prompt.findLast(message => message.role === 'user');
+      const system = request.prompt.filter(message => message.role === 'system');
+      expect(JSON.stringify(user)).toContain(goal ? instruction : 'Review the documentation');
+      if (goal) {
+        expect(JSON.stringify(system)).not.toContain('JSON schema:');
+        expect(JSON.stringify(system)).not.toContain(instruction);
+      } else {
+        expect(JSON.stringify(user)).not.toContain(instruction);
+        expect(JSON.stringify(system)).toContain(
+          'You MUST answer with a JSON object that matches the JSON schema above.',
+        );
+      }
+    }
+    if (withTools) {
+      expect(stream.mock.calls.at(-1)![0].prompt.some(message => message.role === 'tool')).toBe(true);
+    }
+  });
+
+  it.each(['**Decision: done**', '{"decision":"invalid","reason":"because"}'])(
+    'rejects invalid fallback output without inventing a verdict: %s',
+    async text => {
+      const model = new MockLanguageModelV2({
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'verdict' },
+            { type: 'text-delta', id: 'verdict', delta: text },
+            { type: 'text-end', id: 'verdict' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
+          ]),
+        }),
+      });
+      const stream = vi.spyOn(model, 'doStream');
+      // The default error processors would retry the invalid output before the JSON fallback runs,
+      // so opt out to keep the native-then-fallback flow under test.
+      const scorer = createGoalScorer({ judgeModel: model, errorProcessorDefaults: false });
+      await expect(scorer.run({ input: 'Update docs', output: 'Done' })).rejects.toThrow(
+        'Structured output validation failed',
+      );
+      expect(stream).toHaveBeenCalledTimes(2);
+    },
+  );
 });
 
 describe('createGoalScorer JSON prompt injection', () => {

@@ -1,4 +1,5 @@
 import { extractApiErrorDetail, throwApiError } from '../auth/client.js';
+import type { DeployDiagnosis, DeployDiagnosisLookup } from '../deploy-suggestions.js';
 
 export interface Project {
   id: string;
@@ -25,6 +26,13 @@ export interface Environment {
    * Absent on platforms that predate the field.
    */
   managedEnvVarNames?: string[];
+  /**
+   * Railway service ID of this environment's background-worker service, or
+   * null when no dedicated worker service has been provisioned. Absent on
+   * platforms that predate the field; the CLI treats missing and null the
+   * same way (workers currently run inline on the API service).
+   */
+  workerProviderServiceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,7 +86,35 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   return data.projects;
 }
 
-export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+/**
+ * Which store a project's deployed runtime reads env vars from.
+ *
+ * - `environment`: each environment row carries its own vars (the
+ *   environment_deploys pipeline). This is the steady state for every
+ *   project adopted onto environments.
+ * - `project`: a legacy project whose production environment has not been
+ *   adopted yet. The runtime still boots from the project row, and the
+ *   environment rows' vars are not read by anything.
+ */
+export type EnvVarsAuthority = 'environment' | 'project';
+
+export interface EnvironmentList {
+  environments: Environment[];
+  /**
+   * Absent on platforms that predate the field. Callers should treat a
+   * missing value as `environment`, which is what the hosted platform has
+   * been for every adopted project.
+   */
+  envVarsAuthority?: EnvVarsAuthority;
+}
+
+/**
+ * List a project's environments together with the platform's report of
+ * which store the deployed runtime reads env vars from. Use this when the
+ * caller needs to make a decision based on that authority; use
+ * `fetchEnvironments` when only the rows are needed.
+ */
+export async function fetchEnvironmentList(token: string, orgId: string, projectId: string): Promise<EnvironmentList> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -91,8 +127,14 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
     throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
-  const data = (await resp.json()) as { environments: Environment[] };
-  return data.environments;
+  const data = (await resp.json()) as EnvironmentList;
+  return { environments: data.environments, envVarsAuthority: data.envVarsAuthority };
+}
+
+/** List a project's environments. Thin wrapper over `fetchEnvironmentList`. */
+export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+  const { environments } = await fetchEnvironmentList(token, orgId, projectId);
+  return environments;
 }
 
 export async function fetchEnvironmentDeploys(
@@ -178,6 +220,73 @@ export async function deleteEnvironment(token: string, orgId: string, projectId:
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to delete environment', resp.status, extractApiErrorDetail(err));
   }
+}
+
+/**
+ * Look up an existing diagnosis for a failed environment deploy.
+ *
+ * - 204: deploy has not failed; nothing to diagnose ({ state: 'healthy' })
+ * - 200 with `{ diagnosis: null }`: no diagnosis row yet ({ state: 'missing' })
+ * - 200 with `{ diagnosis: … }`: diagnosis exists ({ state: 'ready', diagnosis })
+ *
+ * The diagnosis may still be PENDING — callers should poll via
+ * `pollForDiagnosis`.
+ */
+export async function fetchEnvironmentDeployDiagnosis(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  deployId: string,
+): Promise<DeployDiagnosisLookup> {
+  const resp = await fetch(
+    `${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/deploys/${deployId}/diagnosis`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+    },
+  );
+
+  if (resp.status === 204) return { state: 'healthy' };
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to fetch deploy diagnosis', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { diagnosis: DeployDiagnosis | null };
+  if (!data.diagnosis) return { state: 'missing' };
+  return { state: 'ready', diagnosis: data.diagnosis };
+}
+
+/**
+ * Kick off a diagnosis run for a failed environment deploy. Idempotent:
+ * the API returns 304 if a non-failed diagnosis already exists.
+ */
+export async function startEnvironmentDeployDiagnosis(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  deployId: string,
+): Promise<void> {
+  const resp = await fetch(
+    `${getApiUrl()}/v1/projects/${projectId}/environments/${envId}/deploys/${deployId}/diagnosis`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+    },
+  );
+
+  if (resp.status === 304 || resp.ok) return;
+
+  const err = await resp.json().catch(() => ({}));
+  throwApiError('Failed to start deploy diagnosis', resp.status, extractApiErrorDetail(err));
 }
 
 function getApiUrl(): string {

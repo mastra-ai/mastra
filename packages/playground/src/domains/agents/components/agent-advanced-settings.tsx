@@ -1,12 +1,13 @@
-import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
@@ -20,8 +21,6 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
   const [providerOptionsValue, setProviderOptionsValue] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const theme = useCodemirrorTheme();
 
   const { handleCopy } = useCopyToClipboard({ text: providerOptionsValue });
 
@@ -73,18 +72,15 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     }
   };
 
-  const buttonClass = 'text-neutral3 hover:text-neutral6';
+  const buttonClass = cn(quietTextHover, controlStateColorTransition);
 
   return (
     <TooltipProvider>
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="frequency-penalty">
-              Frequency Penalty
-            </Txt>
+          <Field>
+            <FieldLabel>Frequency Penalty</FieldLabel>
             <Input
-              id="frequency-penalty"
               type="number"
               step="0.1"
               min="-1"
@@ -101,14 +97,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="presence-penalty">
-              Presence Penalty
-            </Txt>
+          <Field>
+            <FieldLabel>Presence Penalty</FieldLabel>
             <Input
-              id="presence-penalty"
               type="number"
               step="0.1"
               min="-1"
@@ -125,14 +118,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="top-k">
-              Top K
-            </Txt>
+          <Field>
+            <FieldLabel>Top K</FieldLabel>
             <Input
-              id="top-k"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.topK || ''}
@@ -146,14 +136,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-tokens">
-              Max Tokens
-            </Txt>
+          <Field>
+            <FieldLabel>Max Tokens</FieldLabel>
             <Input
-              id="max-tokens"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxTokens || ''}
@@ -167,14 +154,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-steps">
-              Max Steps
-            </Txt>
+          <Field>
+            <FieldLabel>Max Steps</FieldLabel>
             <Input
-              id="max-steps"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxSteps || ''}
@@ -188,14 +172,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="max-retries">
-              Max Retries
-            </Txt>
+          <Field>
+            <FieldLabel>Max Retries</FieldLabel>
             <Input
-              id="max-retries"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxRetries || ''}
@@ -209,14 +190,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="seed">
-              Seed
-            </Txt>
+          <Field>
+            <FieldLabel>Seed</FieldLabel>
             <Input
-              id="seed"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.seed || ''}
@@ -230,14 +208,12 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
         </div>
 
-        <div className="space-y-1">
+        <Field invalid={Boolean(error)} className="gap-1">
           <div className="flex items-center justify-between">
-            <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
-              Provider Options
-            </Txt>
+            <FieldLabel>Provider Options</FieldLabel>
 
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -284,20 +260,16 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
               )}
             </div>
           </div>
-          <CodeMirror
+          <CodeEditor
             value={providerOptionsValue}
             onChange={setProviderOptionsValue}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            readOnly={!canEdit}
-            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent p-2 shadow-sm transition-colors"
+            language="json"
+            editable={canEdit}
+            showCopyButton={false}
+            className="h-75"
           />
-          {error && (
-            <Txt variant="ui-md" className="text-accent2">
-              {error}
-            </Txt>
-          )}
-        </div>
+          <FieldError>{error}</FieldError>
+        </Field>
       </div>
     </TooltipProvider>
   );

@@ -1,4 +1,4 @@
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
@@ -12,7 +12,6 @@ import {
   GitBranch,
   Inbox,
   Palette,
-  Search,
   SlidersHorizontal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -141,7 +140,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -150,18 +149,7 @@ export function SettingsNavigation() {
       </MainSidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup variant="outline">
-            <InputGroupAddon>
-              <Search aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search settings"
-              placeholder="Search settings…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
@@ -181,7 +169,6 @@ export function SettingsNavigation() {
                     <MainSidebar.NavLink
                       key={id}
                       asChild
-                      size="default"
                       isActive={isActive}
                       link={{ name: label, url: '#', icon: <Icon /> }}
                     >
@@ -202,7 +189,7 @@ export function SettingsNavigation() {
           );
         })
       ) : (
-        <Txt as="p" variant="ui-sm" role="status" className="px-3 py-2">
+        <Txt as="p" variant="caption" role="status" className="px-3 py-2">
           No settings found.
         </Txt>
       )}

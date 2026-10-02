@@ -1,12 +1,11 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -95,7 +94,7 @@ export function AgentsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Sub-Agents"
@@ -108,17 +107,7 @@ export function AgentsPage() {
             <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search agents"
-              placeholder="Search agents"
-              onChange={event => setSearch(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput label="Search agents" placeholder="Search agents" value={search} onValueChange={setSearch} />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -128,7 +117,7 @@ export function AgentsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={agent.value} className="bg-surface2">
+                  <Entity key={agent.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{agent.label}</EntityName>
                       <EntityDescription>
@@ -136,8 +125,8 @@ export function AgentsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                            !isDisabled && 'border-dashed border-border',
                           )}
                           value={
                             isSelected

@@ -1,6 +1,6 @@
 import { Column } from '@mastra/playground-ui/components/Columns';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { format } from 'date-fns';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
 export interface DatasetCompareVersionToolbarProps {
@@ -13,7 +13,7 @@ export interface DatasetCompareVersionToolbarProps {
 function formatVersionLabel(version: number, createdAt?: Date | string): string {
   if (createdAt) {
     const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `v${version}  ${format(d, "MMM dd 'at' H:mm:ss a")}`;
+    return `v${version}  ${formatDate(d, 'date-time')}`;
   }
   return `v${version}`;
 }
@@ -34,23 +34,30 @@ export function DatasetCompareVersionToolbar({
   return (
     <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
       <div />
-      <SelectFieldBlock
-        label="Version A"
-        labelIsHidden={true}
-        name="version-a"
-        placeholder="Select version"
-        options={options}
-        value={versionA ?? ''}
-        onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}
-      />
-      <SelectFieldBlock
-        label="Version B"
-        labelIsHidden={true}
-        name="version-b"
-        options={options}
-        value={versionB ?? ''}
-        onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}
-      />
+      <Select value={versionA ?? ''} onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}>
+        <SelectTrigger aria-label="Version A" size="md">
+          <SelectValue placeholder="Select version" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={versionB ?? ''} onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}>
+        <SelectTrigger aria-label="Version B" size="md">
+          <SelectValue placeholder="Select an option" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <div />
     </Column.Toolbar>
   );

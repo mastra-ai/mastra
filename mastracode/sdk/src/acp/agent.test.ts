@@ -1,10 +1,5 @@
-import type { AgentSideConnection, ContentBlock, PromptResponse } from '@agentclientprotocol/sdk';
-import type {
-  AgentController,
-  AgentControllerEvent,
-  AgentControllerMode,
-  Session,
-} from '@mastra/core/agent-controller';
+import type { AgentSideConnection, ContentBlock } from '@agentclientprotocol/sdk';
+import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import { describe, it, expect, vi } from 'vitest';
 
@@ -49,7 +44,9 @@ describe('ACP Agent - Text Extraction', () => {
       },
     ];
 
-    expect(extractTextFromContentBlocks(blocks)).toBe('Here is the content:\n[resource: file:///path/to/file.ts]');
+    expect(extractTextFromContentBlocks(blocks)).toBe(
+      'Here is the content:\n[resource: file:///path/to/file.ts]\nfile content',
+    );
   });
 
   it('handles mixed content blocks', () => {
@@ -69,8 +66,16 @@ describe('ACP Agent - Text Extraction', () => {
     ];
 
     expect(extractTextFromContentBlocks(blocks)).toBe(
-      'Start\n[resource: file:///a.ts]\nMiddle\n[resource: file:///b.ts]\nEnd',
+      'Start\n[resource: file:///a.ts]\nMiddle\n[resource: file:///b.ts]\ncontent\nEnd',
     );
+  });
+
+  it.each<ContentBlock>([
+    { type: 'image', data: 'AA==', mimeType: 'image/png' },
+    { type: 'audio', data: 'AA==', mimeType: 'audio/wav' },
+    { type: 'resource', resource: { uri: 'file:///binary', blob: 'AA==' } },
+  ])('rejects unsupported content instead of silently discarding it: $type', block => {
+    expect(() => extractTextFromContentBlocks([{ type: 'text', text: 'Keep this' }, block])).toThrow();
   });
 
   it('handles empty blocks array', () => {
@@ -87,8 +92,8 @@ describe('ACP Agent - StopReason Mapping', () => {
     expect(mapStopReason('aborted')).toBe('cancelled');
   });
 
-  it('maps error to end_turn', () => {
-    expect(mapStopReason('error')).toBe('end_turn');
+  it('does not map failure to a successful stop reason', () => {
+    expect(() => mapStopReason('error')).toThrow();
   });
 
   it('maps suspended to end_turn', () => {
@@ -96,59 +101,83 @@ describe('ACP Agent - StopReason Mapping', () => {
   });
 });
 
-describe('ACP Agent - Prompt concurrency', () => {
-  it('serializes thread switching for concurrent prompts', async () => {
-    let eventListener: ((event: AgentControllerEvent) => void) | undefined;
-    const switchThread = vi.fn().mockResolvedValue(undefined);
+describe('ACP Agent - Turn failures and cancellation', () => {
+  function setup() {
+    let listener: (event: AgentControllerEvent) => void = () => {};
+    let nextThreadId = 0;
     const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const abort = vi.fn();
     const session = {
-      subscribe: vi.fn(listener => {
-        eventListener = listener;
-        return vi.fn();
-      }),
-      thread: {
-        create: vi.fn().mockResolvedValueOnce({ id: 'thread-1' }).mockResolvedValueOnce({ id: 'thread-2' }),
-        switch: switchThread,
+      subscribe: (callback: typeof listener) => {
+        listener = callback;
+        return () => {};
       },
-      mode: { get: vi.fn(() => 'default') },
-      model: { get: vi.fn(() => 'test-model') },
+      thread: {
+        create: async () => ({ id: `thread-${++nextThreadId}` }),
+        switch: async () => {},
+      },
+      mode: { get: () => 'default' },
+      model: { get: () => 'test-model' },
       sendMessage,
+      abort,
     } as unknown as Session;
-    const controller = {
-      listAvailableModels: vi.fn().mockResolvedValue([]),
-    } as unknown as AgentController;
-    const connection = {
-      sessionUpdate: vi.fn().mockResolvedValue(undefined),
-    } as unknown as AgentSideConnection;
+    const agent = new MastraCodeAcpAgent(
+      { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection,
+      async () => ({
+        controller: { listAvailableModels: async () => [] } as unknown as AgentController,
+        session,
+        modes: [],
+      }),
+    );
+    return { agent, sendMessage, abort, emit: (event: AgentControllerEvent) => listener(event) };
+  }
 
-    const agent = new MastraCodeAcpAgent(connection, controller, session, [] satisfies AgentControllerMode[]);
-    const { sessionId: firstSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
-    const { sessionId: secondSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
-    switchThread.mockClear();
-
-    const firstPrompt = agent.prompt({
-      sessionId: firstSessionId,
-      prompt: [{ type: 'text', text: 'first' }],
+  it('rejects a failed turn with its error and allows the next prompt to succeed', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Provider authentication failed') });
+      emit({ type: 'agent_end', reason: 'error' });
     });
+    await expect(agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'Hello' }] })).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('Provider authentication failed'),
+    });
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'complete' }));
+    await expect(agent.prompt({ sessionId, prompt: [{ type: 'text', text: 'Try again' }] })).resolves.toMatchObject({
+      stopReason: 'end_turn',
+    });
+  });
+
+  it('reports failure even when agent_end has no preceding error event', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'error' }));
+    await expect(agent.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({ code: -32603 });
+  });
+
+  it('does not fail a turn that recovers from a retryable error', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Retrying'), retryable: true });
+      emit({ type: 'agent_end', reason: 'complete' });
+    });
+    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'end_turn' });
+  });
+
+  it('does not abort another session when an unknown session is cancelled', async () => {
+    const { agent, emit, sendMessage, abort } = setup();
+    const first = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    const prompt = agent.prompt({ sessionId: first.sessionId, prompt: [] });
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
-
-    const secondPrompt = agent.prompt({
-      sessionId: secondSessionId,
-      prompt: [{ type: 'text', text: 'second' }],
-    });
-    await Promise.resolve();
-
-    expect(switchThread).toHaveBeenCalledTimes(1);
-    expect(switchThread).toHaveBeenNthCalledWith(1, { threadId: 'thread-1' });
-
-    eventListener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
-    await expect(firstPrompt).resolves.toMatchObject({ stopReason: 'end_turn' });
-
-    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
-    expect(switchThread).toHaveBeenCalledTimes(2);
-    expect(switchThread).toHaveBeenNthCalledWith(2, { threadId: 'thread-2' });
-
-    eventListener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
-    await expect(secondPrompt).resolves.toMatchObject({ stopReason: 'end_turn' } satisfies Partial<PromptResponse>);
+    await agent.cancel({ sessionId: 'unknown' });
+    expect(abort).not.toHaveBeenCalled();
+    await agent.cancel({ sessionId: first.sessionId });
+    expect(abort).toHaveBeenCalledTimes(1);
+    emit({ type: 'agent_end', reason: 'aborted' });
+    await expect(prompt).resolves.toMatchObject({ stopReason: 'cancelled' });
+    await agent.cancel({ sessionId: first.sessionId });
+    expect(abort).toHaveBeenCalledTimes(1);
   });
 });

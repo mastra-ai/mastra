@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { DatasetItem } from '@mastra/client-js';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -13,6 +14,11 @@ import { baseItem, itemWithEmptyScorers, itemWithMocks, itemWithScorers } from '
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+// The panel's history button renders through the framework Link (null by default).
+const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a {...props}>{children}</a>
+);
 const scorerControlTestTimeout = 15_000;
 
 const renderPanel = (item: DatasetItem) => {
@@ -28,9 +34,11 @@ const renderPanel = (item: DatasetItem) => {
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
-        </MemoryRouter>
+        <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={{} as never}>
+          <MemoryRouter>
+            <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
+          </MemoryRouter>
+        </LinkComponentProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -41,7 +49,7 @@ const useScorerHandler = () => {
 };
 
 const enterEditMode = async () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Actions menu' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open actions menu' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
 };
 
@@ -67,6 +75,13 @@ describe('DatasetItemPanel', () => {
 
       expect(screen.getByText('Tool Mocks')).not.toBeNull();
       expect(screen.getByText(/getWeather/)).not.toBeNull();
+    });
+
+    it('links to the versions history with the item version pre-selected', () => {
+      renderPanel(baseItem);
+
+      const link = screen.getByRole('link', { name: 'Go to item versions history' });
+      expect(link.getAttribute('href')).toBe(`/datasets/ds-1/items/${baseItem.id}/versions?version=1`);
     });
 
     it('shows that absent scorer IDs inherit from the dataset', () => {

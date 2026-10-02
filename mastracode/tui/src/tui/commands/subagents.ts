@@ -128,21 +128,53 @@ function getConfiguredSubagentTypes(
     : BUILT_IN_SUBAGENT_TYPES;
 }
 
-export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
+async function configureSubagentModels(ctx: SlashCommandContext): Promise<void> {
   const agentTypes = getConfiguredSubagentTypes(ctx);
-
   const answer = await askModalQuestion(ctx.state.ui, {
     question: 'Select subagent type',
+    allowCustomResponse: false,
     options: agentTypes.map(t => ({
       label: t.label,
       description: t.description,
     })),
   });
 
+  const selected = agentTypes.find(t => t.label === answer);
+  if (selected) {
+    await showSubagentScopeThenList(ctx, selected.id, selected.label);
+  }
+}
+
+function setSubagentsEnabled(ctx: SlashCommandContext, enabled: boolean): void {
+  const settings = loadSettings();
+  settings.preferences.subagentsEnabled = enabled;
+  saveSettings(settings);
+  ctx.showInfo(`Subagents ${enabled ? 'enabled' : 'disabled'}. Restart MastraCode for this to take effect.`);
+}
+
+export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
+  const settings = loadSettings();
+  const toggleLabel = settings.preferences.subagentsEnabled ? 'Disable subagents' : 'Enable subagents';
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'Manage subagents',
+    allowCustomResponse: false,
+    options: [
+      {
+        label: toggleLabel,
+        description: `${toggleLabel} for future MastraCode sessions`,
+      },
+      {
+        label: 'Configure models',
+        description: 'Choose the default model for each subagent type',
+      },
+    ],
+  });
+
   try {
-    const selected = agentTypes.find(t => t.label === answer);
-    if (selected) {
-      await showSubagentScopeThenList(ctx, selected.id, selected.label);
+    if (answer === toggleLabel) {
+      setSubagentsEnabled(ctx, !settings.preferences.subagentsEnabled);
+    } else if (answer === 'Configure models') {
+      await configureSubagentModels(ctx);
     }
   } catch (err) {
     ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);

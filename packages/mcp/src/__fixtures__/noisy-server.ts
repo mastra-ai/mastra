@@ -1,5 +1,5 @@
 import { Server } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 
 // Write to stderr so tests can verify stderr piping
 console.error('noisy-server: startup log');
@@ -10,7 +10,6 @@ server.setRequestHandler('tools/list', async () => ({
   tools: [],
 }));
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+serveStdio(() => server, { legacy: 'reject' });
 
 export { server };

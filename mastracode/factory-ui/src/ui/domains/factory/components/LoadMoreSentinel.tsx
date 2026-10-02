@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { useEffect, useRef } from 'react';
+import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
+import type { ReactNode } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 interface LoadMoreSentinelProps {
   hasNextPage: boolean;
@@ -8,41 +10,48 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
   /** Accessible label, e.g. "Load more issues". */
   label: string;
+  /** Optional list-shaped placeholder for surfaces where a spinner would shift the layout. Pass null to hide it. */
+  loadingIndicator?: ReactNode;
 }
 
 /**
- * Infinite-scroll trigger for the Factory lists. Fetches the next page when it
- * scrolls into view; the visible "Load more" button is both the observed node
- * and a keyboard/no-IntersectionObserver fallback.
+ * Loads one page each time it comes into view. A page that adds nothing to
+ * scroll past leaves it where it is, so the button loads the next one.
  */
-export function LoadMoreSentinel({ hasNextPage, isFetchingNextPage, onLoadMore, label }: LoadMoreSentinelProps) {
-  const ref = useRef<HTMLDivElement>(null);
+export function LoadMoreSentinel({
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  label,
+  loadingIndicator,
+}: LoadMoreSentinelProps) {
+  const { inView, setRef } = useInView();
+  const loadMoreUnlessFetching = useEffectEvent(() => {
+    if (!isFetchingNextPage) onLoadMore();
+  });
 
   useEffect(() => {
-    const node = ref.current;
-    if (!node || !hasNextPage || isFetchingNextPage) return;
-    if (typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries.some(entry => entry.isIntersecting)) onLoadMore();
-      },
-      // Start the fetch shortly before the end of the list is reached.
-      { rootMargin: '200px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
+    if (inView) loadMoreUnlessFetching();
+  }, [inView]);
 
   if (!hasNextPage) return null;
 
   return (
-    <div ref={ref} className="flex justify-center py-2">
+    <div ref={setRef} className="py-2">
       {isFetchingNextPage ? (
-        <Spinner size="sm" aria-label="Loading more" />
+        loadingIndicator === undefined ? (
+          <div className="flex justify-center">
+            <Spinner size="sm" aria-label="Loading more" />
+          </div>
+        ) : (
+          loadingIndicator
+        )
       ) : (
-        <Button variant="ghost" size="sm" onClick={() => onLoadMore()}>
-          {label}
-        </Button>
+        <div className="flex justify-center">
+          <Button variant="ghost" size="sm" onClick={() => onLoadMore()}>
+            {label}
+          </Button>
+        </div>
       )}
     </div>
   );

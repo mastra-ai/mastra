@@ -8,6 +8,10 @@ import { Fragment, useState } from 'react';
 export interface SourcePickerItem {
   id: string;
   label: string;
+  /** Optional trailing note, e.g. marking a project redundant under a selected team. */
+  hint?: string;
+  /** When true, the row is shown but its checkbox cannot be toggled. */
+  disabled?: boolean;
 }
 
 export interface SourcePickerGroup {
@@ -66,7 +70,7 @@ export function SourcePicker({
           <Spinner size="sm" aria-label={`Saving ${label} selection`} />
         ) : (
           selectedCount > 0 && (
-            <Txt as="span" variant="ui-xs" className="text-icon3 shrink-0">
+            <Txt as="span" variant="meta" className="text-muted-foreground shrink-0">
               {selectedCount} selected
             </Txt>
           )
@@ -76,14 +80,14 @@ export function SourcePicker({
       <ScrollArea orientation="vertical" maxHeight="20rem">
         <div role="group" aria-label={label} className="flex flex-col gap-px p-2">
           {matchingGroups.length === 0 ? (
-            <Txt as="p" variant="ui-sm" className="text-icon3 px-2 py-2">
+            <Txt as="p" variant="caption" className="text-muted-foreground px-2 py-2">
               No matches
             </Txt>
           ) : (
             matchingGroups.map(group => (
               <Fragment key={group.id}>
                 {group.label && (
-                  <Txt as="p" variant="ui-xs" className="text-icon3 px-2 pt-3 pb-1 first:pt-0">
+                  <Txt as="p" variant="meta" className="text-muted-foreground px-2 pt-3 pb-1 first:pt-0">
                     {group.label}
                   </Txt>
                 )}
@@ -94,12 +98,17 @@ export function SourcePicker({
                   >
                     <Checkbox
                       checked={selectedIds?.includes(item.id) ?? false}
-                      disabled={disabled}
+                      disabled={disabled || item.disabled}
                       onCheckedChange={() => onToggleItem(item.id)}
                     />
-                    <Txt as="span" variant="ui-md" className="text-icon5 truncate">
+                    <Txt as="span" variant="body" className="text-foreground truncate">
                       {item.label}
                     </Txt>
+                    {item.hint && (
+                      <Txt as="span" variant="meta" className="text-muted-foreground ml-auto shrink-0">
+                        {item.hint}
+                      </Txt>
+                    )}
                   </label>
                 ))}
               </Fragment>

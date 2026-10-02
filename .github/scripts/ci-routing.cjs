@@ -141,13 +141,20 @@ function validateWorkspacePackages(packages, workspacePackages) {
   );
 }
 
-function qualityAssuranceInputs(changedFiles) {
-  if (!Array.isArray(changedFiles) || changedFiles.some(file => typeof file !== 'string')) {
+function qualityAssuranceInputs(changedFiles, packageReadmePaths = [], missingPackageDocs = []) {
+  if (
+    !Array.isArray(changedFiles) ||
+    changedFiles.some(file => typeof file !== 'string') ||
+    !Array.isArray(missingPackageDocs)
+  ) {
     return {
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
+      hasReadmeInputs: true,
+      readmeReasons: ['invalid-input'],
       agentsReasons: ['invalid-input'],
       peerdepsReasons: ['invalid-input'],
+      missingPackageDocs: [],
     };
   }
 
@@ -176,11 +183,24 @@ function qualityAssuranceInputs(changedFiles) {
       file === 'packages/server/package.json',
   );
 
+  const eligibleReadmes = new Set(packageReadmePaths);
+  const readmeReasons = changedFiles.filter(
+    file =>
+      eligibleReadmes.has(file) ||
+      file === '.github/scripts/check-package-readmes.mjs' ||
+      file === '.github/scripts/check-package-readmes.test.mjs' ||
+      file === '.github/scripts/ci-routing.cjs' ||
+      file === '.github/workflows/lint.yml',
+  );
+
   return {
     hasAgentsInputs: agentsReasons.length > 0,
     hasPeerdepsInputs: peerdepsReasons.length > 0,
+    hasReadmeInputs: readmeReasons.length > 0 || missingPackageDocs.length > 0,
     agentsReasons,
     peerdepsReasons,
+    readmeReasons,
+    missingPackageDocs,
   };
 }
 

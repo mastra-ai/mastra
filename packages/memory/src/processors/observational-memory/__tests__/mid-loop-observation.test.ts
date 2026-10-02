@@ -583,6 +583,155 @@ describe('Mid-Loop Observation', () => {
     });
   });
 
+  describe('22573 mid-loop safe prefix buffering', () => {
+    // Unique thread/resource per test: BufferingCoordinator keeps process-wide
+    // static state (in-flight ops, boundaries) keyed by thread/resource, so
+    // reusing the suite-wide ids lets a prior test's still-running fire-and-forget
+    // buffer op silently suppress this test's buffer trigger.
+    let pfxCounter = 0;
+    function nextIds() {
+      return { tid: `test-thread-22573-${++pfxCounter}`, rid: 'test-resource-22573' };
+    }
+
+    async function createBufferedProcessor(tid: string, rid: string) {
+      await storage.saveThread({
+        thread: {
+          id: tid,
+          resourceId: rid,
+          title: 'Prefix Test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      const omWithBuffering = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: {
+          model: createMockObserverModel(),
+          messageTokens: 1000, // Keep below-threshold so only buffering (not observation) can fire
+          bufferTokens: 200,
+          bufferActivation: 0.8,
+        },
+        reflection: {
+          model: createMockObserverModel(),
+          observationTokens: 50000,
+        },
+      });
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, noopMemoryProvider);
+      const observerSpy = mockCallObserver(omWithBuffering);
+      return { omWithBuffering, processorWithBuffering, observerSpy };
+    }
+
+    function pendingToolMessage(id: string, createdAt: Date): MastraDBMessage {
+      return {
+        id,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: `${id}-tc`, toolName: 'test-tool', args: {} },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt,
+      };
+    }
+
+    function stepArgsFor(tid: string, rid: string, messageList: MessageList, state: Record<string, unknown>) {
+      return {
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext: createRequestContext(tid, rid),
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+      };
+    }
+
+    async function waitForChunks(tid: string, rid: string, timeoutMs: number) {
+      let record = await storage.getObservationalMemory(tid, rid);
+      const deadline = Date.now() + timeoutMs;
+      while (!record?.bufferedObservationChunks?.length && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 100));
+        record = await storage.getObservationalMemory(tid, rid);
+      }
+      return record?.bufferedObservationChunks ?? [];
+    }
+
+    it('buffers only the prefix before a tool call still pending on the newest message', async () => {
+      const { tid, rid } = nextIds();
+      const { processorWithBuffering } = await createBufferedProcessor(tid, rid);
+      const messageList = new MessageList({ threadId: tid, resourceId: rid });
+      const now = Date.now();
+
+      const oldIds: string[] = [];
+      for (let i = 0; i < 8; i++) {
+        const id = `old-${i}`;
+        oldIds.push(id);
+        // User role only: an assistant warmup would merge with the pending
+        // assistant response message under MessageList response semantics.
+        messageList.add(
+          createTestMessage(`Old ${i}: `.padEnd(200, 'x'), 'user', id, new Date(now - 100_000 + i * 1000)),
+          'memory',
+        );
+      }
+      messageList.add(pendingToolMessage('pending-tool-msg', new Date(now - 10_000)), 'response');
+
+      await processorWithBuffering.processInputStep(stepArgsFor(tid, rid, messageList, {}));
+
+      const chunks = await waitForChunks(tid, rid, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      const bufferedIds = chunks.flatMap(chunk => chunk.messageIds);
+      for (const id of oldIds) {
+        expect(bufferedIds).toContain(id);
+      }
+      expect(bufferedIds).not.toContain('pending-tool-msg');
+      // Raw persistence still happened: the pending call remains in the list,
+      // eligible to buffer on a later turn once its result arrives.
+      expect(messageList.get.all.db().map(msg => msg.id)).toContain('pending-tool-msg');
+    }, 20000);
+
+    it('buffers an abandoned call once the conversation has continued past it', async () => {
+      const { tid, rid } = nextIds();
+      const { processorWithBuffering } = await createBufferedProcessor(tid, rid);
+      const messageList = new MessageList({ threadId: tid, resourceId: rid });
+      const now = Date.now();
+
+      // A `call` that is no longer the newest message never received its result;
+      // providers reject the prompt unless core drops/pairs it, so it is an orphan
+      // and must not stall buffering for the rest of the thread.
+      messageList.add(pendingToolMessage('abandoned-call-msg', new Date(now - 200_000)), 'memory');
+      const laterIds: string[] = [];
+      for (let i = 0; i < 8; i++) {
+        const id = `later-${i}`;
+        laterIds.push(id);
+        messageList.add(
+          createTestMessage(`Later ${i}: `.padEnd(200, 'x'), 'user', id, new Date(now - 100_000 + i * 1000)),
+          'memory',
+        );
+      }
+
+      await processorWithBuffering.processInputStep(stepArgsFor(tid, rid, messageList, {}));
+
+      const chunks = await waitForChunks(tid, rid, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      const bufferedIds = chunks.flatMap(chunk => chunk.messageIds);
+      expect(bufferedIds).toContain('abandoned-call-msg');
+      for (const id of laterIds) {
+        expect(bufferedIds).toContain(id);
+      }
+    }, 20000);
+  });
+
   describe('#16523 — step-0 observation of a single over-threshold message', () => {
     // A single first message exceeding messageTokens used to hit a dead zone:
     // shouldBuffer requires pendingTokens < threshold and observation was gated
@@ -697,6 +846,87 @@ describe('Mid-Loop Observation', () => {
         createdAt: new Date(),
       };
       messageList.add(pendingToolMsg, 'response');
+
+      await processor.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).not.toHaveBeenCalled();
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeFalsy();
+    });
+
+    // Regression for #23315: a provider tool call abandoned by a terminal model
+    // error is reconciled to `output-error`. The OM deferred-check keys only on
+    // state === 'call', so a reconciled abandoned call must NOT permanently block
+    // observation — otherwise buffering is deferred forever.
+    it('observes at step 0 when the only tool call was reconciled to output-error (abandoned)', async () => {
+      const observerSpy = mockCallObserver(om);
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'memory');
+      const abandonedToolMsg: MastraDBMessage = {
+        id: 'abandoned-tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              providerExecuted: true,
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'tc-1',
+                toolName: 'web_search',
+                args: {},
+                errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
+              },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+      messageList.add(abandonedToolMsg, 'response');
+
+      await processor.processInputStep(stepArgs(messageList));
+
+      expect(observerSpy).toHaveBeenCalled();
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+    });
+
+    // Regression for #23315: reconciling abandoned calls must not weaken the guard
+    // for genuinely live pending calls. A real `call` still defers observation even
+    // when a reconciled `output-error` sits next to it.
+    it('still defers observation while a live pending call remains alongside a reconciled output-error', async () => {
+      const observerSpy = mockCallObserver(om);
+      const messageList = new MessageList({ threadId, resourceId });
+      messageList.add(createGiantMessage(), 'memory');
+      const mixedToolMsg: MastraDBMessage = {
+        id: 'mixed-tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              providerExecuted: true,
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'tc-done',
+                toolName: 'web_search',
+                args: {},
+                errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
+              },
+            } as any,
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'tc-live', toolName: 'test-tool', args: {} },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+      messageList.add(mixedToolMsg, 'response');
 
       await processor.processInputStep(stepArgs(messageList));
 

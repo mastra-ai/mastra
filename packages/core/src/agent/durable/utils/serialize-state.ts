@@ -182,9 +182,9 @@ export function serializeModelSettings(
   const source = settings as Record<string, unknown>;
   const out: SerializableModelSettings = {};
   const pickNumber = (key: keyof SerializableModelSettings) => {
-    const value = source[key as string];
+    const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      (out as Record<string, unknown>)[key as string] = value;
+      (out as Record<string, unknown>)[key] = value;
     }
   };
 
@@ -198,7 +198,26 @@ export function serializeModelSettings(
   pickNumber('maxRetries');
 
   if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
-    out.stopSequences = source.stopSequences as string[];
+    out.stopSequences = source.stopSequences;
+  }
+
+  // Execution time budgets (#21724). `totalMs` re-arms the run-level budget on
+  // cold resume/recovery (see DurableAgent.recover()); `stepMs`/`firstChunkMs`
+  // bound each model call inside the shared execute wrapper, which receives
+  // these serialized settings on the durable path. Only positive finite
+  // numbers survive, mirroring validateModelTimeoutSettings.
+  if (source.timeout && typeof source.timeout === 'object') {
+    const timeoutSource = source.timeout as Record<string, unknown>;
+    const timeout: NonNullable<SerializableModelSettings['timeout']> = {};
+    for (const key of ['totalMs', 'stepMs', 'firstChunkMs'] as const) {
+      const value = timeoutSource[key];
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        timeout[key] = value;
+      }
+    }
+    if (Object.keys(timeout).length > 0) {
+      out.timeout = timeout;
+    }
   }
 
   // Headers are never serialized into the workflow input. They are stored
@@ -220,6 +239,8 @@ export function serializeDurableOptions(options: {
   toolChoice?: any;
   activeTools?: string[];
   modelSettings?: SerializableModelSettings | Record<string, unknown>;
+  agentMaxRetries?: number;
+  agentMaxRetriesConfigured?: boolean;
   requireToolApproval?: boolean;
   toolCallConcurrency?: ToolCallConcurrency;
   autoResumeSuspendedTools?: boolean;
@@ -227,10 +248,12 @@ export function serializeDurableOptions(options: {
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
   hasErrorProcessors?: boolean;
+  emptyErrorProcessorOverride?: boolean;
   providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
   disableBackgroundTasks?: boolean;
+  backgroundTaskPolicy?: SerializableDurableOptions['backgroundTaskPolicy'];
   tracingOptions?: SerializableDurableOptions['tracingOptions'];
   actor?: SerializableDurableOptions['actor'];
   instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
@@ -258,6 +281,8 @@ export function serializeDurableOptions(options: {
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
     modelSettings: serializeModelSettings(options.modelSettings),
+    agentMaxRetries: options.agentMaxRetries,
+    agentMaxRetriesConfigured: options.agentMaxRetriesConfigured,
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
@@ -265,10 +290,12 @@ export function serializeDurableOptions(options: {
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
     hasErrorProcessors: options.hasErrorProcessors,
+    emptyErrorProcessorOverride: options.emptyErrorProcessorOverride,
     providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
     disableBackgroundTasks: options.disableBackgroundTasks,
+    backgroundTaskPolicy: options.backgroundTaskPolicy,
     tracingOptions: options.tracingOptions,
     actor: options.actor,
     instructionsOverride: options.instructionsOverride,
@@ -285,6 +312,7 @@ export function createWorkflowInput(params: {
   runId: string;
   agentId: string;
   agentName?: string;
+  agentVersionId?: string;
   messageList: MessageList;
   tools: Record<string, CoreTool>;
   model: MastraLanguageModel;
@@ -302,6 +330,7 @@ export function createWorkflowInput(params: {
     runId: params.runId,
     agentId: params.agentId,
     agentName: params.agentName,
+    agentVersionId: params.agentVersionId,
     messageListState: params.messageList.serialize(),
     toolsMetadata: serializeToolsMetadata(params.tools),
     modelConfig: serializeModelConfig(params.model),

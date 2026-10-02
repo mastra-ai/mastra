@@ -1,19 +1,20 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { useEffect, useId } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../Sidebar';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderSidebarTrigger';
+import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { isSettingsSection } from '../domains/settings/settingsSections';
-import { AppShell } from '../layouts/AppShell';
+import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
- * unknown sections redirect to the default. With an active factory the page
- * keeps the standard app frame (sidebar swaps to section navigation); without
- * one it renders full-bleed, as there is no sidebar to frame.
+ * unknown sections redirect to the default. The app frame (sidebar swapped to
+ * section navigation) is rendered by `AppLayout`.
  */
 export function SettingsPage() {
   const { section } = useParams();
@@ -23,35 +24,60 @@ export function SettingsPage() {
     return <Navigate to="../preferences" replace state={location.state} />;
   }
   return (
-    <SettingsPageLayout>
+    <SettingsPageLayout
+      header={
+        <PageHeader>
+          <FocusedTitle key={section}>{SETTINGS_SECTION_LABELS[section]}</FocusedTitle>
+        </PageHeader>
+      }
+    >
       <SettingsPanel />
     </SettingsPageLayout>
   );
 }
 
-export function SettingsPageLayout({ children }: { children: ReactNode }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
+/** Moves focus to the section title on desktop so section switches are announced; mobile focuses its own title. */
+function FocusedTitle({ children }: { children: ReactNode }) {
+  const id = useId();
   const { isMobile } = useMainSidebar();
-
-  if (!factoryId) {
-    return (
-      <main className="bg-surface2 flex min-h-dvh flex-col">
-        {isMobile && (
-          <div className="bg-surface2 sticky top-0 z-2 shrink-0 px-3 py-2">
-            <SettingsHeader autoFocus placement="mobile" />
-          </div>
-        )}
-        <div className="flex flex-1 flex-col px-5 pb-5 lg:px-0 lg:pb-0">{children}</div>
-      </main>
-    );
-  }
+  useEffect(() => {
+    if (!isMobile) document.getElementById(id)?.focus();
+  }, [id, isMobile]);
   return (
-    <AppShell
-      scroll="document"
-      sidebar={<Sidebar />}
-      header={<ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />}
+    <PageHeader.Title id={id} tabIndex={-1} className="outline-hidden">
+      {children}
+    </PageHeader.Title>
+  );
+}
+
+/**
+ * Settings body: on mobile the section title lives in the page header row
+ * (the desktop title is rendered by the panel itself); with a collapsed
+ * desktop sidebar the header row carries the sidebar trigger and search.
+ */
+export function SettingsPageLayout({
+  children,
+  header,
+  breadcrumbs,
+}: {
+  children: ReactNode;
+  header: ReactNode;
+  breadcrumbs?: ReactNode;
+}) {
+  const { isMobile, desktopState } = useMainSidebar();
+  const sidebarCollapsed = !isMobile && desktopState === 'collapsed';
+
+  return (
+    <PageLayout
+      variant="narrow"
+      header={header}
+      breadcrumbs={
+        breadcrumbs ??
+        (isMobile ? <SettingsHeader autoFocus /> : sidebarCollapsed ? <ChatHeaderSidebarTrigger /> : undefined)
+      }
+      headerActions={sidebarCollapsed ? <GlobalSearchButton id="global-search-collapsed-trigger" /> : undefined}
     >
       {children}
-    </AppShell>
+    </PageLayout>
   );
 }

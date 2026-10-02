@@ -11,6 +11,9 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { IMastraAuthProvider } from './auth';
 
+export type { MiddlewareHandler, Handler, Context } from 'hono';
+export type { DescribeRouteOptions } from 'hono-openapi';
+
 type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
@@ -267,8 +270,9 @@ export type ServerConfig = {
    * Max time (ms) to drain in-flight requests after SIGINT/SIGTERM. Must be a
    * finite number from 0 through 2_147_483_647. When the window passes,
    * remaining HTTP connections are force-closed. Mastra shutdown then runs
-   * either way (bounded separately) before the process exits. Set 0 to skip
-   * the drain entirely.
+   * either way before the process exits, giving in-flight evented workflow
+   * runs the same window to finish before pubsub is torn down. Set 0 to skip
+   * both drains.
    * @default 5000
    */
   drainTimeout?: number;

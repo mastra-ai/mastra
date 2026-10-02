@@ -1,6 +1,7 @@
 import { ScorerRunError } from '../../evals/base';
-import type { MastraScorer } from '../../evals/base';
-import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
+import type { MastraScorer, ScorerStepName } from '../../evals/base';
+import type { NotScorableOutcome } from '../../evals/not-scorable';
+import { extractTrajectory, extractTrajectoryFromTrace, extractWorkflowTrajectory } from '../../evals/types';
 import type {
   ScorerRunInputForAgent,
   ScorerRunOutputForAgent,
@@ -195,12 +196,18 @@ export async function runScorersForItem(
 
   // Pre-extract trajectory once for all trajectory scorers in this batch.
   // Try the trace store first (requires observability storage + traceId), then
-  // fall back to extracting from the raw MastraDBMessage[] scoring output.
+  // fall back to the agent's raw MastraDBMessage[] scoring output or the workflow's step results.
   const hasTrajectoryScorer = scorers.some(s => s.type === 'trajectory');
   let trajectoryOutput: Trajectory | undefined;
   if (hasTrajectoryScorer) {
     const traceTrajectory = await extractTrajectoryFromStorage(storage, traceId);
-    trajectoryOutput = traceTrajectory ?? (scorerOutput ? extractTrajectory(scorerOutput) : { steps: [] });
+    trajectoryOutput =
+      traceTrajectory ??
+      (scorerOutput
+        ? extractTrajectory(scorerOutput)
+        : workflowData?.stepResults
+          ? extractWorkflowTrajectory(workflowData.stepResults, workflowData.stepExecutionPath)
+          : { steps: [] });
   }
 
   // Build correlation context so scorers can emit scores with full experiment context
@@ -295,6 +302,7 @@ interface ScorerPromptMetadata {
 function extractScorerRunFields(scoreResult: unknown): {
   score: number | null;
   reason: string | null;
+  notScorable?: NotScorableOutcome;
   promptMetadata: ScorerPromptMetadata;
 } {
   if (typeof scoreResult !== 'object' || scoreResult === null) {
@@ -309,9 +317,20 @@ function extractScorerRunFields(scoreResult: unknown): {
     return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
   };
 
+  const notScorable = obj('notScorable');
+
   return {
     score: typeof fields.score === 'number' ? fields.score : null,
     reason: typeof fields.reason === 'string' ? fields.reason : null,
+    // `step` is always one of the scorer's own step names; see MastraScorer.
+    ...(notScorable && typeof notScorable.step === 'string'
+      ? {
+          notScorable: {
+            step: notScorable.step as ScorerStepName,
+            ...(typeof notScorable.reason === 'string' ? { reason: notScorable.reason } : {}),
+          },
+        }
+      : {}),
     promptMetadata: {
       generateScorePrompt: str('generateScorePrompt'),
       generateReasonPrompt: str('generateReasonPrompt'),
@@ -393,7 +412,7 @@ async function runScorerSafe(
       };
     }
 
-    const { score, reason, promptMetadata } = extractScorerRunFields(scoreResult);
+    const { score, reason, notScorable, promptMetadata } = extractScorerRunFields(scoreResult);
 
     return {
       result: {
@@ -402,6 +421,7 @@ async function runScorerSafe(
         score,
         reason,
         error: null,
+        ...(notScorable ? { notScorable } : {}),
         targetScope: effectiveScope,
       },
       promptMetadata,
@@ -551,9 +571,7 @@ export async function runStepScorersForItem(
               stepId,
             };
           }
-          const fields = scoreResult as Record<string, unknown>;
-          const score = typeof fields.score === 'number' ? fields.score : null;
-          const reason = typeof fields.reason === 'string' ? fields.reason : null;
+          const { score, reason, notScorable } = extractScorerRunFields(scoreResult);
 
           // Persist score (best-effort, mirrors runScorersForItem)
           if (persistScores && storage && score !== null) {
@@ -592,6 +610,7 @@ export async function runStepScorersForItem(
             score,
             reason,
             error: null,
+            ...(notScorable ? { notScorable } : {}),
             targetScope: 'span' as const,
             stepId,
           };

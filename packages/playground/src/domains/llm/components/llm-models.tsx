@@ -17,6 +17,7 @@ export interface LLMModelsProps {
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   disabled?: boolean;
+  'aria-label'?: string;
 }
 
 export const LLMModels = ({
@@ -30,6 +31,7 @@ export const LLMModels = ({
   onOpenChange,
   container,
   disabled,
+  'aria-label': ariaLabel,
 }: LLMModelsProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
@@ -69,6 +71,7 @@ export const LLMModels = ({
       container={container}
       size={size}
       disabled={disabled}
+      aria-label={ariaLabel}
     />
   );
 };

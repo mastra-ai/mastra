@@ -15,6 +15,8 @@
 
 import { closeSync, existsSync, openSync, readSync, renameSync, rmSync, statSync, statfsSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 import type { MastraCompositeStore, PruneOptions, PruneResult, RetentionConfig } from '@mastra/core/storage';
 // Native `libsql` driver, deliberately alongside `@libsql/client` (used by the
@@ -57,6 +59,19 @@ export interface ReclaimResult {
   file: string;
   bytesBefore: number;
   bytesAfter: number;
+  /**
+   * Set when the file was left untouched instead of compacted.
+   *
+   * `'vector-index'`: the database carries a `libsql_vector_idx` index.
+   * Vacuuming such a database corrupts its `libsql_vector_meta_shadow` table
+   * (`PRAGMA integrity_check` → `row not in PRIMARY KEY order`), silently at
+   * first, so we never compact it. See
+   * https://github.com/mastra-ai/mastra/issues/23439.
+   *
+   * `'detection-failed'`: the schema could not be inspected, so we cannot
+   * prove the database is safe to vacuum and skip it as a precaution.
+   */
+  skipped?: 'vector-index' | 'detection-failed';
 }
 
 /** Handle the TUI uses to run storage maintenance without reaching into store internals. */
@@ -117,6 +132,62 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
 }
 
 /**
+ * Collect our own closed-but-unfinalized libsql connections before probing.
+ *
+ * libsql-js does not finalize prepared statements on `close()` (they are only
+ * released by GC; tursodatabase/libsql-js#228), so a connection we already
+ * closed can still hold the WAL lock and make the reclaim probe fail.
+ *
+ * `gc` is only global under `--expose-gc`, so we set that V8 flag at runtime
+ * and read `gc` from a fresh VM context. The flag is process-wide, but it only
+ * makes `gc` available to contexts created afterward (the main context's
+ * globals are untouched) and changes no GC behavior. A forced
+ * collection only frees unreachable objects. This runs only on the explicit
+ * vacuum path (`mastracode prune --vacuum` or `/prune vacuum`), and both exit
+ * the process right after, so the flag never outlives maintenance in practice.
+ *
+ * Remove this once libsql-js#228 lands and `close()` finalizes statements.
+ */
+async function releaseClosedConnections(): Promise<void> {
+  // Let pending close() callbacks settle before collecting.
+  await new Promise(resolve => setImmediate(resolve));
+  const gc =
+    (globalThis as { gc?: () => void }).gc ??
+    (() => {
+      setFlagsFromString('--expose-gc');
+      return runInNewContext('gc') as () => void;
+    })();
+  // Native finalizers run after the collection; a second pass collects what they freed.
+  gc();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  gc();
+}
+
+/**
+ * Does this database carry a libsql vector index?
+ *
+ * Takes an already-open connection on purpose: the query needs a prepared
+ * statement, and a statement opened before the exclusivity probe pins the
+ * connection past close() (libsql-js#228) and makes the probe's
+ * `journal_mode = DELETE` fail with SQLITE_BUSY on files nobody else has open.
+ * The caller's connection must therefore already be in rollback mode — a
+ * pinned statement holds no lock there.
+ *
+ * Matched by schema, not filename — the main database can carry vector indexes
+ * too. SQLite stores `CREATE INDEX` SQL verbatim, so the match is deliberately
+ * loose (no trailing `(`): an index written `libsql_vector_idx (embedding)`
+ * must not slip through. The two errors are not symmetric — a false positive
+ * costs one uncompacted file that we tell the user about, a false negative
+ * silently corrupts their vector index.
+ */
+function hasVectorIndex(db: InstanceType<typeof Database>): boolean {
+  const row = db
+    .prepare(`SELECT 1 AS hit FROM sqlite_master WHERE type = 'index' AND sql LIKE '%libsql_vector_idx%' LIMIT 1`)
+    .get() as Record<string, unknown> | undefined;
+  return row !== undefined;
+}
+
+/**
  * Compact each local libsql db file by streaming a `VACUUM INTO` copy next to
  * it, then swapping the copy into place. Reports before/after sizes.
  *
@@ -134,6 +205,11 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
  * MUST run with every connection to these files closed (the swap replaces the
  * inode — a surviving connection would keep writing to the unlinked old file).
  * `runStorageMaintenance()` closes storage before calling this.
+ *
+ * Databases carrying a `libsql_vector_idx` index are skipped, not compacted:
+ * any VACUUM over one corrupts its `libsql_vector_meta_shadow` table (issue
+ * #23439). Detection fails closed — a file we cannot inspect is skipped too.
+ * Skipped files come back with `skipped` set so the caller can report them.
  */
 export async function reclaimLibSQLDisk(
   dbFiles: string[],
@@ -162,6 +238,11 @@ export async function reclaimLibSQLDisk(
     // https://github.com/tursodatabase/libsql-js/issues/228 (fix in flight in
     // PR #214). Once that lands, the header check can become a plain
     // journal_mode query.
+    //
+    // The same bug means the caller's own storage connection, closed by
+    // closeStorage(), still holds the lock until its statements are
+    // finalized; collect them first so the probe doesn't see ourselves.
+    await releaseClosedConnections();
     const probe = new Database(file);
     try {
       probe.exec('PRAGMA busy_timeout = 2000');
@@ -177,7 +258,7 @@ export async function reclaimLibSQLDisk(
     if (journalModeFromHeader(file) !== 'delete') {
       throw new Error(
         `${file} is in use by another process — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Native `libsql` driver, not `@libsql/client`: the wrapper's close() can
@@ -187,6 +268,19 @@ export async function reclaimLibSQLDisk(
     const db = new Database(file);
     try {
       db.exec('PRAGMA busy_timeout = 2000');
+      // First, before any check that can throw: a full disk must not abort the
+      // whole loop over a file we were going to leave alone anyway.
+      let skipped: ReclaimResult['skipped'];
+      try {
+        if (hasVectorIndex(db)) skipped = 'vector-index';
+      } catch {
+        // Fail closed: we could not establish that this file is safe to vacuum.
+        skipped = 'detection-failed';
+      }
+      if (skipped) {
+        results.push({ file, bytesBefore, bytesAfter: bytesBefore, skipped });
+        continue;
+      }
       const pageSize = pragmaNumber(db, 'page_size');
       const pageCount = pragmaNumber(db, 'page_count');
       const freelistCount = pragmaNumber(db, 'freelist_count');
@@ -215,7 +309,7 @@ export async function reclaimLibSQLDisk(
       rmSync(tmp, { force: true });
       throw new Error(
         `${file} was opened by another process during compaction — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Swap the compacted copy into place. The old WAL/SHM sidecars belong to
@@ -387,7 +481,9 @@ export async function runStorageMaintenance(opts: {
 
   if (!vacuum) {
     if (maintenance.reclaimDisk) {
-      log('Deleted rows free pages inside the db file but not on disk. Run /prune vacuum to reclaim disk space.');
+      log(
+        'Deleted rows free pages inside the db file but not on disk. Run /prune vacuum (or mastracode prune --vacuum) to reclaim disk space.',
+      );
     }
     return;
   }
@@ -406,8 +502,29 @@ export async function runStorageMaintenance(opts: {
     return;
   }
   for (const r of reclaimed) {
-    log(`  ${r.file}: ${formatBytes(r.bytesBefore)} → ${formatBytes(r.bytesAfter)}`);
+    if (r.skipped === 'vector-index') {
+      log(`  ${r.file}: skipped — it contains a vector index, and compacting it would corrupt that index.`);
+    } else if (r.skipped === 'detection-failed') {
+      log(`  ${r.file}: skipped — it could not be inspected, so it was left untouched as a precaution.`);
+    } else {
+      log(`  ${r.file}: ${formatBytes(r.bytesBefore)} → ${formatBytes(r.bytesAfter)}`);
+    }
   }
-  const saved = reclaimed.reduce((sum, r) => sum + Math.max(0, r.bytesBefore - r.bytesAfter), 0);
-  log(`Reclaimed ${formatBytes(saved)}.`);
+  const compacted = reclaimed.filter(r => !r.skipped);
+  const vectorSkips = reclaimed.filter(r => r.skipped === 'vector-index').length;
+  const failedSkips = reclaimed.filter(r => r.skipped === 'detection-failed').length;
+  const skipSummary = [
+    vectorSkips > 0
+      ? `${vectorSkips} skipped because ${vectorSkips === 1 ? 'it contains' : 'they contain'} a vector index`
+      : '',
+    failedSkips > 0 ? `${failedSkips} skipped because ${failedSkips === 1 ? 'it' : 'they'} could not be inspected` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+  if (compacted.length === 0) {
+    log(`No database files were compacted; ${skipSummary}.`);
+    return;
+  }
+  const saved = compacted.reduce((sum, r) => sum + Math.max(0, r.bytesBefore - r.bytesAfter), 0);
+  log(skipSummary ? `Reclaimed ${formatBytes(saved)}; ${skipSummary}.` : `Reclaimed ${formatBytes(saved)}.`);
 }

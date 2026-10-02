@@ -1,5 +1,23 @@
 {
-  "attachment": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"],
-  "temperature": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"],
-  "structuredOutput": ["muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor"]
+  "attachment": [
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-1.3",
+    "muse-spark-1.3-contributor"
+  ],
+  "temperature": [
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-1.3",
+    "muse-spark-1.3-contributor"
+  ],
+  "structuredOutput": [
+    "muse-spark-1.1",
+    "muse-spark-1.2",
+    "muse-spark-1.2-contributor",
+    "muse-spark-1.3",
+    "muse-spark-1.3-contributor"
+  ]
 }

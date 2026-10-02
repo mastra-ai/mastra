@@ -7,7 +7,7 @@ description: "Browse Tinfoil model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/tinfoil.svg" alt="Tinfoil logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Tinfoil
 
-Access 8 Tinfoil models through Mastra's model router. Authentication is handled automatically using the `TINFOIL_API_KEY` environment variable.
+Access 9 Tinfoil models through Mastra's model router. Authentication is handled automatically using the `TINFOIL_API_KEY` environment variable.
 
 Learn more in the [Tinfoil documentation](https://docs.tinfoil.sh).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "tinfoil/deepseek-v4-flash"
+  model: "tinfoil/deepseek-v4-1-flash"
 });
 
 // Generate a response
@@ -46,16 +46,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "tinfoil/deepseek-v4-flash",
-    "imageInput": false,
+    "model": "tinfoil/deepseek-v4-1-flash",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 0.7
+    "inputCost": 0.65,
+    "outputCost": 1.45
   },
   {
     "model": "tinfoil/gemma4-31b",
@@ -70,16 +70,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "tinfoil/glm-5-2",
+    "model": "tinfoil/glm-5-3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 393216,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 1.5,
-    "outputCost": 5.25
+    "inputCost": 1.8,
+    "outputCost": 5.75
+  },
+  {
+    "model": "tinfoil/glm-5-3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 1.25
   },
   {
     "model": "tinfoil/gpt-oss-120b",
@@ -99,7 +111,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 32768,
     "inputCost": 0.15,
@@ -156,7 +168,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.tinfoil.sh/v1",
-    id: "tinfoil/deepseek-v4-flash",
+    id: "tinfoil/deepseek-v4-1-flash",
     apiKey: process.env.TINFOIL_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -175,9 +187,8 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "tinfoil/nomic-embed-text"
-      : "tinfoil/deepseek-v4-flash";
+      : "tinfoil/deepseek-v4-1-flash";
   }
 });
 ```
-
 

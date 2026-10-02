@@ -1,5 +1,35 @@
 # @mastra/auth-google
 
+## 0.1.5
+
+### Patch Changes
+
+- Fixed Google SSO users being signed out after about an hour. Sessions now last for the configured `session.cookieMaxAge` (24 hours by default) instead of expiring with the short-lived Google ID token. ([#25043](https://github.com/mastra-ai/mastra/pull/25043))
+
+## 0.1.4
+
+### Patch Changes
+
+- Improved Google authentication portability by signing service account tokens with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- Improved Google authentication portability by signing service account tokens with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 0.1.3
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 0.1.2
 
 ### Patch Changes

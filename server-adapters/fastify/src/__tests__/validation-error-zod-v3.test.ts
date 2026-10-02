@@ -5,8 +5,8 @@
  * `instanceof` the v4 `ZodError` bundled with this adapter. The structural
  * `isZodError` check restores the correct field-path response shape.
  */
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

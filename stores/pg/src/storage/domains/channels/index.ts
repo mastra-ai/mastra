@@ -5,10 +5,11 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { CreateIndexOptions, ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName } from '../utils';
 
 export class ChannelsPG extends ChannelsStorage {
@@ -21,8 +22,8 @@ export class ChannelsPG extends ChannelsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ChannelsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -59,7 +60,7 @@ export class ChannelsPG extends ChannelsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of ChannelsPG.MANAGED_TABLES) {
@@ -81,7 +82,7 @@ export class ChannelsPG extends ChannelsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return ChannelsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -137,7 +138,7 @@ export class ChannelsPG extends ChannelsStorage {
         installation.agentId,
         installation.status,
         installation.webhookId ?? null,
-        JSON.stringify(installation.data),
+        toPgJson(installation.data),
         installation.configHash ?? null,
         installation.error ?? null,
         createdAt,
@@ -151,14 +152,14 @@ export class ChannelsPG extends ChannelsStorage {
   async getInstallation(id: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
     return row ? this.#parseInstallationRow(row) : null;
   }
 
   async getInstallationByAgent(platform: string, agentId: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(
+    const row = await this.#db.readClient.oneOrNone(
       `SELECT * FROM ${tableName} WHERE "platform" = $1 AND "agentId" = $2 ORDER BY CASE "status" WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, "updatedAt" DESC LIMIT 1`,
       [platform, agentId],
     );
@@ -168,14 +169,14 @@ export class ChannelsPG extends ChannelsStorage {
   async getInstallationByWebhookId(webhookId: string): Promise<ChannelInstallation | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "webhookId" = $1`, [webhookId]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "webhookId" = $1`, [webhookId]);
     return row ? this.#parseInstallationRow(row) : null;
   }
 
   async listInstallations(platform: string): Promise<ChannelInstallation[]> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_INSTALLATIONS, schemaName });
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE "platform" = $1 ORDER BY "createdAt" DESC`,
       [platform],
     );
@@ -200,14 +201,14 @@ export class ChannelsPG extends ChannelsStorage {
          "data" = EXCLUDED."data",
          "updatedAt" = EXCLUDED."updatedAt",
          "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-      [config.platform, JSON.stringify(config.data), now, now],
+      [config.platform, toPgJson(config.data), now, now],
     );
   }
 
   async getConfig(platform: string): Promise<ChannelConfig | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "platform" = $1`, [platform]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "platform" = $1`, [platform]);
     if (!row) return null;
     return {
       platform: row.platform as string,

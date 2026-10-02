@@ -1,6 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { useState, useEffect, useCallback } from 'react';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 function parseJsonString(jsonString: string): any {
   try {
@@ -10,7 +9,12 @@ function parseJsonString(jsonString: string): any {
   }
 }
 
-export function useAgentWorkingMemory(agentId: string, threadId: string, resourceId: string) {
+export function useAgentWorkingMemory(
+  agentId: string,
+  threadId: string,
+  resourceId: string,
+  requestContext?: Record<string, any>,
+) {
   const client = useMastraClient();
   const [threadExists, setThreadExists] = useState(false);
   const [workingMemoryData, setWorkingMemoryData] = useState<string | null>(null);
@@ -18,9 +22,10 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const [workingMemoryFormat, setWorkingMemoryFormat] = useState<'json' | 'markdown'>('markdown');
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const { requestContext } = usePlaygroundStore();
+  const latestRequest = useRef(0);
 
   const refetch = useCallback(async () => {
+    const requestId = ++latestRequest.current;
     setIsLoading(true);
     try {
       if (!agentId || !threadId) {
@@ -29,6 +34,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         return;
       }
       const res = await client.getWorkingMemory({ agentId, threadId, resourceId, requestContext });
+      if (requestId !== latestRequest.current) return;
       const { workingMemory, source, workingMemoryTemplate, threadExists } = res as {
         workingMemory: string | null;
         source: 'thread' | 'resource';
@@ -53,12 +59,13 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         setWorkingMemoryData(workingMemory || workingMemoryTemplate?.content || '');
       }
     } catch (error) {
+      if (requestId !== latestRequest.current) return;
       setWorkingMemoryData(null);
       console.error('Error fetching working memory', error);
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequest.current) setIsLoading(false);
     }
-  }, [agentId, threadId, resourceId]);
+  }, [agentId, threadId, resourceId, client, requestContext]);
 
   useEffect(() => {
     void refetch();

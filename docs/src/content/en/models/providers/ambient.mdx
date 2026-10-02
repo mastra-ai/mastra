@@ -7,7 +7,7 @@ description: "Browse Ambient model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/ambient.svg" alt="Ambient logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ambient
 
-Access 10 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
+Access 12 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
 
 Learn more in the [Ambient documentation](https://ambient.xyz).
 
@@ -104,6 +104,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.69,
     "outputCost": 3.49
+  },
+  {
+    "model": "ambient/qwen/qwen3.6-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.32,
+    "outputCost": 3.2
+  },
+  {
+    "model": "ambient/qwen/qwen3.8-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.32,
+    "outputCost": 3.2
   },
   {
     "model": "ambient/stepfun/step-3.7-flash",
@@ -203,5 +227,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

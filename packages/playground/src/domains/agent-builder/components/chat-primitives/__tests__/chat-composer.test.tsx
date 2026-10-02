@@ -9,10 +9,6 @@ import { ChatComposer } from '../chat-composer';
 
 const noop = () => {};
 
-interface RenderOptions {
-  agentId?: string;
-}
-
 const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; children: React.ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {} as AgentBuilderEditFormValues,
@@ -24,13 +20,10 @@ const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; c
   );
 };
 
-const renderComposer = (
-  props: Partial<React.ComponentProps<typeof ChatComposer>> = {},
-  { agentId = 'agent_test' }: RenderOptions = {},
-) =>
+const renderComposer = (props: Partial<React.ComponentProps<typeof ChatComposer>> = {}) =>
   render(
     <TooltipProvider>
-      <FormHarness agentId={agentId}>
+      <FormHarness>
         <ChatComposer
           draft=""
           onDraftChange={noop}
@@ -72,15 +65,5 @@ describe('ChatComposer', () => {
     expect(submit.querySelector('.animate-spin')).not.toBeNull();
     expect(submit.hasAttribute('disabled')).toBe(true);
     expect(textarea.disabled).toBe(true);
-  });
-
-  it('applies agent-color CSS variables to the composer container derived from the agentId', () => {
-    const { getByTestId } = renderComposer({}, { agentId: 'agent_support' });
-    const container = getByTestId('composer-container') as HTMLDivElement;
-    expect(container.style.getPropertyValue('--agent-color-fg')).toMatch(/^hsl\(/);
-    expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
-    expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-within:border-[var(--agent-color-bg)]');
-    expect(container.className).not.toContain('focus-within:ring');
   });
 });

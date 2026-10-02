@@ -13,7 +13,7 @@ import { IntegrationGrid } from '@site/src/components/integrations/grid';
 
 A sandbox gives your agent an isolated environment where it can run commands, execute code, install dependencies, and manage processes. This lets agents perform work that would be risky, resource-intensive, or impractical to run directly inside your application.
 
-Sandboxes are often temporary, so files created inside them may disappear when the environment stops. A [filesystem](/docs/sandbox/filesystem) gives the agent a place to read, write, and [search](/docs/sandbox/search) files that can outlive the sandbox. You can use one to keep outputs between runs, seed a new sandbox with existing files, or give the agent documents it can search while working. Filesystems also work without a sandbox, for example when an agent only needs a knowledge base or access to files in a service such as Google Drive.
+Sandboxes are often temporary, so files created inside them may disappear when the environment stops. A [filesystem](/docs/sandbox/filesystem) gives the agent a place to read, write, and [search](/docs/sandbox/search) files that can outlive the sandbox. You can use one to keep outputs between runs, seed a new sandbox with existing files, or give the agent documents it can search while working. Filesystems also work without a sandbox, for example when an agent only needs a knowledge base or access to files in a service such as Google Drive. A real-world example is [Mastra Factory](https://factory.mastra.ai/) which uses sandboxes to give coding-agent sessions an environment for repository checkouts, dependencies, and commands.
 
 {/* vale ai-tells.VerbTricolon = YES */}
 
@@ -355,3 +355,4 @@ await sandbox.executeCommand('node', ['scripts/download-reports.js'], {
 - [`SandboxProcessManager` reference](/reference/workspace/process-manager)
 - [Sandbox provider interface](/reference/workspace/sandbox)
 - [Filesystem](/docs/sandbox/filesystem)
+- [Mastra Factory](https://factory.mastra.ai)

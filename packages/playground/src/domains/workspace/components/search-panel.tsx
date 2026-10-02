@@ -1,7 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
 
@@ -24,17 +32,17 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   bm25: {
     label: 'Keyword',
     icon: <FileText className="h-3.5 w-3.5" />,
-    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    color: 'bg-badge-blue-strong text-badge-blue-foreground border-badge-blue-edge',
   },
   vector: {
     label: 'Semantic',
     icon: <Sparkles className="h-3.5 w-3.5" />,
-    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+    color: 'bg-badge-purple-strong text-badge-purple-foreground border-badge-purple-edge',
   },
   hybrid: {
     label: 'Hybrid',
     icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    color: 'bg-badge-amber-strong text-badge-amber-foreground border-badge-amber-edge',
   },
 };
 
@@ -75,45 +83,40 @@ export function SearchWorkspacePanel({
   ];
 
   return (
-    <div className="bg-surface4 rounded-lg">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="p-4">
-        <div className="flex items-center gap-3">
-          {/* Query Input */}
-          <div className="relative flex-1">
-            <Search className="text-neutral3 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              value={query}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-              placeholder="Search workspace files..."
-              variant="outline"
-              className="h-10 pl-9"
-            />
-          </div>
+    <div className="rounded-lg bg-muted">
+      <Form onSubmit={handleSearch} className="p-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3">
+          <SearchInput
+            label="Search workspace files"
+            className="flex-1"
+            placeholder="Search workspace files..."
+            value={query}
+            onValueChange={setQuery}
+          />
 
-          {/* Top K */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-neutral4 text-xs">Top</span>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="bg-surface2 border-border1 h-10 w-14 text-center"
-              title="Number of results"
-            />
-          </div>
+          <Field className="contents">
+            <div className="flex items-center gap-1.5">
+              <FieldLabel size="smaller">Top</FieldLabel>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={topK}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
+                className="w-14 border-border bg-background text-center"
+                title="Number of results"
+              />
+            </div>
+            <FieldError className="col-span-full row-start-2" />
+          </Field>
 
-          {/* Search Button */}
-          <Button type="submit" disabled={isSearching || !query.trim()} size="lg" className="h-10 px-4">
+          <Button type="submit" disabled={isSearching || !query.trim()} size="lg">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>
 
-        {/* Mode Selection */}
         {availableModes.length > 0 && (
-          <div className="mt-3 flex gap-2">
+          <div className="flex gap-2">
             {availableModes.map(m => {
               const config = modeConfig[m];
               const isActive = mode === m;
@@ -122,7 +125,7 @@ export function SearchWorkspacePanel({
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
-                  className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${isActive ? config.color : 'bg-surface2 text-neutral4 hover:bg-surface3 border-transparent'} `}
+                  className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-column ${isActive ? config.color : 'state-layer border-transparent bg-background text-muted-foreground'}`}
                 >
                   {config.icon}
                   {config.label}
@@ -131,15 +134,14 @@ export function SearchWorkspacePanel({
             })}
           </div>
         )}
-      </form>
+      </Form>
 
-      {/* Results */}
       {searchResults && (
-        <div className="border-border1 border-t">
-          <div className="flex items-center justify-between px-4 py-2 text-xs">
-            <span className="text-neutral4">
+        <div className="border-t border-border">
+          <div className="flex items-center justify-between px-4 py-2 text-caption">
+            <span className="text-muted-foreground">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
-              <span className="text-neutral6">{searchResults.query}</span>"
+              <span className="text-foreground">{searchResults.query}</span>"
             </span>
             <span className={`rounded px-1.5 py-0.5 ${modeConfig[searchResults.mode].color}`}>
               {modeConfig[searchResults.mode].label}
@@ -147,7 +149,9 @@ export function SearchWorkspacePanel({
           </div>
 
           {searchResults.results.length === 0 ? (
-            <div className="text-neutral4 px-4 py-8 text-center text-sm">No results found. Try a different query.</div>
+            <div className="px-4 py-5 text-center text-body text-muted-foreground">
+              No results found. Try a different query.
+            </div>
           ) : (
             <ul className="max-h-[320px] overflow-auto">
               {searchResults.results.map((result, index) => (
@@ -177,25 +181,33 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   const fileId = getWorkspaceSearchResultFileId(result);
 
   return (
-    <li className="border-border1 border-t first:border-t-0">
-      <button onClick={onClick} className="hover:bg-surface5 flex w-full gap-3 px-4 py-3 text-left transition-colors">
-        <span className="text-neutral3 w-4 shrink-0 text-xs tabular-nums">{rank}</span>
+    <li className="border-t border-border first:border-t-0">
+      <button onClick={onClick} className="flex w-full gap-3 px-4 py-3 text-left hover:bg-fill-subtle">
+        <Txt as="span" variant="caption" tone="muted" className="w-4 shrink-0 tabular-nums">
+          {rank}
+        </Txt>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <FolderOpen className="text-neutral4 h-3.5 w-3.5 shrink-0" />
-            <span className="text-neutral6 truncate font-mono text-sm">{fileId}</span>
+            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <Txt as="span" variant="body" tone="ink" font="mono" className="truncate">
+              {fileId}
+            </Txt>
             <div className="flex shrink-0 items-center gap-1.5">
-              <div className="bg-surface2 h-1 w-12 overflow-hidden rounded-full">
-                <div className="bg-accent1 h-full rounded-full" style={{ width: `${scorePercent}%` }} />
+              <div className="h-1 w-12 overflow-hidden rounded-full bg-background">
+                <div className="h-full rounded-full bg-chart-green" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-ui-xs text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
+              <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+                {result.score.toFixed(2)}
+              </Txt>
             </div>
           </div>
-          <p className="text-neutral4 line-clamp-2 text-xs">{result.content}</p>
+          <Txt variant="caption" tone="muted" className="line-clamp-2">
+            {result.content}
+          </Txt>
           {result.lineRange && (
-            <p className="text-neutral3 mt-1 text-xs">
+            <Txt variant="caption" tone="muted" className="mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </button>
@@ -227,57 +239,49 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
 
   return (
     <div className="space-y-4">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="space-y-3">
+      <Form onSubmit={handleSearch}>
         <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="text-neutral3 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search across skills..."
-              className="bg-surface3 border-border1 text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-lg border py-2 pr-4 pl-10 text-sm focus:ring-2 focus:outline-hidden"
-            />
-          </div>
+          <SearchInput
+            label="Search skills"
+            className="flex-1"
+            placeholder="Search across skills..."
+            value={query}
+            onValueChange={setQuery}
+          />
           <Button type="submit" disabled={!query.trim() || isSearching}>
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
           </Button>
         </div>
 
-        <div className="flex items-center gap-4 text-sm">
-          <label className="text-neutral4 flex items-center gap-2">
-            <span>Results:</span>
-            <select
-              value={topK}
-              onChange={e => setTopK(Number(e.target.value))}
-              className="bg-surface3 border-border1 text-neutral5 rounded border px-2 py-1"
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-            </select>
-          </label>
+        <div className="flex items-center gap-4 text-body">
+          <Field orientation="horizontal">
+            <FieldLabel size="smaller">Results:</FieldLabel>
+            <Select value={String(topK)} onValueChange={value => setTopK(Number(value))}>
+              <SelectTrigger size="sm" className="w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[3, 5, 10, 20].map(value => (
+                  <SelectItem key={value} value={String(value)}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
-          <label className="text-neutral4 flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={includeReferences}
-              onChange={e => setIncludeReferences(e.target.checked)}
-              className="border-border1 bg-surface3 rounded"
-            />
-            <span>Include references</span>
-          </label>
+          <Field orientation="horizontal">
+            <Checkbox checked={includeReferences} onCheckedChange={checked => setIncludeReferences(checked === true)} />
+            <FieldLabel size="smaller">Include references</FieldLabel>
+          </Field>
         </div>
-      </form>
+      </Form>
 
-      {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-neutral5 text-sm font-medium">
+          <Txt as="h3" variant="subheading" tone="ink">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
-          </h3>
+          </Txt>
           <div className="space-y-2">
             {results.map((result, index) => (
               <SkillSearchResultCard
@@ -299,30 +303,34 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
   return (
     <button
       onClick={onClick}
-      className="bg-surface3 border-border1 hover:border-accent1/50 w-full rounded-lg border p-4 text-left transition-colors"
+      className={cn(raisedSurfaceStyle, surfaceStateLayerStyle, 'w-full rounded-lg p-4 text-left')}
     >
       <div className="flex items-start gap-3">
-        <div className="bg-surface5 mt-0.5 shrink-0 rounded p-1.5">
+        <div className="mt-0.5 shrink-0 rounded bg-muted p-1.5">
           {isReference ? (
-            <FileText className="text-neutral4 h-3.5 w-3.5" />
+            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
           ) : (
-            <SkillIcon className="text-neutral4 h-3.5 w-3.5" />
+            <SkillIcon className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <span className="text-neutral6 font-medium">{result.skillName}</span>
-            <span className="text-neutral3 text-xs">{result.source}</span>
-            <span className="text-neutral3 ml-auto text-xs">Score: {result.score.toFixed(3)}</span>
+            <span className="font-medium text-foreground">{result.skillName}</span>
+            <Txt as="span" variant="caption" tone="muted">
+              {result.source}
+            </Txt>
+            <Txt as="span" variant="caption" tone="muted" className="ml-auto">
+              Score: {result.score.toFixed(3)}
+            </Txt>
           </div>
-          <p className="text-neutral4 line-clamp-3 text-sm whitespace-pre-wrap">
+          <Txt tone="muted" className="line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
-          </p>
+          </Txt>
           {result.lineRange && (
-            <p className="text-neutral3 mt-2 text-xs">
+            <Txt variant="caption" tone="muted" className="mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            </Txt>
           )}
         </div>
       </div>

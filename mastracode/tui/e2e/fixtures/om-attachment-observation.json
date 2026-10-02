@@ -13,6 +13,7 @@
             "id": "call_om_attachment_step",
             "name": "execute_command",
             "arguments": {
+              "description": "Running the observation check command",
               "command": "printf 'OM_ATTACHMENT_STEP_DONE\\n'",
               "timeout": 5,
               "cwd": null,

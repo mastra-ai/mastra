@@ -1,63 +1,77 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentFlowChainProps {
   experiment: DatasetExperiment;
   className?: string;
 }
 
-/** One step's subject: a typed icon (tooltip names the type) plus its label. */
-function Node({
+/**
+ * One stage of the pipeline: a typed icon (tooltip names the type), the stage's
+ * subject, and a one-line description of what happens to the data next. Stages
+ * are joined by a vertical rail; the last one has none.
+ */
+function Stage({
   icon,
   typeLabel,
-  children,
+  subject,
+  description,
+  isLast = false,
 }: {
   icon: ReactNode;
   /** Named on the icon so the chain reads without a legend. */
   typeLabel: string;
-  children: ReactNode;
+  subject: ReactNode;
+  description: string;
+  isLast?: boolean;
 }) {
   return (
-    <div className="text-ui-sm text-neutral5 flex flex-none items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0">
-      <Tooltip>
-        <TooltipTrigger render={<span className="text-neutral3 flex" role="img" aria-label={typeLabel} />}>
-          {icon}
-        </TooltipTrigger>
-        <TooltipContent>{typeLabel}</TooltipContent>
-      </Tooltip>
-      {children}
-    </div>
+    <li className="relative grid grid-cols-[auto_1fr] gap-x-2.5 pb-4 last:pb-0">
+      <div className="flex flex-col items-center">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                className="flex size-5 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-3.5"
+                role="img"
+                aria-label={typeLabel}
+              />
+            }
+          >
+            {icon}
+          </TooltipTrigger>
+          <TooltipContent>{typeLabel}</TooltipContent>
+        </Tooltip>
+        {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
+      </div>
+      <div className="grid min-w-0 gap-0.5">
+        <div className="flex min-h-5 items-center text-caption text-foreground">{subject}</div>
+        <Txt variant="meta" tone="faint">
+          {description}
+        </Txt>
+      </div>
+    </li>
   );
 }
 
-/** The labelled arrow between two nodes — the label is what makes the flow readable. */
-function Step({ label }: { label: string }) {
-  return (
-    <div className="text-neutral2 text-ui-xs flex flex-none items-center gap-1.5">
-      <span className="whitespace-nowrap">{label}</span>
-      <ArrowRightIcon className="size-3.5 shrink-0" aria-hidden />
-    </div>
-  );
-}
-
-const linkClass = 'text-neutral5 inline-flex items-center gap-1.5 hover:underline';
+const linkClass = 'text-foreground inline-flex min-w-0 items-center gap-1.5 hover:underline';
 
 /**
  * Reads the experiment as the pipeline it actually is: every dataset item is sent
- * to the target, and its output is compared against the item's ground truth by the
- * scorers. Purely explanatory — it carries no measurement, the meta bar does.
+ * to the target, and its output is scored against the item's ground truth by the
+ * scorers. Purely explanatory — it carries no measurement, the run meta does.
  */
 export function ExperimentFlowChain({ experiment, className }: ExperimentFlowChainProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
@@ -66,14 +80,11 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
   const scorerIds = useExperimentScorerIds(experiment);
 
-  const scorerNames = scorerIds.map(id => scorers?.[id]?.scorer?.config?.name ?? id);
-
   const targetType = experiment.targetType;
   const targetId = experiment.targetId;
+  const targetName = resolveTargetName(experiment, registries);
 
-  const targetName = () => resolveTargetName(experiment, registries);
-
-  const targetHref = () => {
+  const targetHref = (() => {
     if (!targetId) return null;
     switch (targetType) {
       case 'agent':
@@ -85,58 +96,72 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
       default:
         return null;
     }
-  };
+  })();
 
   const TargetIcon = (targetType && TARGET_ICON[targetType]) || AgentIcon;
   const targetTypeLabel = (targetType && TARGET_LABEL[targetType]) || 'Evaluation target';
-  const href = targetHref();
 
   return (
-    <div className={cn('flex items-center gap-3 overflow-x-auto', className)}>
-      <Node icon={<DatasetsIcon />} typeLabel="Dataset">
-        {experiment.datasetId ? (
-          <LinkComponent href={paths.datasetLink(experiment.datasetId)} className={linkClass}>
-            {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
-            {experiment.datasetVersion != null && <span className="text-neutral3">(v{experiment.datasetVersion})</span>}
-          </LinkComponent>
-        ) : (
-          <span className="text-neutral3">No dataset</span>
-        )}
-      </Node>
+    <ol className={cn('grid', className)}>
+      <Stage
+        icon={<DatasetsIcon />}
+        typeLabel="Dataset"
+        description={`Each item will be passed to the ${targetTypeLabel.toLowerCase()}`}
+        subject={
+          experiment.datasetId ? (
+            <LinkComponent href={paths.datasetLink(experiment.datasetId)} className={linkClass}>
+              <span className="truncate">
+                {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
+              </span>
+              {experiment.datasetVersion != null && (
+                <span className="shrink-0 text-muted-foreground">(v{experiment.datasetVersion})</span>
+              )}
+            </LinkComponent>
+          ) : (
+            <span className="text-muted-foreground">No dataset</span>
+          )
+        }
+      />
 
-      <Step label="each item" />
+      <Stage
+        icon={<TargetIcon />}
+        typeLabel={targetTypeLabel}
+        description="Its output is then scored"
+        subject={
+          targetHref ? (
+            <LinkComponent href={targetHref} className={linkClass}>
+              <span className="truncate">{targetName}</span>
+            </LinkComponent>
+          ) : (
+            <span className="truncate text-muted-foreground">{targetName}</span>
+          )
+        }
+      />
 
-      <Node icon={<TargetIcon />} typeLabel={targetTypeLabel}>
-        {href ? (
-          <LinkComponent href={href} className={linkClass}>
-            {targetName()}
-          </LinkComponent>
-        ) : (
-          <span className="text-neutral3">{targetName()}</span>
-        )}
-      </Node>
-
-      <Step label="output" />
-
-      <Tooltip>
-        {/* Focusable so the scorer list is reachable without a pointer. */}
-        <TooltipTrigger
-          render={
-            <div tabIndex={0} className="flex outline-offset-4">
-              <Node icon={<ScorersIcon />} typeLabel="Scorers">
-                {scorerIds.length === 0 ? 'Scorers' : `${scorerIds.length} scorer${scorerIds.length === 1 ? '' : 's'}`}
-              </Node>
-            </div>
-          }
-        />
-        <TooltipContent>
-          {scorerNames.length > 0 ? scorerNames.join(', ') : 'No scorer has produced a score yet'}
-        </TooltipContent>
-      </Tooltip>
-
-      <Step label="comparing ground truth" />
-
-      <div className="text-ui-sm text-neutral5 flex-none whitespace-nowrap">Score</div>
-    </div>
+      <Stage
+        icon={<ScorersIcon />}
+        typeLabel="Scorers"
+        description="It gives a score by comparing ground truth"
+        isLast
+        subject={
+          scorerIds.length === 0 ? (
+            <span className="text-muted-foreground">No scorer has produced a score yet</span>
+          ) : (
+            <ul className="grid min-w-0 gap-0.5">
+              {scorerIds.map(id => {
+                const name = scorers?.[id]?.scorer?.config?.name ?? id;
+                return (
+                  <li key={id} className="min-w-0">
+                    <LinkComponent href={paths.scorerLink(id)} className={linkClass}>
+                      <span className="truncate">{name}</span>
+                    </LinkComponent>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        }
+      />
+    </ol>
   );
 }

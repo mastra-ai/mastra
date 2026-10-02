@@ -73,9 +73,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/code-mode',
               label: 'Code Mode',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -109,9 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'workflows/dynamic-workflows',
               label: 'Dynamic Workflows',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -471,9 +465,6 @@ const sidebars = {
               type: 'doc',
               id: 'auth/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -522,9 +513,6 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/workers',
               label: 'Workers',
-              customProps: {
-                tags: ['new'],
-              },
             },
           ],
         },
@@ -670,6 +658,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/agent-lifecycle',
+              label: 'Agent lifecycle',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/authentication-identity',
               label: 'Authentication',
               customProps: {
@@ -678,8 +674,21 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/mcp-authentication-authorization',
+              label: 'MCP authentication',
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
+            },
+            {
+              type: 'doc',
+              id: 'guides/build-an-eval-loop',
+              label: 'Build an eval loop',
+              customProps: {
+                tags: ['new'],
+              },
             },
           ],
         },
@@ -704,6 +713,11 @@ const sidebars = {
     },
     {
       type: 'doc',
+      id: 'mastra-platform/system-environment-variables',
+      label: 'System environment variables',
+    },
+    {
+      type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
     },
@@ -714,11 +728,16 @@ const sidebars = {
     },
     {
       type: 'doc',
-      id: 'mastra-platform/trace-intelligence',
-      label: 'Trace Intelligence',
+      id: 'mastra-platform/alerts',
+      label: 'Alerts',
       customProps: {
         tags: ['new'],
       },
+    },
+    {
+      type: 'doc',
+      id: 'mastra-platform/trace-intelligence',
+      label: 'Trace Intelligence',
     },
     {
       type: 'doc',

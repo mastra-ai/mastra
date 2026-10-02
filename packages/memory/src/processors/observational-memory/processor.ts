@@ -236,17 +236,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           runState,
         });
-        // Pass the record through even without observations — resource-scoped
-        // retrieval still injects recall guidance so the actor can browse and
-        // search other threads.
-        const systemMessages = ctx.omRecord
-          ? await this.engine.buildContextSystemMessages({
-              threadId,
-              resourceId,
-              record: ctx.omRecord,
-              unobservedContextBlocks: ctx.otherThreadsContext,
-            })
-          : undefined;
+        // Recall guidance is useful even with no record; null preserves read-only behavior.
+        const systemMessages = await this.engine.buildContextSystemMessages({
+          threadId,
+          resourceId,
+          record: ctx.omRecord,
+          unobservedContextBlocks: ctx.otherThreadsContext,
+        });
 
         injectObservationContextMessages({
           messageList,
@@ -271,6 +267,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // old turn first so any messages tracked on that list are flushed before OM moves on.
         await activeTurn.end().catch(() => {});
         if (this.turn === activeTurn) {
+          this.turn = undefined;
+        }
+        state.__omTurn = undefined;
+      }
+
+      // A turn can be sealed before the loop reaches its next step — for example when a
+      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+      if (activeTurn?.ended || this.turn?.ended) {
+        if (this.turn?.ended) {
           this.turn = undefined;
         }
         state.__omTurn = undefined;
@@ -414,15 +421,25 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
         const turn = asLiveTurn(state.__omTurn) ?? this.turn;
-        if (turn) {
-          await turn.end();
-          this.turn = undefined;
-          state.__omTurn = undefined;
-        } else {
-          // No turn exists — this happens during a resumed stream where input processors
-          // were skipped (isResume=true), so processInputStep never created a turn.
-          // Directly persist any new response messages so the final assistant text
-          // from the resumed turn is not lost.
+        // The turn can already be sealed by the time the loop finalizes — for example when a
+        // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer, or
+        // when a mid-loop seal left the shared state pointing at an ended turn. `end()` throws
+        // on an ended turn, and the refs are only cleared after it resolves, so a stale ended
+        // turn would reject finalization and never reach the direct-persist path below. Treat it
+        // as absent, mirroring the ended-turn cleanup in processInputStep.
+        const liveTurn = turn && !turn.ended ? turn : undefined;
+
+        if (liveTurn) {
+          await liveTurn.end();
+        }
+        this.turn = undefined;
+        state.__omTurn = undefined;
+
+        if (!liveTurn) {
+          // No live turn exists — this happens during a resumed stream where input processors
+          // were skipped (isResume=true), so processInputStep never created a turn, or when the
+          // turn was already sealed before finalization. Directly persist any new response
+          // messages so the final assistant text from the resumed turn is not lost.
           const newOutput = messageList.get.response.db();
           const newInput = messageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];

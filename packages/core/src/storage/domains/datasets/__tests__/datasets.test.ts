@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ExperimentsInMemory } from '../../experiments/inmemory';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
 
@@ -593,6 +594,139 @@ describe('DatasetsInMemory', () => {
 
       const fetched = await storage.getItemById({ id: item.id });
       expect(fetched).toBeNull();
+    });
+
+    it('purgeItem scrubs every historical row without changing version visibility', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { patient: 'Bob' },
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+      expect(
+        history.every(
+          row =>
+            row.input === null &&
+            row.groundTruth === null &&
+            row.expectedTrajectory === null &&
+            row.toolMocks === null &&
+            row.unmockedToolPolicy === null &&
+            row.scorerIds === null &&
+            row.requestContext === null &&
+            row.source === null,
+        ),
+      ).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+      await expect(storage.getItemById({ id: item.id, datasetVersion: item.datasetVersion })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+      await expect(storage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion })).resolves.toMatchObject(
+        { input: null, metadata: { __purged: true } },
+      );
+    });
+
+    it('rejects updates that would restore purged item data', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: dataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_PURGED' });
+      await expect(storage.getItemHistory(item.id)).resolves.toHaveLength(1);
+      await expect(storage.getItemById({ id: item.id })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+    });
+
+    it('does not disclose purge state when updating an item through another dataset', async () => {
+      const sourceDataset = await storage.createDataset({ name: 'source' });
+      const targetDataset = await storage.createDataset({ name: 'target' });
+      const item = await storage.addItem({ datasetId: sourceDataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: sourceDataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: targetDataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toThrow('does not belong to dataset');
+    });
+
+    it('redacts in-memory experiment result writes submitted after item purge', async () => {
+      const experiments = new ExperimentsInMemory({ db });
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const experiment = await experiments.createExperiment({
+        name: 'late-result',
+        datasetId: dataset.id,
+        datasetVersion: item.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+      const added = await experiments.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        tags: ['patient-alice'],
+      });
+      const updated = await experiments.updateExperimentResult({
+        id: added.id,
+        experimentId: experiment.id,
+        status: 'needs-review',
+        tags: ['patient-alice'],
+        comment: 'Patient Alice requires review',
+      });
+      const upserted = await experiments.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'restored secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        attempt: 0,
+      });
+
+      expect(added).toMatchObject({ input: null, output: null, metadata: { __purged: true }, tags: null });
+      expect(updated).toMatchObject({ status: 'needs-review', tags: null, comment: null });
+      expect(upserted).toMatchObject({
+        id: added.id,
+        input: null,
+        output: null,
+        groundTruth: null,
+        metadata: { __purged: true },
+        error: null,
+        tags: null,
+        comment: null,
+      });
     });
 
     it('getItemById with datasetVersion returns the row visible in the snapshot (T3.13)', async () => {
@@ -1229,6 +1363,84 @@ describe('DatasetsInMemory', () => {
       });
       expect(item.source?.type).toBe('candidate-screener');
       expect(item.source?.referenceId).toBe('verdict-123');
+    });
+  });
+
+  describe('ordering', () => {
+    it('lists datasets newest first by default', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.createDataset({ name: 'bravo' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.createDataset({ name: 'alpha' });
+      vi.useRealTimers();
+
+      const result = await storage.listDatasets({ pagination: { page: 0, perPage: 10 } });
+      expect(result.datasets.map(d => d.name)).toEqual(['alpha', 'bravo']);
+    });
+
+    it('lists datasets by name ascending when requested', async () => {
+      await storage.createDataset({ name: 'bravo' });
+      await storage.createDataset({ name: 'alpha' });
+      await storage.createDataset({ name: 'charlie' });
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'name', direction: 'ASC' },
+      });
+      expect(result.datasets.map(d => d.name)).toEqual(['alpha', 'bravo', 'charlie']);
+    });
+
+    it('rejects unknown orderBy fields for datasets and items', async () => {
+      const dataset = await storage.createDataset({ name: 'ds' });
+      await expect(
+        storage.listDatasets({
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'nope' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+      await expect(
+        storage.listItems({
+          datasetId: dataset.id,
+          pagination: { page: 0, perPage: 10 },
+          orderBy: { field: 'name' as any, direction: 'ASC' },
+        }),
+      ).rejects.toThrow(/Invalid orderBy field/);
+    });
+
+    it('lists datasets by createdAt ascending when requested', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.createDataset({ name: 'first' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.createDataset({ name: 'second' });
+      vi.useRealTimers();
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(result.datasets.map(d => d.name)).toEqual(['first', 'second']);
+    });
+
+    it('lists items oldest first when requested', async () => {
+      const dataset = await storage.createDataset({ name: 'ds' });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      await storage.addItem({ datasetId: dataset.id, input: 'first' });
+      vi.setSystemTime(new Date('2026-01-02T00:00:00Z'));
+      await storage.addItem({ datasetId: dataset.id, input: 'second' });
+      vi.useRealTimers();
+
+      const newest = await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } });
+      expect(newest.items.map(i => i.input)).toEqual(['second', 'first']);
+
+      const oldest = await storage.listItems({
+        datasetId: dataset.id,
+        pagination: { page: 0, perPage: 10 },
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      expect(oldest.items.map(i => i.input)).toEqual(['first', 'second']);
     });
   });
 });

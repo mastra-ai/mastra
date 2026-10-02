@@ -197,6 +197,49 @@ describe('QdrantVector', () => {
       expect(results).toHaveLength(2);
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
     });
+
+    it('should throw instead of reporting success when deleteVectors gets a malformed id', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await expect(
+        qdrant.deleteVectors({ indexName: testCollectionName, ids: [ids[0]!, 'not-a-uuid'] }),
+      ).rejects.toThrow(/Invalid Qdrant point IDs.*not-a-uuid/);
+
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
+      expect(stats.count).toBe(3);
+    });
+
+    it('should reject numeric ids above the uint64 maximum', async () => {
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await expect(
+        qdrant.deleteVectors({ indexName: testCollectionName, ids: ['18446744073709551616'] }),
+      ).rejects.toThrow(/Invalid Qdrant point IDs.*18446744073709551616/);
+    });
+
+    it('should delete points addressed by urn:uuid and braced UUID ids', async () => {
+      const urnId = 'urn:uuid:F9168C5E-CEB2-4faa-B6BF-329BF39FA1E4';
+      const bracedId = '{00000000-0000-4000-8000-000000000001}';
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+      await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors.slice(0, 2), ids: [urnId, bracedId] });
+      expect((await qdrant.describeIndex({ indexName: testCollectionName })).count).toBe(5);
+
+      await qdrant.deleteVectors({ indexName: testCollectionName, ids: [urnId, bracedId] });
+
+      expect((await qdrant.describeIndex({ indexName: testCollectionName })).count).toBe(3);
+    });
+
+    it('should not throw when deleteVectors gets valid ids that do not exist', async () => {
+      const ids = await qdrant.upsert({ indexName: testCollectionName, vectors: testVectors });
+
+      await qdrant.deleteVectors({
+        indexName: testCollectionName,
+        ids: [ids[0]!, '00000000-0000-4000-8000-000000000001', '123456789'],
+      });
+
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
+      expect(stats.count).toBe(2);
+    });
   });
 
   describe('Filter Queries', () => {
@@ -450,12 +493,36 @@ describe('QdrantVector', () => {
 
     describe('Special Cases', () => {
       it('handles regex patterns in queries', async () => {
-        const results = await qdrant.query({
+        // Qdrant has no native regex filtering: $regex is translated to a
+        // full-text match, which matches whole tokens rather than substrings.
+        // On indexed text fields this was always the case; since Qdrant
+        // v1.19.1 it also applies to unindexed payload fields
+        // (qdrant/qdrant#10341), so a partial token like 'item' no longer
+        // matches 'item1'..'item4'. Only assert whole-token matching, which
+        // behaves the same on all Qdrant versions.
+        const wholeTokenResults = await qdrant.query({
           indexName: testCollectionName,
           queryVector: [1, 0, 0],
-          filter: { name: { $regex: 'item' } },
+          filter: { name: { $regex: 'item2' } },
         });
-        expect(results.length).toBe(4);
+        expect(wholeTokenResults.length).toBe(1);
+        expect(wholeTokenResults[0]?.metadata?.name).toBe('item2');
+
+        // With a full-text payload index the token semantics apply on every
+        // Qdrant version, so a partial token must not match. The index is
+        // dropped afterwards to keep the shared collection unindexed for the
+        // other filter tests.
+        await qdrant.createPayloadIndex({ indexName: testCollectionName, fieldName: 'name', fieldSchema: 'text' });
+        try {
+          const partialTokenResults = await qdrant.query({
+            indexName: testCollectionName,
+            queryVector: [1, 0, 0],
+            filter: { name: { $regex: 'item' } },
+          });
+          expect(partialTokenResults.length).toBe(0);
+        } finally {
+          await qdrant.deletePayloadIndex({ indexName: testCollectionName, fieldName: 'name' });
+        }
       });
 
       it('handles array operators in queries', async () => {

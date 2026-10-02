@@ -1,8 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -66,12 +65,6 @@ function ThresholdInput({
   );
 }
 
-/**
- * Persisted observational-memory settings, optionally synchronized to an
- * active session. With `factoryId` set, the section edits the factory
- * project's shared settings (used by board runs and channel sessions) instead
- * of the caller's personal row.
- */
 export function OMSection({
   resourceId,
   scope,
@@ -123,64 +116,46 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
-  const attachmentOptions: { value: AttachmentChoice; label: string }[] = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'on', label: 'On' },
-    { value: 'off', label: 'Off' },
-  ];
-
   return (
     <>
       {error && (
-        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground px-4 py-3">
           {error}
         </Txt>
       )}
 
       {config && !modelsAvailable && (
         <div className="flex items-center gap-2 px-4 py-3">
-          <Badge size="md" variant="yellow">
+          <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
-          <Txt as="p" variant="ui-xs" className="text-icon3">
+          <Txt as="p" variant="meta" className="text-muted-foreground">
             Observational-memory model calls may fail until credentials are configured.
           </Txt>
         </div>
       )}
 
-      <SettingsRow variant="factory" label="Observer model" description="Summarizes the conversation into observations">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.observerModelId ?? ''}
-            placeholder="Select observer model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-          />
-        </div>
+      <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
+        <ModelCombobox
+          models={models}
+          value={config?.observerModelId ?? ''}
+          placeholder="Select observer model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('observer', modelId)}
+        />
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Reflector model"
-        description="Distills observations into longer-term memory"
-      >
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.reflectorModelId ?? ''}
-            placeholder="Select reflector model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-          />
-        </div>
+      <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
+        <ModelCombobox
+          models={models}
+          value={config?.reflectorModelId ?? ''}
+          placeholder="Select reflector model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('reflector', modelId)}
+        />
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Messages before observation"
-        description="Message tokens processed before the observer runs."
-      >
+      <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
         {config && (
           <div className="w-full max-w-40">
             <ThresholdInput
@@ -196,7 +171,6 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow
-        variant="factory"
         label="Observations before reflection"
         description="Observation tokens accumulated before the reflector runs."
       >
@@ -214,25 +188,17 @@ export function OMSection({
         )}
       </SettingsRow>
 
-      <SettingsRow
-        variant="factory"
-        label="Observe attachments"
-        description="Whether attached files are included in observations"
-      >
-        <ButtonsGroup spacing="close" role="group" aria-label="Observe attachments">
-          {attachmentOptions.map(option => (
-            <Button
-              key={option.value}
-              variant={attachmentChoice === option.value ? 'primary' : 'outline'}
-              size="sm"
-              aria-pressed={attachmentChoice === option.value}
-              disabled={busy || !config}
-              onClick={() => attachmentsMutation.mutate({ value: choiceToAttachment(option.value) })}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </ButtonsGroup>
+      <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
+        <SegmentedControl
+          aria-label="Observe attachments"
+          value={attachmentChoice}
+          disabled={busy || !config}
+          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+        >
+          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+          <SegmentedControlItem value="on">On</SegmentedControlItem>
+          <SegmentedControlItem value="off">Off</SegmentedControlItem>
+        </SegmentedControl>
       </SettingsRow>
     </>
   );

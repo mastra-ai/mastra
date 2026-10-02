@@ -1,5 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest, SquareKanban } from 'lucide-react';
@@ -9,22 +18,25 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useParkedSessions, useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardStatus';
-import { githubNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { relatedWorkItemIndex, relationshipLabel } from '../../factory/services/relationships';
+import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem } from '../../factory/services/workItems';
+import { isPullRequestSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import type { FactoryUserSession } from '../services/user-sessions';
 import { getFactorySessionKind, getSessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import { SessionOwnerToggle } from './SessionOwnerToggle';
 import { sessionRowStatus } from '../services/sessionStatus';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 
@@ -69,10 +81,12 @@ export function WorkspacesSection() {
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [ownerScope, setOwnerScope] = useState({ work: true, review: true });
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
   const { pinnedSessions, setPinned } = usePinnedSessions();
   const workItems = useWorkItemsQuery(factoryId);
+  const parkedSessions = useParkedSessions(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const workspaceIds = workspaceRows.map(workspace => workspace.sessionId);
   const runningByPath = useActiveRunResources({
@@ -91,9 +105,9 @@ export function WorkspacesSection() {
   );
   const relatedItemsFor = relatedWorkItemIndex(allWorkItems);
   const latestPullRequestFor = (item: WorkItem) => {
-    if (item.source === 'github-pr') return item;
+    if (isPullRequestSource(item.source)) return item;
     return relatedItemsFor(item)
-      .filter(related => related.source === 'github-pr')
+      .filter(related => isPullRequestSource(related.source))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   };
 
@@ -101,7 +115,8 @@ export function WorkspacesSection() {
     const workItemSession = workItemByPath.get(workspace.sessionId);
     const item = workItemSession?.item;
     const pullRequest = item && latestPullRequestFor(item);
-    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
+    const pullRequestNumber = pullRequest ? changeRequestNumberForItem(pullRequest) : undefined;
+    const provider = pullRequest?.source === 'gitlab-pr' ? ('gitlab' as const) : ('github' as const);
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
     const initializing = !workspace.materializedAt;
@@ -115,7 +130,9 @@ export function WorkspacesSection() {
         active,
         initializing,
         running,
-        attention: item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id)),
+        attention:
+          parkedSessions.has(workspace.sessionId) ||
+          (item !== undefined && itemAwaitsPerson(proposalByItem.get(item.id), effectByItem.get(item.id))),
         review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
@@ -124,20 +141,25 @@ export function WorkspacesSection() {
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
         threadId: workItemSession?.threadId,
         pullRequestNumber,
+        provider,
         knownMerged: pullRequest?.metadata.merged === true,
         pinned: pinnedSessions.has(workspace.sessionId),
       },
     ];
   });
   const latestRows = (review: boolean) => {
-    const all = rows.filter(row => row.review === review).sort(bySessionPriority);
+    const mineOnly = ownerScope[review ? 'review' : 'work'];
+    const all = rows
+      .filter(row => row.review === review)
+      .filter(row => !mineOnly || !viewerUserId || row.workspace.userId === viewerUserId)
+      .sort(bySessionPriority);
     const visible = all.slice(0, COLLAPSED_ROW_COUNT);
-    // Deep links and board handoffs can open a session that sorts below the fold;
-    // show it rather than promote it, so the list never moves under the reader.
     const open = all.find(row => row.active);
     if (open && !visible.includes(open)) visible.push(open);
     return { visible, all };
   };
+  const hasWorkRows = rows.some(row => !row.review);
+  const hasReviewRows = rows.some(row => row.review);
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
   const pullRequestTargets = [...workRows.visible, ...reviewRows.visible].flatMap(row =>
@@ -148,6 +170,7 @@ export function WorkspacesSection() {
             threadId: row.threadId,
             projectPath: row.workspace.sessionId,
             pullRequestNumber: row.pullRequestNumber,
+            provider: row.provider,
             knownMerged: row.knownMerged,
           },
         ]
@@ -162,11 +185,6 @@ export function WorkspacesSection() {
   const pending = deleteWorkspace.isPending;
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
-    // A workspace's thread id is its own session id (FactoryStartCoordinator
-    // seeds the session with threadId = sessionId), so navigate straight there
-    // instead of blocking on a session create + thread listing round-trip. The
-    // thread page brings the session online on mount and shows a skeleton while
-    // its messages load.
     void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${workspace.sessionId}`, {
       state: { from: location },
     });
@@ -177,16 +195,18 @@ export function WorkspacesSection() {
     deleteWorkspace.mutate(confirmDelete, { onSuccess: () => setConfirmDelete(null) });
   };
 
-  if (workRows.all.length === 0 && reviewRows.all.length === 0) return null;
+  if (!hasWorkRows && !hasReviewRows) return null;
 
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      {workRows.all.length > 0 && (
+      {hasWorkRows && (
         <WorkspaceGroup
           key="work"
           title="Work Sessions"
           rows={workRows.visible}
           allRows={workRows.all}
+          mineOnly={ownerScope.work}
+          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, work: mineOnly }))}
           kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -197,12 +217,14 @@ export function WorkspacesSection() {
           onDelete={setConfirmDelete}
         />
       )}
-      {reviewRows.all.length > 0 && (
+      {hasReviewRows && (
         <WorkspaceGroup
           key="review"
           title="Review Sessions"
           rows={reviewRows.visible}
           allRows={reviewRows.all}
+          mineOnly={ownerScope.review}
+          onMineOnlyChange={mineOnly => setOwnerScope(current => ({ ...current, review: mineOnly }))}
           kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
@@ -215,30 +237,26 @@ export function WorkspacesSection() {
       )}
 
       {confirmDelete && (
-        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
-          <DialogContent className="w-full max-w-sm" aria-label="Delete workspace">
-            <DialogHeader className="px-5 pt-4 pb-2">
+        <Dialog
+          open
+          onOpenChange={open => !open && setConfirmDelete(null)}
+          intent="destructive"
+          pending={deleteWorkspace.isPending}
+        >
+          <DialogContent size="sm" aria-label="Delete workspace">
+            <DialogHeader>
               <DialogTitle>Delete workspace?</DialogTitle>
+              <DialogDescription>
+                This deletes the <span className="text-foreground">{confirmDelete.branch}</span> checkout and its
+                uncommitted changes. This can’t be undone. Threads from this workspace are kept.
+              </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout and its uncommitted
-                changes. This can’t be undone. Threads from this workspace are kept.
-              </Txt>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
-                  onClick={confirmDeleteWorkspace}
-                  disabled={deleteWorkspace.isPending}
-                >
-                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
-                </Button>
-              </div>
-            </div>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={confirmDeleteWorkspace}>
+                {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
+              </DialogAction>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
@@ -262,6 +280,7 @@ interface FactoryWorkspaceRow {
   updatedAt: string;
   threadId?: string;
   pullRequestNumber?: number;
+  provider: ChangeRequestProvider;
   knownMerged: boolean;
   pinned: boolean;
 }
@@ -270,6 +289,8 @@ function WorkspaceGroup({
   title,
   rows,
   allRows,
+  mineOnly,
+  onMineOnlyChange,
   kind,
   pending,
   mergedByPath,
@@ -282,6 +303,8 @@ function WorkspaceGroup({
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   allRows: FactoryWorkspaceRow[];
+  mineOnly: boolean;
+  onMineOnlyChange: (mineOnly: boolean) => void;
   kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
@@ -296,7 +319,14 @@ function WorkspaceGroup({
   const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
-      <SidebarSectionHeading icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}>
+      <SidebarSectionHeading
+        icon={kind === 'Review session' ? <GitPullRequest /> : <SquareKanban />}
+        action={
+          viewerUserId ? (
+            <SessionOwnerToggle label={`${kind.toLowerCase()}s`} mineOnly={mineOnly} onChange={onMineOnlyChange} />
+          ) : undefined
+        }
+      >
         {title}
       </SidebarSectionHeading>
       <MainSidebar.NavList>
@@ -312,6 +342,7 @@ function WorkspaceGroup({
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] ?? row.knownMerged}
+            changeRequestProvider={row.provider}
             status={sessionRowStatus(row)}
             pinned={row.pinned}
             preview={{
@@ -325,18 +356,19 @@ function WorkspaceGroup({
             }}
             onSelect={() => onSelect(row.workspace)}
             onPinChange={pinned => onPinChange(row.workspace.sessionId, pinned)}
-            // The DELETE route is owner-only and 404s for non-owners, which the
-            // delete service treats as an idempotent success; offering delete
-            // on a known non-owned row would fake-succeed and the row would
-            // reappear. Unknown viewer (auth disabled) keeps it.
             onDelete={viewerUserId && row.workspace.userId !== viewerUserId ? undefined : () => onDelete(row.workspace)}
           />
         ))}
       </MainSidebar.NavList>
+      {visibleRows.length === 0 ? (
+        <Txt as="p" variant="caption" tone="muted" role="status" className="m-0 pl-3">
+          No sessions of your own.
+        </Txt>
+      ) : null}
       {hiddenCount > 0 && (
         <button
           type="button"
-          className="text-icon3 hover:text-icon5 pl-3 text-left text-xs"
+          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}

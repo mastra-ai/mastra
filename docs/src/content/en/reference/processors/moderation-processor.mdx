@@ -43,6 +43,14 @@ const processor = new ModerationProcessor({
             isOptional: false,
           },
           {
+            name: 'errorStrategy',
+            type: "'warn' | 'strict'",
+            description:
+              "How to handle failures from the internal model call. 'warn' is fail-open: it logs the failure and allows the content through unchanged. 'strict' is fail-closed: it stops processing with a tripwire.",
+            isOptional: true,
+            default: "'warn'",
+          },
+          {
             name: 'categories',
             type: 'string[]',
             description: 'Categories to check for moderation. If not specified, uses default OpenAI categories',

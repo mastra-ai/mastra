@@ -48,9 +48,11 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 
 // #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
 // installed core fails feature-detection instead of breaking module load.
@@ -123,7 +125,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     return transformed;
   });
   if (schemaName) {
-    const quotedSchema = `"${parseSqlIdentifier(schemaName, 'schema name')}"`;
+    const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
       for (const table of [
@@ -262,7 +264,7 @@ function parseOutbox(row: Record<string, unknown>): KnowledgeSemanticOutboxEntry
 function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: string }> {
   const table = (name: string) => {
     const quotedName = `"${parseSqlIdentifier(name, 'table name')}"`;
-    return schemaName ? `"${parseSqlIdentifier(schemaName, 'schema name')}".${quotedName}` : quotedName;
+    return schemaName ? `"${parseSchemaName(schemaName)}".${quotedName}` : quotedName;
   };
   return [
     {
@@ -360,16 +362,19 @@ export class KnowledgePG extends KnowledgeStorage {
 
   readonly #client: DbClient;
   readonly #executor: Executor;
+  /** Reader-backed executor for standalone reads; mutations and read-modify-write stay on #executor. */
+  readonly #readExecutor: Executor;
   readonly #db: PgDB;
   readonly #schemaName?: string;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
     this.#executor = createExecutor(client, schemaName);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#readExecutor = createExecutor(readClient, schemaName);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
   }
 
   async init(): Promise<void> {
@@ -466,15 +471,15 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async getNode(id: string): Promise<KnowledgeNode | null> {
-    return this.#getNode(this.#executor, id);
+    return this.#getNode(this.#readExecutor, id);
   }
 
   async getNodeByName(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
-    return this.#getNodeByName(this.#executor, input.name, canonicalizeKnowledgeScope(input.scope));
+    return this.#getNodeByName(this.#readExecutor, input.name, canonicalizeKnowledgeScope(input.scope));
   }
 
   async resolveNode(input: { name: string; scope: KnowledgeScope }): Promise<KnowledgeNode | null> {
-    return this.#resolveNode(this.#executor, input.name, canonicalizeKnowledgeScope(input.scope));
+    return this.#resolveNode(this.#readExecutor, input.name, canonicalizeKnowledgeScope(input.scope));
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
@@ -503,7 +508,7 @@ export class KnowledgePG extends KnowledgeStorage {
       args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
     }
     args.push(input.limit ?? 100);
-    const result = await this.#executor.execute({
+    const result = await this.#readExecutor.execute({
       sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC, id ASC LIMIT ?`,
       args,
     });
@@ -660,6 +665,7 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const parent = await this.#resolveTerminalNode(tx, nodeReferenceId(input.node));
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
+      const metadataJson = input.metadata ? toPgJson(input.metadata) : null;
       const record: KnowledgeRecord = {
         id: input.id ?? createKnowledgeUlid(),
         node: parent.id,
@@ -683,18 +689,18 @@ export class KnowledgePG extends KnowledgeStorage {
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
           record.maxScope ?? null,
-          record.metadata ? JSON.stringify(record.metadata) : null,
+          metadataJson,
         ],
       });
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
       await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
-      return record;
+      return metadataJson ? { ...record, metadata: JSON.parse(metadataJson) } : record;
     });
   }
 
   async getKnowledge(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
-    const result = await this.#executor.execute({
+    const result = await this.#readExecutor.execute({
       sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE id=?${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}`,
       args: [input.id],
     });
@@ -719,7 +725,7 @@ export class KnowledgePG extends KnowledgeStorage {
     if (input.after) args.push(input.after);
     const limit = input.limit ?? 100;
     args.push(limit + 1);
-    const result = await this.#executor.execute({
+    const result = await this.#readExecutor.execute({
       sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
@@ -799,7 +805,7 @@ export class KnowledgePG extends KnowledgeStorage {
     const normalizedQuery = input.query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
     const query = `%${escapeLikePattern(normalizedQuery)}%`;
-    const records = await this.#executor.execute({
+    const records = await this.#readExecutor.execute({
       sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
       args: [key, key, query, query, query, query, input.limit ?? 20],
     });
@@ -817,7 +823,7 @@ export class KnowledgePG extends KnowledgeStorage {
       scope: parseJson<KnowledgeScope>(row.scopeJson),
     }));
     if (results.length < (input.limit ?? 20)) {
-      const records = await this.#executor.execute({
+      const records = await this.#readExecutor.execute({
         sql: `SELECT f.*,f.scope AS "scopeJson",r.name,r.scope AS "parentScopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
@@ -875,7 +881,7 @@ export class KnowledgePG extends KnowledgeStorage {
   }): Promise<KnowledgeActivityEvent[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = knowledgeScopeKey(scope);
-    const result = await this.#executor.execute({
+    const result = await this.#readExecutor.execute({
       sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
       args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
@@ -1019,13 +1025,13 @@ export class KnowledgePG extends KnowledgeStorage {
     relationship: 'about' | 'mentioning' | 'related',
   ): Promise<QueryKnowledgeOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const node = await this.#resolveTerminalNode(this.#executor, nodeReferenceId(input.node));
+    const node = await this.#resolveTerminalNode(this.#readExecutor, nodeReferenceId(input.node));
     if (!node) return { records: [] };
     const key = knowledgeScopeKey(scope);
     const args: QueryValues = [node.id, ...(relationship === 'related' ? [node.id] : []), key, key];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
-    const result = await this.#executor.execute({
+    const result = await this.#readExecutor.execute({
       sql: `SELECT DISTINCT f.*,f.scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f${relationship === 'about' ? '' : ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=f.id`} WHERE ${relationship === 'about' ? 'f.node=?' : relationship === 'mentioning' ? 'm.recordId=?' : '(f.node=? OR m.recordId=?)'} AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
       args,
     });

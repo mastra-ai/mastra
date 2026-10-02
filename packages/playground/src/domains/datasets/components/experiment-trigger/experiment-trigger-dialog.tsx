@@ -1,28 +1,37 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
+import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { DynamicForm } from '@/lib/form';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -36,6 +45,8 @@ export interface ExperimentTriggerDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;
 }
+
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /**
  * Schema-driven request context form. Converts the dataset's plain JSON Schema
@@ -58,14 +69,50 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return (
+      <div role="alert">
+        <Notice variant="destructive">Failed to parse request context schema</Notice>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-2">
-      <Label>Request Context</Label>
+    <Fieldset>
+      <FieldsetLegend>Request Context</FieldsetLegend>
       <DynamicForm schema={zodSchema} onValuesChange={onChange} className="[&_button[type=submit]]:hidden" />
-    </div>
+    </Fieldset>
+  );
+}
+
+function PipelineStep({
+  index,
+  done,
+  isLast,
+  children,
+}: {
+  index: number;
+  done: boolean;
+  isLast?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-4">
+      <div className="flex flex-col items-center">
+        <span
+          aria-hidden="true"
+          className={cn(
+            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
+            done
+              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
+              : 'border-border text-muted-foreground',
+          )}
+        >
+          {index}
+        </span>
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
+      </div>
+      <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
+    </li>
   );
 }
 
@@ -88,22 +135,32 @@ export function ExperimentTriggerDialog({
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
   const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
   const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[]>(initialScorerIds ?? []);
+  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId);
+  const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
+  const datasetDefaultScorers = dataset?.scorerIds ?? [];
+  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
   const canRun = Boolean(datasetId && targetType && targetId && name.trim());
   const isRunning = triggerExperiment.isPending;
 
+  const missing = [!name.trim() && 'name', !datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
+  const hasRequestContext = hasSchema
+    ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
+    : requestContextRaw.trim().length > 0;
+
   const handleDatasetChange = (nextDatasetId: string) => {
     setDatasetId(nextDatasetId);
     setVersion(null);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
   };
 
@@ -114,7 +171,7 @@ export function ExperimentTriggerDialog({
     setVersion(initialDatasetVersion ?? null);
     setTargetType(initialTargetType ?? '');
     setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? []);
+    setSelectedScorers(initialScorerIds ?? null);
     setRequestContextValues({});
     setRequestContextRaw('');
   };
@@ -140,7 +197,6 @@ export function ExperimentTriggerDialog({
   };
 
   const handleRun = async () => {
-    // Explicit guards (rather than `canRun`) so TypeScript narrows `targetType` for the request.
     if (!datasetId || !targetType || !targetId || !name.trim()) return;
 
     let requestContext: Record<string, unknown> | undefined;
@@ -159,7 +215,7 @@ export function ExperimentTriggerDialog({
         description: description.trim() || undefined,
         targetType,
         targetId,
-        scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
+        scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
         version: version ?? undefined,
         requestContext,
       });
@@ -176,111 +232,169 @@ export function ExperimentTriggerDialog({
   };
 
   const handleClose = () => {
-    if (!isRunning) {
-      onOpenChange(false);
-      resetState();
+    onOpenChange(false);
+    resetState();
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && canRun && !isRunning) {
+      event.preventDefault();
+      void handleRun();
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent ref={contentRef}>
+    <Dialog open={open} onOpenChange={handleClose} pending={isRunning}>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
         <DialogHeader>
-          <DialogTitle>Run Experiment</DialogTitle>
+          <DialogTitle>Run experiment</DialogTitle>
           <DialogDescription>
-            {version != null
-              ? `Execute items from version v${version} of the dataset against a target.`
-              : 'Execute dataset items against a target.'}
+            Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="grid gap-6">
-          <div className="grid gap-6">
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-name">Name *</Label>
+        <DialogBody>
+          <div className="space-y-4">
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="experiment-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter experiment name"
                 autoFocus
                 disabled={isRunning}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-description">Description</Label>
-              <Input
-                id="experiment-description"
+            <Field>
+              <FieldLabel>Description</FieldLabel>
+              <Textarea
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter experiment description (optional)"
                 disabled={isRunning}
+                rows={2}
               />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Dataset</Label>
-              <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
-            </div>
-
-            {datasetId && (
-              <div className="grid gap-2">
-                <Label>Version</Label>
-                <DatasetVersions
-                  datasetId={datasetId}
-                  value={version}
-                  onValueChange={setVersion}
-                  container={contentRef}
-                />
-              </div>
-            )}
+            </Field>
           </div>
 
-          <TargetSelector
-            targetType={targetType}
-            setTargetType={setTargetType}
-            targetId={targetId}
-            setTargetId={setTargetId}
-            container={contentRef}
-          />
+          <ol className="list-none">
+            <PipelineStep index={1} done={Boolean(datasetId)}>
+              <div className="grid grid-cols-[1fr_140px] gap-3">
+                <Field>
+                  <FieldLabel>Dataset</FieldLabel>
+                  <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
+                </Field>
+                {datasetId && (
+                  <Field>
+                    <FieldLabel>Version</FieldLabel>
+                    <DatasetVersions
+                      datasetId={datasetId}
+                      value={version}
+                      onValueChange={setVersion}
+                      container={contentRef}
+                    />
+                  </Field>
+                )}
+              </div>
+              {datasetId && itemCount !== undefined && (
+                <Txt variant="meta" tone="muted">
+                  {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                </Txt>
+              )}
+            </PipelineStep>
 
-          <ScorerSelector
-            selectedScorers={selectedScorers}
-            setSelectedScorers={setSelectedScorers}
-            disabled={isRunning}
-            container={contentRef}
-          />
-
-          {hasSchema ? (
-            <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
-          ) : (
-            <div className="space-y-2">
-              <Label>Request Context (JSON, optional)</Label>
-              <CodeEditor
-                value={requestContextRaw}
-                onChange={setRequestContextRaw}
-                showCopyButton={false}
-                className="min-h-[80px]"
+            <PipelineStep index={2} done={Boolean(targetId)}>
+              <TargetSelector
+                targetType={targetType}
+                setTargetType={setTargetType}
+                targetId={targetId}
+                setTargetId={setTargetId}
+                container={contentRef}
               />
-            </div>
-          )}
+              {targetType && !targetId && (
+                <Txt variant="meta" tone="muted">
+                  Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
+                </Txt>
+              )}
+            </PipelineStep>
+
+            <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
+              <ScorerSelector
+                selectedScorers={effectiveScorers}
+                setSelectedScorers={setSelectedScorers}
+                disabled={isRunning}
+                container={contentRef}
+                helperText={
+                  usesDatasetDefaults
+                    ? "Pre-filled from the dataset's default scorers."
+                    : 'Scores are computed after each item runs.'
+                }
+              />
+            </PipelineStep>
+          </ol>
+
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
+              <ChevronRight className="size-4" />
+              Request Context (JSON, optional)
+              {hasRequestContext && (
+                <Badge size="xs" variant="blue">
+                  set
+                </Badge>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              {hasSchema ? (
+                <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
+              ) : (
+                <CodeEditor
+                  value={requestContextRaw}
+                  onChange={setRequestContextRaw}
+                  showCopyButton={false}
+                  aria-label="Request context JSON"
+                  className="min-h-[160px]"
+                />
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="px-6 pt-4">
-          <Button onClick={handleClose} disabled={isRunning}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
+        <DialogFooter>
+          <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
+            {missing.length === 0 ? (
+              <>
+                <Badge variant="success" indicator="dot">
+                  Ready
+                </Badge>
+                <Txt as="span" variant="meta" tone="muted">
+                  {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
+                </Txt>
+              </>
+            ) : (
+              <Badge variant="neutral" indicator="dot">
+                Missing {missing.join(', ')}
+              </Badge>
+            )}
+          </p>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleRun} disabled={!canRun}>
             {isRunning ? (
               <>
                 <Spinner className="h-4 w-4" />
                 Running...
               </>
             ) : (
-              'Run'
+              <>
+                Run
+                <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
+                  <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                  <Kbd size="xs">↵</Kbd>
+                </span>
+              </>
             )}
-          </Button>
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

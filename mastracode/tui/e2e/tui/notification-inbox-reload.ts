@@ -169,7 +169,6 @@ values
     await runtime.waitForScreenText(/E2E notification reload fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Switched to: E2E notification reload fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/low · triage-note · dismissed/i, terminal, 8_000);
     await runtime.waitForScreenText(/low · deployment-success · archived/i, terminal, 8_000);
     await runtime.waitForScreenText(/medium · comment-batch · pending/i, terminal, 8_000);

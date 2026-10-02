@@ -2,10 +2,10 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useDatasets } from '@mastra/playground-ui/domains/datasets';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
-import { useDatasets } from '../hooks/use-datasets';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetComboboxProps {
   value?: string;
@@ -16,6 +16,9 @@ export interface DatasetComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
   container?: ComboboxProps['container'];
 }
 
@@ -28,6 +31,9 @@ export function DatasetCombobox({
   className,
   disabled = false,
   variant,
+  size,
+  'aria-label': ariaLabel,
+  align,
   container,
 }: DatasetComboboxProps) {
   const { data, isLoading, isError, error } = useDatasets();
@@ -65,6 +71,9 @@ export function DatasetCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={size}
+      aria-label={ariaLabel}
+      align={align}
       container={container}
     />
   );

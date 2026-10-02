@@ -247,8 +247,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       result: Promise.resolve({ status: 'completed', exitCode: 0 }),
     });
 
-    await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+    await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:0');
 
+    expect(lifecycleMocks.createMastraCode).toHaveBeenCalledWith({
+      settingsPath: undefined,
+      coAuthor: { name: 'mastracode' },
+    });
     expect(lifecycleMocks.order).toEqual(
       expect.arrayContaining(['diagnostics-start', 'mastracode-create', 'intervals-stop', 'diagnostics-stop']),
     );

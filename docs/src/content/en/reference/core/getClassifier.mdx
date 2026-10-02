@@ -1,0 +1,58 @@
+---
+title: 'Reference: getClassifier() | Core'
+description: 'The getClassifier() method retrieves a classifier that was registered with the Mastra instance using its registration key.'
+packages:
+  - '@mastra/core'
+---
+
+# getClassifier()
+
+The `getClassifier()` method retrieves a classifier that was registered with the Mastra instance using its registration key. It throws an error if the requested classifier isn't found.
+
+## Usage example
+
+```typescript
+import { mastra } from './mastra'
+
+const safety = mastra.getClassifier('safety')
+
+const result = await safety.evaluate({
+  state: { content: 'A message to evaluate' },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'The registration key of the classifier to retrieve. This should match a key used when registering classifiers in the Mastra constructor.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'classifier',
+    type: 'Classifier',
+    description: 'The Classifier instance associated with the provided key.',
+  },
+]}
+/>
+
+## Error handling
+
+This method throws a `MastraError` with id `MASTRA_GET_CLASSIFIER_NOT_FOUND` if no classifier is registered under the specified key.
+
+## Related
+
+- [getClassifierById()](/reference/core/getClassifierById): Get a classifier by its id property
+- [listClassifiers()](/reference/core/listClassifiers): Get all registered classifiers
+- [Classifier](/reference/classifier/classifier)

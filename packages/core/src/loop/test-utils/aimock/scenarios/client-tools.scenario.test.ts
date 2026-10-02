@@ -118,7 +118,7 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
       // No execute: the client executes this one and sends the result back.
     });
 
-    const { chunks } = await runLoopScenario({
+    const { chunks, requests } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'Use both tools',
@@ -148,5 +148,10 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
 
     // ...while the client-side tool stays unresolved for the client to complete.
     expect(toolResults.some((c: any) => c.payload?.toolCallId === 'call-browser')).toBe(false);
+
+    // The turn really did end at the pending client call: exactly one model request. Without
+    // this the loop can re-invoke the model on a result nobody produced while the assertions
+    // above still pass (issue #23295 — durable only).
+    expect(requests.length).toBe(1);
   });
 });

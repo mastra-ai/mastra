@@ -8,7 +8,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { createTool } from '@mastra/core/tools';
-import { Workspace } from '@mastra/core/workspace';
+import { LocalFilesystem, resolveToolConfig, Workspace } from '@mastra/core/workspace';
 import type { FilesystemProvider, SandboxProvider, WorkspaceProvider } from '@mastra/core/editor';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -402,6 +402,77 @@ describe('editor.workspace — hydrateSnapshotToWorkspace', () => {
     });
 
     expect(workspace).toBeInstanceOf(Workspace);
+    expect(workspace.getToolsConfig()).toEqual({
+      enabled: true,
+      requireApproval: true,
+      mastra_workspace_read_file: { enabled: true },
+      mastra_workspace_write_file: { enabled: false },
+    });
+  });
+
+  it('round trips stored tool controls and applies per-tool overrides before and after snapshotting', async () => {
+    const { editor } = await createSetup();
+    const tools = {
+      enabled: true,
+      requireApproval: true,
+      tools: {
+        mastra_workspace_write_file: { enabled: false, requireApproval: false, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true, requireApproval: true, requireReadBeforeWrite: false },
+      },
+    };
+    const workspace = await editor.workspace.hydrateSnapshotToWorkspace('ws-tool-controls', {
+      name: 'Tool controls',
+      filesystem: { provider: 'local', config: { basePath: '/tmp/tool-controls' } },
+      tools,
+    });
+    const snapshot = await editor.workspace.snapshotFromWorkspace(workspace);
+    expect(snapshot.tools).toEqual(tools);
+    const restored = await editor.workspace.hydrateSnapshotToWorkspace('ws-restored-controls', snapshot);
+    for (const instance of [workspace, restored]) {
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_write_file')).toMatchObject({
+        enabled: false,
+        requireApproval: false,
+        requireReadBeforeWrite: true,
+      });
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_read_file')).toMatchObject({
+        enabled: true,
+        requireApproval: true,
+        requireReadBeforeWrite: false,
+      });
+      expect(await resolveToolConfig(instance.getToolsConfig(), 'mastra_workspace_list_files')).toMatchObject({
+        enabled: true,
+        requireApproval: true,
+      });
+    }
+  });
+
+  it('round trips per-tool-only runtime controls without persisting or invoking dynamic settings', async () => {
+    const { editor } = await createSetup();
+    const dynamic = vi.fn(() => true);
+    const workspace = new Workspace({
+      id: 'ws-runtime-controls',
+      filesystem: new LocalFilesystem({ basePath: '/tmp/runtime-controls' }),
+      tools: {
+        enabled: dynamic,
+        mastra_workspace_write_file: { enabled: false, requireApproval: true, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true, requireApproval: dynamic, maxOutputTokens: 100 },
+      },
+    });
+    const snapshot = await editor.workspace.snapshotFromWorkspace(workspace);
+    expect(snapshot.tools).toEqual({
+      tools: {
+        mastra_workspace_write_file: { enabled: false, requireApproval: true, requireReadBeforeWrite: true },
+        mastra_workspace_read_file: { enabled: true },
+      },
+    });
+    const restored = await editor.workspace.hydrateSnapshotToWorkspace('ws-runtime-restored', snapshot);
+    expect(await resolveToolConfig(restored.getToolsConfig(), 'mastra_workspace_write_file')).toMatchObject({
+      enabled: false,
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    });
+    expect(await editor.workspace.snapshotFromWorkspace(restored)).toEqual(snapshot);
+    expect(dynamic).not.toHaveBeenCalled();
   });
 });
 
@@ -586,6 +657,44 @@ describe('editor.agent — workspace integration', () => {
     const workspace = await agent!.getWorkspace({});
     expect(workspace).toBeInstanceOf(Workspace);
     expect(workspace!.name).toBe('Inline WS');
+  });
+
+  it('should reuse a single stored inline workspace for configs that differ only in key order', async () => {
+    const { editor, storage } = await createSetup();
+
+    await editor.agent.create({
+      id: 'agent-order-a',
+      name: 'Agent A',
+      instructions: 'You are a test agent',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: {
+        type: 'inline',
+        config: {
+          name: 'Inline WS',
+          filesystem: { provider: 'local', config: { basePath: '/tmp/inline-ws' } },
+        },
+      },
+    });
+
+    await editor.agent.create({
+      id: 'agent-order-b',
+      name: 'Agent B',
+      instructions: 'You are a test agent',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: {
+        type: 'inline',
+        // Same config as agent-order-a, but keys inserted in a different order.
+        config: {
+          filesystem: { config: { basePath: '/tmp/inline-ws' }, provider: 'local' },
+          name: 'Inline WS',
+        },
+      },
+    });
+
+    const workspaceStore = await storage.getStore('workspaces');
+    const all = await workspaceStore!.list();
+    const inlineWorkspaces = all.workspaces.filter((ws: { id: string }) => ws.id.startsWith('inline-'));
+    expect(inlineWorkspaces).toHaveLength(1);
   });
 
   it('should create an agent with an ID-referenced workspace', async () => {

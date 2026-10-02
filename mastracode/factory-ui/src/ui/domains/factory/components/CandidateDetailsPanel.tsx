@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { EllipsisVertical, Minimize2, PencilLine } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -9,12 +9,13 @@ import { useRef, useState } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardStatus';
-import type { RunAction } from '../boardRunSpecs';
+import type { CardMove } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import { CardSourceDescription } from './BoardCardDetails';
 import { CardActions } from './BoardCardParts';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CardDetailsPanel } from './CardDetailsPanel';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function CandidateDetailsPanel({
   candidate,
@@ -24,9 +25,7 @@ export function CandidateDetailsPanel({
   projectRepositoryId,
   factoryProjectId,
   menu,
-  defaultAction,
-  disabled,
-  runPending,
+  defaultMove,
   onRun,
 }: {
   candidate: BoardCandidate;
@@ -36,15 +35,14 @@ export function CandidateDetailsPanel({
   projectRepositoryId: string;
   factoryProjectId: string;
   menu: ReactNode;
-  defaultAction: RunAction;
-  disabled: boolean;
-  runPending: boolean;
-  /** Start a run; `prompt` undefined = the action's default prompt. */
-  onRun: (action: RunAction, prompt?: string) => void;
+  defaultMove?: CardMove;
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
+  onRun: (move: CardMove, prompt?: string) => void;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const move = defaultMove;
 
   const closePrompt = () => {
     setPromptOpen(false);
@@ -53,10 +51,10 @@ export function CandidateDetailsPanel({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed || runPending) return;
+    if (!trimmed || move === undefined) return;
     closePrompt();
     morph.closeDetails();
-    onRun(defaultAction, trimmed);
+    onRun(move, trimmed);
   };
 
   return (
@@ -73,7 +71,7 @@ export function CandidateDetailsPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label={`Collapse ${candidate.title}`}
                 onClick={morph.closeDetails}
               >
@@ -85,7 +83,7 @@ export function CandidateDetailsPanel({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-xs"
+                      size="icon-sm"
                       aria-label={`All actions for ${candidate.title}`}
                     >
                       <EllipsisVertical size={13} aria-hidden />
@@ -99,41 +97,37 @@ export function CandidateDetailsPanel({
             </>
           }
           actions={
-            <CardActions
-              actions={[
-                {
-                  label: runPending ? 'Starting…' : defaultAction.label,
-                  disabled: disabled || runPending,
-                  start: () => onRun(defaultAction),
-                },
-              ]}
-              beforeStart={morph.closeDetails}
-            >
-              <Button
-                ref={promptAnchorRef}
-                type="button"
-                variant="outline"
-                size="sm"
-                data-card-morph="reveal"
-                onClick={() => setPromptOpen(true)}
-              >
-                <PencilLine size={13} aria-hidden />
-                Custom prompt…
-              </Button>
-            </CardActions>
+            move === undefined ? undefined : (
+              <CardActions actions={[{ label: move.label, start: () => onRun(move) }]} beforeStart={morph.closeDetails}>
+                <Button
+                  ref={promptAnchorRef}
+                  type="button"
+                  size="sm"
+                  data-card-morph="reveal"
+                  onClick={() => setPromptOpen(true)}
+                >
+                  <PencilLine size={13} aria-hidden />
+                  Custom prompt…
+                </Button>
+              </CardActions>
+            )
           }
         />
       }
     >
-      <ScrollArea className="flex min-h-0 grow flex-col" viewPortClassName="min-h-0 grow">
-        <div className="stream-landing flex flex-col gap-2 p-3">
-          <h3 className="text-ui-smd text-icon6 m-0 font-[550] wrap-anywhere">{candidate.title}</h3>
-          <CardSourceDescription
-            item={candidate}
-            projectRepositoryId={projectRepositoryId}
-            factoryProjectId={factoryProjectId}
-          />
-        </div>
+      <ScrollArea className="flex min-h-0 grow flex-col">
+        <ScrollAreaViewport className="min-h-0 grow">
+          <div className="stream-landing flex flex-col gap-2 p-3">
+            <Txt as="h3" variant="label" tone="ink" className="m-0 font-[550] wrap-anywhere">
+              {candidate.title}
+            </Txt>
+            <CardSourceDescription
+              item={candidate}
+              projectRepositoryId={projectRepositoryId}
+              factoryProjectId={factoryProjectId}
+            />
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
       <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
         <PopoverContent anchor={promptAnchorRef} align="end" className="w-80 p-3">
@@ -161,10 +155,10 @@ export function CandidateDetailsPanel({
               }}
             />
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
+              <Button type="button" variant="ghost" size="sm" onClick={closePrompt}>
                 Cancel
               </Button>
-              <Button type="submit" size="xs" disabled={runPending || !prompt.trim()}>
+              <Button type="submit" size="sm" disabled={!prompt.trim()}>
                 Run
               </Button>
             </div>

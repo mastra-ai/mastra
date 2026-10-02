@@ -36,11 +36,11 @@ describe('buildInsert jsonb encoding', () => {
     expect(JSON.parse(encoded)).toEqual({ text: 'beforeafter' });
   });
 
-  it('strips unpaired surrogates that PostgreSQL rejects with 22P02', () => {
+  it('repairs unpaired surrogates that PostgreSQL rejects with 22P02', () => {
     const encoded = jsonbValue({ traceId: 't1', input: { text: 'a\ud83db' } })!;
 
     expect(LONE_SURROGATE.test(encoded)).toBe(false);
-    expect(JSON.parse(encoded)).toEqual({ text: 'ab' });
+    expect(JSON.parse(encoded)).toEqual({ text: 'a�b' });
   });
 
   it('preserves valid Unicode and escapes', () => {
@@ -48,6 +48,14 @@ describe('buildInsert jsonb encoding', () => {
     const encoded = jsonbValue({ traceId: 't1', input: value })!;
 
     expect(JSON.parse(encoded)).toEqual(value);
+  });
+
+  it('preserves a real backslash before an invalid character and literal Unicode escape text', () => {
+    const input = { path: 'C:\\path\\\uD800-end', literal: String.raw`literal\uD800` };
+    expect(JSON.parse(jsonbValue({ traceId: 't1', input })!)).toEqual({
+      path: 'C:\\path\\�-end',
+      literal: input.literal,
+    });
   });
 
   it('preserves a plain string as a valid JSON scalar', () => {

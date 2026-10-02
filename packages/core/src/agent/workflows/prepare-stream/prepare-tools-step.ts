@@ -60,6 +60,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
         backgroundTaskEnabled,
+        backgroundTaskPolicy: options.backgroundTaskPolicy,
         inputProcessors: options.inputProcessors,
         hooks: options.hooks,
         // Use the resolved execution model so provider-native placeholders

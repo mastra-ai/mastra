@@ -317,6 +317,7 @@ const results = await store.query({
 - Special handling for null and empty values
 - Vector-specific filtering capabilities
 - Datetime values must be in RFC 3339 format
+- `$regex` is translated to Qdrant's full-text match, which matches whole tokens rather than arbitrary regular expressions or substrings (e.g. `{ name: { $regex: "item" } }` doesn't match `"item1"`). On unindexed payload fields, Qdrant versions before v1.19.1 fall back to substring matching
 
 ### Upstash
 

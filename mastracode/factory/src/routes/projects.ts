@@ -3,11 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type {
-  CreateFactoryProjectInput,
-  FactoryProjectsStorage,
-  UpdateFactoryProjectInput,
-} from '../storage/domains/projects/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -15,13 +11,14 @@ import type {
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
-const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
@@ -38,55 +35,6 @@ async function readJson(context: Context): Promise<unknown | undefined> {
   } catch {
     return undefined;
   }
-}
-
-function parseCreateInput(value: unknown): CreateFactoryProjectInput | null {
-  if (!value || typeof value !== 'object') return null;
-  const input = value as Record<string, unknown>;
-  if (typeof input.name !== 'string') return null;
-  const name = input.name.trim();
-  if (!name || name.length > MAX_NAME_LENGTH) return null;
-  if (input.description !== undefined && input.description !== null && typeof input.description !== 'string')
-    return null;
-  const description = typeof input.description === 'string' ? input.description.trim() || null : null;
-  if (description && description.length > MAX_DESCRIPTION_LENGTH) return null;
-  return { name, description };
-}
-
-function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
-  if (!value || typeof value !== 'object') return null;
-  const input = value as Record<string, unknown>;
-  const patch: UpdateFactoryProjectInput = {};
-  if (input.name !== undefined) {
-    if (typeof input.name !== 'string') return null;
-    const name = input.name.trim();
-    if (!name || name.length > MAX_NAME_LENGTH) return null;
-    patch.name = name;
-  }
-  if (input.description !== undefined) {
-    if (input.description !== null && typeof input.description !== 'string') return null;
-    const description = typeof input.description === 'string' ? input.description.trim() || null : null;
-    if (description && description.length > MAX_DESCRIPTION_LENGTH) return null;
-    patch.description = description;
-  }
-  if (input.defaultModelId !== undefined) {
-    const defaultModelId = parseOptionalString(input.defaultModelId, { maxLength: MAX_NAME_LENGTH, nullable: true });
-    if (defaultModelId === false) return null;
-    patch.defaultModelId = defaultModelId ?? null;
-  }
-  if (input.slackWorkItemsEnabled !== undefined) {
-    if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
-    patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
-  }
-  if (input.autoRunEnabled !== undefined) {
-    if (typeof input.autoRunEnabled !== 'boolean') return null;
-    patch.autoRunEnabled = input.autoRunEnabled;
-  }
-  if (input.autoApprovePlans !== undefined) {
-    if (typeof input.autoApprovePlans !== 'boolean') return null;
-    patch.autoApprovePlans = input.autoApprovePlans;
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 function parseConnectionInput(value: unknown): { integrationId: string; installationId: string } | null {
@@ -196,6 +144,24 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
+interface ModelApplySession {
+  thread: {
+    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
+    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
+  };
+}
+
+interface ModelApplyController {
+  getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
+}
+
+function persistedThreadMode(metadata: Record<string, unknown> | null | undefined): string | undefined {
+  if (typeof metadata?.currentModeId === 'string' && metadata.currentModeId) return metadata.currentModeId;
+  const modeKeys = Object.keys(metadata ?? {}).filter(key => key.startsWith('modeModelId_'));
+  if (modeKeys.length !== 1) return undefined;
+  return modeKeys[0]?.slice('modeModelId_'.length) || undefined;
+}
+
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -207,6 +173,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   resolveRepository?: (input: {
     integrationId: string;
     orgId: string;
+    userId: string;
     installationId: string;
     externalId: string;
     slug: string;
@@ -218,8 +185,10 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain — retired sessions drop the refs work items hold on them. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  /** Work-items domain used by session retirement and running-thread model updates. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
+  /** Controller used to reach the thread store behind each active binding. */
+  controller?: ModelApplyController;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -306,8 +275,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
 
   routes(): ApiRoute[] {
     return [
-      registerApiRoute('/web/factory/projects', {
-        method: 'GET',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectList.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectList.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
@@ -316,56 +285,159 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           return context.json({ projects: await (await this.#projects()).list({ orgId: tenant.orgId }) });
         },
       }),
-      registerApiRoute('/web/factory/projects', {
-        method: 'POST',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectCreate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectCreate.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const input = parseCreateInput(await readJson(context));
-          if (!input) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (await this.#projects()).create({ orgId: tenant.orgId, userId: tenant.userId, input });
+          const parsed = FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) return context.json({ error: 'invalid_project' }, 400);
+          const project = await (
+            await this.#projects()
+          ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
           return context.json({ project }, 201);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'GET',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectGet.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectGet.pathSchema.safeParse({ id: context.req.param('id') });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const { id } = parsedPath.data;
           const project = await this.#project(tenant.orgId, id);
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'PATCH',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectUpdate.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
-          const input = parseUpdateInput(await readJson(context));
-          if (!input) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (await this.#projects()).update({ orgId: tenant.orgId, id, input });
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectUpdate.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
+          const project = await (
+            await this.#projects()
+          ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },
       }),
-      registerApiRoute('/web/factory/projects/:id', {
-        method: 'DELETE',
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          const id = context.req.param('id');
-          if (!id || !UUID_RE.test(id)) return context.json({ error: 'Project not found' }, 404);
+          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: 'Organization administrator access is required to update running sessions.',
+              },
+              403,
+            );
+          }
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, parsedPath.data.id);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const modelId = project.defaultModelId;
+          if (!modelId) {
+            return context.json(
+              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
+              400,
+            );
+          }
+          const { workItems, controller } = this.deps;
+          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
+
+          const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
+            binding => binding.status === 'active',
+          );
+          const seen = new Set<string>();
+          const applied: string[] = [];
+          const skipped: Array<{
+            threadId: string;
+            reason:
+              | 'not-running'
+              | 'work-item-missing'
+              | 'stage-inactive'
+              | 'thread-missing'
+              | 'mode-unknown'
+              | 'apply-failed';
+          }> = [];
+
+          for (const binding of bindings) {
+            const key = `${binding.sessionId}:${binding.threadId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
+            if (!item || item.factoryProjectId !== project.id) {
+              skipped.push({ threadId: binding.threadId, reason: 'work-item-missing' });
+              continue;
+            }
+            if (!ACTIVE_RUN_BINDING_STAGES.has(item.stages[0] ?? '')) {
+              skipped.push({ threadId: binding.threadId, reason: 'stage-inactive' });
+              continue;
+            }
+            const session = await controller.getSessionByResource(binding.resourceId);
+            if (!session) {
+              skipped.push({ threadId: binding.threadId, reason: 'not-running' });
+              continue;
+            }
+            const thread = await session.thread.getById({ threadId: binding.threadId });
+            if (!thread) {
+              skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
+              continue;
+            }
+            const modeId = persistedThreadMode(thread.metadata);
+            if (!modeId) {
+              skipped.push({ threadId: binding.threadId, reason: 'mode-unknown' });
+              continue;
+            }
+            try {
+              await session.thread.setSettingOn({
+                threadId: binding.threadId,
+                key: `modeModelId_${modeId}`,
+                value: modelId,
+              });
+              applied.push(binding.threadId);
+            } catch (error) {
+              console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
+              skipped.push({ threadId: binding.threadId, reason: 'apply-failed' });
+            }
+          }
+
+          return context.json({ modelId, applied, skipped });
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectDelete.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectDelete.pathSchema.safeParse({
+            id: context.req.param('id'),
+          });
+          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
+          const { id } = parsedPath.data;
           if (!(await this.#project(tenant.orgId, id))) return context.json({ error: 'Project not found' }, 404);
           for (const handle of await this.#handles()) {
             for (const connection of await handle.connections.list({ orgId: tenant.orgId, factoryProjectId: id })) {
@@ -495,6 +567,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               ? await this.deps.resolveRepository({
                   integrationId: found.connection.integrationId,
                   orgId: tenant.orgId,
+                  userId: tenant.userId,
                   installationId: found.connection.installationId,
                   ...input.repository,
                 })

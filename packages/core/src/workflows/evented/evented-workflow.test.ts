@@ -101,8 +101,7 @@ createWorkflowTestSuite({
   },
 
   beforeAll: async () => {
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
   },
 
   afterAll: async () => {
@@ -495,6 +494,37 @@ describe('Workflow (Evented Engine Specific)', () => {
       const result = await runWorkflow(workflow, id);
       expect(result.status).toBe('success');
       expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('treats a throwing branch condition as falsy and runs the remaining branches', async () => {
+      const id = 'conditional-throwing-condition';
+      const step1 = makeBranchStep('branch1', 5, { first: 1 });
+      const step2 = makeBranchStep('branch2', 5, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [step1, step2],
+      });
+      workflow
+        .branch([
+          [
+            async () => {
+              throw new Error('condition boom');
+            },
+            step1,
+          ],
+          [async () => true, step2],
+        ])
+        .commit();
+
+      const result = await runWorkflow(workflow, id);
+      expect(result.status).toBe('success');
+      expect(result.steps.branch1).toBeUndefined();
+      expect(result.steps.branch2?.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 0, second: 1 });
     });
 
     it('exposes the merged state to the step after the parallel block', async () => {
@@ -1211,6 +1241,68 @@ describe('Workflow (Evented Engine Specific)', () => {
         // Iteration 0 already succeeded and must not run a second time.
         expect(executions).toEqual([1, 2]);
         expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
+  describe('foreach iteration records (issue #24943)', () => {
+    it('does not copy the foreach input array into each iteration record', async () => {
+      const items = Array.from({ length: 5 }, (_, i) => i);
+
+      const seed = createStep({
+        id: 'records-seed',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+        execute: async () => items,
+      });
+      const double = createStep({
+        id: 'records-double',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => inputData * 2,
+      });
+
+      const workflow = createWorkflow({
+        id: 'evented-foreach-records',
+        inputSchema: z.object({}),
+        outputSchema: z.array(z.number()),
+      });
+      workflow.then(seed).foreach(double, { concurrency: 1 }).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-records': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe('success');
+        if (result.status === 'success') {
+          expect(result.result).toEqual([0, 2, 4, 6, 8]);
+        }
+
+        const workflowsStore = await testStorage.getStore('workflows');
+        const record = await workflowsStore?.getWorkflowRunById({
+          runId: run.runId,
+          workflowName: 'evented-foreach-records',
+        });
+        const snapshot = typeof record?.snapshot === 'string' ? JSON.parse(record.snapshot) : record?.snapshot;
+        const stepResult = snapshot?.context?.['records-double'];
+        expect(stepResult?.payload).toEqual(items);
+
+        const foreachOutput = stepResult?.suspendPayload?.__workflow_meta?.foreachOutput;
+        expect(foreachOutput).toHaveLength(items.length);
+        for (const [i, entry] of foreachOutput.entries()) {
+          expect(entry).not.toHaveProperty('payload');
+          expect(entry.status).toBe('success');
+          expect(entry.output).toBe(i * 2);
+        }
       } finally {
         await mastra.stopWorkers();
       }

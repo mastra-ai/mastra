@@ -1,7 +1,9 @@
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { SignalProvider } from '@mastra/core/signals';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 
 import type { MastraCodeState } from './schema.js';
 
@@ -127,6 +129,16 @@ export type MastraCodePluginRuntime = {
    * @experimental see {@link MastraCodePluginRuntime}
    */
   getActiveSession?: () => MastraCodePluginSession | undefined;
+  /**
+   * Borrow the host's persistence when booting a nested controller. Do not close
+   * these instances or run storage maintenance on them; the host owns their lifetime.
+   * Opening the same SQLite files with a plugin-local native library is unsafe.
+   */
+  getStorage?: () => {
+    storage: MastraCompositeStore;
+    storageBackend: 'libsql' | 'pg';
+    vector?: MastraVector;
+  };
 };
 
 export type MastraCodePluginContext = MastraCodePluginRuntime & {

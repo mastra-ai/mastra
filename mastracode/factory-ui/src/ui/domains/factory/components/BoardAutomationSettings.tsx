@@ -21,8 +21,8 @@ function AutomationSwitch({
     <Tooltip>
       <TooltipTrigger
         render={
-          <div className="text-icon3 flex items-center gap-2">
-            <Txt as="span" variant="ui-sm">
+          <div className="text-muted-foreground flex items-center gap-2">
+            <Txt as="span" variant="caption">
               {label}
             </Txt>
             <Switch
@@ -59,7 +59,7 @@ export function BoardAutomationSettings({
         label="Auto-start runs"
         enabled={autoRunEnabled}
         mutation={autoRun}
-        tooltip="On: the Factory starts the runs it picks up itself (new reviews, triage). Off: a run a rule wants to start waits on its card until you click it."
+        tooltip="On: the Factory starts on its own the runs it picks up (new reviews, triage, GitHub events). Off: those runs wait on their card until you click. A card you moved or started yourself never waits. A card from outside the write-access circle always waits for your first gesture."
       />
       <AutomationSwitch
         label="Auto-approve plans"

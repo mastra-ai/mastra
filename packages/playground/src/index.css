@@ -7,22 +7,9 @@
 @layer base {
   :root {
     --top-bar-height: 40px;
-    --color-thumb: var(--surface4);
-    --color-thumb-hover: var(--surface6);
+    --color-thumb: var(--fill);
+    --color-thumb-hover: var(--fill-hover);
     --color-track: transparent;
-
-    /*
-     * Override playground-ui semantic font tokens with locally-bundled fonts.
-     * Studio uses Mona Sans for both display and body.
-     */
-    --font-display:
-      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-      'Noto Color Emoji';
-    --font-body:
-      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-      'Noto Color Emoji';
-    --font-mono:
-      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
     font-feature-settings: 'ss06' on;
@@ -101,9 +88,9 @@ th:has(header) {
     position: absolute;
     inset: -20%;
     background:
-      radial-gradient(ellipse 55% 45% at 25% 30%, rgba(212, 212, 216, 0.09), transparent 65%),
-      radial-gradient(ellipse 50% 40% at 75% 70%, rgba(161, 161, 170, 0.07), transparent 65%),
-      radial-gradient(ellipse 40% 35% at 50% 95%, rgba(244, 244, 245, 0.05), transparent 70%);
+      radial-gradient(ellipse 55% 45% at 25% 30%, var(--gray-alpha-2), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 75% 70%, var(--gray-alpha-1), transparent 65%),
+      radial-gradient(ellipse 40% 35% at 50% 95%, var(--gray-alpha-1), transparent 70%);
     filter: blur(40px);
     animation: starter-drift 28s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     pointer-events: none;
@@ -146,6 +133,41 @@ th:has(header) {
   }
 
   /*
+   * One diagonal light sweep across the landing greeting, timed to land once the
+   * suggested prompts have finished staggering in (last chip ≈ 540ms + 420ms).
+   */
+  /* With a 300% image, 100% → 0% moves the centered band once across the box, left to right. */
+  @keyframes starter-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: 0% 0;
+    }
+  }
+  .starter-shimmer {
+    --shimmer-base: var(--color-muted-foreground);
+    --shimmer-highlight: var(--color-foreground);
+    color: transparent;
+    background-image: linear-gradient(
+      115deg,
+      var(--shimmer-base) 42%,
+      var(--shimmer-highlight) 50%,
+      var(--shimmer-base) 58%
+    );
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: starter-shimmer 1100ms ease-in-out 1000ms both;
+  }
+  .starter-shimmer-ink {
+    --shimmer-base: var(--color-foreground);
+    --shimmer-highlight: var(--color-muted-foreground);
+  }
+
+  /*
    * Agent builder "Your agent is ready" panel — a polished, finite light pass.
    * A soft ambient aurora gently drifts behind the content, while a bright
    * specular highlight sweeps diagonally across the surface once on mount
@@ -163,8 +185,8 @@ th:has(header) {
     position: absolute;
     inset: -25%;
     background:
-      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, rgba(212, 212, 216, 0.14)), transparent 62%),
-      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, rgba(161, 161, 170, 0.1)), transparent 64%);
+      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, var(--gray-alpha-4)), transparent 62%),
+      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, var(--gray-alpha-3)), transparent 64%);
     filter: blur(48px);
     animation: ready-aurora-drift 22s cubic-bezier(0.45, 0, 0.55, 1) infinite;
     pointer-events: none;
@@ -184,9 +206,9 @@ th:has(header) {
     background: linear-gradient(
       105deg,
       transparent 30%,
-      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 44%,
-      var(--ready-sweep-hot, rgba(255, 255, 255, 0.22)) 50%,
-      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 56%,
+      var(--ready-sweep-soft, var(--gray-alpha-2)) 44%,
+      var(--ready-sweep-hot, var(--gray-alpha-5)) 50%,
+      var(--ready-sweep-soft, var(--gray-alpha-2)) 56%,
       transparent 70%
     );
     background-size: 250% 100%;
@@ -215,17 +237,29 @@ th:has(header) {
     animation: starter-enter 560ms var(--ease-out-custom) 200ms both;
   }
 
+  /* Landing → chat: the named composer glides from center to the dock. */
+  ::view-transition-group(agent-chat-composer) {
+    animation-duration: 320ms;
+    animation-timing-function: var(--ease-out-custom);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
     .starter-chip,
+    .starter-shimmer,
     .ready-stage::before,
     .ready-stage-content {
       animation: none;
     }
     .ready-stage-sweep {
       opacity: 0;
+    }
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none;
     }
   }
 }

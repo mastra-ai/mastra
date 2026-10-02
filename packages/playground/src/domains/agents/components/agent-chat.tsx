@@ -1,31 +1,11 @@
+import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { Thread } from '@/lib/ai-ui/thread';
 
 import type { ChatProps } from '@/types';
-
-interface AvailableSuggestedPromptsOptions {
-  suggestedPrompts?: string[];
-  isNewThread?: boolean;
-  isMessagesLoading: boolean;
-}
-
-/**
- * Keeps existing-thread prompts hidden until message history has loaded, so
- * they do not briefly appear before the conversation replaces the welcome UI.
- */
-const getAvailableSuggestedPrompts = ({
-  suggestedPrompts,
-  isNewThread,
-  isMessagesLoading,
-}: AvailableSuggestedPromptsOptions) => {
-  if (isNewThread) return suggestedPrompts;
-  if (isMessagesLoading) return undefined;
-  return suggestedPrompts;
-};
 
 export const AgentChat = ({
   agentId,
@@ -51,13 +31,22 @@ export const AgentChat = ({
   runOptionsSlot?: React.ReactNode;
 }) => {
   const { settings } = useAgentSettings();
-  const requestContext = useMergedRequestContext();
+  const requestContext = useEntityRequestContext('agent', agentId)[0];
 
-  const { data, isLoading: isMessagesLoading } = useAgentMessages({
-    agentId: agentId,
-    threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
-    memory: memory ?? false,
-  });
+  const {
+    data,
+    isLoading: isMessagesLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAgentMessages(
+    {
+      agentId: agentId,
+      threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
+      memory: memory ?? false,
+    },
+    requestContext,
+  );
 
   // Handle scrolling to message after navigation
   useEffect(() => {
@@ -67,9 +56,9 @@ export const AgentChat = ({
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
         if (messageElement) {
           messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-surface4');
+          messageElement.classList.add('bg-muted');
           setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
+            messageElement.classList.remove('bg-muted');
           }, 2000);
         }
       }, 100);
@@ -85,11 +74,10 @@ export const AgentChat = ({
   }
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
-  const availableSuggestedPrompts = getAvailableSuggestedPrompts({
-    suggestedPrompts,
-    isNewThread,
-    isMessagesLoading,
-  });
+
+  const loadOlderMessages = () => {
+    if (!isFetchingNextPage) void fetchNextPage();
+  };
 
   return (
     <ChatProvider
@@ -108,11 +96,14 @@ export const AgentChat = ({
         agentName={agentName ?? ''}
         agentId={agentId}
         threadId={threadId}
-        suggestedPrompts={availableSuggestedPrompts}
+        suggestedPrompts={suggestedPrompts}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
         refreshThreadList={refreshThreadList}
         runOptionsSlot={runOptionsSlot}
+        isHistoryLoading={isMessagesLoading}
+        onLoadPrevious={hasNextPage ? loadOlderMessages : undefined}
+        isLoadingPrevious={isFetchingNextPage}
       />
     </ChatProvider>
   );

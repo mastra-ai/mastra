@@ -30,22 +30,6 @@ describe('TokenBudget', () => {
     expect(container.querySelector('.token-budget-arc')?.getAttribute('stroke-dasharray')).toBe('43.98 43.98');
   });
 
-  it.each([
-    ['messages', 'text-blue-500'],
-    ['memory', 'text-violet-500'],
-    ['warning', 'text-warning1'],
-  ] as const)('colours a %s budget with its own tone', (tone, expected) => {
-    render(<TokenBudget label="Message window" threshold={30_000} tokens={1} tone={tone} />);
-
-    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain(expected);
-  });
-
-  it('reads as a messages budget unless told otherwise', () => {
-    render(<TokenBudget label="Message window" threshold={30_000} tokens={1} />);
-
-    expect(screen.getByRole('meter', { name: 'Message window' }).className).toContain('text-blue-500');
-  });
-
   it('reports a value the meter can actually hold', () => {
     render(<TokenBudget label="Message window" threshold={30_000} tokens={44_000} />);
 

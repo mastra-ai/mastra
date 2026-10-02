@@ -5,7 +5,7 @@ import { createMastraStorageCompositionTests } from './composite-tests';
 import { createObservabilityVNextTests } from './domains/observability-vnext';
 
 // Test InMemoryStore (MockStore)
-createTestSuite(new MockStore());
+createTestSuite(new MockStore(), { scopedTraceDeletion: true });
 
 // Test MastraStorage composition with InMemoryStore backing
 createMastraStorageCompositionTests();

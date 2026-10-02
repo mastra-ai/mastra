@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('parallel tool calls landing at once', () => {
-  it('cascades the rows in one beat at a time instead of dropping them as a block', () => {
+  it('cascades the rows in one beat at a time, then folds them once the third lands', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
@@ -47,6 +47,7 @@ describe('parallel tool calls landing at once', () => {
 
     act(() => void vi.advanceTimersByTime(4000));
 
-    expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(3);
+    expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
   });
 });

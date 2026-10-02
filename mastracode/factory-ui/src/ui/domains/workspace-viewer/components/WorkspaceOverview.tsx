@@ -3,6 +3,7 @@ import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
 
 import type { WorkspaceChanges, WorkspaceFilesListing } from '../../../../api/types';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 interface WorkspaceOverviewProps {
   listing?: WorkspaceFilesListing;
@@ -52,11 +53,11 @@ export function WorkspaceOverview({
     changes.deletions !== undefined;
   const changesStatus = hasChangeStats ? (
     <span className="flex items-center gap-1 font-mono tabular-nums">
-      <span className="text-notice-success/70">+{changes.additions}</span>
-      <span className="text-notice-destructive/70">−{changes.deletions}</span>
+      <span className="text-success-indicator">+{changes.additions}</span>
+      <span className="text-destructive-foreground">−{changes.deletions}</span>
     </span>
   ) : (
-    <span className="text-icon3">{changesLabel}</span>
+    <span className="text-muted-foreground">{changesLabel}</span>
   );
 
   return (
@@ -64,28 +65,28 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowChanges}>
         <FileDiff />
         <span>Changes</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <Txt as="span" variant="meta" className="ml-auto">
           <WorkspaceOverviewStatus loading={changesLoading} error={changesError}>
             {changesStatus}
           </WorkspaceOverviewStatus>
-        </span>
+        </Txt>
       </Button>
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
         <span>Files</span>
-        <span className="text-ui-xs ml-auto font-medium">
+        <Txt as="span" variant="meta" className="ml-auto">
           <WorkspaceOverviewStatus loading={filesLoading} error={filesError}>
-            <span className="text-icon3">{fileLabel}</span>
+            <span className="text-muted-foreground">{fileLabel}</span>
           </WorkspaceOverviewStatus>
-        </span>
+        </Txt>
       </Button>
       {onShowComments ? (
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
           <MessageSquare />
           <span>Comments</span>
-          <span className="text-ui-xs text-icon3 ml-auto font-medium">
+          <Txt as="span" variant="meta" tone="muted" className="ml-auto">
             {commentCount === 0 ? 'None yet' : commentCount}
-          </span>
+          </Txt>
         </Button>
       ) : null}
     </aside>

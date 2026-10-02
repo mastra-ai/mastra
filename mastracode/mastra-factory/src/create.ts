@@ -14,6 +14,7 @@ import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
   attachNeonDatabase,
   createServerProject,
+  ensureProductionEnvironment,
   getDatabaseConnection,
   mintOrgApiKey,
   PlatformApiError,
@@ -325,6 +326,21 @@ async function runPlatformProvisioning({
       throw err;
     }
     envAccumulator.MASTRA_PLATFORM_SECRET_KEY = secretKey;
+
+    const environmentSpinner = p.spinner();
+    environmentSpinner.start('Configuring production environment…');
+    try {
+      envAccumulator.MASTRA_ENVIRONMENT_ID = await ensureProductionEnvironment({
+        token,
+        orgId,
+        projectId: project.id,
+        region: projectRegion,
+      });
+      environmentSpinner.stop('Production environment ready.');
+    } catch (err) {
+      environmentSpinner.stop('Environment setup failed.');
+      throw err;
+    }
 
     // 5-7. Neon attach + poll + connection string.
     const neonSpinner = p.spinner();

@@ -217,6 +217,67 @@ export class DuckDBConnection extends MastraBase {
     }
   }
 
+  /** Delete one bounded retention batch and return the number of rows removed. */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: string;
+    column: string;
+    cutoff: Date;
+    limit: number;
+  }): Promise<number> {
+    const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    if (!identifier.test(tableName) || !identifier.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+
+    const rows = await this.query(
+      `DELETE FROM ${tableName}
+       WHERE rowid IN (
+         SELECT rowid FROM ${tableName}
+         WHERE ${column} < ?
+         ORDER BY ${column}
+         LIMIT ?
+       )
+       RETURNING 1 AS deleted`,
+      [cutoff, limit],
+    );
+    return rows.length;
+  }
+
+  /** Execute parameterized statements atomically using a single DuckDB connection. */
+  async executeTransaction(statements: readonly { sql: string; params?: readonly unknown[] }[]): Promise<void> {
+    if (statements.length === 0) return;
+
+    const connection = await this.getConnection();
+    try {
+      await connection.run('BEGIN TRANSACTION');
+      for (const statement of statements) {
+        const params = statement.params ?? [];
+        if (params.length === 0) {
+          await connection.run(statement.sql);
+          continue;
+        }
+        let paramIndex = 0;
+        const preparedSql = statement.sql.replace(/\?/g, () => `$${++paramIndex}`);
+        const prepared = await connection.prepare(preparedSql);
+        for (let i = 0; i < params.length; i++) {
+          bindParam(prepared, i + 1, params[i]);
+        }
+        await prepared.run();
+      }
+      await connection.run('COMMIT');
+    } catch (error) {
+      await connection.run('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      this.closeConnection(connection);
+    }
+  }
+
   /**
    * Execute multiple SQL statements in order using a single DuckDB connection.
    *

@@ -96,3 +96,8 @@ export async function highlight(code: string, language: string): Promise<ThemedT
 
   return tokens;
 }
+
+export function languageForPath(path: string | undefined): string | undefined {
+  const extension = path?.split('.').pop()?.toLowerCase();
+  return extension ? langAliases[extension] : undefined;
+}

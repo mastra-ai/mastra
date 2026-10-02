@@ -62,7 +62,7 @@ A sandbox constructed with a known `id` resolves that id on `start()`: reconnect
 
 Providers that predate the contract return `void`, which the base class treats as unknown.
 
-Provider implementations plug into the start lifecycle at one of three rungs; the best available wins, and the base class always owns coalescing, status management, the `onStart` hook, and mount processing:
+Providers implement the start lifecycle using one of the following approaches, listed in order of preference. The base class handles concurrent start calls and status management, as well as the `onStart` hook and mount processing:
 
 1. **Acquisition primitives**: implement protected `find()` (side-effect-free lookup by logical id, returning a provider-native handle or `undefined`), `connect(handle)` (wake/resume/adopt), and `create()` (provision fresh) without overriding `start()`. The base orchestrates find → connect → `{ outcome: 'connected' }`, else create → `{ outcome: 'created' }`. The outcome is derived structurally from which branch ran. Used by `E2BSandbox`, `DaytonaSandbox`, and `LocalSandbox`.
 1. **`start()` override returning `SandboxStartResult`**: for providers whose API is a fused get-or-create where decomposition would add round-trips (`PlatformSandbox`, `RailwaySandbox`).
@@ -74,7 +74,7 @@ The result is also forwarded to the `onStart` lifecycle hook as `{ sandbox, outc
 
 ### `onStart` (constructor option)
 
-`onStart` runs inside the start lifecycle, after the sandbox reaches `running` status and before pending mounts are processed. It fires on every start regardless of trigger, whether an explicit call, a lazy `ensureRunning()` from a command, or a revival after the provider replaced the VM. That makes it the seam for once-per-VM setup: branch on `outcome` and probe or run whatever the environment needs.
+`onStart` runs inside the start lifecycle, after the sandbox reaches `running` status and before pending mounts are processed. It fires on every start regardless of trigger, whether an explicit call, a lazy `ensureRunning()` from a command, or a revival after the provider replaced the VM. Use this hook for once-per-VM setup: check `outcome` to decide whether to run setup or check that it already completed.
 
 ```typescript
 new E2BSandbox({
@@ -94,7 +94,7 @@ new E2BSandbox({
 
 Semantics:
 
-- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`. A caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
 - `outcome` distinguishes the branches: `'created'` means this start provisioned a fresh VM (run setup), `'connected'` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
 - Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `outcome: 'created'`.
 - The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.

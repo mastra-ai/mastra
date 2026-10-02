@@ -1,7 +1,10 @@
 import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
+// Imported through the package's public exports on purpose: CI's Changed Test
+// Gate typechecks this file against the base branch (see `paths` below), and
+// `@/exports` keeps exposing the provider wherever its implementation lives.
+import { LinkComponentProvider } from '@/exports';
+import type { LinkComponentProviderProps } from '@/exports';
 
 /**
  * Anchor stub for tests that render components which route through the framework
@@ -25,7 +28,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 // typechecks this file against the base branch, whose `LinkComponentPaths`
 // may not match the head branch's exactly. The assertion tolerates extra
 // keys so the stub can carry entries for both versions.
-const paths: Record<string, (...args: string[]) => string> = {
+const paths: Record<string, (...args: any[]) => string> = {
   agentLink: id => `/agents/${id}`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
@@ -39,7 +42,13 @@ const paths: Record<string, (...args: string[]) => string> = {
   networkLink: id => `/networks/${id}`,
   networkNewThreadLink: id => `/networks/${id}/chat/new`,
   networkThreadLink: (networkId, threadId) => `/networks/${networkId}/chat/${threadId}`,
-  scorerLink: id => `/scorers/${id}`,
+  scorerLink: (id: string, params?: { scoreId?: string; entity?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.entity) query.set('entity', params.entity);
+    if (params?.scoreId) query.set('scoreId', params.scoreId);
+    const search = query.toString();
+    return search ? `/scorers/${id}?${search}` : `/scorers/${id}`;
+  },
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: id => `/cms/scorers/${id}`,
   cmsAgentCreateLink: () => '/cms/agents/create',
@@ -60,11 +69,11 @@ const paths: Record<string, (...args: string[]) => string> = {
   workflowRunLink: (workflowId, runId) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: id => `/datasets/${id}`,
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   // Only used by the base branch's `LinkComponentPaths` (see comment above).
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
+  experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
+  traceLink: (traceId, spanId) => `/traces?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
 };
 
 // eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.

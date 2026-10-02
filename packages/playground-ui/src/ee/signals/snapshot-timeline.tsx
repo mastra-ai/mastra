@@ -4,12 +4,13 @@ import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
 const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
-  selected: 'bg-accent1 border-accent1',
-  'compare-point': 'bg-accent1 border-accent1',
+  selected: 'bg-foreground border-border-strong',
+  'compare-point': 'bg-foreground border-border-strong',
 };
 
 /**
@@ -37,7 +38,7 @@ export function TimelineTrack({
 
   return (
     <div aria-label="Snapshot landmarks" className="relative mx-2 h-12 min-w-40 flex-1" role="group">
-      <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full" />
+      <div aria-hidden="true" className="absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full bg-border" />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
         const grabbed = marker === 'compare-point' && index === grabbedIndex;
@@ -47,9 +48,9 @@ export function TimelineTrack({
             aria-current={marker === 'selected' ? 'true' : undefined}
             aria-label={snapshotTickLabel(snapshot, totalCount)}
             aria-pressed={marker === 'compare-point' ? grabbed : undefined}
-            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 transition-colors ${
-              marker ? MARKER_TICK_CLASSES[marker] : 'border-surface2 bg-surface4 hover:bg-accent1/60'
-            } ${grabbed ? 'ring-accent1/70 ring-2' : ''}`}
+            className={`absolute top-4 size-3.5 -translate-1/2 rounded-full border-2 ${
+              marker ? MARKER_TICK_CLASSES[marker] : 'border-background bg-muted hover:bg-muted-foreground'
+            } ${grabbed ? 'ring-2 ring-foreground' : ''}`}
             data-marker={marker}
             onClick={() => onTickSelect(index)}
             style={{ left: `${positions[index]}%` }}
@@ -59,14 +60,18 @@ export function TimelineTrack({
       })}
       {snapshots.map((snapshot, index) =>
         dayLabels[index] ? (
-          <span
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
+            font="mono"
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
-            className="text-neutral3 absolute top-7 -translate-x-1/2 font-mono text-[10px] tabular-nums"
+            className="absolute top-7 -translate-x-1/2 tabular-nums"
             style={{ left: `${positions[index]}%` }}
           >
             {dayLabels[index]}
-          </span>
+          </Txt>
         ) : null,
       )}
     </div>
@@ -125,15 +130,14 @@ export function SnapshotTimeline({
             onClick={() => onPlayingChange(!isPlaying)}
             size="sm"
             type="button"
-            variant="outline"
+            icon={isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
           >
-            {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <p className="text-neutral4 font-mono text-xs tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" font="mono" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
-        </p>
+        </Txt>
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">

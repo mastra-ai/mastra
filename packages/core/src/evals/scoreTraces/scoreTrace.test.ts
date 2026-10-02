@@ -345,6 +345,26 @@ describe('scoreTrace', () => {
     });
   });
 
+  describe('not-scorable outcome', () => {
+    it('resolves to null and persists nothing when the scorer declares the span not scorable', async () => {
+      const target = { traceId: 'trace-1' };
+      await testContext.setupSuccessfulScenario(target);
+      testContext.mockScorerRun.mockResolvedValue({
+        runId: 'run-123',
+        input: { test: 'input' },
+        output: { test: 'output' },
+        notScorable: { step: 'preprocess', reason: 'no tool call' },
+      });
+
+      const result = await testContext.scoreTraceTarget(target);
+
+      expect(result).toBeNull();
+      expect(testContext.mockScorerRun).toHaveBeenCalledTimes(1);
+      expect(testContext.mockScoresStore.saveScore).not.toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).not.toHaveBeenCalled();
+    });
+  });
+
   describe('error handling', () => {
     it('throws when the trace cannot be found', async () => {
       const target = { traceId: 'nonexistent-trace' };
@@ -603,6 +623,44 @@ describe('scoreTraceBatch', () => {
         }),
       }),
     ]);
+  });
+
+  it('reports not-scorable targets separately from scored and failed ones', async () => {
+    const targets: ScoreTraceBatchTarget[] = [
+      { traceId: 'trace-1', datasetItemId: 'dataset-item-1' },
+      { traceId: 'trace-2', spanId: 'span-2', datasetItemId: 'dataset-item-2' },
+      { traceId: 'trace-3', spanId: 'missing-span', datasetItemId: 'dataset-item-3' },
+    ];
+    await testContext.setupSuccessfulBatchScenario(targets);
+    // trace-3's requested span does not exist, so that target fails.
+    testContext.mockObservabilityStore.getTrace.mockImplementation(async ({ traceId }: { traceId: string }) =>
+      createMockTraceRecord({ traceId, spanId: traceId === 'trace-2' ? 'span-2' : undefined }),
+    );
+    testContext.mockScorerRun.mockImplementation(async (run: { targetTraceId?: string }) =>
+      run.targetTraceId === 'trace-2'
+        ? { runId: 'run-2', input: {}, output: {}, notScorable: { step: 'preprocess', reason: 'no tool call' } }
+        : createMockScorerResult({ runId: 'run-1', input: { test: 'input' }, output: { test: 'output' } }),
+    );
+
+    const result = await testContext.scoreTraceBatchTargets(targets, { batchId: 'batch-1' });
+
+    expect(result).toEqual(
+      expect.objectContaining({ batchId: 'batch-1', scoredCount: 1, notScorableCount: 1, failedCount: 1 }),
+    );
+    expect(result.results).toEqual([
+      expect.objectContaining({ ok: true, index: 0, traceId: 'trace-1', score: expect.any(Object) }),
+      {
+        ok: true,
+        index: 1,
+        traceId: 'trace-2',
+        spanId: 'span-2',
+        datasetItemId: 'dataset-item-2',
+        notScorable: { step: 'preprocess', reason: 'no tool call' },
+      },
+      expect.objectContaining({ ok: false, index: 2, traceId: 'trace-3', error: expect.any(Error) }),
+    ]);
+    expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledWith(expect.objectContaining({ traceId: 'trace-1' }));
   });
 
   it('returns mixed success and failure results without aborting sibling targets', async () => {

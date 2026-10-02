@@ -1,8 +1,10 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export const RootGuards = () => {
   return (
@@ -44,17 +46,22 @@ const OnboardingGuard = () => {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <FactoryWebTelemetry />
+      <Outlet />
+    </>
+  );
 };
 
 function AuthNotConfiguredScreen() {
   return (
-    <div className="bg-surface1 grid h-dvh w-full place-items-center px-6 text-center">
+    <div className="bg-sidebar grid h-dvh w-full place-items-center px-6 text-center">
       <div className="max-w-md space-y-3">
-        <h1 className="text-icon6 text-xl font-semibold">
+        <Txt as="h1" variant="heading" tone="ink" className="font-semibold">
           This MastraCode server has no authentication provider configured
-        </h1>
-        <p className="text-icon3 text-sm leading-6">
+        </Txt>
+        <p className="text-muted-foreground text-sm leading-6">
           MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
           then reload this page.
         </p>
@@ -65,7 +72,7 @@ function AuthNotConfiguredScreen() {
 
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
-    <div className="bg-surface1 flex h-dvh w-full items-center justify-center">
+    <div className="bg-sidebar flex h-dvh w-full items-center justify-center">
       <BrandLoader size="lg" aria-label={label} />
     </div>
   );

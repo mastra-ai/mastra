@@ -10,10 +10,12 @@ import {
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { useMaybeSidebarState } from '@mastra/playground-ui/components/MainSidebar';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import {
   Cpu,
   EyeIcon,
@@ -36,8 +38,6 @@ import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
@@ -52,7 +52,7 @@ type ScopeOption = {
 };
 
 function getRouteValue(item: NavItem, sectionTitle?: string) {
-  return [item.name, item.url, sectionTitle, item.docs?.label, 'path route navigate'].filter(Boolean).join(' ');
+  return [item.name, item.url, sectionTitle, 'path route navigate'].filter(Boolean).join(' ');
 }
 
 function getRouteBadge(sectionTitle?: string) {

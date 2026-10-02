@@ -62,7 +62,7 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
   );
@@ -113,7 +113,7 @@ describe('User sessions sidebar activity', () => {
     await screen.findByRole('status', { name: 'Initializing feature-b' });
   });
 
-  it('resolves the initializing belt once the run that materialized the session finishes', async () => {
+  it('clears the initializing belt once the run that materialized the session finishes', async () => {
     let settled = false;
     const active = new Set(['sess-4']);
     stubProjectAndSessions([]);
@@ -121,7 +121,7 @@ describe('User sessions sidebar activity', () => {
     // stamped `materializedAt` (registered after the base stub — the most
     // recent handler wins).
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
           sessions: [
             makeSession({
@@ -137,7 +137,7 @@ describe('User sessions sidebar activity', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await screen.findByRole('status', { name: 'Agent working in feature-d' });
+    await screen.findByRole('status', { name: 'Initializing feature-d' });
 
     // The run finishes and the server stamps materializedAt; the sessions
     // list refetches on its own cadence.

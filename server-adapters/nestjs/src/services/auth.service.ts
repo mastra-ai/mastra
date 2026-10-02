@@ -1,179 +1,119 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
-import {
-  isProtectedPath,
-  canAccessPublicly,
-  isDevPlaygroundRequest,
-  checkRules,
-  defaultAuthConfig,
-} from '@mastra/server/auth';
-import { Inject, Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
-import type { Request } from 'express';
+import { coreAuthMiddleware, MASTRA_USER_KEY } from '@mastra/server/auth';
+import { ForbiddenException, HttpException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Request, Response } from 'express';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
 import { toWebRequest } from '../utils/to-web-request';
+import { CustomRouteService } from './custom-route.service';
 
-type AuthConfigBridge = {
-  authenticateToken?: (token: string, request: unknown) => Promise<unknown> | unknown;
-  authorizeUser?: (user: unknown, request: unknown) => Promise<boolean> | boolean;
-  authorize?: (path: string, method: string, user: unknown, context: unknown) => Promise<boolean> | boolean;
-  rules?: unknown[];
-};
+export interface AuthenticateOptions {
+  /** Request context that receives the user, auth token, and mapped resource ID. */
+  requestContext?: RequestContext;
+  /** Response used to forward session refresh headers (e.g. Set-Cookie). */
+  response?: Response;
+  /** Force authentication even for publicly accessible paths. */
+  requiresAuth?: boolean;
+  /** Set when `requiresAuth` comes from a matched `server.apiRoutes` entry. */
+  customRoute?: boolean;
+}
 
 /**
  * Service that handles authentication for Mastra routes.
- * Called after route matching to check if auth is required.
+ * Delegates to the shared `coreAuthMiddleware` so NestJS behaves like the
+ * other server adapters (cookie sessions, session refresh, RBAC,
+ * `mapUserToResourceId`).
  */
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-
   constructor(
     @Inject(MASTRA) private readonly mastra: Mastra,
     @Inject(MASTRA_OPTIONS) private readonly options: MastraModuleOptions,
+    @Inject(CustomRouteService) private readonly customRoutes: CustomRouteService,
   ) {}
 
   /**
-   * Check authentication for a request based on the matched route.
+   * Whether Mastra auth should run: module options enable it, or the Mastra
+   * server has auth configured (unless module options explicitly disable it).
+   */
+  isEnabled(): boolean {
+    if (this.options.auth?.enabled === false) return false;
+    return Boolean(this.options.auth?.enabled || this.mastra.getServer()?.auth);
+  }
+
+  /**
+   * Check authentication for a request.
    * Returns the authenticated user if auth succeeds, undefined if no auth required.
    * Throws UnauthorizedException or ForbiddenException if auth fails.
-   *
-   * Type assertions (`as any`) are used because `@mastra/server/auth` types
-   * are Hono-centric. The runtime values work with Express requests.
    */
-  async authenticate(request: Request): Promise<unknown> {
-    const authConfig = this.mastra.getServer()?.auth as AuthConfigBridge | undefined;
-    const customRouteAuthConfig = this.options.customRouteAuthConfig;
-    const method = request.method;
-    const path = request.path;
-
-    // No auth config means no authentication required
+  async authenticate(request: Request, options: AuthenticateOptions = {}): Promise<unknown> {
+    const authConfig = this.mastra.getServer()?.auth as MastraAuthConfig | undefined;
     if (!authConfig) {
       return undefined;
     }
 
-    // `@mastra/server/auth` helpers are typed against the Hono-flavored
-    // MastraAuthConfig. AuthConfigBridge is the Express-flavored equivalent
-    // — runtime-compatible but not structurally assignable. Cast through
-    // unknown to bridge the typing without changing runtime behavior.
-    const helperAuthConfig = authConfig as unknown as MastraAuthConfig;
-
-    const getHeader = (name: string): string | undefined => {
-      const value = request.headers[name.toLowerCase()];
-      return Array.isArray(value) ? value[0] : value;
-    };
-
-    // Check if this is a dev playground request (skip auth in dev mode)
-    if (isDevPlaygroundRequest(path, method, getHeader, helperAuthConfig, customRouteAuthConfig)) {
-      return undefined;
+    const requestContext = options.requestContext ?? new RequestContext();
+    const path = request.path;
+    const method = request.method;
+    let customRouteAuthConfig = this.customRoutes.customRouteAuthConfig;
+    if (options.customRoute && options.requiresAuth !== undefined) {
+      // The custom route was matched by Hono's router, which supports patterns the
+      // shared path matcher does not. Pin its auth requirement to the concrete path.
+      customRouteAuthConfig = new Map(customRouteAuthConfig);
+      customRouteAuthConfig.set(`${method.toUpperCase()}:${path}`, options.requiresAuth);
     }
+    const webRequest = toWebRequest(request);
 
-    // Check if this path needs protection
-    if (!isProtectedPath(path, method, helperAuthConfig, customRouteAuthConfig)) {
-      return undefined;
-    }
-
-    // Check if the route can be accessed publicly
-    if (canAccessPublicly(path, method, helperAuthConfig)) {
-      return undefined;
-    }
-
-    // Auth is required - authenticate the request
-    const token = this.extractToken(request);
-
-    if (!token) {
-      throw new UnauthorizedException('Authentication required');
-    }
-
-    try {
-      // Validate token using Mastra's auth system
-      let user: unknown;
-
-      if (typeof authConfig?.authenticateToken === 'function') {
-        // Match other adapters: pass a Web Request so providers can read
-        // headers/cookies via the fetch Headers API (not Express IncomingMessage).
-        user = await authConfig.authenticateToken(token, toWebRequest(request));
-      } else {
-        throw new Error('No token verification method configured');
-      }
-
-      if (!user) {
-        throw new UnauthorizedException('Invalid or expired token');
-      }
-
-      // Express Request doesn't have a `user` property natively
-      (request as any).user = user;
-
-      // Perform authorization check
-      await this.authorize(request, path, method, user, authConfig);
-
-      return user;
-    } catch (error) {
-      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
-        throw error;
-      }
-      this.logger.error('Authentication error:', error instanceof Error ? error.message : 'Unknown error');
-      throw new UnauthorizedException('Authentication failed');
-    }
-  }
-
-  /**
-   * Check authorization for an authenticated user.
-   * `authConfig` is typed as `any` because `@mastra/server/auth` doesn't
-   * export a standalone type for the auth config object.
-   */
-  private async authorize(
-    request: Request,
-    path: string,
-    method: string,
-    user: unknown,
-    authConfig: AuthConfigBridge,
-  ): Promise<void> {
-    // Client-provided authorizeUser function
-    if (typeof authConfig.authorizeUser === 'function') {
-      const isAuthorized = await authConfig.authorizeUser(user, toWebRequest(request));
-      if (!isAuthorized) {
-        throw new ForbiddenException('Access denied');
-      }
-      return;
-    }
-
-    // Client-provided authorize function
-    if (typeof authConfig.authorize === 'function') {
-      // Build a context object similar to Express adapter
-      const context = {
+    const result = await coreAuthMiddleware({
+      path,
+      method,
+      getHeader: name => {
+        const value = request.headers[name.toLowerCase()];
+        return Array.isArray(value) ? value[0] : value;
+      },
+      mastra: this.mastra,
+      authConfig,
+      customRouteAuthConfig,
+      requestContext,
+      rawRequest: webRequest,
+      token: this.extractToken(request) ?? null,
+      buildAuthorizeContext: () => ({
         get: (key: string) => {
           if (key === 'mastra') return this.mastra;
-          if (key === 'customRouteAuthConfig') return this.options.customRouteAuthConfig;
+          if (key === 'customRouteAuthConfig') return customRouteAuthConfig;
           return undefined;
         },
-        req: toWebRequest(request),
-      };
+        req: webRequest,
+      }),
+      requiresAuth: options.requiresAuth,
+    });
 
-      const isAuthorized = await authConfig.authorize(path, method, user, context);
-      if (!isAuthorized) {
-        throw new ForbiddenException('Access denied');
-      }
-      return;
-    }
-
-    // Custom rule-based authorization
-    if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-      const isAuthorized = await checkRules(authConfig.rules as MastraAuthConfig['rules'], path, method, user);
-      if (!isAuthorized) {
-        throw new ForbiddenException('Access denied');
-      }
-      return;
-    }
-
-    // Default rule-based authorization
-    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-      const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
-      if (!isAuthorized) {
-        throw new ForbiddenException('Access denied');
+    if (result.headers && options.response) {
+      for (const [key, value] of Object.entries(result.headers)) {
+        if (key.toLowerCase() === 'set-cookie') {
+          options.response.append(key, value);
+        } else {
+          options.response.setHeader(key, value);
+        }
       }
     }
+
+    if (result.action === 'error') {
+      const message = typeof result.body.error === 'string' ? result.body.error : 'Access denied';
+      if (result.status === 401) throw new UnauthorizedException(message);
+      if (result.status === 403) throw new ForbiddenException(message);
+      throw new HttpException(result.body, result.status);
+    }
+
+    const user = requestContext.get(MASTRA_USER_KEY);
+    if (user !== undefined) {
+      // Express Request doesn't have a `user` property natively
+      (request as any).user = user;
+    }
+    return user;
   }
 
   /**

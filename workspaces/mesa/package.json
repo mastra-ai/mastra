@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mesadev/sdk": "0.38.0"
+    "@mesadev/sdk": "0.49.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -50,9 +50,13 @@ async function getAvailablePort(): Promise<number> {
 
 async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
   const port = await getAvailablePort();
-  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-    env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
-  });
+  const childProcess = spawn(
+    process.execPath,
+    ['--import', import.meta.resolve('tsx'), path.join(__dirname, '..', '__fixtures__/weather.ts')],
+    {
+      env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
+    },
+  );
 
   let resolved = false;
   await new Promise<void>((resolve, reject) => {
@@ -72,7 +76,7 @@ async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
       console.error(chunk.toString());
     });
     childProcess.stdout?.on('data', chunk => {
-      if (chunk.toString().includes('server is running on SSE')) {
+      if (chunk.toString().includes('Weather server is running at')) {
         resolved = true;
         clearTimeout(timeout);
         resolve();
@@ -123,7 +127,7 @@ describe('MCPClient', () => {
           },
         },
         weather: {
-          url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`), // Use the dynamic port
+          url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`), // Use the dynamic port
         },
       },
     });
@@ -154,7 +158,7 @@ describe('MCPClient', () => {
           },
         },
         weather: {
-          url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+          url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
         },
       });
     });
@@ -257,11 +261,8 @@ describe('MCPClient', () => {
       const serverName = 'weather';
       const resourceUri = 'weather://current';
 
-      const subResult = await mcp.resources.subscribe(serverName, resourceUri);
-      expect(subResult).toEqual({});
-
-      const unsubResult = await mcp.resources.unsubscribe(serverName, resourceUri);
-      expect(unsubResult).toEqual({});
+      await expect(mcp.resources.subscribe(serverName, resourceUri)).resolves.toBeUndefined();
+      await expect(mcp.resources.unsubscribe(serverName, resourceUri)).resolves.toBeUndefined();
     });
 
     it('should receive resource updated notification from a specific server', async () => {
@@ -327,7 +328,7 @@ describe('MCPClient', () => {
         id: 'error-test-client',
         servers: {
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
           nonexistentServer: {
             command: 'nonexistent-command',
@@ -423,7 +424,7 @@ describe('MCPClient', () => {
         id: 'error-test-client',
         servers: {
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
           nonexistentServer: {
             command: 'nonexistent-command',
@@ -478,7 +479,7 @@ describe('MCPClient', () => {
             },
           },
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
         },
       });
@@ -921,7 +922,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-tools',
         servers: {
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -946,7 +947,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-toolsets',
         servers: {
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',
@@ -973,7 +974,7 @@ describe('MCPClient', () => {
         id: 'test-fault-isolation-disconnect',
         servers: {
           weather: {
-            url: new URL(`http://127.0.0.1:${weatherServerPort}/sse`),
+            url: new URL(`http://127.0.0.1:${weatherServerPort}/mcp`),
           },
           brokenServer: {
             command: 'nonexistent-binary-that-does-not-exist',

@@ -3,6 +3,7 @@ import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import type {
   CallSettings,
   IdGenerator,
+  ModelMessage,
   StopCondition as StopConditionV5,
   ToolChoice,
   ToolSet,
@@ -12,7 +13,7 @@ import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { CreatedAgentSignal } from '../agent/signals';
+import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -27,6 +28,7 @@ import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
   ProcessInputStepResult,
@@ -129,6 +131,12 @@ export type StreamInternal = {
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   /** @deprecated Use `runScope.get(STEP_WORKSPACE_KEY)` from `loop/run-scope-keys`. */
   stepWorkspace?: Workspace;
+  /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
+  toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
+  stepModelMessages?: ModelMessage[];
+  /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
+  eagerToolExecutionCoordinator?: import('./workflows/agentic-execution/eager-tool-execution').EagerToolExecutionCoordinator;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
   /** @deprecated Use `runScope.get(DELEGATION_BAILED_KEY)` from `loop/run-scope-keys`. */
   _delegationBailed?: boolean;
@@ -211,6 +219,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageList: MessageList;
   includeRawChunks?: boolean;
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** @internal Forwarded only to the caller-facing output. */
+  hideSignals?: boolean | AgentSignalType[];
   modelSettings?: MastraModelSettings;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
@@ -218,8 +228,14 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
   errorProcessors?: ErrorProcessorOrWorkflow[];
+  /**
+   * Whether the caller configured error processors themselves (constructor or
+   * call-time), excluding framework-supplied defaults. Gates the implicit
+   * retry-cap warning so bare agents with only default processors stay quiet.
+   */
+  hasConfiguredErrorProcessors?: boolean;
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -240,6 +256,13 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    */
   agentVersionId?: string;
   toolCallConcurrency?: ToolCallConcurrency;
+  eagerToolExecution?: boolean;
+  /**
+   * @internal Aborts with the caller's signal and once more when the run ends. Run
+   * internals that must not outlive the run listen here instead of on `options.abortSignal`,
+   * which is the caller's own signal and may be reused across many runs.
+   */
+  runAbortSignal?: AbortSignal;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */
@@ -250,7 +273,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   /**
    * Maximum number of processor-triggered retries allowed for this generation.
    * Input/output processor retries require this to be explicitly set.
-   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
+   * Error processor retries from processAPIError fall back to a safety cap of
+   * `DEFAULT_MAX_PROCESSOR_RETRIES` (3) when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 

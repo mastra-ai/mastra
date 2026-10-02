@@ -7,7 +7,7 @@ description: "Browse Vultr model IDs, capabilities, context windows, and pricing
 
 # <img src="https://models.dev/logos/vultr.svg" alt="Vultr logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vultr
 
-Access 10 Vultr models through Mastra's model router. Authentication is handled automatically using the `VULTR_API_KEY` environment variable.
+Access 15 Vultr models through Mastra's model router. Authentication is handled automatically using the `VULTR_API_KEY` environment variable.
 
 Learn more in the [Vultr documentation](https://api.vultrinference.com/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "vultr/MiniMaxAI/MiniMax-M2.7"
+  model: "vultr/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,103 +46,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "vultr/deepseek-ai/DeepSeek-V4-Flash",
+    "model": "vultr/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 1
+    "inputCost": 0.1,
+    "outputCost": 0.25
   },
   {
-    "model": "vultr/MiniMaxAI/MiniMax-M2.7",
-    "imageInput": false,
+    "model": "vultr/deepseek-v4.1-flash",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "vultr/moonshotai/Kimi-K2.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "vultr/nvidia/DeepSeek-V3.2-NVFP4",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.55,
-    "outputCost": 1.65
-  },
-  {
-    "model": "vultr/nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.13,
-    "outputCost": 0.38
-  },
-  {
-    "model": "vultr/nvidia/Nemotron-Cascade-2-30B-A3B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
     "inputCost": 0.15,
     "outputCost": 0.6
   },
   {
-    "model": "vultr/Qwen/Qwen3.5-397B-A17B",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2
-  },
-  {
-    "model": "vultr/Qwen/Qwen3.6-27B",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.3,
-    "outputCost": 2
-  },
-  {
-    "model": "vultr/XiaomiMiMo/MiMo-V2.5-Pro",
+    "model": "vultr/glm-5.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -150,20 +78,152 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.55,
-    "outputCost": 1.65
+    "inputCost": 0.75,
+    "outputCost": 3
   },
   {
-    "model": "vultr/zai-org/GLM-5.2-FP8",
+    "model": "vultr/glm-5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 393216,
+    "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.85,
-    "outputCost": 3.1
+    "inputCost": 0.75,
+    "outputCost": 3
+  },
+  {
+    "model": "vultr/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.35
+  },
+  {
+    "model": "vultr/glm-5.x-menthol",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  },
+  {
+    "model": "vultr/laguna-s-2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 0.09,
+    "outputCost": 0.18
+  },
+  {
+    "model": "vultr/mimo-v2.6-flash-rl",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.25
+  },
+  {
+    "model": "vultr/mimo-v2.6-pro-rl",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 0.8
+  },
+  {
+    "model": "vultr/minimax-m3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 512000,
+    "inputCost": 0.2,
+    "outputCost": 0.9
+  },
+  {
+    "model": "vultr/muse-glimmer-30b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "vultr/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.1,
+    "outputCost": 0.25
+  },
+  {
+    "model": "vultr/nemotron-3.5-content-safety",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.15
+  },
+  {
+    "model": "vultr/qwen3.8-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 1
+  },
+  {
+    "model": "vultr/qwen3.8-flash-next",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.2
   }
 ]}
 />
@@ -180,7 +240,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.vultrinference.com/v1",
-    id: "vultr/MiniMaxAI/MiniMax-M2.7",
+    id: "vultr/deepseek-v4-flash-0731",
     apiKey: process.env.VULTR_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -198,10 +258,9 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "vultr/zai-org/GLM-5.2-FP8"
-      : "vultr/MiniMaxAI/MiniMax-M2.7";
+      ? "vultr/qwen3.8-flash-next"
+      : "vultr/deepseek-v4-flash-0731";
   }
 });
 ```
-
 

@@ -40,7 +40,6 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, unk
       namespace: record.namespace || 'workflows',
       workflow_name: record.workflow_name,
       run_id: record.run_id,
-      ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
   } else {
     key = getKey(tableName, { id: record.id });

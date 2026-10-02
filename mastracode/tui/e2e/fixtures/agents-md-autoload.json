@@ -1,0 +1,36 @@
+{
+  "fixtures": [
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "turnIndex": 0 },
+      "response": {
+        "toolCalls": [{ "id": "call_directory_core", "name": "find_files", "arguments": { "path": "packages/core/" } }]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "hasToolResult": true, "turnIndex": 1 },
+      "response": { "content": "Core directory listing complete." }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "turnIndex": 2 },
+      "response": {
+        "toolCalls": [{ "id": "call_file_core", "name": "view", "arguments": { "path": "packages/core/package.json" } }]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "hasToolResult": true, "turnIndex": 3 },
+      "response": { "content": "Core file read complete." }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "turnIndex": 4 },
+      "response": {
+        "toolCalls": [
+          { "id": "call_file_deployer", "name": "view", "arguments": { "path": "packages/deployer/package.json" } }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "hasToolResult": true, "turnIndex": 5 },
+      "response": { "content": "Deployer file read complete." }
+    }
+  ]
+}

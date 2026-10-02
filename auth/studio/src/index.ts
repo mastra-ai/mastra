@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type {
   IOrganizationsProvider,
   ISSOProvider,
@@ -31,7 +31,14 @@ export interface StudioUser extends EEUser {
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
   /** Base URL of the Mastra shared API (e.g., https://api.mastra.ai/v1) */
   sharedApiUrl?: string;
-  /** Organization ID that owns this deployed instance. Users not in this org are rejected. */
+  /**
+   * Organization ID that owns this deployed instance. Members are served in
+   * this org whatever org their session is on; non-members are rejected.
+   *
+   * Resolved in order: this option → `MASTRA_ORGANIZATION_ID` env var →
+   * `organizationId` field in `.mastra-project.json` in the current working
+   * directory (written by the CLI when the project is linked to an org).
+   */
   organizationId?: string;
   /**
    * Cookie domain for session cookies (e.g., '.example.com').
@@ -43,6 +50,33 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
 }
 
 const COOKIE_NAME = 'wos-session';
+
+const PROJECT_CONFIG_FILE = '.mastra-project.json';
+
+/**
+ * Read `organizationId` from a project's `.mastra-project.json` in the current
+ * working directory. Used as a last-resort fallback when neither the constructor
+ * option nor `MASTRA_ORGANIZATION_ID` is set — the file is written by the CLI
+ * when a project is linked to a platform organization, so `mastra dev` /
+ * `mastra studio` should honor it locally without requiring the user to also
+ * export the env var. Failures (missing file, malformed JSON, unexpected shape)
+ * are swallowed silently: this is a best-effort fallback, not a hard dependency.
+ */
+function readOrganizationIdFromProjectConfig(): string | undefined {
+  try {
+    const raw = readFileSync(join(process.cwd(), PROJECT_CONFIG_FILE), 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && 'organizationId' in parsed) {
+      const value = (parsed as { organizationId?: unknown }).organizationId;
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
+    }
+  } catch {
+    // no-op: file missing, unreadable, or malformed — fall back to no org id
+  }
+  return undefined;
+}
 
 /**
  * Upper bound for shared-API verification fetches. Matches the platform API
@@ -112,7 +146,11 @@ export class MastraAuthStudio
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
     this.sharedApiUrl = explicitSharedApiUrl || 'https://platform.mastra.ai/v1';
-    this.organizationId = options?.organizationId || process.env.MASTRA_ORGANIZATION_ID;
+    // Prefer explicit config, then env, then `.mastra-project.json` in cwd. The
+    // project-config fallback covers local dev (`pnpm mastra dev`) where the
+    // env var typically isn't exported but the project is linked to an org.
+    this.organizationId =
+      options?.organizationId || process.env.MASTRA_ORGANIZATION_ID || readOrganizationIdFromProjectConfig();
 
     // Strip trailing slash
     if (this.sharedApiUrl.endsWith('/')) {
@@ -525,25 +563,39 @@ export class MastraAuthStudio
     if (!sessionCookie) return false;
 
     try {
-      const me = await this.fetchMe(sessionCookie);
-      if (me?.organizationId === organizationId) {
-        return isAdminRole(me.role);
-      }
-
-      // Not the active org — fall back to /auth/orgs for the per-org role.
-      const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
-        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
-      });
-      if (!res.ok) return false;
-
-      const data = (await res.json()) as {
-        organizations?: Array<{ id: string; role?: string | null }>;
-      };
-      const membership = data.organizations?.find(o => o.id === organizationId);
-      return isAdminRole(membership?.role ?? undefined);
+      return isAdminRole(await this.fetchOrganizationRole(sessionCookie, organizationId));
     } catch {
       return false;
     }
+  }
+
+  private async fetchOrganizationRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
+    const me = await this.fetchMe(sessionCookie);
+    if (me?.organizationId === organizationId) return me.role;
+    return this.fetchMembershipRole(sessionCookie, organizationId);
+  }
+
+  private async fetchMembershipRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
+    const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
+      headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+      signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      organizations?: Array<{ id: string; role?: string | null }>;
+    };
+    return data.organizations?.find(o => o.id === organizationId)?.role ?? undefined;
+  }
+
+  private async asPinnedOrganizationMember(user: StudioUser, sessionCookie: string): Promise<StudioUser> {
+    const pinnedOrganizationId = this.organizationId;
+    if (!pinnedOrganizationId) return user;
+    const sessionAlreadyOnPinnedOrganization = user.organizationId === pinnedOrganizationId;
+    const memberOfPinnedOrganization = user.memberOrgIds?.includes(pinnedOrganizationId) ?? false;
+    if (sessionAlreadyOnPinnedOrganization || !memberOfPinnedOrganization) return user;
+    const roleInPinnedOrganization = await this.fetchMembershipRole(sessionCookie, pinnedOrganizationId);
+    // Role and permissions came with the session's org; RBAC re-derives permissions from the role.
+    return { ...user, organizationId: pinnedOrganizationId, role: roleInPinnedOrganization, permissions: undefined };
   }
 
   // ---------------------------------------------------------------------------
@@ -566,8 +618,11 @@ export class MastraAuthStudio
   }
 
   /** Cache key for a verified credential — hash, never the raw secret. */
-  private verificationKey(kind: 'cookie' | 'bearer', credential: string): string {
-    return createHash('sha256').update(`${kind}:${credential}`).digest('hex');
+  private async verificationKey(kind: 'cookie' | 'bearer', credential: string): Promise<string> {
+    const digest = new Uint8Array(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${kind}:${credential}`)),
+    );
+    return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
   private getCachedVerification(key: string): StudioUser | null {
@@ -622,7 +677,7 @@ export class MastraAuthStudio
    * to validate it and get user info.
    */
   private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('cookie', sessionCookie);
+    const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {
       // Keep the userId → cookie mapping warm for IOrganizationsProvider.
@@ -665,7 +720,7 @@ export class MastraAuthStudio
       // methods (invoked with only a userId) can act on the user's behalf.
       this.rememberUserSession(data.user.id, sessionCookie);
 
-      const user: StudioUser = {
+      const sessionUser: StudioUser = {
         id: data.user.id,
         email: data.user.email,
         name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
@@ -675,6 +730,7 @@ export class MastraAuthStudio
         permissions: data.permissions,
         memberOrgIds: data.memberOrgIds,
       };
+      const user = await this.asPinnedOrganizationMember(sessionUser, sessionCookie);
       // Don't pin brand-new users in the no-org state: org bootstrap runs on
       // the next request, which must re-read /auth/me to see the new org.
       if (user.organizationId) this.cacheVerification(cacheKey, user);
@@ -693,15 +749,15 @@ export class MastraAuthStudio
    * to validate it and get user info (used for CLI tokens).
    */
   private async verifyBearerToken(token: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('bearer', token);
+    const cacheKey = await this.verificationKey('bearer', token);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) return cached;
 
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (this.organizationId) headers['x-organization-id'] = this.organizationId;
       const res = await fetch(`${this.sharedApiUrl}/auth/verify`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
 

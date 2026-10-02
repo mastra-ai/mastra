@@ -17,7 +17,7 @@
 @keyframes memory-sidebar-hover-lock {
   from,
   to {
-    background-color: var(--surface4);
+    background-color: var(--muted);
   }
 }
 

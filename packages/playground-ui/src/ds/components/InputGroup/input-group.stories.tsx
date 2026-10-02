@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, MailIcon, MinusIcon, PlusIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt/Txt';
 import {
   InputGroup,
   InputGroupAddon,
@@ -10,18 +12,13 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof InputGroup> = {
   title: 'Composite/InputGroup',
   component: InputGroup,
   parameters: {
     layout: 'centered',
-  },
-  argTypes: {
-    variant: {
-      control: { type: 'select' },
-      options: ['default', 'filled', 'outline'],
-    },
   },
 };
 
@@ -38,29 +35,17 @@ export const Default: Story = {
   ),
 };
 
-export const Variants: Story = {
+export const WithTextarea: Story = {
   render: () => (
     <div className="flex w-80 flex-col gap-3">
-      <InputGroup variant="default">
+      <InputGroup>
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Default" />
+        <InputGroupInput placeholder="Search" />
       </InputGroup>
-      <InputGroup variant="filled">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Filled" />
-      </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Outline" />
-      </InputGroup>
-      <InputGroup variant="outline">
-        <InputGroupTextarea placeholder="Outline textarea" />
+      <InputGroup>
+        <InputGroupTextarea placeholder="Textarea" />
       </InputGroup>
     </div>
   ),
@@ -172,12 +157,6 @@ export const BlockEndAddon: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex w-80 flex-col gap-3">
-      <InputGroup size="xs">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Extra Small" />
-      </InputGroup>
       <InputGroup size="sm">
         <InputGroupAddon>
           <SearchIcon />
@@ -189,12 +168,6 @@ export const Sizes: Story = {
           <SearchIcon />
         </InputGroupAddon>
         <InputGroupInput placeholder="Medium" />
-      </InputGroup>
-      <InputGroup size="default">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput placeholder="Default" />
       </InputGroup>
       <InputGroup size="lg">
         <InputGroupAddon>
@@ -221,14 +194,16 @@ export const Disabled: Story = {
 
 export const Invalid: Story = {
   render: () => (
-    <div className="w-80">
+    <Field invalid className="w-80">
+      <FieldLabel>Email</FieldLabel>
       <InputGroup>
         <InputGroupAddon>
           <MailIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Invalid" defaultValue="not an email" error />
+        <InputGroupInput placeholder="Invalid" defaultValue="not an email" />
       </InputGroup>
-    </div>
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
   ),
 };
 
@@ -274,37 +249,49 @@ export const NumberWithStepper: Story = {
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
-    <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
+    <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Sidebar
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface1" />
+          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-background p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Main canvas
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface2" />
+          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Card
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface3" />
+          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-popover p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Popover
+        </Txt>
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput placeholder="On bg-surface4" />
+          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents..." />
         </InputGroup>
       </div>
     </div>

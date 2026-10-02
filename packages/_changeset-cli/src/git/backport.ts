@@ -1,8 +1,9 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
-import childProcess from 'node:child_process';
 import { Octokit } from '@octokit/rest';
 import { defineCommand, runMain } from 'citty';
+
+import { runGit } from './runGit';
 
 if (!process.env.GITHUB_TOKEN) {
   throw new Error(`GITHUB_TOKEN environment variable must be set.`);
@@ -52,46 +53,30 @@ async function github({ pull_number, continue: continueAfterCherryPick }: { pull
 
   console.log(`Backport branch name: ${backportBranchName}`);
 
-  childProcess.execSync(`git fetch origin ${baseBranch}`, {
-    stdio: `inherit`,
-  });
+  runGit(['fetch', 'origin', baseBranch]);
 
   try {
-    childProcess.execSync(`git switch "${baseBranch}"`, {
-      stdio: `inherit`,
-    });
-    childProcess.execSync(`git pull origin "${baseBranch}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['switch', '--', baseBranch]);
+    runGit(['pull', 'origin', baseBranch]);
   } catch {}
 
   if (!continueAfterCherryPick) {
     try {
-      childProcess.execSync(`git branch -D "${backportBranchName}"`, {
-        stdio: `inherit`,
-      });
+      runGit(['branch', '-D', '--', backportBranchName]);
     } catch {}
   }
 
   if (continueAfterCherryPick) {
-    childProcess.execSync(`git switch "${backportBranchName}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['switch', '--', backportBranchName]);
 
     try {
-      childProcess.execSync(`git cherry-pick --continue`, {
-        stdio: `inherit`,
-      });
+      runGit(['cherry-pick', '--continue']);
     } catch {}
   } else {
-    childProcess.execSync(`git checkout -b "${backportBranchName}"`, {
-      stdio: `inherit`,
-    });
+    runGit(['checkout', '-b', backportBranchName]);
 
     try {
-      childProcess.execSync(`git cherry-pick -x ${commitSha}`, {
-        stdio: `inherit`,
-      });
+      runGit(['cherry-pick', '-x', commitSha]);
     } catch (err) {
       console.error('[ERROR]: cherry-pick failed', err);
 
@@ -108,9 +93,7 @@ cc @${prDetails.data.user.login}
     }
   }
 
-  childProcess.execSync(`git push origin +${backportBranchName} --force`, {
-    stdio: `inherit`,
-  });
+  runGit(['push', 'origin', `+${backportBranchName}`, '--force']);
 
   const pr = await octokit.pulls.create({
     owner,

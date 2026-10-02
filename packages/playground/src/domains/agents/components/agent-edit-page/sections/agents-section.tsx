@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -49,7 +50,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Controller
         name="agents"
         control={control}
@@ -83,29 +84,32 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-surface3 flex items-center justify-between p-3">
+                <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
-                    <SectionTitle icon={<AgentIcon className="text-accent1" />}>
-                      Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <SectionTitle icon={<AgentIcon className="text-span-agent" />}>
+                      Sub-Agents{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border1 border-t p-3">
+                  <div className="border-t border-border p-3">
                     <div className="flex flex-col gap-2">
-                      <Combobox
-                        multiple
-                        options={options}
-                        value={selectedIds}
-                        onValueChange={handleValueChange}
-                        placeholder="Select sub-agents..."
-                        searchPlaceholder="Search agents..."
-                        emptyText="No agents available"
-                        disabled={isLoading || readOnly}
-                        error={error}
-                      />
+                      <Field invalid={Boolean(error)}>
+                        <Combobox
+                          multiple
+                          aria-label="Agents"
+                          options={options}
+                          value={selectedIds}
+                          onValueChange={handleValueChange}
+                          placeholder="Select sub-agents..."
+                          searchPlaceholder="Search agents..."
+                          emptyText="No agents available"
+                          disabled={isLoading || readOnly}
+                        />
+                        <FieldError>{error}</FieldError>
+                      </Field>
                       {selectedOptions.length > 0 && (
                         <div className="mt-2 flex flex-col gap-3">
                           {selectedOptions.map(agent => (
@@ -113,7 +117,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                               key={agent.value}
                               id={agent.value}
                               name={agent.label}
-                              icon={<AgentIcon className="text-accent1" />}
+                              icon={<AgentIcon className="text-span-agent" />}
                               description={field.value?.[agent.value]?.description || ''}
                               onDescriptionChange={
                                 readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)

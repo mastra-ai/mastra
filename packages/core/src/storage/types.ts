@@ -113,6 +113,16 @@ type StorageListMessagesOptions = {
     metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
+  /**
+   * Whether to compute the total count of matching messages.
+   *
+   * Defaults to `true` to preserve Studio pagination, which relies on `total`.
+   * Callers that only need a bounded window of recent messages (e.g. agent
+   * last-N reads) can pass `false` so the store skips the `COUNT(*)` work and
+   * derives `hasMore` from a single extra row. When `false`, `total` is not a
+   * reliable count and should not be used for pagination math.
+   */
+  includeTotal?: boolean;
 };
 
 /**
@@ -162,7 +172,28 @@ export type StorageListWorkflowRunsInput = {
    */
   page?: number;
   resourceId?: string;
+  /**
+   * Best-effort narrowing filter on the thread id embedded in the snapshot JSON.
+   *
+   * Unlike `resourceId`, the thread id is not a column — it lives inside the
+   * snapshot at one of two locations (see `getSnapshotMemoryInfo` in
+   * `domains/workflows/snapshot-memory-info.ts` for the canonical extraction):
+   * 1. agentic-loop: `context.<suspended step>.suspendPayload.__streamState.messageList.memoryInfo.threadId`
+   * 2. durable loop: `context.input.messageListState.memoryInfo.threadId`
+   *
+   * Adapters MAY ignore this field entirely (returning a superset), but MUST
+   * NOT exclude rows the canonical extraction would match. Callers must
+   * re-verify the thread id on returned rows; most adapters currently ignore
+   * the field and only jsonb/json-capable stores (e.g. pg, libsql) push it down.
+   */
+  threadId?: string;
   status?: WorkflowRunStatus;
+  /**
+   * When true, callers only need run metadata. Adapters MAY reduce each run's
+   * snapshot to `{ status, timestamp }` to avoid loading the full snapshot.
+   * Adapters that ignore this return full snapshots.
+   */
+  summary?: boolean;
 };
 
 export type StorageListThreadsInput = {
@@ -240,15 +271,22 @@ export type StorageCloneThreadInput = {
 };
 
 /**
+ * Output from copying a thread. Message payloads are copied inside the store and
+ * never returned; only the id mapping is produced.
+ */
+export type StorageCopyThreadOutput = {
+  /** The newly created thread */
+  thread: StorageThreadType;
+  /** Map from source message IDs to copied message IDs (used for OM remapping) */
+  messageIdMap?: Record<string, string>;
+};
+
+/**
  * Output from cloning a thread
  */
-export type StorageCloneThreadOutput = {
-  /** The newly created cloned thread */
-  thread: StorageThreadType;
+export type StorageCloneThreadOutput = StorageCopyThreadOutput & {
   /** The messages that were copied to the new thread */
   clonedMessages: MastraDBMessage[];
-  /** Map from source message IDs to cloned message IDs (used for OM remapping) */
-  messageIdMap?: Record<string, string>;
 };
 
 export type StorageResourceType = {
@@ -1179,8 +1217,18 @@ export interface ObservationalMemoryHistoryOptions {
   from?: Date;
   /** Only return records created at or before this date */
   to?: Date;
-  /** Number of records to skip (for pagination) */
+  /** Number of records to skip after filtering and ordering (for pagination) */
   offset?: number;
+  /** Match the literal canonical `<observation-group id="..."` prefix in active or buffered observations. */
+  groupId?: string;
+  /** Only return generations strictly before this generation count. */
+  beforeGeneration?: number;
+  /** Only return generations strictly after this generation count. */
+  afterGeneration?: number;
+  /** Generation ordering. Defaults to DESC (newest first). */
+  sortDirection?: 'ASC' | 'DESC';
+  /** Only return the record with this ID, if it belongs to the requested thread or resource. */
+  recordId?: string;
 }
 
 export interface ObservationalMemoryRecord {
@@ -2535,12 +2583,12 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
+  toolMocks?: DatasetItemToolMock[] | null;
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
+  scorerIds?: string[] | null;
+  requestContext?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  source?: DatasetItemSource | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2560,12 +2608,12 @@ export interface DatasetItemRow {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
-  scorerIds?: string[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
+  toolMocks?: DatasetItemToolMock[] | null;
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy | null;
+  scorerIds?: string[] | null;
+  requestContext?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  source?: DatasetItemSource | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2728,6 +2776,17 @@ export interface DeleteDatasetItemInput {
   filters?: DatasetTenancyFilters;
 }
 
+/**
+ * Permanently scrubs user-supplied content from every SCD-2 row for an item
+ * and from experiment results that reference it, while retaining identity and
+ * versioning skeletons for referential integrity and reproducibility.
+ */
+export interface PurgeDatasetItemInput {
+  id: string;
+  datasetId: string;
+  filters?: DatasetTenancyFilters;
+}
+
 export interface DatasetTenancyFilters {
   organizationId?: string;
   projectId?: string;
@@ -2752,9 +2811,21 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
   name?: string;
 }
 
+export type DatasetOrderByField = 'createdAt' | 'updatedAt' | 'name';
+export type DatasetItemOrderByField = 'createdAt' | 'updatedAt';
+export type ExperimentOrderByField = 'createdAt' | 'status';
+export type ExperimentResultOrderByField = 'startedAt' | 'createdAt';
+
+export interface ListOrderBy<TField extends string> {
+  field?: TField;
+  direction?: ThreadSortDirection;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
   filters?: ListDatasetsFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetOrderByField>;
 }
 
 export interface ListDatasetsOutput {
@@ -2768,6 +2839,8 @@ export interface ListDatasetItemsInput {
   search?: string;
   pagination: StoragePagination;
   filters?: DatasetTenancyFilters;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<DatasetItemOrderByField>;
 }
 
 export interface ListDatasetItemsOutput {
@@ -3123,6 +3196,8 @@ export interface ListExperimentsInput {
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `createdAt DESC`. Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentOrderByField>;
 }
 
 export interface ListExperimentsOutput {
@@ -3134,9 +3209,13 @@ export interface ListExperimentResultsInput {
   experimentId: string;
   traceId?: string;
   status?: ExperimentResultStatus;
+  /** Return only results that have *all* of these tags. Empty/undefined disables the filter. */
+  tags?: string[];
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
+  /** Sort order. Defaults to `startedAt ASC` (execution order). Ties are broken by `id ASC`. */
+  orderBy?: ListOrderBy<ExperimentResultOrderByField>;
 }
 
 export interface ListExperimentResultsOutput {

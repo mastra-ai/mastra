@@ -7,21 +7,24 @@
  *
  *   {
  *     "global": { "allDisabled": true, "disabledServers": ["name"] },
- *     "projects": { "/path/to/project": { "disabledServers": ["name"] } }
+ *     "projects": {
+ *       "/path/to/project": { "serverOverrides": { "name": "enabled" } }
+ *     }
  *   }
  *
- * Disabled names are kept even if the server disappears from config, so a
- * server that is removed and later re-added stays disabled until the user
- * re-enables it.
+ * Project overrides are kept even if the server disappears from config, so a
+ * server that is removed and later re-added keeps its explicit project state.
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 
+export type McpProjectServerOverride = 'enabled' | 'disabled';
+
 interface McpStateFile {
   global?: { allDisabled?: boolean; disabledServers?: string[] };
-  projects?: Record<string, { disabledServers?: string[] }>;
+  projects?: Record<string, { serverOverrides?: Record<string, McpProjectServerOverride>; disabledServers?: string[] }>;
 }
 
 /** Global (all-projects) MCP disable state. */
@@ -66,17 +69,35 @@ function cleanNames(names: unknown): string[] {
   return names.filter((name): name is string => typeof name === 'string');
 }
 
-/** Load the persisted disabled server names for a project. */
-export function loadDisabledServers(projectDir: string): string[] {
-  return cleanNames(readStateFile().projects?.[projectDir]?.disabledServers);
+function cleanProjectOverrides(overrides: unknown): Record<string, McpProjectServerOverride> {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return {};
+  return Object.fromEntries(
+    Object.entries(overrides).filter(
+      (entry): entry is [string, McpProjectServerOverride] => entry[1] === 'enabled' || entry[1] === 'disabled',
+    ),
+  );
 }
 
-/** Persist the disabled server names for a project. */
-export function saveDisabledServers(projectDir: string, disabledServers: string[]): void {
+/** Load project-specific server overrides, migrating legacy disabled names in memory. */
+export function loadProjectServerOverrides(projectDir: string): Record<string, McpProjectServerOverride> {
+  const project = readStateFile().projects?.[projectDir];
+  const overrides = cleanProjectOverrides(project?.serverOverrides);
+  for (const name of cleanNames(project?.disabledServers)) {
+    overrides[name] ??= 'disabled';
+  }
+  return overrides;
+}
+
+/** Persist project-specific server overrides. */
+export function saveProjectServerOverrides(
+  projectDir: string,
+  serverOverrides: Record<string, McpProjectServerOverride>,
+): void {
   const state = readStateFile();
   const projects = state.projects ?? {};
-  if (disabledServers.length > 0) {
-    projects[projectDir] = { disabledServers: [...disabledServers].sort() };
+  const sortedOverrides = Object.fromEntries(Object.entries(serverOverrides).sort(([a], [b]) => a.localeCompare(b)));
+  if (Object.keys(sortedOverrides).length > 0) {
+    projects[projectDir] = { serverOverrides: sortedOverrides };
   } else {
     delete projects[projectDir];
   }

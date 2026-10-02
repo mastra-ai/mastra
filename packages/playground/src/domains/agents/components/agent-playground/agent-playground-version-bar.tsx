@@ -5,20 +5,26 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
@@ -44,17 +50,6 @@ interface AgentPlaygroundVersionBarProps {
   onOpenPr?: () => Promise<void>;
   /** Whether the user is viewing a previous (non-latest) version that can be published */
   isViewingPreviousVersion?: boolean;
-}
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function AgentPlaygroundVersionBar({
@@ -99,14 +94,14 @@ export function AgentPlaygroundVersionBar({
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatTimestamp(v.createdAt)}`,
+          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
-            <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>
+            <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
-            <Badge variant="green">Published</Badge>
+            <Badge variant="success">Published</Badge>
           ) : isDraftVersion ? (
-            <Badge variant="blue">Draft</Badge>
+            <Badge variant="info">Draft</Badge>
           ) : undefined,
         };
       }),
@@ -130,7 +125,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="border-border1 bg-surface3 flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -141,7 +136,7 @@ export function AgentPlaygroundVersionBar({
             className="min-w-0 flex-1"
           />
         ) : (
-          <Txt variant="ui-xs" className="text-neutral3">
+          <Txt variant="meta" tone="muted">
             {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}
@@ -151,9 +146,9 @@ export function AgentPlaygroundVersionBar({
         <Tooltip>
           <TooltipTrigger
             aria-label="Version information"
-            className="text-neutral3 hover:text-neutral5 shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className={cn('shrink-0 rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
           >
-            <Icon size="sm">
+            <Icon size="xs">
               <Info />
             </Icon>
           </TooltipTrigger>
@@ -163,26 +158,26 @@ export function AgentPlaygroundVersionBar({
         </Tooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {readOnly && <Badge variant="yellow">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="blue">Unpublished</Badge>}
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
     actionBar: (
-      <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
+      <div className="flex items-center justify-end border-t border-border bg-card px-3 py-2">
         {showCodeModeActions ? (
-          <ButtonsGroup className="flex-wrap justify-end">
-            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()}>
-              <Icon size="sm">
-                <Download />
-              </Icon>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
               Download JSON
             </Button>
             {canOpenPr ? (
-              <Button variant="primary" size="md" onClick={() => void onOpenPr?.()} title={openPrTitle}>
-                <Icon size="sm">
-                  <GitPullRequest />
-                </Icon>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void onOpenPr?.()}
+                title={openPrTitle}
+                icon={<GitPullRequest />}
+              >
                 Open PR
               </Button>
             ) : (
@@ -194,7 +189,7 @@ export function AgentPlaygroundVersionBar({
                   </>
                 ) : (
                   <>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Save />
                     </Icon>
                     Save to filesystem
@@ -202,11 +197,11 @@ export function AgentPlaygroundVersionBar({
                 )}
               </Button>
             )}
-          </ButtonsGroup>
+          </div>
         ) : readOnly && !isViewingPreviousVersion ? null : (
-          <ButtonsGroup className="flex-wrap justify-end">
-            <ButtonsGroup spacing="close">
-              <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ButtonsGroup>
+              <Button variant="default" onClick={() => onSaveDraft()} disabled={saveDisabled}>
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />
@@ -214,7 +209,7 @@ export function AgentPlaygroundVersionBar({
                   </>
                 ) : (
                   <>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <Save />
                     </Icon>
                     Save New Version
@@ -223,13 +218,13 @@ export function AgentPlaygroundVersionBar({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
+                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
                     <ChevronDown className="size-3.5" />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
-                    <Icon size="sm">
+                    <Icon size="xs">
                       <MessageSquare />
                     </Icon>
                     Save with message
@@ -255,31 +250,28 @@ export function AgentPlaygroundVersionBar({
                 </>
               ) : (
                 <>
-                  <Icon size="sm">
+                  <Icon size="xs">
                     <Check />
                   </Icon>
                   {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
                 </>
               )}
             </Button>
-          </ButtonsGroup>
+          </div>
         )}
 
-        {/* Change message dialog */}
-        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Save New Version</DialogTitle>
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
-            <DialogBody className="py-1">
-              <div className="grid gap-2">
-                <Label htmlFor="change-message">Change message</Label>
+            <DialogBody>
+              <Field>
+                <FieldLabel>Change message</FieldLabel>
                 <Input
-                  id="change-message"
                   placeholder="Describe what changed..."
                   value={changeMessage}
-                  className="focus:ring-white/50"
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -289,18 +281,11 @@ export function AgentPlaygroundVersionBar({
                   disabled={isSavingDraft}
                   autoFocus
                 />
-              </div>
+              </Field>
             </DialogBody>
-            <DialogFooter className="px-6">
-              <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleSaveWithMessage} disabled={isSavingDraft}>
-                <Icon size="sm">
-                  <Save />
-                </Icon>
-                Save Version
-              </Button>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

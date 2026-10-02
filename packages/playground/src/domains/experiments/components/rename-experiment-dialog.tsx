@@ -1,11 +1,20 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export interface RenameExperimentDialogProps {
   experiment: DatasetExperiment;
@@ -22,11 +31,11 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
   const [description, setDescription] = useState(experiment.description ?? '');
   const { updateExperiment } = useDatasetMutations();
 
-  const canSave = Boolean(name.trim()) && !updateExperiment.isPending;
+  const canSave = Boolean(name.trim());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSave || !experiment.datasetId) return;
+    if (!canSave || updateExperiment.isPending || !experiment.datasetId) return;
 
     try {
       await updateExperiment.mutateAsync({
@@ -43,44 +52,40 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange }: Renam
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={updateExperiment.isPending}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Rename Experiment</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="rename-experiment-name">Name *</Label>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel required>Name</FieldLabel>
               <Input
-                id="rename-experiment-name"
+                required
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Enter experiment name"
                 autoFocus
               />
-            </div>
+            </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="rename-experiment-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Input
-                id="rename-experiment-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Enter experiment description (optional)"
               />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={() => onOpenChange(false)} disabled={updateExperiment.isPending}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={!canSave}>
-                {updateExperiment.isPending ? 'Saving...' : 'Save'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+            </Field>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!canSave}>
+              {updateExperiment.isPending ? 'Saving...' : 'Save'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
       </DialogContent>
     </Dialog>
   );

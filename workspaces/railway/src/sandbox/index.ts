@@ -230,6 +230,17 @@ export class RailwaySandbox extends MastraSandbox {
     return this._sandbox;
   }
 
+  /**
+   * The Railway provider sandbox id — the physical, reattachable VM id, as
+   * distinct from the logical `id`. Resolved after connect or create; also
+   * reflects a configured reattach id before start. Persist this to reattach
+   * deterministically later via the `sandboxId` option. Undefined until the
+   * sandbox has been started (or configured to reattach) in this process.
+   */
+  get sandboxId(): string | undefined {
+    return this._sandbox?.id ?? this._sandboxId;
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------

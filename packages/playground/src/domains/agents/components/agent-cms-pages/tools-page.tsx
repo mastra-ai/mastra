@@ -4,8 +4,11 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { PlusIcon, XIcon } from 'lucide-react';
@@ -149,17 +152,18 @@ export function ToolsPage() {
 
   const renderToolEntity = (tool: (typeof options)[number]) => {
     return (
-      <Entity key={tool.value} className="bg-surface2">
+      <Entity key={tool.value} className="bg-background">
         <EntityContent>
-          <EntityName className="text-ui-md! leading-ui-md! font-medium">{tool.label}</EntityName>
+          <EntityName className="! text-subheading!">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
-                canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
+                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-muted-foreground',
+                focusRing,
+                canEditToolDescriptions && 'hover:bg-fill-subtle focus:bg-fill-subtle',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
               onChange={e => handleDescriptionChange(tool.value, e.target.value)}
@@ -180,10 +184,10 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
+            className={cn('rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
             aria-label={`Remove ${tool.label}`}
           >
-            <Icon size="sm">
+            <Icon size="xs">
               <XIcon />
             </Icon>
           </button>
@@ -194,7 +198,7 @@ export function ToolsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 pt-4">
+      <div className="flex flex-col gap-4 pt-4">
         {isToolsLocked && (
           <Notice variant="info" title="Tools are owned by code">
             <Notice.Message>
@@ -218,10 +222,7 @@ export function ToolsPage() {
             {canEditToolMembership && unselectedOptions.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Icon size="sm">
-                      <PlusIcon />
-                    </Icon>
+                  <Button variant="ghost" size="sm" icon={<PlusIcon />}>
                     Add Tools
                   </Button>
                 </PopoverTrigger>
@@ -231,10 +232,16 @@ export function ToolsPage() {
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
+                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
-                      <span className="text-ui-md text-neutral5 font-normal">{tool.label}</span>
-                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
+                      <Txt as="span" tone="ink">
+                        {tool.label}
+                      </Txt>
+                      {tool.description && (
+                        <Txt as="span" variant="meta" tone="muted">
+                          {tool.description}
+                        </Txt>
+                      )}
                     </button>
                   ))}
                 </PopoverContent>

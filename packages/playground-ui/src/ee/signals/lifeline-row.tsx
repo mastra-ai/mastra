@@ -1,10 +1,14 @@
 import { LifelinePoint } from './lifeline-point';
+import { getSignalAreaClass, getSignalColor, getSignalConnectorClass } from './signal-colors';
 import { formatSnapshotCutoff } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
-import { nodeColor } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 const TRACK_HEIGHT = 28;
 const MAX_BAR_HEIGHT = 22;
@@ -39,14 +43,12 @@ export function LifelineRow({
   signalName,
   snapshots,
   positions,
-  hue,
   onThemeSelect,
 }: {
   row: ThemeLifeline;
   signalName: TraceSignalName;
   snapshots: ThemeSnapshot[];
   positions: number[];
-  hue: number;
   onThemeSelect: (selection: ThemeSelection, snapshotIndex: number) => void;
 }) {
   const isPersistent = row.points.length * 2 >= snapshots.length;
@@ -57,15 +59,17 @@ export function LifelineRow({
   return (
     <li
       aria-label={`${row.label}: present in ${row.points.length} of ${snapshots.length} landmarks`}
-      className={`group hover:bg-surface3 flex items-center gap-3 rounded-md transition-colors ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
+      className={`group flex items-center gap-3 rounded-md hover:bg-fill-subtle ${isPersistent ? '' : 'opacity-55 hover:opacity-100'}`}
     >
-      <span
-        className="text-neutral4 group-hover:text-neutral6 w-52 shrink-0 truncate text-right text-xs"
+      <Txt
+        as="span"
+        variant="caption"
+        className={cn(quietTextHoverInGroup, controlStateColorTransition, 'w-52 shrink-0 truncate text-right')}
         title={row.label}
       >
         {row.label}
-      </span>
-      <div className="border-border1 relative mx-2 h-7 min-w-0 flex-1 border-b">
+      </Txt>
+      <div className="relative mx-2 h-7 min-w-0 flex-1 border-b border-border">
         {connectors.length > 0 || segments.length > 0 ? (
           <svg
             aria-hidden="true"
@@ -76,13 +80,14 @@ export function LifelineRow({
             {segments.map(segment => {
               const area = lifelineArea(segment, positions);
               if (!area) return undefined;
-              return <polygon key={`area-${area.key}`} fill={nodeColor(hue)} fillOpacity={0.14} points={area.points} />;
+              return (
+                <polygon key={`area-${area.key}`} className={getSignalAreaClass(signalName)} points={area.points} />
+              );
             })}
             {connectors.map(({ from, to }) => (
               <line
                 key={`${from.snapshotIndex}-${to.snapshotIndex}`}
-                stroke={nodeColor(hue)}
-                strokeOpacity={0.45}
+                className={getSignalConnectorClass(signalName)}
                 strokeWidth={1.2}
                 vectorEffect="non-scaling-stroke"
                 x1={positions[from.snapshotIndex]}
@@ -102,7 +107,7 @@ export function LifelineRow({
               title={title}
               positionPercent={positions[point.snapshotIndex]}
               height={barHeight(point.share)}
-              color={nodeColor(hue)}
+              color={getSignalColor(signalName)}
               onSelect={
                 themeId === undefined
                   ? undefined
@@ -112,9 +117,9 @@ export function LifelineRow({
           );
         })}
       </div>
-      <span className="text-neutral3 w-9 shrink-0 font-mono text-[11px] tabular-nums">
+      <Txt as="span" variant="caption" tone="muted" font="mono" className="w-9 shrink-0 tabular-nums">
         {row.points.length}/{snapshots.length}
-      </span>
+      </Txt>
     </li>
   );
 }

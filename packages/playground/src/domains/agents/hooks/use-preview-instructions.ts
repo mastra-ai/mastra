@@ -1,8 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-
 interface ApiInstructionBlock {
   type: string;
   content?: string;
@@ -28,9 +26,12 @@ function toApiBlocks(blocks: ApiInstructionBlock[]) {
   });
 }
 
-export function usePreviewInstructions(blocks: ApiInstructionBlock[] | undefined, enabled: boolean) {
+export function usePreviewInstructions(
+  blocks: ApiInstructionBlock[] | undefined,
+  enabled: boolean,
+  requestContext?: Record<string, any>,
+) {
   const client = useMastraClient();
-  const requestContext = useMergedRequestContext();
 
   return useQuery({
     queryKey: ['preview-instructions', blocks, requestContext],

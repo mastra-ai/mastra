@@ -1,12 +1,14 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { ChevronLeft, Link2 } from 'lucide-react';
+import { ChevronLeft, Link2, Unplug } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDisconnectConnection } from '../hooks/use-disconnect-connection';
@@ -40,6 +42,7 @@ export const ManageConnectionForm = ({
   const disconnectConnection = useDisconnectConnection();
   const [draft, setDraft] = useState(initialLabel);
   const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
+  const connectionNameField = `${testIdPrefix}-name`;
   const integrationName = titleize(providerId);
 
   const disconnect = () => {
@@ -56,7 +59,7 @@ export const ManageConnectionForm = ({
 
   return (
     <>
-      <DialogBody className="flex flex-col gap-3">
+      <DialogBody>
         {showBack && (
           <Button
             type="button"
@@ -65,60 +68,56 @@ export const ManageConnectionForm = ({
             onClick={onBack}
             aria-label="Back to connections"
             data-testid={`${testIdPrefix}-back`}
-            className="text-neutral3 -mt-1 -ml-1.5 w-fit"
+            className="-mt-1 -ml-1.5 w-fit text-muted-foreground"
+            icon={<ChevronLeft />}
           >
-            <Icon>
-              <ChevronLeft />
-            </Icon>
             Connections
           </Button>
         )}
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="bg-surface4 grid size-14 place-items-center overflow-hidden rounded-xl" aria-hidden>
+          <div className="grid size-14 place-items-center overflow-hidden rounded-xl bg-muted" aria-hidden>
             {iconUrl ? (
               <img src={iconUrl} alt="" className="size-8 object-contain" />
             ) : (
-              <Icon size="lg" className="text-neutral3">
+              <Icon size="lg" className="text-muted-foreground">
                 <Link2 />
               </Icon>
             )}
           </div>
 
           <div className="flex w-full flex-col items-center gap-1.5">
-            <Txt variant="ui-xs" className="text-neutral3">
+            <Txt variant="meta" tone="muted">
               {integrationName} connection
             </Txt>
-            <div className="relative w-full">
-              <Input
-                id={`${testIdPrefix}-input`}
-                variant="filled"
-                size="sm"
-                value={draft}
-                onChange={event => {
-                  setDraft(event.target.value);
-                  rename.scheduleRename(event.target.value);
-                }}
-                disabled={disabled || rename.isPending}
-                placeholder="Unnamed connection"
-                autoFocus
-                aria-label="Connection name"
-                testId={`${testIdPrefix}-input`}
-                className="text-center"
-              />
-              {rename.isPending && (
-                <span className="absolute top-1/2 right-2 -translate-y-1/2">
-                  <Spinner size="sm" aria-label="Saving" data-testid={`${testIdPrefix}-saving`} />
-                </span>
-              )}
-            </div>
-            {rename.error ? (
-              <Txt variant="ui-xs" className="text-red-500">
-                {String(rename.error)}
-              </Txt>
-            ) : null}
+            <Field invalid={Boolean(rename.error)} className="w-full justify-items-center gap-1.5">
+              <div className="relative w-full">
+                <Input
+                  name={connectionNameField}
+                  size="sm"
+                  value={draft}
+                  onChange={event => {
+                    setDraft(event.target.value);
+                    rename.scheduleRename(event.target.value);
+                  }}
+                  disabled={disabled || rename.isPending}
+                  placeholder="Unnamed connection"
+                  autoFocus
+                  aria-label="Connection name"
+                  testId={`${testIdPrefix}-input`}
+                  className="text-center"
+                />
+                {rename.isPending && (
+                  <span className="absolute top-1/2 right-2 -translate-y-1/2">
+                    <Spinner size="sm" aria-label="Saving" data-testid={`${testIdPrefix}-saving`} />
+                  </span>
+                )}
+              </div>
+              <FieldError>{rename.error ? String(rename.error) : null}</FieldError>
+            </Field>
           </div>
 
           <Button
+            icon={<Unplug />}
             type="button"
             variant="ghost"
             onClick={() => setConfirmDisconnectOpen(true)}
@@ -140,9 +139,11 @@ export const ManageConnectionForm = ({
             </AlertDialog.Description>
           </AlertDialog.Header>
           {disconnectConnection.error ? (
-            <Txt variant="ui-xs" className="text-red-500">
-              {String(disconnectConnection.error)}
-            </Txt>
+            <AlertDialog.Body>
+              <div role="alert">
+                <Notice variant="destructive">{String(disconnectConnection.error)}</Notice>
+              </div>
+            </AlertDialog.Body>
           ) : null}
           <AlertDialog.Footer>
             <AlertDialog.Cancel
@@ -152,6 +153,7 @@ export const ManageConnectionForm = ({
               Cancel
             </AlertDialog.Cancel>
             <Button
+              icon={<Unplug />}
               type="button"
               variant="primary"
               onClick={disconnect}

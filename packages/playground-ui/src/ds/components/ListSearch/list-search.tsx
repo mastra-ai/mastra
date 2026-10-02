@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
-import type { InputProps } from '@/ds/components/Input';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { useKeydown } from '@/lib/keyboard';
 
 export type ListSearchProps = {
@@ -9,14 +9,13 @@ export type ListSearchProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
-  size?: InputProps['size'];
+  size?: SearchInputProps['size'];
   /**
    * Optional controlled value. When provided, ListSearch stays in sync with this
    * prop — useful when the parent needs to clear the input programmatically
    * (e.g. from a Reset button). If omitted, ListSearch manages its own state.
    */
   value?: string;
-  variant?: InputProps['variant'];
   /**
    * Opts out of the Cmd/Ctrl+Shift+F focus shortcut. Pass this on secondary
    * instances so two search fields on the same page don't fight over focus.
@@ -31,20 +30,20 @@ export const ListSearch = ({
   debounceMs = 300,
   size,
   value: controlledValue,
-  variant = 'outline',
   shortcutDisabled = false,
 }: ListSearchProps) => {
-  const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useKeydown({
-    'mod+shift+f': () => {
-      if (shortcutDisabled) return;
-      inputRef.current?.focus();
-      inputRef.current?.select();
+  useKeydown(
+    {
+      'mod+shift+f': () => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      },
     },
-  });
+    { enabled: !shortcutDisabled },
+  );
 
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);
@@ -62,32 +61,24 @@ export const ListSearch = ({
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInternalValue(e.target.value);
-      debouncedSearch(e.target.value);
-    },
-    [debouncedSearch],
-  );
-
-  const handleReset = useCallback(() => {
-    setInternalValue('');
-    onSearch('');
+  const searchNowOrDebounced = (next: string) => {
+    setInternalValue(next);
+    if (next) {
+      debouncedSearch(next);
+      return;
+    }
     debouncedSearch.cancel();
-  }, [onSearch, debouncedSearch]);
+    onSearch('');
+  };
 
   return (
-    <SearchFieldBlock
-      name={id}
+    <SearchInput
+      ref={inputRef}
       label={label}
-      labelIsHidden
       placeholder={placeholder}
-      value={internalValue}
-      onChange={handleChange}
-      onReset={handleReset}
       size={size}
-      variant={variant}
-      inputRef={inputRef}
+      value={internalValue}
+      onValueChange={searchNowOrDebounced}
       className="w-full max-w-120"
     />
   );

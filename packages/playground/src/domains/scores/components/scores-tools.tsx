@@ -1,7 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { XIcon } from 'lucide-react';
 
 export type ScoreEntityOption = { value: string; label: string; type: 'AGENT' | 'WORKFLOW' | 'ALL' };
@@ -16,33 +14,34 @@ type ScoresToolsProps = {
 
 export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOptions, isLoading }: ScoresToolsProps) {
   return (
-    <ButtonsGroup>
-      <SelectFieldBlock
-        label="Filter by Entity"
-        labelIsHidden={true}
-        name="select-entity"
-        placeholder="Select..."
-        size="md"
-        options={entityOptions || []}
+    <div className="flex items-center gap-2">
+      <Select
+        value={selectedEntity?.value || ''}
         onValueChange={(val: string) => {
           const entity = entityOptions?.find(entity => entity.value === val);
           if (entity) {
             onEntityChange(entity);
           }
         }}
-        value={selectedEntity?.value || ''}
-        className="min-w-56"
         disabled={isLoading}
-      />
+      >
+        <SelectTrigger aria-label="Filter by Entity" size="md" className="whitespace-nowrap">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {(entityOptions || []).map(option => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {selectedEntity && selectedEntity.value !== 'all' && (
-        <Button onClick={onReset} disabled={isLoading} size="md">
+        <Button onClick={onReset} disabled={isLoading} size="sm" variant="default" icon={<XIcon />}>
           Reset
-          <Icon>
-            <XIcon />
-          </Icon>
         </Button>
       )}
-    </ButtonsGroup>
+    </div>
   );
 }

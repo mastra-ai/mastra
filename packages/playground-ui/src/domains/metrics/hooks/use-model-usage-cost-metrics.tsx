@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { formatCompact } from '../components/metrics-utils';
 import { useMetricsFilters } from './use-metrics-filters';
+import { formatCompactNumber } from '@/lib/cost';
 import { getOrCreate } from '@/lib/map';
 
 export interface ModelUsageRow {
@@ -98,10 +98,10 @@ export function useModelUsageCostMetrics() {
       return Array.from(modelMap.entries())
         .map(([model, vals]) => ({
           model,
-          input: formatCompact(vals.input),
-          output: formatCompact(vals.output),
-          cacheRead: formatCompact(vals.cacheRead),
-          cacheWrite: formatCompact(vals.cacheWrite),
+          input: formatCompactNumber(vals.input),
+          output: formatCompactNumber(vals.output),
+          cacheRead: formatCompactNumber(vals.cacheRead),
+          cacheWrite: formatCompactNumber(vals.cacheWrite),
           cost: vals.cost,
           costUnit: vals.costUnit,
         }))

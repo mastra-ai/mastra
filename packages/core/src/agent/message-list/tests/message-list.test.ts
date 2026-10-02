@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
 import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
@@ -775,7 +774,7 @@ describe('MessageList', () => {
       // msg2
       messages = appendResponseMessages({
         messages,
-        responseMessages: [{ ...msg2, id: randomUUID() }],
+        responseMessages: [{ ...msg2, id: globalThis.crypto.randomUUID() }],
       });
       // Filter out tool invocations with state="call" from expected UI messages
       const expectedUIMessages = messages.map(m => {
@@ -794,7 +793,10 @@ describe('MessageList', () => {
       expect(list.get.all.ui()).toEqual(expectedUIMessages);
 
       // msg3
-      messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
+      messages = appendResponseMessages({
+        messages,
+        responseMessages: [{ id: globalThis.crypto.randomUUID(), ...msg3 }],
+      });
       expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
         expect.objectContaining({
           role: 'user',
@@ -1269,6 +1271,24 @@ describe('MessageList', () => {
         } satisfies MastraDBMessage,
       ]);
     });
+
+    it.each(['https://example.com/leads.csv', 'data:text/csv;base64,bmFtZQpBY21l', 'bmFtZQpBY21l'])(
+      'preserves attachment filenames in UI messages after storage round-trip: %s',
+      data => {
+        const list = new MessageList({ threadId, resourceId }).add(
+          {
+            role: 'user',
+            content: [{ type: 'file', mimeType: 'text/csv', data, filename: 'leads.csv' }],
+          } satisfies VercelCoreMessage,
+          'input',
+        );
+        const restored = new MessageList({ threadId, resourceId }).add(list.get.all.db(), 'memory');
+
+        expect(restored.get.all.aiV5.ui()[0]?.parts).toEqual([
+          expect.objectContaining({ type: 'file', filename: 'leads.csv', mediaType: 'text/csv' }),
+        ]);
+      },
+    );
 
     it('should correctly convert a Mastra V1 MessageType with a file part containing a non-data URL', () => {
       const inputV1Message = {
@@ -2188,7 +2208,7 @@ describe('MessageList', () => {
       ];
       expect(uiMessages).toEqual(expectedMessages);
 
-      let newId = randomUUID();
+      let newId = globalThis.crypto.randomUUID();
       const responseMessages = [
         {
           id: newId,
@@ -2223,7 +2243,7 @@ describe('MessageList', () => {
       ]);
 
       const newClientMessage = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         role: 'user',
         createdAt: new Date(),
         content: 'Do it anyway please',
@@ -2243,14 +2263,14 @@ describe('MessageList', () => {
       );
 
       const responseMessages2 = [
-        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        { id: globalThis.crypto.randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'assistant',
           content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
         },
         {
-          id: randomUUID(),
+          id: globalThis.crypto.randomUUID(),
           role: 'tool',
           content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
         },
@@ -2538,6 +2558,7 @@ describe('MessageList', () => {
             result: 123,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2591,6 +2612,7 @@ describe('MessageList', () => {
             result: 42,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2691,6 +2713,7 @@ describe('MessageList', () => {
             result: 100,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2736,6 +2759,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2783,6 +2807,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2849,6 +2874,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });

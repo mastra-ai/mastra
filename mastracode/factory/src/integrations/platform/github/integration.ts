@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
+import { Octokit } from '@octokit/rest';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -45,6 +46,8 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
+import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
+import { resolveGithubRules } from '../../github/default-rules.js';
 import type {
   GithubIntegration,
   GithubRepositoryPermission,
@@ -152,6 +155,9 @@ type GithubReviewComment = GithubComment & {
 };
 
 const PAGE_SIZE = 30;
+// Open issues list newest-first; missed opens are recent, so a bounded scan
+// keeps each sweep's API cost flat on repositories with a large backlog.
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
 /**
  * Slug of the GitHub App this integration posts as. Platform credentials do not
@@ -215,6 +221,11 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
+  readonly #rules: GithubEventRules;
+
+  get rules(): GithubEventRules {
+    return this.#rules;
+  }
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
@@ -397,6 +408,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = parsePositiveInteger(installation.externalId);
+      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       // Every session materialization requests access; reuse a recent grant
       // instead of re-minting through the Platform each time. The TTL keeps
@@ -495,10 +518,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   constructor(
     options: {
+      /** Replace an event handler, or disable it with null; omitted events keep defaults. */
+      rules?: GithubRuleOverrides;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
     } = {},
   ) {
+    this.#rules = resolveGithubRules(options.rules);
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
@@ -528,7 +554,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#pullRequestReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
     this.#issueReconcileIntervalMs =
-      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
+      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
+      legacyReconcileIntervalMs;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -781,7 +808,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
-          ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+          ? attachGithubIssueReconciler(
+              this,
+              ctx,
+              input => this.fetchIssueState(input),
+              input => this.listOpenIssueStates(input),
+            )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
@@ -901,7 +933,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         state: result.state === 'closed' ? 'closed' : 'open',
         ...(result.state_reason ? { stateReason: result.state_reason } : {}),
         assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
-        labels: (result.labels ?? []).map(label => (typeof label === 'string' ? label : label.name)).filter((name): name is string => Boolean(name)),
+        labels: (result.labels ?? [])
+          .map(label => (typeof label === 'string' ? label : label.name))
+          .filter((name): name is string => Boolean(name)),
         ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.updated_at ? { updatedAt: result.updated_at } : {}),
@@ -909,6 +943,35 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const query = new URLSearchParams({ state: 'open', page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ issues: GithubIssue[] }>(
+        'GET',
+        `${repositoryPath(input.repository, 'issues')}?${query}`,
+      );
+      for (const issue of result.issues) {
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.htmlUrl,
+          state: 'open',
+          assignees: issue.assignees,
+          labels: issue.labels,
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        });
+      }
+      if (result.issues.length < PAGE_SIZE) break;
+    }
+    return issues;
   }
 
   async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
@@ -923,7 +986,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       if (result.comments.length < PAGE_SIZE) break;
     }
     const existing = comments
-      .filter(comment => comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login))
+      .filter(
+        comment =>
+          comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
+      )
       .sort((left, right) => left.id - right.id)[0];
     if (existing) {
       const comment = await this.#client.request<GithubComment>(
@@ -1078,6 +1144,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { labels },
     );
     return result.labels;
+  }
+
+  async removeIssueLabel(_installationId: number, sourceId: string, issueNumber: number, label: string): Promise<void> {
+    const name = label.trim();
+    if (!name) return;
+    await this.#client.request<void>(
+      'DELETE',
+      repositoryPath(sourceId, `issues/${issueNumber}/labels/${encodeURIComponent(name)}`),
+    );
   }
 
   getInstallationOctokit(_installationId: number): ReturnType<GithubIntegration['getInstallationOctokit']> {
@@ -1240,7 +1315,39 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       },
       { actingUserId: input.actingUserId },
     );
-    return parsePullRequest(result);
+    const created = parsePullRequest(result);
+    if (input.actingUserId && input.connection.type === 'app-installation') {
+      try {
+        const user = await this.#fetchUserConnection(input.actingUserId);
+        const login = user.githubUsername;
+        if (user.connected && login) {
+          const { owner, repo } = splitRepository(input.sourceId);
+          const { token } = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
+            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
+          const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
+          const { data } = await octokit.issues.addAssignees({
+            owner,
+            repo,
+            issue_number: result.number,
+            assignees: [login],
+          });
+          if (!data.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+            logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
+          } else {
+            created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
+          }
+        }
+      } catch (error) {
+        logPlatformWarn('Failed to assign the PR opener', {
+          url: created.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return created;
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {

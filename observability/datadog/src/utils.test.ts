@@ -3,9 +3,13 @@
  */
 
 import { SpanType } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { __setObservabilityFeaturesForTest } from './features';
 import { formatInput, formatOutput, getSpanTypeToKind, kindFor, toDate, safeStringify } from './utils';
+
+// features.ts starts capability detection asynchronously. Settle it before
+// applying test overrides so it cannot outlive this suite's environment.
+beforeAll(() => vi.dynamicImportSettled(), 60_000);
 
 describe('kindFor', () => {
   describe('with model-inference-span feature (current hierarchy)', () => {

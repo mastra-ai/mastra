@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest';
 import {
   AUDIT_CATEGORIES,
   auditActionLabel,
-  auditActionsForCategories,
   auditActorLabel,
   auditCategory,
   auditEventBounds,
   auditMetadataPreview,
+  auditNamespacesForCategories,
   auditVisibleMetadata,
   type AuditNamespace,
 } from './auditPresentation';
@@ -55,25 +55,8 @@ describe('audit presentation', () => {
 
   it('treats every selected category as no filter', () => {
     const all = new Set<AuditNamespace>(AUDIT_CATEGORIES.map(category => category.namespace));
-    expect(auditActionsForCategories(all)).toBeUndefined();
-    expect(auditActionsForCategories(new Set<AuditNamespace>(['run']))).toEqual([
-      'factory.run.started',
-      'factory.run.approved',
-      'factory.run.dismissed',
-    ]);
-    expect(auditActionsForCategories(new Set<AuditNamespace>(['intake']))).toEqual([
-      'factory.intake.config_updated',
-      'factory.intake.binding_updated',
-    ]);
-  });
-
-  it('keeps partial category filters within the server action cap', () => {
-    for (const excluded of AUDIT_CATEGORIES) {
-      const selected = new Set<AuditNamespace>(
-        AUDIT_CATEGORIES.filter(category => category !== excluded).map(category => category.namespace),
-      );
-      expect(auditActionsForCategories(selected)?.length).toBeLessThanOrEqual(16);
-    }
+    expect(auditNamespacesForCategories(all)).toBeUndefined();
+    expect(auditNamespacesForCategories(new Set<AuditNamespace>(['agent', 'run']))).toEqual(['run', 'agent']);
   });
 
   it('spans the first and last event, padding a single-event log', () => {

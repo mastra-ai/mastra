@@ -1,14 +1,15 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
-import { cleanProviderId, findProviderById } from '../utils';
-import { ProviderLogo } from './provider-logo';
+import { findProviderById } from '../utils';
 import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMProvidersProps {
@@ -21,6 +22,7 @@ export interface LLMProvidersProps {
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   disabled?: boolean;
+  'aria-label'?: string;
 }
 
 export const LLMProviders = ({
@@ -33,6 +35,7 @@ export const LLMProviders = ({
   onOpenChange,
   container,
   disabled,
+  'aria-label': ariaLabel,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const allProviders = dataProviders?.providers || [];
@@ -53,7 +56,7 @@ export const LLMProviders = ({
           <ProviderLogo providerId={provider.id} size={16} />
           <div
             className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
+              provider.connected ? 'bg-success-indicator' : 'bg-destructive-indicator'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
           />
@@ -62,8 +65,9 @@ export const LLMProviders = ({
       end: provider.docUrl ? (
         <Info
           className={cn(
-            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
-            'hover:text-neutral4 hover:opacity-100',
+            'size-3.5 cursor-pointer opacity-0 transition-opacity duration-100',
+            quietTextHover,
+            'hover:opacity-100',
             'group-data-[highlighted]/item:opacity-100',
           )}
           onClick={(e: MouseEvent<SVGSVGElement>) => {
@@ -104,6 +108,7 @@ export const LLMProviders = ({
       onOpenChange={onOpenChange}
       container={container}
       disabled={disabled}
+      aria-label={ariaLabel}
     />
   );
 };

@@ -1,9 +1,9 @@
 /**
  * BDD coverage for the app-used Factory session and push mutation hooks.
  *
- * Drives the real `postRepositoryGitOp`-backed services + React Query mutations;
+ * Drives the real browser services and React Query mutations;
  * only the network is mocked (MSW). Handlers assert the request bodies so the
- * wire contract with `/web/github/projects/:id/*` stays pinned.
+ * provider-neutral session creation and GitHub-specific push contracts stay pinned.
  */
 import { act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -19,6 +19,7 @@ import { useCreateUserSessionMutation, usePushBranchMutation } from '../useGithu
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
 const PROJECT_URL = `${ORIGIN}/web/github/projects/${PROJECT}`;
+const SESSIONS_URL = `${ORIGIN}/web/source-control/projects/${PROJECT}/sessions`;
 
 describe('git operation mutation hooks', () => {
   it('given a branch and base, when creating a session, then it persists metadata without materializing a worktree', async () => {
@@ -38,7 +39,7 @@ describe('git operation mutation hooks', () => {
       updatedAt: '2026-07-22T00:00:00.000Z',
     };
     server.use(
-      http.post(`${PROJECT_URL}/sessions`, async ({ request }) => {
+      http.post(SESSIONS_URL, async ({ request }) => {
         expect(await request.json()).toEqual({ branch: 'feat-x', baseBranch: 'main' });
         return HttpResponse.json({ session });
       }),
@@ -85,7 +86,7 @@ describe('git operation mutation hooks', () => {
 
   it('given the server rejects with a 400 error body, when the mutation fails, then the error carries the code and status', async () => {
     server.use(
-      http.post(`${PROJECT_URL}/sessions`, () =>
+      http.post(SESSIONS_URL, () =>
         HttpResponse.json({ error: 'invalid_branch', message: 'Invalid branch' }, { status: 400 }),
       ),
     );

@@ -1,12 +1,12 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Bot, CircleAlert, MessageSquare, User, Zap } from 'lucide-react';
+import { Bot, Brain, CircleAlert, Hourglass, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { useFactoryAttention } from '../../../../hooks/useFactoryAttention';
+import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { formatDuration } from '../../../../lib/date';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { boardItemPath } from '../overview';
@@ -32,13 +32,13 @@ function ActorIcon({ by }: { by: string | undefined }) {
           : by.startsWith('factory-')
             ? [Zap, 'a rule']
             : [User, 'a person'];
-  return <Glyph className="text-icon3 size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
+  return <Glyph className="text-muted-foreground size-[13px] shrink-0" aria-label={`Moved by ${label}`} />;
 }
 
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
+      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -68,11 +68,11 @@ function ItemRow({
     <>
       {leading}
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="ui-sm" className="text-icon6 truncate font-medium">
+        <Txt as="span" variant="column" className="text-foreground truncate">
           {title}
         </Txt>
         {subtitle ? (
-          <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
+          <Txt as="span" variant="meta" className="text-muted-foreground truncate">
             {subtitle}
           </Txt>
         ) : null}
@@ -81,7 +81,7 @@ function ItemRow({
       <span className={`${TIMESTAMP} relative shrink-0 text-right`}>
         {unread ? (
           <span
-            className="bg-warning1 absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
+            className="bg-warning-indicator absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
             aria-label="Unread"
           />
         ) : null}
@@ -127,7 +127,7 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
       <button
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} text-ui-xs text-icon3 hover:text-icon5 w-full cursor-pointer`}
+        className={`${PANEL_ROW_LINK} text-meta text-muted-foreground hover:text-foreground w-full cursor-pointer`}
       >
         <span className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}
@@ -222,9 +222,12 @@ export function ActivityFeed({
 }
 
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
-  mention: { Glyph: MessageSquare, tone: 'text-badge-blue-fg', label: 'Mention' },
-  'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
-  activity: { Glyph: MessageSquare, tone: 'text-icon3', label: 'Comment' },
+  mention: { Glyph: MessageSquare, tone: 'text-badge-blue-indicator', label: 'Mention' },
+  'automation-failed': { Glyph: CircleAlert, tone: 'text-destructive-foreground', label: 'Failed run' },
+  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning-foreground', label: 'Suggested run' },
+  'supervisor-finding': { Glyph: Brain, tone: 'text-badge-green-indicator', label: 'Supervisor finding' },
+  activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
+  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning-foreground', label: 'Agent waiting' },
 };
 
 /** What landed. Unread lives at the row's edge instead, so the titles stay aligned. */
@@ -242,7 +245,7 @@ function attentionWhere(item: FactoryAttentionItem): string {
 
 /** Read and archive stay on the attention page — a preview that acts is a second inbox. */
 export function AttentionPreview({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const attention = useFactoryAttention(factoryProjectId, 'open', EXPANDED_ROWS, 'badge');
+  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const items = attention.data?.items ?? [];
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;

@@ -1,0 +1,21 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say the one causes the other. Disable this rule for husbandry or biology prose."
+level: error
+nonword: true
+ignorecase: true
+# "Breeds" is an AI fingerprint for causation given a biological verb: complexity
+# "breeds confusion," inconsistency "breeds distrust," a loose process is "a
+# breeding ground for" bugs. The abstract offspring is the discriminator, so
+# literal breeding (dogs, livestock, mosquitoes) stays quiet; husbandry or
+# biology writing disables the rule. The proverb "familiarity breeds
+# contempt" fires on purpose, since a proverb in technical prose is the same
+# substitution. Every token measured at zero across the Go and Python
+# standard libraries.
+tokens:
+  # --- Abstract offspring: a condition siring another condition.
+  - "\\bbreed(?:s|ing)? (?:confusion|complexity|distrust|mistrust|resentment|frustration|inconsistency|complacency|contempt|cynicism|doubt|errors|bugs|drift|dependence|silos)\\b"
+
+  # --- The nursery: a place where the offspring hatch ("a breeding ground
+  # for subtle bugs").
+  - "\\bbreeding ground for\\b"

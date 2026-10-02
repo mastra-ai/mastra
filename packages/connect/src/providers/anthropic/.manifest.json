@@ -1,0 +1,25 @@
+{
+  "providerId": "anthropic",
+  "localId": "anthropic",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-22T15:55:52.809Z",
+  "toolCount": 12,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "c469317f6ce59735481a10bd760d2c8c235230abc012f53d23767d3353f309b8",
+    "tools.ts": "64bbc3fe27171e76d522115175d06fc9530bd410c5c1fff1cc750f0f495178ad",
+    "tools/cancel-message-batch.ts": "5be79d5a5c9b613c938dd1fcebb674a78861e004a36a0f779c03a3bcee8fc769",
+    "tools/count-message-tokens.ts": "bf8099927302b14358264a2969e8da67ae7f5fec7dd0d884d3de49ed65b61da7",
+    "tools/create-message-batch.ts": "cde76dd791eef75a1aa017d3a2e0b2622c3bb7010eadae046085f473a1c95754",
+    "tools/create-message.ts": "ac583714186407fd7bae9ba6f99ada7789d20a76c12de2755eaef57567f20b2c",
+    "tools/delete-file.ts": "3d357c6e2e44f2003b0fedfa3240c7a34fbdd26278c012e37835466ad290a808",
+    "tools/get-file.ts": "441594056f970614bded0b3f0b5513ed9d491ede56cca39fcb421277088f7f7e",
+    "tools/get-message-batch.ts": "ef9c18a8459216ce10ca13c51f7e6892d9b31a1f0d536e5f13b7fcaec2f379d0",
+    "tools/get-model.ts": "9c60bde212a7e4cb23abea8f4365cf9969f0a0496394a4522c81f8ae82780bf0",
+    "tools/list-files.ts": "be542a2fd95a1817c3aa6f10e057756f057643b508a5eb229766e9268eee5e2a",
+    "tools/list-message-batch-results.ts": "91d5eafe780cfc32aaa23e283807c662ff51a60624aa92c920406c414ef8d06d",
+    "tools/list-message-batches.ts": "05089b67720fdca66b9c13ed989ba716bc702cb34cc35ab999616ee842730d9f",
+    "tools/list-models.ts": "9c9d85eac3958cded431d6fba555df6d775d215148a5e87bc307b02928f6ba05"
+  }
+}

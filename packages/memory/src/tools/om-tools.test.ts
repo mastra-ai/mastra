@@ -188,7 +188,7 @@ describe('om-tools', () => {
       expect(result.messages).not.toContain('Cursor does not belong to the active thread');
     });
 
-    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
+    it('should name the other thread for cross-thread cursors in resource scope', async () => {
       await memory.saveThread({
         thread: {
           id: 'other-thread',
@@ -218,12 +218,13 @@ describe('om-tools', () => {
         resourceId,
         cursor: 'other-1',
         threadScope: threadId,
+        retrievalScope: 'resource',
       });
 
       expect(result.count).toBe(0);
       expect(result.messages).toContain('Cursor does not belong to the active thread');
       expect(result.messages).toContain('Pass threadId="other-thread"');
-      expect(result.messages).toContain('omit threadId and use this cursor directly in resource scope');
+      expect(result.messages).not.toContain('omit threadId');
     });
 
     it('should return a hint when cursor is a colon-delimited range', async () => {
@@ -963,19 +964,35 @@ describe('om-tools', () => {
       ).rejects.toThrow('Could not resolve cursor message');
     });
 
-    it('should return a helpful message for cross-thread cursors in strict thread scope', async () => {
+    it('should not disclose the other thread for cross-thread cursors in strict thread scope', async () => {
+      // Thread scope fails closed with the same generic error as an unresolvable cursor,
+      // so probing message IDs reveals nothing about other threads.
+      await expect(
+        recallMessages({
+          memory: memory as any,
+          threadId: 'different-thread',
+          resourceId,
+          cursor: 'owner-msg-1',
+          threadScope: 'different-thread',
+        }),
+      ).rejects.toThrow('Could not resolve cursor message: owner-msg-1');
+    });
+
+    it('should name the other thread for cross-thread cursors when resource scope is explicit', async () => {
       const result = await recallMessages({
         memory: memory as any,
         threadId: 'different-thread',
         resourceId,
         cursor: 'owner-msg-1',
         threadScope: 'different-thread',
+        retrievalScope: 'resource',
       });
 
       expect(result.count).toBe(0);
       expect(result.messages).toContain('Cursor does not belong to the active thread');
-      expect(result.messages).toContain('different-thread');
       expect(result.messages).toContain(threadId);
+      expect(result.messages).toContain(`Pass threadId="${threadId}"`);
+      expect(result.messages).not.toContain('omit threadId');
     });
 
     it('should allow cursor from same resource in resource scope', async () => {
@@ -1001,7 +1018,8 @@ describe('om-tools', () => {
       ).rejects.toThrow('Could not resolve cursor message');
     });
 
-    it('should allow recallPart to resolve a cursor from another thread in the same resource', async () => {
+    // Seeds a sibling thread that belongs to the *same* resource as `threadId`.
+    const seedSameResourceSiblingThread = async () => {
       await memory.saveThread({
         thread: {
           id: 'same-resource-other-thread',
@@ -1024,12 +1042,31 @@ describe('om-tools', () => {
           },
         ],
       });
+    };
+
+    it('should reject recallPart cursor from another thread when a thread scope is set', async () => {
+      await seedSameResourceSiblingThread();
+
+      await expect(
+        recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          threadScope: threadId,
+          cursor: 'same-resource-other-msg-1',
+          partIndex: 0,
+        }),
+      ).rejects.toThrow('Could not resolve cursor message');
+    });
+
+    it('should allow recallPart to resolve a cursor from another thread in the same resource when no thread scope is set', async () => {
+      await seedSameResourceSiblingThread();
 
       const result = await recallPart({
         memory: memory as any,
-        threadId,
+        threadId: 'same-resource-other-thread',
         resourceId,
-        threadScope: threadId,
+        // no threadScope = resource scope, where cross-thread browsing is allowed
         cursor: 'same-resource-other-msg-1',
         partIndex: 0,
       });
@@ -1057,6 +1094,143 @@ describe('om-tools', () => {
       });
       expect(result.count).toBe(1);
       expect(result.messages).toContain('Owner message');
+    });
+
+    // Regression coverage for https://github.com/mastra-ai/mastra/issues/21863.
+    // The helper-level tests above always pass `resourceId` explicitly, so they never
+    // exercised the tool wiring that dropped it in thread scope. These drive the tool.
+    describe('recall tool scope enforcement (#21863)', () => {
+      it('should not return a cross-resource message body through partIndex in thread scope', async () => {
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'owner-msg-1', partIndex: 0 }, {
+            memory,
+            agent: { threadId: otherThreadId, resourceId: otherResourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should not return a same-resource sibling thread body through partIndex in thread scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 }, {
+            memory,
+            agent: { threadId, resourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should still resolve a cross-thread cursor through partIndex in resource scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 },
+          { memory, agent: { resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-1');
+        expect(result.text).toContain('Same resource other thread message');
+      });
+
+      it('should still resolve a cross-thread cursor through partIndex in resource scope with an active thread', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        // context.agent.threadId is populated on every agent run, so this is the normal
+        // path for partIndex continuation notes, which deliberately omit threadId.
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 0 },
+          { memory, agent: { threadId, resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-1');
+        expect(result.text).toContain('Same resource other thread message');
+      });
+
+      it('should fall back to the next message in the cursor message thread, not the active thread', async () => {
+        await seedSameResourceSiblingThread();
+
+        await memory.saveMessages({
+          messages: [
+            {
+              id: 'same-resource-other-msg-2',
+              threadId: 'same-resource-other-thread',
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Sibling thread follow-up' }] },
+              createdAt: new Date('2024-01-01T12:30:00Z'),
+            },
+            {
+              id: 'active-thread-later-msg',
+              threadId,
+              resourceId,
+              role: 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: 'Active thread later message' }] },
+              createdAt: new Date('2024-01-01T13:00:00Z'),
+            },
+          ],
+        });
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.(
+          { mode: 'messages', cursor: 'same-resource-other-msg-1', partIndex: 99 },
+          { memory, agent: { threadId, resourceId } } as any,
+        );
+
+        expect(result.messageId).toBe('same-resource-other-msg-2');
+        expect(result.text).toContain('Sibling thread follow-up');
+        expect(result.text).not.toContain('Active thread later message');
+      });
+
+      it('should reject a cross-resource cursor outright in thread scope without disclosing anything', async () => {
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'owner-msg-1' }, {
+            memory,
+            agent: { threadId: otherThreadId, resourceId: otherResourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message');
+      });
+
+      it('should not disclose the other thread when refusing a cross-thread cursor in thread scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'thread', searchEnabled: false });
+
+        // Thread scope fails closed with the same generic error as an unresolvable cursor,
+        // so probing message IDs reveals nothing about threads the caller may not browse.
+        await expect(
+          tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1' }, {
+            memory,
+            agent: { threadId, resourceId },
+          } as any),
+        ).rejects.toThrow('Could not resolve cursor message: same-resource-other-msg-1');
+      });
+
+      it('should name the other thread when refusing a cross-thread cursor in resource scope', async () => {
+        await seedSameResourceSiblingThread();
+
+        const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+        const result: any = await tool.execute?.({ mode: 'messages', cursor: 'same-resource-other-msg-1' }, {
+          memory,
+          agent: { threadId, resourceId },
+        } as any);
+
+        expect(result.count).toBe(0);
+        expect(result.messages).toContain('Cursor does not belong to the active thread');
+        expect(result.messages).toContain('Pass threadId="same-resource-other-thread"');
+        expect(result.messages).not.toContain('omit threadId');
+      });
     });
   });
 
@@ -1525,6 +1699,386 @@ describe('om-tools', () => {
 
       expect(result.text).toContain('content from other thread');
       expect(result.messageId).toBe('other-msg');
+    });
+  });
+
+  describe('attachment parts', () => {
+    let memory: Memory;
+    const threadId = 'thread-attachments';
+    const resourceId = 'resource-attachments';
+    const base64Png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const signedUrl = `https://example.invalid/uploads/report.pdf?X-Amz-Signature=${'a1b2c3d4'.repeat(80)}`;
+
+    beforeEach(async () => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { model: 'test-model', scope: 'thread', retrieval: true } } as any,
+      });
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Attachment thread',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:00:00Z'),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-attachments',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'file',
+                  data: 'https://example.invalid/original.png',
+                  mimeType: 'image/png',
+                  filename: 'original.png',
+                } as any,
+                {
+                  type: 'file',
+                  url: 'https://example.invalid/deck.pptx',
+                  mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                },
+                { type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'inline.png' } as any,
+                { type: 'file', data: base64Png, mimeType: 'image/png' } as any,
+                { type: 'file', data: 'file-abc123', mimeType: 'application/pdf', filename: 'uploaded.pdf' } as any,
+                { type: 'file', data: signedUrl, mimeType: 'application/pdf', filename: 'report.pdf' } as any,
+                { type: 'image', image: 'https://example.invalid/photo.png', mimeType: 'image/png' } as any,
+                { type: 'file', data: new URL('https://example.invalid/scan.png'), mimeType: 'image/png' } as any,
+                { type: 'file', data: `DATA:image/png;base64,${base64Png}` } as any,
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'msg-viewed-attachment',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'call-view',
+                    toolName: 'recall',
+                    args: { cursor: 'msg-attachments', partIndex: 2, viewAttachment: true },
+                    result: {
+                      content: [
+                        { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+                        { type: 'file', data: base64Png, mimeType: 'image/png' },
+                      ],
+                    },
+                  },
+                  providerMetadata: {
+                    mastra: {
+                      modelOutput: {
+                        type: 'content',
+                        value: [
+                          { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+                          { type: 'media', data: base64Png, mediaType: 'image/png' },
+                        ],
+                      },
+                    },
+                  },
+                } as any,
+              ],
+            },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+          {
+            id: 'msg-attachments-text',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'look at the attachment' }] },
+            createdAt: new Date('2024-01-01T10:05:00Z'),
+          },
+        ],
+      });
+    });
+
+    const fetchPart = (partIndex: number, charOffset?: number) =>
+      recallPart({ memory: memory as any, threadId, resourceId, cursor: 'msg-attachments', partIndex, charOffset });
+
+    it('returns the stored URL and media type for a URL-backed file part via the recall tool', async () => {
+      const recall = memory.listTools().recall!;
+      const result = await recall.execute?.(
+        { mode: 'messages', cursor: 'msg-attachments', partIndex: 0, detail: 'high' },
+        {
+          memory,
+          agent: { threadId, resourceId },
+        } as any,
+      );
+
+      expect((result as any).text).toBe('[File: original.png] image/png url: https://example.invalid/original.png');
+    });
+
+    it('reads v5-shaped file parts (url/mediaType)', async () => {
+      const result = await fetchPart(1);
+      expect(result.text).toBe(
+        '[File] application/vnd.openxmlformats-officedocument.presentationml.presentation url: https://example.invalid/deck.pptx',
+      );
+    });
+
+    it('omits inline data but keeps the media type', async () => {
+      const dataUri = await fetchPart(2);
+      expect(dataUri.text).toBe('[File: inline.png] image/png (inline data omitted)');
+
+      const rawBase64 = await fetchPart(3);
+      expect(rawBase64.text).toBe('[File] image/png (inline data omitted)');
+    });
+
+    it('returns provider file IDs', async () => {
+      const result = await fetchPart(4);
+      expect(result.text).toBe('[File: uploaded.pdf] application/pdf file id: file-abc123');
+    });
+
+    it('continues a long signed URL across charOffset chunks', async () => {
+      const chunks: string[] = [];
+      let charOffset: number | undefined;
+      do {
+        const chunk = await recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-attachments',
+          partIndex: 5,
+          charOffset,
+          maxTokens: 100,
+        });
+        chunks.push(chunk.text);
+        charOffset = chunk.nextCharOffset;
+      } while (charOffset !== undefined);
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(`[File: report.pdf] application/pdf url: ${signedUrl}`);
+    });
+
+    it('includes references in paged recall and truncates long ones at low detail', async () => {
+      const high = await recallThreadFromStart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        detail: 'high',
+        maxTokens: 10_000,
+      });
+      expect(high.messages).toContain('[p0] [File: original.png] image/png url: https://example.invalid/original.png');
+      expect(high.messages).toContain(signedUrl);
+      expect(high.messages).not.toContain(base64Png);
+
+      const low = await recallThreadFromStart({ memory: memory as any, threadId, resourceId, detail: 'low' });
+      expect(low.messages).toContain('url: https://example.invalid/original.png');
+      expect(low.messages).not.toContain(signedUrl);
+      expect(low.messages).toContain('recall cursor="msg-attachments" partIndex=5 detail="high"');
+      expect(low.messages).not.toContain(base64Png);
+    });
+
+    const viewAttachment = (partIndex: number, cursor = 'msg-attachments') => {
+      const recall = memory.listTools().recall!;
+      return recall.execute?.({ mode: 'messages', cursor, partIndex, viewAttachment: true }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any) as Promise<any>;
+    };
+
+    it('returns the actual media for a data-URI attachment', async () => {
+      await expect(viewAttachment(2)).resolves.toEqual({
+        content: [
+          { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+          { type: 'file', data: base64Png, mimeType: 'image/png' },
+        ],
+      });
+    });
+
+    it('returns the actual media for a raw base64 attachment', async () => {
+      await expect(viewAttachment(3)).resolves.toEqual({
+        content: [
+          { type: 'text', text: '[File] image/png (inline data omitted)' },
+          { type: 'file', data: base64Png, mimeType: 'image/png' },
+        ],
+      });
+    });
+
+    it('does not send remote attachments, since AI SDK v5 providers cannot take a URL in a tool result', async () => {
+      const cases: Array<[number, string]> = [
+        [0, '[File: original.png] image/png url: https://example.invalid/original.png'],
+        [5, `[File: report.pdf] application/pdf url: ${signedUrl}`],
+        [6, '[Image] image/png url: https://example.invalid/photo.png'],
+        [7, '[File] image/png url: https://example.invalid/scan.png'],
+      ];
+
+      for (const [partIndex, description] of cases) {
+        const result = await viewAttachment(partIndex);
+        expect(result.content).toBeUndefined();
+        expect(result.messages).toBe(
+          `${description} — This attachment is stored at a remote URL, so it can't be shown inline. Use its url if you need to reference it.`,
+        );
+      }
+    });
+
+    it('explains when the attachment cannot be shown', async () => {
+      const providerFileId = await viewAttachment(4);
+      expect(providerFileId.messages).toContain('[File: uploaded.pdf] application/pdf file id: file-abc123');
+      expect(providerFileId.messages).toContain("payload is not inline data, so it can't be shown");
+      expect(providerFileId.content).toBeUndefined();
+
+      const unsupportedType = await viewAttachment(1);
+      expect(unsupportedType.messages).toBe(
+        "[File] application/vnd.openxmlformats-officedocument.presentationml.presentation url: https://example.invalid/deck.pptx — Attachments of type application/vnd.openxmlformats-officedocument.presentationml.presentation can't be shown inline. Use the attachment's url or file id if you need to reference it.",
+      );
+    });
+
+    it('explains when the target part is not an attachment or cursor/partIndex are missing', async () => {
+      const textPart = await viewAttachment(0, 'msg-attachments-text');
+      expect(textPart.messages).toContain(
+        'Part 0 of message msg-attachments-text is a text-type part, not an attachment.',
+      );
+
+      const recall = memory.listTools().recall!;
+      const missingPartIndex = (await recall.execute?.(
+        { mode: 'messages', cursor: 'msg-attachments', viewAttachment: true },
+        { memory, agent: { threadId, resourceId } } as any,
+      )) as any;
+      expect(missingPartIndex.messages).toContain('viewAttachment needs both cursor and partIndex');
+      expect(missingPartIndex.content).toBeUndefined();
+
+      const missingCursor = (await recall.execute?.({ mode: 'messages', partIndex: 2, viewAttachment: true }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any)) as any;
+      expect(missingCursor).toEqual({
+        messages:
+          'viewAttachment needs both cursor and partIndex so it knows which attachment to show. Call recall with cursor, partIndex, and viewAttachment: true.',
+      });
+    });
+
+    it('reads data URIs with an uppercase scheme', async () => {
+      const described = await fetchPart(8);
+      expect(described.text).toBe('[File] image/png (inline data omitted)');
+
+      await expect(viewAttachment(8)).resolves.toEqual({
+        content: [
+          { type: 'text', text: '[File] image/png (inline data omitted)' },
+          { type: 'file', data: base64Png, mimeType: 'image/png' },
+        ],
+      });
+    });
+
+    it('does not print inline media from a stored viewAttachment result', async () => {
+      const result = await recallPart({
+        memory: memory as any,
+        threadId,
+        resourceId,
+        cursor: 'msg-viewed-attachment',
+        partIndex: 0,
+      });
+
+      expect(result.text).toContain('[Tool Result: recall]');
+      expect(result.text).toContain('"data": "(inline data omitted)"');
+      expect(result.text).not.toContain(base64Png);
+    });
+
+    it('does not show an attachment from another thread in thread scope', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-attachments-other',
+          resourceId,
+          title: 'Other thread',
+          createdAt: new Date('2024-01-01T09:00:00Z'),
+          updatedAt: new Date('2024-01-01T09:00:00Z'),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-other-attachment',
+            threadId: 'thread-attachments-other',
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'secret.png' } as any],
+            },
+            createdAt: new Date('2024-01-01T09:00:00Z'),
+          },
+        ],
+      });
+
+      const threadScopedRecall = memory.listTools({
+        observationalMemory: { model: 'test-model', scope: 'thread', retrieval: { scope: 'thread' } },
+      } as any).recall!;
+
+      await expect(
+        threadScopedRecall.execute?.(
+          { mode: 'messages', cursor: 'msg-other-attachment', partIndex: 0, viewAttachment: true },
+          { memory, agent: { threadId, resourceId } } as any,
+        ),
+      ).rejects.toThrow('Could not resolve cursor message: msg-other-attachment');
+    });
+
+    it('does not show an attachment from another resource', async () => {
+      await memory.saveThread({
+        thread: {
+          id: 'thread-foreign',
+          resourceId: 'resource-foreign',
+          title: 'Foreign thread',
+          createdAt: new Date('2024-01-01T09:00:00Z'),
+          updatedAt: new Date('2024-01-01T09:00:00Z'),
+        },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-foreign-attachment',
+            threadId: 'thread-foreign',
+            resourceId: 'resource-foreign',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'file', data: `data:image/png;base64,${base64Png}`, filename: 'foreign.png' } as any],
+            },
+            createdAt: new Date('2024-01-01T09:00:00Z'),
+          },
+        ],
+      });
+
+      await expect(viewAttachment(0, 'msg-foreign-attachment')).rejects.toThrow(
+        'Could not resolve cursor message: msg-foreign-attachment',
+      );
+    });
+
+    it('maps a viewed attachment to text plus a native media part for the model', async () => {
+      const recall = memory.listTools().recall!;
+      const viewed = await viewAttachment(2);
+
+      expect(recall.toModelOutput!(viewed)).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: '[File: inline.png] image/png (inline data omitted)' },
+          { type: 'media', data: base64Png, mediaType: 'image/png' },
+        ],
+      });
+
+      // A remote attachment only gets a note, so there's nothing to map.
+      expect(recall.toModelOutput!(await viewAttachment(0))).toBeUndefined();
+
+      // Regular recall output is left alone so it keeps its default JSON tool-result shape.
+      const paged = await recall.execute?.({ mode: 'messages', cursor: 'msg-attachments', page: 1, detail: 'low' }, {
+        memory,
+        agent: { threadId, resourceId },
+      } as any);
+      expect(recall.toModelOutput!(paged)).toBeUndefined();
     });
   });
 
@@ -2412,9 +2966,10 @@ describe('om-tools', () => {
 
       expect(result.count).toBe(2);
       expect(result.results).toContain('### Current thread memory');
-      expect(result.results).toContain('### Older memory from another thread');
+      expect(result.results).toContain('### Memory from another thread');
       expect(result.results).toContain('This result came from the current thread.');
-      expect(result.results).toContain('This result came from an older memory generation in another thread.');
+      expect(result.results).toContain('This result came from another thread.');
+      expect(result.results).not.toContain('older memory generation');
       expect(result.results).toContain('- thread: thread-a (Setup Help)');
       expect(result.results).toContain('- thread: thread-b (Search Docs)');
       expect(result.results).toContain('- source: raw messages from ID msg-1 through ID msg-3');
@@ -2541,7 +3096,7 @@ describe('om-tools', () => {
       expect(result.results).not.toContain('Filtered Out');
     });
 
-    it('should apply a final token cap to the assembled markdown output', async () => {
+    it('should cap observation text without cutting result metadata', async () => {
       const memory = makeMockMemory({
         searchResults: [
           {
@@ -3103,7 +3658,7 @@ describe('om-tools', () => {
 
       const recall = memory.listTools().recall;
       const schema = getInputJSONSchema(recall);
-      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search', 'observations']);
       expect(recall.description).toContain('mode="search"');
     });
   });

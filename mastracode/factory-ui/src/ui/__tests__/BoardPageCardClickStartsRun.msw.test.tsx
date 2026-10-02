@@ -1,10 +1,8 @@
 /**
- * Clicking a board card opens its details; committing to work happens through
- * the dialog's run button. The run still starts with its invocation so the
- * resulting thread gets a kickoff message instead of an empty "What can I help
- * you build?" session. Only items with no run spec fall back to a plain session.
+ * A card's button is a move: it transitions the card into the lane whose rule
+ * runs the work, and the lane's own button re-enters it. Nothing here starts a
+ * run directly — the server's rules do, off the transition.
  */
-import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -12,7 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -42,6 +40,19 @@ const issueWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const logoutIssue = {
+  number: 9,
+  title: 'Crash on logout',
+  url: 'https://github.com/acme/app/issues/9',
+  author: 'octocat',
+  labels: [],
+  comments: 0,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:00:00.000Z',
+};
+
+const intakeWorkItem = { ...issueWorkItem, stages: ['intake'] };
+
 const linearWorkItem = {
   ...issueWorkItem,
   id: 'linear-item-1',
@@ -52,15 +63,62 @@ const linearWorkItem = {
     url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
   },
   title: 'ENG-42: Fix intake sync',
-  metadata: { identifier: 'ENG-42' },
+  metadata: { identifier: 'ENG-42', linearIssueId: 'linear-issue-1' },
 };
 
-/**
- * Stubs the board's data endpoints and captures run-start requests. The run
- * start never resolves, keeping the test on the board (no thread navigation).
- */
-function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkItem] as object[] } = {}) {
-  const startRequests: Array<Record<string, unknown>> = [];
+const gitlabWorkItem = {
+  ...issueWorkItem,
+  id: 'gitlab-item-1',
+  externalSource: {
+    integrationId: 'gitlab',
+    type: 'issue',
+    externalId: 'gitlab-issue:encoded-issue-1',
+    url: 'https://gitlab.com/acme/app/-/work_items/1',
+  },
+  title: 'GitLab issue added to board',
+  stages: ['intake'],
+  metadata: {
+    gitlabIssueId: '1',
+    identifier: 'acme/app#1',
+    sourceId: 'gitlab-source-1',
+  },
+};
+
+const gitlabCandidateIssue = {
+  id: '2',
+  externalId: 'gitlab-issue:encoded-issue-2',
+  identifier: 'acme/app#2',
+  title: 'GitLab candidate issue',
+  url: 'https://gitlab.com/acme/app/-/work_items/2',
+  state: 'opened',
+  stateType: 'unstarted',
+  priority: null,
+  assignee: null,
+  author: 'grace',
+  source: 'acme/app',
+  sourceId: 'gitlab-source-1',
+  labels: [],
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
+};
+
+interface TransitionRequest {
+  itemId: string;
+  body: Record<string, unknown>;
+}
+
+/** Stubs the board's data endpoints and captures everything a card click writes. */
+function stubBoardEndpoints({
+  issues = [] as object[],
+  workItems = [issueWorkItem] as object[],
+  multiRepository = false,
+  mappedLinearRepository = false,
+  linearIssues = [] as object[],
+} = {}) {
+  const transitions: TransitionRequest[] = [];
+  const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
+  const created: Array<Record<string, unknown>> = [];
+  const comments: Array<{ itemId: string; body: Record<string, unknown> }> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -82,6 +140,9 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
                 sandboxWorkdir: '/repo',
                 repository: { slug: 'acme/app', defaultBranch: 'main' },
               },
+              ...(multiRepository
+                ? [{ id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } }]
+                : []),
             ],
           },
         ],
@@ -95,13 +156,28 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
       HttpResponse.json({
         config: {
           github: { enabled: true, sourceIds: ['acme/app'] },
-          linear: { enabled: false, sourceIds: null },
+          linear: {
+            enabled: multiRepository,
+            sourceIds: multiRepository ? ['linear-project-1'] : null,
+            ...(mappedLinearRepository ? { repositoryByLinearProject: { 'linear-project-1': 'acme/other' } } : {}),
+          },
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-      HttpResponse.json({ enabled: false, connected: false, workspace: null }),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+      HttpResponse.json({
+        bindings: multiRepository
+          ? [{ integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' }]
+          : [],
+      }),
     ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+      HttpResponse.json({ categories: {}, tools: {} }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+      HttpResponse.json({ enabled: multiRepository, connected: multiRepository, workspace: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
     // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
@@ -125,29 +201,65 @@ function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkIte
         description: 'The app crashes when logging out.',
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params }) =>
-      HttpResponse.json({
+    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params, request }) => {
+      expect(new URL(request.url).searchParams.get('issueId')).toBe('linear-issue-1');
+      return HttpResponse.json({
         identifier: String(params.identifier),
         title: 'Fix intake sync',
         url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
         description: 'The sync runs the wrong way.',
-      }),
-    ),
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
       HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/issue-7' } }),
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
+      HttpResponse.json({ sessions: [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
-      startRequests.push((await request.json()) as Record<string, unknown>);
-      await new Promise(() => {}); // never resolves — assertions read startRequests
-      return HttpResponse.json({});
+    http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, configured: false })),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      created.push(body);
+      return HttpResponse.json({
+        workItem: { ...issueWorkItem, id: 'item-filed', title: String(body.title), stages: ['intake'] },
+      });
     }),
+    http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, async ({ params, request }) => {
+      comments.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
+      return HttpResponse.json({ comment: { id: 'comment-1' } });
+    }),
+    http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
+      const body = (await request.json()) as Record<string, unknown>;
+      patches.push({ itemId: String(params.itemId), body });
+      return HttpResponse.json({
+        workItem: {
+          ...issueWorkItem,
+          id: String(params.itemId),
+          revision: 5,
+          ...(body.metadata ? { metadata: body.metadata } : {}),
+        },
+      });
+    }),
+    http.post(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
+      async ({ params, request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        transitions.push({ itemId: String(params.itemId), body });
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: `transition-${transitions.length}`,
+            itemId: String(params.itemId),
+            revision: 9,
+            stage: body.stage,
+            decisions: [],
+          },
+        });
+      },
+    ),
   );
 
-  return { startRequests };
+  return { transitions, patches, created, comments };
 }
 
 function renderWorkBoard() {
@@ -155,42 +267,224 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-async function startRunFromCardDetails(cardTitle: string) {
+async function moveFromCardDetails(cardTitle: string, action: string) {
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: `Details for ${cardTitle}` }));
 
   const dialog = await screen.findByRole('dialog', { name: cardTitle });
-  await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+  await user.click(within(dialog).getByRole('button', { name: action }));
 }
 
-describe('Board card details open the default run', () => {
-  it('starts the default run with its invocation from a sessionless work-item card details', async () => {
-    const { startRequests } = stubBoardEndpoints();
+describe('Board card buttons move the card', () => {
+  it('issues a transition to Triage with cause card_action when Investigate is clicked', async () => {
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
     renderWorkBoard();
 
-    await startRunFromCardDetails('Fix login bug');
+    await moveFromCardDetails('Fix login bug', 'Investigate');
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'triage',
-      invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'triage' },
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({
+      itemId: 'item-1',
+      body: { board: 'work', stage: 'triage', cause: 'card_action', expectedRevision: 1 },
+    });
+    expect(transitions[0]?.body).not.toHaveProperty('reenter');
+  });
+
+  it('chooses a repository before investigating an unattributed Linear item in a multi-repository factory', async () => {
+    const { patches, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
+    });
+    renderWorkBoard();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
+
+    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    const user = userEvent.setup();
+    const search = within(dialog).getByRole('searchbox', { name: 'Search repositories' });
+    expect(within(dialog).getByRole('button', { name: /acme\/app/ })).toBeVisible();
+    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
+
+    await user.type(search, '  ACME/OTHER  ');
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
+    expect(within(dialog).getByRole('button', { name: /acme\/other/ })).toBeVisible();
+    expect(patches).toHaveLength(0);
+    expect(transitions).toHaveLength(0);
+
+    await user.clear(search);
+    await user.type(search, 'missing');
+    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
+    expect(within(dialog).queryByRole('button', { name: /acme\/other/ })).not.toBeInTheDocument();
+    await user.clear(search);
+    expect(await within(dialog).findByRole('button', { name: /acme\/app/ })).toBeVisible();
+    const chosenRepository = within(dialog).getByRole('button', { name: /acme\/other/ });
+    chosenRepository.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(patches).toEqual([
+      { itemId: 'linear-item-1', body: { metadata: { ...linearWorkItem.metadata, repository: 'acme/other' } } },
+    ]);
+    expect(transitions[0]).toMatchObject({
+      itemId: 'linear-item-1',
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
     });
   });
 
-  it('starts a hands-off run from the card menu, asking the server to preapprove its plans', async () => {
-    const { startRequests } = stubBoardEndpoints();
+  it('cancels repository selection without changing a Linear item and resets search on reopening', async () => {
+    const { patches, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      workItems: [{ ...linearWorkItem, stages: ['intake'] }],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Linear' }));
+    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'not-linked');
+    expect(await within(dialog).findByText('No matching repositories')).toBeVisible();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument());
+    expect(patches).toHaveLength(0);
+    expect(transitions).toHaveLength(0);
+
+    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+    const reopened = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    expect(within(reopened).getByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
+    expect(within(reopened).getByRole('button', { name: /acme\/app/ })).toBeVisible();
+    expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
+    expect(patches).toHaveLength(0);
+    expect(transitions).toHaveLength(0);
+  });
+
+  it('chooses a repository before filing and investigating a Linear candidate', async () => {
+    const { created, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      workItems: [],
+      linearIssues: [
+        {
+          id: 'linear-issue-1',
+          identifier: 'ENG-42',
+          title: 'Fix intake sync',
+          url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+          state: 'Todo',
+          stateType: 'unstarted',
+          priorityLabel: 'High',
+          assignee: null,
+          team: 'Engineering',
+          sourceId: 'linear-project-1',
+          projectId: 'linear-project-1',
+          labels: [],
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      ],
+    });
+    renderWorkBoard();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
+
+    await moveFromCardDetails('Fix intake sync', 'Investigate');
+
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    const user = userEvent.setup();
+    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
+    expect(created).toHaveLength(0);
+    expect(transitions).toHaveLength(0);
+    await user.click(within(dialog).getByRole('button', { name: /acme\/other/ }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(created[0]?.metadata).toMatchObject({ linearProjectId: 'linear-project-1', repository: 'acme/other' });
+  });
+
+  it('uses the configured Linear project repository without prompting', async () => {
+    const { patches, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      mappedLinearRepository: true,
+      workItems: [
+        {
+          ...linearWorkItem,
+          stages: ['intake'],
+          metadata: { ...linearWorkItem.metadata, linearProjectId: 'linear-project-1' },
+        },
+      ],
+    });
+    renderWorkBoard();
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
+
+    await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+  });
+
+  it("re-enters the lane when the card's own lane button is clicked", async () => {
+    const { transitions } = stubBoardEndpoints();
+    renderWorkBoard();
+
+    await moveFromCardDetails('Fix login bug', 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]?.body).toMatchObject({ stage: 'triage', cause: 'card_action', reenter: true });
+  });
+
+  it('offers only explicit card moves without hands-off approval shortcuts', async () => {
+    stubBoardEndpoints();
     renderWorkBoard();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
 
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      preapprovePlans: true,
-      workItem: { id: 'item-1', role: 'triage' },
+    expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
+  });
+
+  it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
+    const { transitions, created, comments } = stubBoardEndpoints({
+      issues: [logoutIssue],
     });
+    const { client } = renderWorkBoard();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
+    expect(comments).toEqual([
+      { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
+    ]);
+    expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
+  });
+
+  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
+    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
+        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
+      ),
+    );
+    renderWorkBoard();
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
+    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
+    await user.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
+    expect(transitions).toEqual([]);
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
@@ -227,6 +521,63 @@ describe('Board card details open the default run', () => {
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
   });
 
+  it('shows GitLab descriptions before and after an issue is added to the board', async () => {
+    stubBoardEndpoints({ workItems: [gitlabWorkItem] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            gitlab: { enabled: true, sourceIds: ['gitlab-source-1'] },
+            linear: { enabled: false, sourceIds: null },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            {
+              integrationId: 'gitlab',
+              sourceId: 'gitlab-source-1',
+              factoryProjectId: FACTORY_ID,
+              board: 'work',
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
+        HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, ({ params, request }) => {
+        expect(new URL(request.url).searchParams.get('factoryProjectId')).toBe(FACTORY_ID);
+        const description =
+          params.issueId === 'gitlab-issue:encoded-issue-1'
+            ? 'Persisted GitLab description.'
+            : 'Candidate GitLab description.';
+        return HttpResponse.json({ description, comments: [] });
+      }),
+    );
+
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    const persisted = await screen.findByRole('button', { name: 'Details for GitLab issue added to board' });
+    await screen.findByRole('button', { name: 'Details for GitLab candidate issue' });
+    await user.click(persisted);
+
+    const persistedDialog = await screen.findByRole('dialog', { name: 'GitLab issue added to board' });
+    expect(await within(persistedDialog).findByText('Persisted GitLab description.')).toBeInTheDocument();
+    await user.click(within(persistedDialog).getByRole('button', { name: 'Collapse GitLab issue added to board' }));
+
+    await user.click(await screen.findByRole('button', { name: 'Details for GitLab candidate issue' }));
+    const candidateDialog = await screen.findByRole('dialog', { name: 'GitLab candidate issue' });
+    expect(await within(candidateDialog).findByText('Candidate GitLab description.')).toBeInTheDocument();
+  });
+
   it("shows a Linear card's own description in its details", async () => {
     stubBoardEndpoints({ workItems: [linearWorkItem] });
     renderWorkBoard();
@@ -250,89 +601,5 @@ describe('Board card details open the default run', () => {
       'href',
       'https://github.com/acme/app/issues/7',
     );
-  });
-
-  it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
-    const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
-    renderWorkBoard();
-
-    await startRunFromCardDetails('ENG-42: Fix intake sync');
-
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'planning',
-      invocation: {
-        type: 'skill',
-        skillName: 'factory-triage',
-        arguments: expect.stringContaining(
-          `Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42/fix-intake-sync)\n\n` +
-            `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`,
-        ),
-      },
-      workItem: { id: 'linear-item-1', role: 'plan' },
-    });
-  });
-
-  it('shows the source description in the dialog and runs a candidate card from it', async () => {
-    const { startRequests } = stubBoardEndpoints({
-      issues: [
-        {
-          number: 9,
-          title: 'Crash on logout',
-          url: 'https://github.com/acme/app/issues/9',
-          author: 'octocat',
-          labels: [],
-          comments: 0,
-          createdAt: '2026-07-18T00:00:00.000Z',
-          updatedAt: '2026-07-18T00:00:00.000Z',
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
-
-    await waitFor(() => expect(startRequests).toHaveLength(1));
-    expect(startRequests[0]).toMatchObject({
-      destinationStage: 'triage',
-      invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'triage' },
-    });
-  });
-
-  // Run clicks refetch worktrees before deciding what to do. When that
-  // refetch fails (e.g. the auth cookie expired overnight), the click used to
-  // die silently — no run, no toast, nothing. It must surface an error.
-  it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
-    const { startRequests } = stubBoardEndpoints();
-    // First work-items read (board load) succeeds; the click's pre-start
-    // refetch 401s like an expired session would.
-    let itemsCalls = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
-        itemsCalls += 1;
-        if (itemsCalls === 1) return HttpResponse.json({ workItems: [issueWorkItem] });
-        return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
-      }),
-    );
-    // The Toaster normally mounts in main.tsx, above the router.
-    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-    renderWithProviders(
-      <>
-        <RouterProvider router={router} />
-        <Toaster position="bottom-right" />
-      </>,
-    );
-
-    await startRunFromCardDetails('Fix login bug');
-
-    // Both the click's toast and the poll's retry can surface the same message.
-    await waitFor(() => expect(screen.getAllByText(/unauthorized/i).length).toBeGreaterThanOrEqual(1));
-    expect(startRequests).toHaveLength(0);
   });
 });

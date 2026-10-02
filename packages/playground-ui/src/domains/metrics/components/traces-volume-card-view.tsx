@@ -8,7 +8,8 @@ import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { VolumeRow } from '../hooks/use-trace-volume-metrics';
-import { CHART_COLORS, formatCompact } from './metrics-utils';
+import { CHART_COLORS } from './metrics-utils';
+import { formatCompactNumber } from '@/lib/cost';
 
 export type VolumeTab = 'agents' | 'workflows' | 'tools';
 
@@ -52,7 +53,7 @@ function VolumeBars({
         { label: 'Errors', color: CHART_COLORS.pink },
       ]}
       maxVal={Math.max(...data.map(d => d.completed + d.errors))}
-      fmt={formatCompact}
+      fmt={formatCompactNumber}
     />
   );
 }
@@ -98,7 +99,7 @@ export function TracesVolumeCardView({
     <MetricsCard>
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Trace Volume" description="Runs and call counts." />
-        {hasData && <MetricsCard.Summary value={formatCompact(total)} label="Total runs" />}
+        {hasData && <MetricsCard.Summary value={formatCompactNumber(total)} label="Total runs" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
       {isLoading ? (
@@ -121,7 +122,7 @@ export function TracesVolumeCardView({
                 <Tab value="workflows">Workflows</Tab>
                 <Tab value="tools">Tools</Tab>
               </TabList>
-              <TabContent value="agents">
+              <TabContent value="agents" className="pt-3">
                 {data.agentData.length > 0 ? (
                   <VolumeBars
                     data={data.agentData}
@@ -133,7 +134,7 @@ export function TracesVolumeCardView({
                   <MetricsCard.NoData message="No agent data yet" />
                 )}
               </TabContent>
-              <TabContent value="workflows">
+              <TabContent value="workflows" className="pt-3">
                 {data.workflowData.length > 0 ? (
                   <VolumeBars
                     data={data.workflowData}
@@ -145,7 +146,7 @@ export function TracesVolumeCardView({
                   <MetricsCard.NoData message="No workflow data yet" />
                 )}
               </TabContent>
-              <TabContent value="tools">
+              <TabContent value="tools" className="pt-3">
                 {data.toolData.length > 0 ? (
                   <VolumeBars
                     data={data.toolData}

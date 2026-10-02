@@ -2,9 +2,9 @@ import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getEntityTypeForSpan, InternalSpans } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
-import { pMap } from '../../utils/p-map';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
+import type { NotScorableOutcome } from '../not-scorable';
 import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInputAndOutput } from './utils';
@@ -64,6 +64,7 @@ const getTraceStep = createStep({
       return;
     }
 
+    const pMap = (await import('p-map')).default;
     await pMap(
       inputData.targets,
       async target => {
@@ -128,6 +129,15 @@ export type ScoreTraceBatchResult =
       spanId: string;
       datasetItemId?: string;
       score: ScoreRowData;
+    }
+  | {
+      /** The scorer declared the target not scorable. No score was persisted. */
+      ok: true;
+      index: number;
+      traceId: string;
+      spanId?: string;
+      datasetItemId?: string;
+      notScorable: NotScorableOutcome;
     }
   | {
       ok: false;
@@ -234,17 +244,7 @@ async function runScorerForTrace({
   });
 }
 
-/**
- * Resolve a trace/span target, run the scorer, and persist the resulting score.
- */
-export async function scoreTrace({
-  storage,
-  scorer,
-  target,
-  batchId,
-  datasetId,
-  datasetItemId,
-}: {
+type ScoreTraceOptions = {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: ScoreTraceTarget;
@@ -256,11 +256,37 @@ export async function scoreTrace({
    * independent of how the trace is resolved. */
   datasetId?: string;
   datasetItemId?: string;
-}): Promise<ScoreRowData> {
+};
+
+type ScoreTraceOutcome = { score: ScoreRowData } | { notScorable: NotScorableOutcome };
+
+/**
+ * Resolve a trace/span target, run the scorer, and persist the resulting score.
+ *
+ * Resolves to `null` when the scorer declared the target not scorable: no score
+ * exists to persist, so nothing is written to the scores store or the span.
+ */
+export async function scoreTrace(options: ScoreTraceOptions): Promise<ScoreRowData | null> {
+  const outcome = await scoreTraceTarget(options);
+  return 'score' in outcome ? outcome.score : null;
+}
+
+async function scoreTraceTarget({
+  storage,
+  scorer,
+  target,
+  batchId,
+  datasetId,
+  datasetItemId,
+}: ScoreTraceOptions): Promise<ScoreTraceOutcome> {
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
 
   const result = await runScorerForTrace({ scorer, trace, span });
+
+  if (result.notScorable) {
+    return { notScorable: result.notScorable };
+  }
 
   const scorerResult = {
     ...result,
@@ -287,7 +313,7 @@ export async function scoreTrace({
   // Legacy score-store emission. This path is being deprecated.
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
-  return savedScoreRecord;
+  return { score: savedScoreRecord };
 }
 
 function toBatchResultError(error: unknown): Error {
@@ -315,15 +341,19 @@ export async function scoreTraceBatch({
 }): Promise<{
   batchId?: string;
   datasetId?: string;
+  /** Targets that produced a persisted score. */
   scoredCount: number;
+  /** Targets the scorer declared not scorable. Not counted as scored or failed. */
+  notScorableCount: number;
   failedCount: number;
   results: ScoreTraceBatchResult[];
 }> {
+  const { default: pMap } = await import('p-map');
   const results = await pMap(
     targets,
     async (target, index): Promise<ScoreTraceBatchResult> => {
       try {
-        const score = await scoreTrace({
+        const outcome = await scoreTraceTarget({
           storage,
           scorer,
           target,
@@ -331,6 +361,19 @@ export async function scoreTraceBatch({
           datasetId,
           datasetItemId: target.datasetItemId,
         });
+
+        if ('notScorable' in outcome) {
+          return {
+            ok: true,
+            index,
+            traceId: target.traceId,
+            ...(target.spanId ? { spanId: target.spanId } : {}),
+            ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+            notScorable: outcome.notScorable,
+          };
+        }
+
+        const { score } = outcome;
         const spanId = score.spanId ?? target.spanId;
 
         if (!spanId) {
@@ -359,13 +402,15 @@ export async function scoreTraceBatch({
     { concurrency },
   );
 
-  const scoredCount = results.filter(result => result.ok).length;
+  const scoredCount = results.filter(result => result.ok && 'score' in result).length;
+  const notScorableCount = results.filter(result => result.ok && 'notScorable' in result).length;
 
   return {
     ...(batchId ? { batchId } : {}),
     ...(datasetId ? { datasetId } : {}),
     scoredCount,
-    failedCount: results.length - scoredCount,
+    notScorableCount,
+    failedCount: results.length - scoredCount - notScorableCount,
     results,
   };
 }

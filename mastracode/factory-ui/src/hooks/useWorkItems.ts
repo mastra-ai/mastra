@@ -1,5 +1,4 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { isFactoryRuleStage } from '@mastra/factory/rules/types';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   queryOptions,
@@ -25,6 +24,7 @@ import type {
   FactoryBoard,
   UpdateWorkItemInput,
   WorkItem,
+  WorkItemStageEntry,
 } from '../ui/domains/factory/services/workItems';
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
@@ -32,11 +32,11 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   return factoryProjectId;
 }
 
-/** Rewrite the cached board's cards, keeping the run activity read alongside them. */
+/** Rewrite the cached board's cards, keeping the session activity read alongside them. */
 function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
   // Returning undefined skips the write: never seed a partial board before the list query loads.
   queryClient.setQueryData<BoardSnapshot>(listKey, board =>
-    board ? { runningSessionIds: board.runningSessionIds, workItems: patch(board.workItems) } : undefined,
+    board ? { ...board, workItems: patch(board.workItems) } : undefined,
   );
 }
 
@@ -56,7 +56,8 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
-const NO_RUNNING_SESSIONS: ReadonlySet<string> = new Set();
+const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
+const NO_SESSIONS: ReadonlySet<string> = new Set();
 
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
@@ -84,7 +85,14 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
 export function useRunningSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
   const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectRunningSessions });
-  return data ?? NO_RUNNING_SESSIONS;
+  return data ?? NO_SESSIONS;
+}
+
+/** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
+export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
+  const { baseUrl } = useApiConfig();
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
+  return data ?? NO_SESSIONS;
 }
 
 /**
@@ -137,37 +145,67 @@ type TransitionWorkItemVariables = {
   board: FactoryBoard;
   stage: string;
   cause?: string;
+  reenter?: boolean;
 };
 
-function requireFactoryStage(stage: string): FactoryRuleStage {
-  if (!isFactoryRuleStage(stage)) throw new Error(`Unsupported Factory stage: ${stage}`);
-  return stage;
+function optimisticStageHistory(
+  item: WorkItem,
+  stage: string,
+  enteredAt: string,
+  by: string,
+  reenter: boolean,
+): WorkItemStageEntry[] {
+  if (reenter) return item.stageHistory;
+  const next = item.stageHistory.map(entry => ({ ...entry }));
+  for (const oldStage of item.stages) {
+    if (oldStage === stage) continue;
+    for (let index = next.length - 1; index >= 0; index -= 1) {
+      const entry = next[index];
+      if (entry?.stage === oldStage && entry.exitedAt === undefined) {
+        next[index] = { ...entry, exitedAt: enteredAt, exitedBy: by };
+        break;
+      }
+    }
+  }
+  if (!item.stages.includes(stage)) next.push({ stage, enteredAt, by });
+  return next;
 }
 
-export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
+export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
   const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: ({ item, board, stage, cause = 'board_drag' }: TransitionWorkItemVariables) =>
+    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
-        stage: requireFactoryStage(stage),
+        stage,
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
+        ...(reenter ? { reenter } : {}),
       }),
-    onMutate: async ({ item, stage }) => {
+    onMutate: async ({ item, stage, reenter = false }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previousItem = queryClient
         .getQueryData<BoardSnapshot>(listKey)
         ?.workItems.find(candidate => candidate.id === item.id);
+      const enteredAt = new Date().toISOString();
+      const actor = currentUserId ?? 'factory:optimistic';
       patchCards(queryClient, listKey, cards =>
-        cards.map(candidate => (candidate.id === item.id ? { ...candidate, stages: [stage] } : candidate)),
+        cards.map(candidate =>
+          candidate.id === item.id
+            ? {
+                ...candidate,
+                stages: [stage],
+                stageHistory: optimisticStageHistory(candidate, stage, enteredAt, actor, reenter),
+              }
+            : candidate,
+        ),
       );
-      return { previousItem };
+      return { previousItem, enteredAt, actor };
     },
     onError: (_error, variables, context) => {
       const previousItem = context?.previousItem;
@@ -185,10 +223,25 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
           if (result.status === 'rejected') return context?.previousItem ?? item;
           if (result.revision <= item.revision) return item;
-          return { ...item, stages: [result.stage], revision: result.revision };
+          const previousItem = context?.previousItem ?? variables.item;
+          return {
+            ...item,
+            stages: [result.stage],
+            stageHistory: optimisticStageHistory(
+              previousItem,
+              result.stage,
+              context?.enteredAt ?? new Date().toISOString(),
+              context?.actor ?? currentUserId ?? 'factory:optimistic',
+              variables.reenter ?? false,
+            ),
+            revision: result.revision,
+          };
         }),
       );
       void queryClient.invalidateQueries({ queryKey: listKey });
+      // The lane's rule queues its run inside this commit; without this the card
+      // stays silent until the decisions poll comes round.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
     },
   });
   const pendingTransitions = useMutationState({
@@ -210,7 +263,7 @@ interface PendingTransitionVariables {
 
 function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (!('stage' in value) || !isFactoryRuleStage(value.stage)) return false;
+  if (!('stage' in value) || typeof value.stage !== 'string') return false;
   if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item))
     return false;
   return typeof value.item.id === 'string';

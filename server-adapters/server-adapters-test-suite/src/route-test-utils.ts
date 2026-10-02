@@ -1,0 +1,582 @@
+import { getZodTypeName, getZodDef } from '@mastra/core/utils';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { z, type ZodSchema } from 'zod';
+
+/**
+ * Normalizes a route path to ensure consistent formatting.
+ * - Removes leading/trailing whitespace
+ * - Validates no path traversal (..), query strings (?), or fragments (#)
+ * - Collapses multiple consecutive slashes
+ * - Removes trailing slashes
+ * - Ensures leading slash (unless empty)
+ *
+ * @param path - The route path to normalize
+ * @returns The normalized path (empty string for root paths)
+ * @throws Error if path contains invalid characters
+ */
+export function normalizeRoutePath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
+    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
+  }
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/' || normalized === '') {
+    return '';
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  return normalized;
+}
+
+/**
+ * Provide valid schema values for routes whose fields have cross-field constraints.
+ */
+export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+} {
+  if (route.path === '/observability/traces/query/values') {
+    return { body: { predicateScope: 'trace', path: 'entityName' } };
+  }
+
+  return {};
+}
+
+/**
+ * Generate context-aware test value based on field name
+ */
+export function generateContextualValue(fieldName?: string): string {
+  if (!fieldName) return 'test-string';
+
+  const field = fieldName.toLowerCase();
+
+  // Timestamp fields used in body validation need a valid ISO string.
+  if (field === 'createdat' || field === 'updatedat') return new Date().toISOString();
+
+  if (field === 'entitytype') return 'AGENT';
+  if (field === 'entityid') return 'test-agent';
+  if (field === 'role') return 'user';
+  // Cron fields must be a valid cron expression (schedule create routes).
+  if (field === 'cron') return '* * * * *';
+  if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
+  // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
+  if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
+
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
+  // Version comparison query params (from/to are version IDs)
+  // Both use the same known version ID - comparing a version to itself returns empty diffs,
+  // which is valid for route integration tests that verify the endpoint responds correctly
+  if (field === 'from') return 'test-version-id';
+  if (field === 'to') return 'test-version-id';
+
+  // Workspace filesystem - content and query fields
+  if (field === 'content') return 'test content'; // For write/index operations
+  if (field === 'query') return 'test'; // For search operations
+
+  if (field.includes('agent')) return 'test-agent';
+  if (field.includes('workflow')) return 'test-workflow';
+  if (field.includes('tool') && field.includes('slug')) return 'test-tool-slug';
+  if (field.includes('tool')) return 'test-tool';
+  if (field.includes('skill')) return 'test-skill';
+  if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
+  if (field.includes('thread')) return 'test-thread';
+  if (field === 'conversationid') return 'test-thread';
+  if (field.includes('resource')) return 'test-resource';
+  if (field.includes('run')) return 'test-run';
+  if (field.includes('step')) return 'test-step';
+  if (field.includes('task')) return 'test-task';
+  if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
+  if (field.includes('processor')) return 'test-processor';
+  if (field.includes('trace')) return 'test-trace';
+  if (field.includes('span')) return 'test-span';
+  if (field.includes('vector')) return 'test-vector';
+  if (field.includes('index')) return 'test-index';
+  if (field.includes('message')) return 'test-message';
+  if (field === 'responseid') return 'test-response';
+  if (field.includes('transport')) return 'test-transport';
+  if (field.includes('model')) return 'openai/gpt-4o';
+  if (field.includes('action')) return 'merge-template';
+  if (field.includes('entity')) return 'test-entity';
+  if (field.includes('provider')) return 'test-provider';
+  if (field.includes('dataset') && field.includes('version')) return '1';
+  if (field.includes('dataset')) return 'test-dataset';
+  if (field.includes('item')) return 'test-item';
+  if (field.includes('experiment')) return 'test-experiment';
+  if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
+  if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
+  if (field.includes('block')) return 'test-prompt-block';
+  if (field === 'uri') return 'ui://test/app';
+
+  return 'test-string';
+}
+
+/**
+ * Generate valid test data from a Zod schema
+ */
+export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): any {
+  let typeName = getZodTypeName(schema);
+  let def = getZodDef(schema);
+
+  // Unwrap effects first
+  while (typeName === 'ZodEffects') {
+    schema = def.schema;
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
+  }
+
+  // Unwrap z.preprocess / .transform pipes (Zod 4 represents these as ZodPipe
+  // with the validated schema at `def.out`). Without this the generator falls
+  // through to `undefined` for any query schema that uses a top-level
+  // preprocess (e.g. legacy-shape back-compat shims).
+  while (typeName === 'ZodPipe' && def?.out) {
+    schema = getZodTypeName(def.out) === 'ZodTransform' ? def.in : def.out;
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
+  }
+
+  if (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
+    return generateValidDataFromSchema(def.innerType, fieldName);
+  }
+  if (typeName === 'ZodDefault') {
+    if ('_zod' in schema) {
+      return def.defaultValue;
+    } else {
+      return def.defaultValue();
+    }
+  }
+
+  if (typeName === 'ZodString') {
+    const hasDateTimeFormat = (def.checks ?? []).some((check: any) => {
+      const checkDef = check._zod?.def ?? check.def ?? check;
+      return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
+    });
+    if (hasDateTimeFormat) {
+      if (fieldName?.toLowerCase() === 'from') return '2026-01-01T00:00:00.000Z';
+      if (fieldName?.toLowerCase() === 'to') return '2026-01-02T00:00:00.000Z';
+      return '2026-01-01T00:00:00.000Z';
+    }
+    return generateContextualValue(fieldName);
+  }
+  if (typeName === 'ZodNumber') {
+    // Respect min/max constraints from Zod checks
+    let min = -Infinity;
+    let max = Infinity;
+    let minInclusive = true;
+    let maxInclusive = true;
+    let requiresInt = false;
+    let requiresSafeInt = false;
+    let multipleOf: number | undefined;
+    const checks = def.checks ?? [];
+    for (const check of checks) {
+      // Zod 3: check.kind === 'min'/'max', check.value
+      if (check.kind === 'min') {
+        min = check.value;
+        minInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'max') {
+        max = check.value;
+        maxInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'int') requiresInt = true;
+      if (check.kind === 'multipleOf') multipleOf = check.value;
+      // Zod 4: checks have _zod.def with check type and value
+      const zod4Def = check._zod?.def;
+      if (zod4Def) {
+        if (zod4Def.check === 'greater_than') {
+          min = zod4Def.value;
+          minInclusive = false;
+        }
+        if (zod4Def.check === 'greater_than_or_equal') {
+          min = zod4Def.value;
+          minInclusive = true;
+        }
+        if (zod4Def.check === 'less_than') {
+          max = zod4Def.value;
+          maxInclusive = false;
+        }
+        if (zod4Def.check === 'less_than_or_equal') {
+          max = zod4Def.value;
+          maxInclusive = true;
+        }
+        if (zod4Def.check === 'multiple_of') multipleOf = zod4Def.value;
+        if (zod4Def.check === 'integer') requiresInt = true;
+        if (zod4Def.check === 'safeint') {
+          requiresSafeInt = true;
+          requiresInt = true;
+        }
+        // Zod 4 emits `int()` as `number_format` with `format: 'int' | 'safeint'`.
+        if (zod4Def.check === 'number_format') {
+          if (zod4Def.format === 'int' || zod4Def.format === 'safeint') {
+            requiresInt = true;
+            if (zod4Def.format === 'safeint') requiresSafeInt = true;
+          }
+        }
+      }
+    }
+
+    const step = requiresInt || requiresSafeInt ? 1 : 0.1;
+    const effectiveMin = min === -Infinity ? min : minInclusive ? min : min + step;
+    const effectiveMax = max === Infinity ? max : maxInclusive ? max : max - step;
+
+    const clampToRange = (value: number): number => {
+      if (effectiveMin !== -Infinity && value < effectiveMin) return effectiveMin;
+      if (effectiveMax !== Infinity && value > effectiveMax) return effectiveMax;
+      return value;
+    };
+
+    let candidate: number;
+    if (effectiveMin !== -Infinity && effectiveMax !== Infinity) {
+      candidate = (effectiveMin + effectiveMax) / 2;
+    } else if (effectiveMin !== -Infinity) {
+      candidate = effectiveMin;
+    } else if (effectiveMax !== Infinity) {
+      candidate = effectiveMax;
+    } else {
+      candidate = requiresInt ? 10 : 10.5;
+    }
+
+    candidate = clampToRange(candidate);
+
+    if (multipleOf && multipleOf > 0) {
+      const minBase = effectiveMin !== -Infinity ? effectiveMin : 0;
+      const maxBase = effectiveMax !== Infinity ? effectiveMax : minBase + multipleOf * 10;
+      let aligned = Math.ceil(minBase / multipleOf) * multipleOf;
+      if (effectiveMin !== -Infinity && aligned < effectiveMin) {
+        aligned += multipleOf;
+      }
+      if (effectiveMax !== Infinity && aligned > effectiveMax) {
+        aligned = Math.floor(maxBase / multipleOf) * multipleOf;
+      }
+      candidate = aligned;
+    }
+
+    if (requiresInt) {
+      candidate = Math.round(candidate);
+      candidate = clampToRange(candidate);
+    }
+
+    if (requiresSafeInt) {
+      candidate = Math.min(Math.max(candidate, Number.MIN_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+    }
+
+    return candidate;
+  }
+  if (typeName === 'ZodBoolean') return true;
+  if (typeName === 'ZodNull') return null;
+  if (typeName === 'ZodUndefined') return undefined;
+  if (typeName === 'ZodDate') return new Date();
+  if (typeName === 'ZodBigInt') return BigInt(0);
+
+  if (typeName === 'ZodLiteral') {
+    if ('_zod' in schema) {
+      return def.values?.[0];
+    } else {
+      return def.value;
+    }
+  }
+
+  if (typeName === 'ZodEnum') {
+    if ('_zod' in schema) {
+      return Object.values(def.entries)[0];
+    } else {
+      return def.values[0];
+    }
+  }
+  if (typeName === 'ZodNativeEnum') {
+    const values = Object.values(def.values);
+    return values[0];
+  }
+
+  if (typeName === 'ZodArray') {
+    if ('_zod' in schema) {
+      return [generateValidDataFromSchema(def.element, fieldName)];
+    } else {
+      return [generateValidDataFromSchema(def.type, fieldName)];
+    }
+  }
+
+  if (typeName === 'ZodObject') {
+    const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+    const obj: any = {};
+    for (const [key, fieldSchema] of Object.entries(shape)) {
+      const fieldTypeName = getZodTypeName(fieldSchema as z.ZodTypeAny);
+      if (fieldTypeName === 'ZodOptional') {
+        // Special case: workflow routes need inputData field even when optional
+        // because _run.start() expects { inputData?, ... } structure, not just {}
+        // Without this, z.object({}).safeParse(undefined) fails with "Required" error
+        if (key === 'inputData' || key === 'agent_id') {
+          const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
+          const innerType = fieldDef.innerType;
+          obj[key] = generateValidDataFromSchema(innerType, key);
+        }
+        continue;
+      }
+      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
+    }
+    return obj;
+  }
+
+  if (typeName === 'ZodRecord') {
+    return { key: generateValidDataFromSchema(def.valueType, fieldName) };
+  }
+
+  if (typeName === 'ZodUnion') {
+    // Special case: for content field in messages, use string format (simpler and more reliable)
+    if (fieldName === 'content') {
+      // Check if one of the options is ZodString
+      for (const option of def.options) {
+        if (getZodTypeName(option) === 'ZodString') {
+          return 'test message content';
+        }
+      }
+    }
+    return generateValidDataFromSchema(def.options[0], fieldName);
+  }
+
+  if (typeName === 'ZodDiscriminatedUnion') {
+    const options = Array.from(def.options.values());
+    return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName);
+  }
+
+  if (typeName === 'ZodIntersection') {
+    const left = generateValidDataFromSchema(def.left, fieldName);
+    const right = generateValidDataFromSchema(def.right, fieldName);
+    return { ...left, ...right };
+  }
+
+  if (typeName === 'ZodTuple') {
+    return def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
+  }
+
+  if (typeName === 'ZodAny' || typeName === 'ZodUnknown') {
+    if (fieldName === 'content') {
+      return [{ type: 'text', text: 'test message content' }];
+    }
+    // Special case: message parts for processor messages
+    if (fieldName === 'parts') {
+      return [{ type: 'text', text: 'test message part' }];
+    }
+    // Special case: workflow inputData is z.unknown() but needs to be an object
+    // to match the workflow's inputSchema (typically z.object({}))
+    if (fieldName === 'inputData') {
+      return {};
+    }
+    // Special case: memory messages are z.any() but handler validates they have threadId/resourceId
+    // Note: This assumes we're generating a single message in an array context
+    if (fieldName === 'messages') {
+      return {
+        role: 'user',
+        content: [{ type: 'text', text: 'test message' }],
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+    }
+    return 'test-value';
+  }
+
+  return undefined;
+}
+
+export function getDefaultValidPathParams(route: ServerRoute): Record<string, any> {
+  const params: Record<string, any> = {};
+
+  // For stored agent routes (versions), use 'test-stored-agent' to match test context
+  // For regular agent routes, use 'test-agent'
+  if (route.path.includes(':agentId') && route.path.includes('/stored/agents/')) {
+    params.agentId = 'test-stored-agent';
+  } else if (route.path.includes(':agentId')) {
+    params.agentId = 'test-agent';
+  }
+  if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
+  if (route.path.includes(':scheduleId')) params.scheduleId = 'test-schedule';
+  if (route.path.includes(':backgroundTaskId')) params.backgroundTaskId = 'test-background-task-id';
+  if (route.path.includes(':toolId')) params.toolId = 'test-tool';
+  if (route.path.includes(':threadId')) params.threadId = 'test-thread';
+  if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
+  if (route.path.includes(':controllerId')) params.controllerId = 'test-controller';
+  if (route.path.includes(':responseId')) params.responseId = 'test-response';
+  if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
+  if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
+  // For stored scorer version routes, use the stored scorer ID to match test context
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {
+    params.scorerId = 'test-stored-scorer';
+  } else if (route.path.includes(':scorerId')) {
+    params.scorerId = 'test-scorer';
+  }
+  if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
+  if (route.path.includes(':feedbackId')) params.feedbackId = 'test-feedback';
+  if (route.path.includes(':traceId')) params.traceId = 'test-trace';
+  if (route.path.includes(':runId')) params.runId = 'test-run';
+  if (route.path.includes(':stepId')) params.stepId = 'test-step';
+  if (route.path.includes(':taskId')) params.taskId = 'test-task-id';
+  if (route.path.includes(':vectorName')) params.vectorName = 'test-vector';
+  if (route.path.includes(':indexName')) params.indexName = 'test-index';
+  if (route.path.includes(':transportId')) params.transportId = 'test-transport';
+  if (route.path.includes(':spanId')) params.spanId = 'test-span';
+  if (route.path.includes(':entityType')) params.entityType = 'AGENT';
+  if (route.path.includes(':entityId')) params.entityId = 'test-agent';
+  if (route.path.includes(':actionId')) params.actionId = 'merge-template';
+  if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
+  if (route.path.includes(':roleId')) params.roleId = 'test-role';
+  if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
+  if (route.path.includes(':processorId')) params.processorId = 'test-processor';
+  // MCP route params - need to get actual server ID from test context
+  if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
+  if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
+  if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+
+  // Workspace route params
+  if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';
+
+  // Skills route params
+  if (route.path.includes(':skillName')) params.skillName = 'test-skill';
+  if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
+
+  // Stored entity route params
+  if (route.path.includes(':storedMCPClientId')) params.storedMCPClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':mcpClientId')) params.mcpClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':storedPromptBlockId')) params.storedPromptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':promptBlockId')) params.promptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
+  if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
+  if (route.path.includes(':dynamicWorkflowId')) params.dynamicWorkflowId = 'test-dynamic-workflow';
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+    params.scorerId = 'test-stored-scorer';
+
+  // Dataset route params
+  if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
+  if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':resultId')) params.resultId = 'test-result';
+  if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
+
+  // Tool provider route params
+  if (route.path.includes(':providerId')) params.providerId = 'test-provider';
+  if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+  if (route.path.includes(':authId')) params.authId = 'test-auth-id';
+  if (route.path.includes(':connectionId')) params.connectionId = 'test-connection-id';
+
+  // Channel route params
+  if (route.path.includes(':platform')) params.platform = 'test-platform';
+
+  // Builder registry route params
+  if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
+
+  return params;
+}
+
+export function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<string, any>> {
+  const invalid: Array<Record<string, any>> = [];
+  invalid.push({});
+
+  if (route.path.includes(':agentId')) {
+    invalid.push({ agentId: 123 });
+  }
+
+  if (route.path.includes(':registryId')) {
+    invalid.push({ registryId: 123 });
+  }
+
+  return invalid;
+}
+
+/**
+ * Validate that a value matches a schema
+ */
+export function expectValidSchema(schema: ZodSchema, value: unknown) {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    throw new Error(`Schema validation failed: ${JSON.stringify(result.error.issues, null, 2)}`);
+  }
+}
+
+/**
+ * Validate that a value does NOT match a schema
+ */
+export function expectInvalidSchema(schema: ZodSchema, value: unknown) {
+  const result = schema.safeParse(value);
+  if (result.success) {
+    throw new Error(`Expected schema validation to fail, but it succeeded`);
+  }
+}
+
+/**
+ * Validate route metadata
+ */
+export function validateRouteMetadata(
+  route: ServerRoute,
+  expected: {
+    method?: string;
+    path?: string;
+    responseType?: ServerRoute['responseType'];
+    hasPathParams?: boolean;
+    hasQueryParams?: boolean;
+    hasBody?: boolean;
+    hasResponse?: boolean;
+    hasOpenAPI?: boolean;
+  },
+) {
+  if (expected.method && route.method !== expected.method) {
+    throw new Error(`Expected method ${expected.method} but got ${route.method}`);
+  }
+
+  if (expected.path && route.path !== expected.path) {
+    throw new Error(`Expected path ${expected.path} but got ${route.path}`);
+  }
+
+  if (expected.responseType && route.responseType !== expected.responseType) {
+    throw new Error(`Expected responseType ${expected.responseType} but got ${route.responseType}`);
+  }
+
+  if (expected.hasPathParams !== undefined) {
+    const hasPathParams = !!route.pathParamSchema;
+    if (hasPathParams !== expected.hasPathParams) {
+      throw new Error(
+        `Expected pathParamSchema to be ${expected.hasPathParams ? 'defined' : 'undefined'} but got ${hasPathParams ? 'defined' : 'undefined'}`,
+      );
+    }
+  }
+
+  if (expected.hasQueryParams !== undefined) {
+    const hasQueryParams = !!route.queryParamSchema;
+    if (hasQueryParams !== expected.hasQueryParams) {
+      throw new Error(
+        `Expected queryParamSchema to be ${expected.hasQueryParams ? 'defined' : 'undefined'} but got ${hasQueryParams ? 'defined' : 'undefined'}`,
+      );
+    }
+  }
+
+  if (expected.hasBody !== undefined) {
+    const hasBody = !!route.bodySchema;
+    if (hasBody !== expected.hasBody) {
+      throw new Error(
+        `Expected bodySchema to be ${expected.hasBody ? 'defined' : 'undefined'} but got ${hasBody ? 'defined' : 'undefined'}`,
+      );
+    }
+  }
+
+  if (expected.hasResponse !== undefined) {
+    const hasResponse = !!route.responseSchema;
+    if (hasResponse !== expected.hasResponse) {
+      throw new Error(
+        `Expected responseSchema to be ${expected.hasResponse ? 'defined' : 'undefined'} but got ${hasResponse ? 'defined' : 'undefined'}`,
+      );
+    }
+  }
+
+  if (expected.hasOpenAPI !== undefined) {
+    const hasOpenAPI = !!route.openapi;
+    if (hasOpenAPI !== expected.hasOpenAPI) {
+      throw new Error(
+        `Expected openapi to be ${expected.hasOpenAPI ? 'defined' : 'undefined'} but got ${hasOpenAPI ? 'defined' : 'undefined'}`,
+      );
+    }
+  }
+}

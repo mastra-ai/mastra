@@ -1,0 +1,237 @@
+---
+title: "Reference: Weaviate vector store | Vectors"
+description: "The WeaviateVector class provides vector search using Weaviate, an open-source vector database."
+packages:
+  - "@mastra/weaviate"
+---
+
+# Weaviate vector store
+
+The `WeaviateVector` class provides vector search using [Weaviate](https://weaviate.io/), an open-source vector database. Collections are created with `vectorizer: none`, so Mastra supplies the embeddings, and Mastra manages ids, distance metrics, and metadata filtering on your behalf.
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance.',
+  },
+  {
+    name: 'httpHost',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'localhost',
+    description: 'Hostname of the Weaviate HTTP server.',
+  },
+  {
+    name: 'httpPort',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '8080',
+    description: 'Port of the Weaviate HTTP server.',
+  },
+  {
+    name: 'httpSecure',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to use a secure (TLS) connection to the HTTP server.',
+  },
+  {
+    name: 'grpcHost',
+    type: 'string',
+    isOptional: true,
+    description: 'Hostname of the Weaviate gRPC server. Defaults to the HTTP host.',
+  },
+  {
+    name: 'grpcPort',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '50051',
+    description: 'Port of the Weaviate gRPC server.',
+  },
+  {
+    name: 'grpcSecure',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to use a secure (TLS) connection to the gRPC server.',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    isOptional: true,
+    description: 'API key for authenticating with Weaviate (e.g. Weaviate Cloud).',
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    isOptional: true,
+    description: 'Additional headers to include in requests (e.g. third-party vectorizer API keys).',
+  },
+]}
+/>
+
+## Methods
+
+### `createIndex()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create.',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model).',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search. Mapped to Weaviate distances (cosine, l2-squared, dot).',
+  },
+]}
+/>
+
+### `upsert()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into.',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector.',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Optional vector ids. Auto-generated if not provided. Arbitrary ids are preserved via a deterministic UUIDv5 mapping.',
+  },
+]}
+/>
+
+### `query()`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query.',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors for.',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return.',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters (see below).',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include the stored vector in the results.',
+  },
+]}
+/>
+
+The store also implements `listIndexes()`, `describeIndex()`, `deleteIndex()`, `updateVector()`, `deleteVector()`, and `deleteVectors()`.
+
+## Basic usage
+
+```ts filename="index.ts" showLineNumbers copy
+import { WeaviateVector } from '@mastra/weaviate'
+
+const store = new WeaviateVector({ id: 'my-store' })
+
+await store.createIndex({ indexName: 'my_index', dimension: 1536, metric: 'cosine' })
+
+await store.upsert({
+  indexName: 'my_index',
+  vectors: [[0.1, 0.2 /* ... */]],
+  metadata: [{ text: 'sample', category: 'docs' }],
+})
+
+const results = await store.query({
+  indexName: 'my_index',
+  queryVector: [0.1, 0.2 /* ... */],
+  topK: 5,
+  filter: { category: 'docs' },
+})
+```
+
+## Connecting to Weaviate Cloud
+
+```ts showLineNumbers copy
+const store = new WeaviateVector({
+  id: 'my-store',
+  httpHost: 'my-cluster.weaviate.network',
+  httpPort: 443,
+  httpSecure: true,
+  grpcHost: 'grpc-my-cluster.weaviate.network',
+  grpcPort: 443,
+  grpcSecure: true,
+  apiKey: process.env.WEAVIATE_API_KEY,
+})
+```
+
+## Metadata filtering
+
+Filters use a MongoDB-style syntax and are translated to Weaviate's native filter API:
+
+- Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
+- Array: `$in`, `$nin`, `$all`
+- Element: `$exists`
+- Logical: `$and`, `$or`, `$not`
+
+```ts showLineNumbers copy
+const results = await store.query({
+  indexName: 'my_index',
+  queryVector: [0.1, 0.2 /* ... */],
+  filter: {
+    $and: [{ category: { $in: ['docs', 'guides'] } }, { views: { $gt: 100 } }],
+  },
+})
+```
+
+### Notes and limitations
+
+- Weaviate doesn't distinguish an explicitly stored `null` from an absent field, so null round-tripping isn't supported.
+- `$regex`, `$size`, `$elemMatch`, `$nor`, and `$contains` aren't supported.
+- Collection names are capitalized by Weaviate. The original index name is preserved in the collection description and returned by `listIndexes()` and `describeIndex()`.
+
+## Related
+
+- [Metadata Filters](/reference/rag/metadata-filters)

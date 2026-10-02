@@ -16,6 +16,10 @@ export type UseDataListKeyboardArgs<T extends HTMLElement = HTMLDivElement> = Om
  * container ref, so callsites only need to attach `containerRef` to the element
  * wrapping the `<DataList>` (or pass an existing scroll ref) and spread
  * `getRowProps(index)` on each interactive row (RowButton / RowLink).
+ *
+ * Pass `global: true` on the page's main list so ArrowUp/ArrowDown work from
+ * anywhere on the page (before any row has focus). Only one list per page
+ * should be global; sub-lists in panels keep the default row-level behavior.
  */
 export const useDataListKeyboard = <T extends HTMLElement = HTMLDivElement>({
   containerRef: externalRef,

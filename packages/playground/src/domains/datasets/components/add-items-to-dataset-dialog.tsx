@@ -1,14 +1,23 @@
 'use client';
 
-import type { DatasetItem, DatasetRecord } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
-import { Label } from '@mastra/playground-ui/components/Label';
+import type { DatasetItem } from '@mastra/client-js';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { useDatasets } from '../hooks/use-datasets';
 
 export interface AddItemsToDatasetDialogProps {
   open: boolean;
@@ -32,11 +41,9 @@ export function AddItemsToDatasetDialog({
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
 
-  // Extract datasets array from response
-  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
+  const datasets = data?.datasets ?? [];
 
-  // Filter out the current dataset from the list
-  const availableDatasets = datasets.filter((d: DatasetRecord) => d.id !== currentDatasetId);
+  const availableDatasets = datasets.filter(dataset => dataset.id !== currentDatasetId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +57,6 @@ export function AddItemsToDatasetDialog({
     setProgress(0);
 
     try {
-      // Add items to selected dataset
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await addItem.mutateAsync({
@@ -62,10 +68,9 @@ export function AddItemsToDatasetDialog({
         setProgress(i + 1);
       }
 
-      const targetDataset = datasets.find((d: DatasetRecord) => d.id === selectedDatasetId);
+      const targetDataset = datasets.find(dataset => dataset.id === selectedDatasetId);
       toast.success(`Added ${items.length} item${items.length !== 1 ? 's' : ''} to "${targetDataset?.name}"`);
 
-      // Reset form
       setSelectedDatasetId('');
       setIsAdding(false);
       setProgress(0);
@@ -79,35 +84,31 @@ export function AddItemsToDatasetDialog({
     }
   };
 
-  const handleCancel = () => {
-    if (isAdding) return; // Prevent cancel during operation
-    setSelectedDatasetId('');
-    onOpenChange(false);
-  };
-
   const progressPercent = items.length > 0 ? (progress / items.length) * 100 : 0;
 
   return (
-    <Dialog open={open} onOpenChange={isAdding ? undefined : onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isAdding}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Items to Dataset</DialogTitle>
         </DialogHeader>
-        <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="target-dataset">Target Dataset *</Label>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel required>Target Dataset</FieldLabel>
               <Select
                 value={selectedDatasetId}
                 onValueChange={setSelectedDatasetId}
                 disabled={isAdding || isDatasetsLoading}
               >
-                <SelectTrigger id="target-dataset">
+                <SelectTrigger>
                   <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="text-neutral4 px-2 py-4 text-center text-sm">No other datasets available</div>
+                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                      No other datasets available
+                    </div>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -117,40 +118,33 @@ export function AddItemsToDatasetDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
-            <p className="text-muted-foreground text-sm">
+            <Txt tone="muted">
               {items.length} item{items.length !== 1 ? 's' : ''} will be copied to the selected dataset
-            </p>
+            </Txt>
 
             {isAdding && (
               <div className="space-y-2">
-                <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="bg-primary h-full transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <p className="text-muted-foreground text-sm">
+                <Txt tone="muted">
                   Adding items: {progress} / {items.length}
-                </p>
+                </Txt>
               </div>
             )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel} disabled={isAdding}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}
-              >
-                {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
-              </Button>
-            </div>
-          </form>
-        </DialogBody>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel onClick={() => setSelectedDatasetId('')}>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!selectedDatasetId || availableDatasets.length === 0}>
+              {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}
+            </DialogAction>
+          </DialogFooter>
+        </Form>
       </DialogContent>
     </Dialog>
   );

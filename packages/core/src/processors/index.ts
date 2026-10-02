@@ -1,21 +1,28 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
-import type { ModelRouterModelId } from '../llm/model';
+import type { ModelRouterModelId, MastraModelSettings } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
+import type {
+  ObservabilityContext,
+  ProcessorSpanPhase as ObservabilityProcessorSpanPhase,
+  ProcessorSpanType,
+  SpanTypeMap,
+  TracingContext,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
+import type { OutputWriter } from '../workflows/types';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -172,6 +179,8 @@ export interface ProcessOutputResultArgs<
  * The actual schema type is only known at the generate()/stream() call site.
  */
 export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The active agent run ID, when this processor is running inside an agent loop */
+  runId?: string;
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
@@ -184,6 +193,13 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /**
+   * When true, this processor will also have processLLMRequest called after
+   * processInputStep. Processors that implement both methods can skip
+   * pre-conversion trimming here and defer it to the prompt stage, where it
+   * accounts for earlier prompt processors (e.g. ToolCallFilter).
+   */
+  llmRequestStage?: boolean;
 
   /**
    * Current model for this step.
@@ -196,7 +212,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   activeTools?: string[];
 
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
@@ -219,6 +235,12 @@ export type RunProcessInputStepArgs = Omit<
   memory?: MastraMemory;
   resourceId?: string;
   threadId?: string;
+  /**
+   * IDs of processors whose processLLMRequest will run for this step.
+   * The runner sets llmRequestStage for these processors, including when they
+   * run inside a processor workflow.
+   */
+  llmRequestProcessorIds?: ReadonlySet<string>;
 };
 
 /**
@@ -244,7 +266,7 @@ export type ProcessInputStepResult = {
    */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: MastraModelSettings;
   /**
    * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
@@ -341,6 +363,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   prompt: LanguageModelV2Prompt;
   /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
   model: MastraLanguageModel;
+  /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
+  messageList?: MessageList;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -593,16 +617,11 @@ export interface ProcessorViolation<TDetail = unknown> {
  * Pipeline phase a processor span is created for. One value per site where the
  * processor runner creates a span, so a processor that runs in more than one
  * phase can name and describe each of them differently.
+ *
+ * Defined in the observability types because `ProcessorPipelineAttributes`
+ * records it on the span; re-exported here as the name processors use.
  */
-export type ProcessorSpanPhase =
-  | 'input'
-  | 'inputStep'
-  | 'llmRequest'
-  | 'llmResponse'
-  | 'output'
-  | 'outputStep'
-  | 'toolResult'
-  | 'requestError';
+export type ProcessorSpanPhase = ObservabilityProcessorSpanPhase;
 
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
@@ -623,9 +642,11 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * declared span type labels the span with the subsystem it came from, so the
    * trace shows where it originated instead of an anonymous processor entry.
    *
-   * The runner keeps setting `entityType` (which phase the processor ran in)
-   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
-   * loses the processor's position in the chain or its mutation log.
+   * The runner keeps setting `entityType` and the `ProcessorPipelineAttributes`
+   * fields either way — including `processorPhase`, which is what a reader
+   * narrows the span's payloads on — so retyping never loses the processor's
+   * position in the chain, its mutation log, or the readable view of its
+   * input and output.
    */
   readonly spanType?: ProcessorSpanType;
   /**
@@ -923,6 +944,14 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
   | OutputProcessor<TTripwireMetadata>
   | ErrorProcessor<TTripwireMetadata>;
 
+/** @internal Context consumed by processor step adapters, without workflow engine machinery. */
+export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
+  inputData: TInput;
+  requestContext?: RequestContext;
+  tracingContext?: TracingContext;
+  outputWriter?: OutputWriter;
+}) => Promise<ProcessorStepOutput>;
+
 /**
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
@@ -930,6 +959,29 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
 export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any> & {
   /** @internal Processors in a combined workflow that compute state signals after input-step execution. */
   __stateSignalProcessors?: Processor[];
+  /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
+  __processOutputStream?: boolean;
+  /**
+   * @internal Whether any wrapped processor runs after the model stream ends
+   * (`processOutputStep` / `processLLMResponse`). Processors are wrapped into a
+   * workflow before they reach the loop, so the wrapper is the only place that
+   * still knows this. Unknown workflows leave it undefined and are treated as
+   * post-stream, because callers use this to decide what is safe to start early.
+   *
+   * Only meaningful on output chains. The same wrapper builds input chains, which
+   * carry the flag without it meaning anything there.
+   */
+  __processOutputStep?: boolean;
+  /**
+   * @internal Whether any wrapped processor implements `processToolResult`. That hook
+   * runs *inside* the model stream and can abort the turn before the post-stream pass,
+   * so it is a separate question from `__processOutputStep`. Recorded here for the same
+   * reason: the wrapper is the only place that still knows. Unknown workflows leave it
+   * undefined and are treated as implementing it.
+   */
+  __processToolResult?: boolean;
+  /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
+  __executeOutputStream?: ProcessorStepExecutor;
 };
 
 /**
@@ -952,11 +1004,29 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
  */
 export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
+/**
+ * Processor config accepted by the provider-boundary LLM request lane.
+ *
+ * The lane carries input processors plus error processors, so an error-lane processor that implements
+ * `processLLMRequest` still gets its hook. Entries without that method are inert there.
+ */
+export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
+  | InputProcessorOrWorkflow<TTripwireMetadata>
+  | ErrorProcessorOrWorkflow<TTripwireMetadata>;
+
 export { isProcessorWorkflow } from './is-processor-workflow';
 
+export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from './stability-defaults';
+
 export * from './processors';
+export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
-export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
+export {
+  ProviderHistoryCompat,
+  anthropicToolIdFormat,
+  cerebrasStripReasoningContent,
+  openaiOrphanItemId,
+} from './provider-history-compat';
 export {
   isBadRequestError,
   isRetryableOpenAIResponsesStreamError,
@@ -970,6 +1040,13 @@ export {
 export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export { createProcessorSendSignal } from './send-signal';
+export { createBackgroundWorkSignalProcessor } from './background-work-signals';
+export type {
+  BackgroundWorkDisposition,
+  BackgroundWorkInvocationKind,
+  BackgroundWorkLifecyclePayload,
+  BackgroundWorkTerminalStatus,
+} from './background-work-signals';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

@@ -35,6 +35,7 @@ export interface ExecutionEngineOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+  evaluatePersistencePredicateBeforeDurableOperation?: boolean;
 
   /**
    * Acknowledges that `resume()` calls cannot be de-duplicated via the persisted
@@ -192,7 +193,7 @@ export abstract class ExecutionEngine extends MastraBase {
       try {
         await Promise.resolve(
           onError({
-            status: result.status as 'failed' | 'tripwire',
+            status: result.status,
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,

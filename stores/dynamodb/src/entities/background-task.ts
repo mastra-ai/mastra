@@ -114,6 +114,15 @@ export const backgroundTaskEntity = new Entity({
       type: 'string',
       required: false,
     },
+    // Execution ownership lease — see BackgroundTask.ownerId
+    ownerId: {
+      type: 'string',
+      required: false,
+    },
+    leaseExpiresAtIso: {
+      type: 'string',
+      required: false,
+    },
   },
   indexes: {
     primary: {

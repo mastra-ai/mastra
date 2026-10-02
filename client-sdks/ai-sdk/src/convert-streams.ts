@@ -66,6 +66,8 @@ type AgentStreamOptionsBase = {
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  /** When true, sub-agent runs are emitted as data-tool-agent parts with ancestry metadata. */
+  includeSubAgentMetadata?: boolean;
   /** Experimental transforms applied to Mastra chunks before AI SDK UI conversion. */
   experimentalTransform?: MastraStreamTransformOptions<any>;
 };
@@ -166,6 +168,7 @@ export function toAISdkV5Stream(
       sendSources: options.sendSources,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
+      includeSubAgentMetadata: options.includeSubAgentMetadata,
     }),
   ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 }
@@ -294,6 +297,7 @@ export function toAISdkStream(
         sendSources: options.sendSources,
         messageMetadata: options.messageMetadata as UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'],
         onError: options.onError as UIMessageStreamOptionsV6<UIMessageV6>['onError'],
+        includeSubAgentMetadata: options.includeSubAgentMetadata,
       }),
     ) as ReadableStream<InferUIMessageChunkV6<UIMessageV6>>;
   }
@@ -333,6 +337,7 @@ export function toAISdkStream(
       sendSources: options.sendSources,
       messageMetadata: options.messageMetadata,
       onError: options.onError,
+      includeSubAgentMetadata: options.includeSubAgentMetadata,
     }),
   ) as ReadableStream<InferUIMessageChunkV5<UIMessageV5>>;
 }

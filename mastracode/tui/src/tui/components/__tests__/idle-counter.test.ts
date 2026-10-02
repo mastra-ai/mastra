@@ -87,3 +87,25 @@ describe('IdleCounterComponent', () => {
     expect(component.render(80)).toEqual(['']);
   });
 });
+
+describe('IdleCounterComponent thinking', () => {
+  const text = (component: IdleCounterComponent) =>
+    component
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .trim();
+
+  it('shows Thinking... in place of idle time, keeping the same single line', () => {
+    const component = new IdleCounterComponent();
+    component.setTimingState({ lastAgentRunDurationMs: 1_000, lastAgentRunEndedAt: 0 }, 5 * 60_000);
+    expect(text(component)).toBe('5m idle');
+
+    component.setThinking(true);
+    expect(text(component)).toBe('Thinking...');
+    expect(component.render(80)).toHaveLength(1);
+
+    component.setThinking(false);
+    expect(component.render(80)).toHaveLength(1);
+  });
+});

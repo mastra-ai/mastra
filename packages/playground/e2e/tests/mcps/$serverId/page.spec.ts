@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
-import { expectBreadcrumbLink, expectRouteDocsLink } from '../../__utils__/route-header';
+import { expectBreadcrumbLink } from '../../__utils__/route-header';
 
 test.describe('MCP server detail page', () => {
   test.afterEach(async () => {
@@ -14,12 +14,6 @@ test.describe('MCP server detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
 
       await expectBreadcrumbLink(page, 'MCP Servers', '/mcps');
-    });
-
-    test('has a documentation link', async ({ page }) => {
-      await page.goto('/mcps/simple-mcp-server');
-
-      await expectRouteDocsLink(page, 'MCP documentation', 'https://mastra.ai/en/docs/tools-mcp/mcp-overview');
     });
 
     test('has a server combobox for navigation', async ({ page }) => {

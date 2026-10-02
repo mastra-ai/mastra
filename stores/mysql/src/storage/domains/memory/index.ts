@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -173,6 +172,7 @@ function addMySQLMessageMetadataFilter(
 export class MemoryMySQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   private pool: Pool;
   private operations: StoreOperationsMySQL;
@@ -634,6 +634,81 @@ export class MemoryMySQL extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single transaction and takes a `SELECT ... FOR UPDATE` row lock on the
+   * thread, so overlapping transfers of the same thread serialize and can never interleave
+   * the thread update with the message update. Either both the thread and every message move
+   * to the new resource, or neither does — there is no split-ownership window. The thread's
+   * `createdAt` is preserved. Callers are responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Lock the thread row for the duration of the transaction. Concurrent transfers of the
+      // same thread block here until this transaction commits, so they cannot interleave.
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT * FROM ${formatTableName(TABLE_THREADS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+        [threadId],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new MastraError({
+          id: createStorageErrorId('MYSQL', 'UPDATE_THREAD_RESOURCE_ID', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Thread "${threadId}" not found`,
+          details: { threadId },
+        });
+      }
+
+      const thread = this.mapThread(row as ThreadRow);
+
+      if (thread.resourceId === resourceId) {
+        await connection.commit();
+        return thread;
+      }
+
+      const updatedAt = new Date();
+      await connection.execute(
+        `UPDATE ${formatTableName(TABLE_THREADS)} SET ${quoteIdentifier('resourceId', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+        [resourceId, transformToSqlValue(updatedAt), threadId],
+      );
+      await connection.execute(
+        `UPDATE ${formatTableName(TABLE_MESSAGES)} SET ${quoteIdentifier('resourceId', 'column name')} = ? WHERE ${quoteIdentifier('thread_id', 'column name')} = ?`,
+        [resourceId, threadId],
+      );
+
+      await connection.commit();
+      return { ...thread, resourceId, updatedAt };
+    } catch (error) {
+      await connection.rollback();
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    } finally {
+      connection.release();
+    }
+  }
+
   public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy, 'DESC');
@@ -904,7 +979,7 @@ export class MemoryMySQL extends MemoryStorage {
           });
         }
         const createdAt = message.createdAt ? new Date(message.createdAt) : new Date();
-        const id = message.id ?? randomUUID();
+        const id = message.id ?? globalThis.crypto.randomUUID();
         const record = {
           id,
           thread_id: message.threadId,
@@ -1122,7 +1197,7 @@ export class MemoryMySQL extends MemoryStorage {
     }
 
     // Use provided ID or generate a new one
-    const newThreadId = providedThreadId || randomUUID();
+    const newThreadId = providedThreadId || globalThis.crypto.randomUUID();
 
     // Check if the new thread ID already exists
     const existingThread = await this.getThreadById({ threadId: newThreadId });
@@ -1220,7 +1295,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       for (const sourceRow of sourceMessageRows) {
         const row = sourceRow as MessageRow;
-        const newMessageId = randomUUID();
+        const newMessageId = globalThis.crypto.randomUUID();
         messageIdMap[row.id] = newMessageId;
 
         let content = row.content;
@@ -1814,6 +1889,10 @@ export class MemoryMySQL extends MemoryStorage {
       const conditions: string[] = [`${omCol('lookupKey')} = ?`];
       const params: any[] = [lookupKey];
 
+      if (options?.recordId !== undefined) {
+        conditions.push(`${omCol('id')} = ?`);
+        params.push(options.recordId);
+      }
       if (options?.from) {
         conditions.push(`${omCol('createdAt')} >= ?`);
         params.push(transformToSqlValue(options.from));
@@ -1823,8 +1902,26 @@ export class MemoryMySQL extends MemoryStorage {
         params.push(transformToSqlValue(options.to));
       }
 
+      if (options?.groupId !== undefined) {
+        conditions.push(`(LOCATE(CAST(? AS BINARY), CAST(${omCol('activeObservations')} AS BINARY)) > 0 OR EXISTS (
+          SELECT 1 FROM JSON_TABLE(${omCol('bufferedObservationChunks')}, '$[*]'
+            COLUMNS (observations LONGTEXT PATH '$.observations')) AS chunk
+          WHERE LOCATE(CAST(? AS BINARY), CAST(chunk.observations AS BINARY)) > 0
+        ))`);
+        const prefix = `<observation-group id="${options.groupId}"`;
+        params.push(prefix, prefix);
+      }
+      if (options?.beforeGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} < ?`);
+        params.push(options.beforeGeneration);
+      }
+      if (options?.afterGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} > ?`);
+        params.push(options.afterGeneration);
+      }
+      const direction = options?.sortDirection === 'ASC' ? 'ASC' : 'DESC';
       const whereClause = conditions.join(' AND ');
-      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} DESC LIMIT ${safeLimit}`;
+      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} ${direction}, ${omCol('createdAt')} ASC, id ASC LIMIT ${safeLimit}`;
 
       if (options?.offset != null && options.offset > 0) {
         sql += ` OFFSET ${options.offset}`;
@@ -1840,7 +1937,7 @@ export class MemoryMySQL extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -1971,7 +2068,7 @@ export class MemoryMySQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
@@ -2146,9 +2243,13 @@ export class MemoryMySQL extends MemoryStorage {
         }
 
         const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
+        if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
+          await connection.commit();
+          return;
+        }
 
         const newChunk: BufferedObservationChunk = {
-          id: `ombuf-${randomUUID()}`,
+          id: `ombuf-${globalThis.crypto.randomUUID()}`,
           cycleId: input.chunk.cycleId,
           observations: input.chunk.observations,
           tokenCount: input.chunk.tokenCount,

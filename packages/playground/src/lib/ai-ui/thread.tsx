@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
@@ -11,42 +11,44 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from '@mastra/playground-ui/components/MessageScroller';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import {
+  buildThreadRailTurns,
+  getClientMessageKey,
+  groupTurns,
+  ThreadRail,
+} from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { MessageFactoryPart } from '@mastra/react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
+import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
-import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
+import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import './thread.css';
-import { SaveFullConversationAction } from './messages/dataset-save-action';
-import { MessageRow } from './messages/message-row';
+import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { startViewTransition } from '@/lib/routing';
 
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
@@ -95,9 +97,10 @@ const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
   if (turns.length === 0) return null;
 
   return (
+    // Shown once the viewport fits the 48rem column plus a rail-safe gutter on each side.
     <div
       data-testid="thread-rail-layer"
-      className="thread-rail-layer pointer-events-none absolute inset-y-0 left-4 z-20"
+      className="pointer-events-none absolute inset-y-0 left-4 z-20 hidden @min-[58rem]:block"
     >
       <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
     </div>
@@ -118,6 +121,13 @@ export interface ThreadProps {
    * thread-list refresh here so the page navigates from /new to the real thread URL.
    */
   refreshThreadList?: () => Promise<void> | void;
+  /**
+   * True while the thread history is being fetched for the first time. The skeleton
+   * only replaces the welcome screen; live messages that arrive earlier take precedence.
+   */
+  isHistoryLoading?: boolean;
+  onLoadPrevious?: () => void | Promise<void>;
+  isLoadingPrevious?: boolean;
 }
 
 export const Thread = ({
@@ -129,12 +139,16 @@ export const Thread = ({
   hideModelSwitcher,
   runOptionsSlot,
   refreshThreadList,
+  isHistoryLoading,
+  onLoadPrevious,
+  isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { draft, updateDraft } = useThreadInput(threadId);
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
-  const { requestContext } = usePlaygroundStore();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
   const { hasSession, viewMode } = useBrowserSession();
@@ -149,114 +163,167 @@ export const Thread = ({
   // Keyed by the opening message's client key: `data-user-message` reconciliation
   // swaps `message.id` to the server signal id, and a changing key would remount
   // the whole turn.
-  const turnGroups: { key: string; messages: MastraDBMessage[]; opensTurn: boolean }[] = [];
-  for (const message of messages) {
-    if (threadRailAnchorIds.has(message.id) || turnGroups.length === 0) {
-      turnGroups.push({
-        key: getClientMessageKey(message),
-        messages: [],
-        opensTurn: threadRailAnchorIds.has(message.id),
-      });
+  const turnGroups = groupTurns(messages, {
+    key: getClientMessageKey,
+    opensTurn: message => threadRailAnchorIds.has(message.id),
+  });
+
+  // Before the first message the dock is unpinned and centered so the greeting,
+  // composer and prompts read as one landing. The composer keeps its tree position
+  // in both modes so the first send doesn't remount it (focus and attachments stay).
+  const showLanding = isEmpty && !isHistoryLoading;
+  // The layout follows `showLanding` one commit late so leaving the landing can be
+  // wrapped in a view transition: the named composer then glides to the dock
+  // instead of snapping. Only the exit caused by a send is animated (the chat is
+  // running then); a history load resolving on refresh or thread switch also flips
+  // `showLanding` false and must snap, or the composer visibly slides on every load.
+  const [landingShown, setLandingShown] = useState(showLanding);
+  useEffect(() => {
+    if (landingShown === showLanding) return;
+    if (showLanding || !isRunning) {
+      setLandingShown(showLanding);
+      return;
     }
-    turnGroups.at(-1)?.messages.push(message);
-  }
+    startViewTransition(() => setLandingShown(false));
+  }, [showLanding, landingShown, isRunning]);
 
   return (
-    <ComposerAttachmentsProvider>
-      <MessageScrollerProvider defaultScrollPosition="last-anchor">
-        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
-          <MessageScroller>
-            <MessageScrollerViewport className="h-full overflow-y-scroll" style={{ overflowAnchor: 'none' }}>
-              {isEmpty ? (
-                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
-              ) : (
-                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
-                  <ThreadRailLayer turns={threadRailTurns} />
-                  <div
-                    ref={messagesContainerRef}
-                    data-testid="thread-message-column"
-                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
-                  >
-                    <BracketOverlay containerRef={messagesContainerRef} />
-                    {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
-                    <ArrivalScope>
-                      <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                        {turnGroups.map((group, index) => {
-                          const isLiveTurn = index === turnGroups.length - 1;
-                          return (
-                            // The room a fresh turn scrolls up into is this min-height: pure
-                            // layout, filled by the streaming reply. It stays after the run —
-                            // collapsing it would shift the reader — and moves to the next
-                            // turn with the anchor scroll.
-                            <div
-                              key={group.key}
-                              className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
-                            >
-                              {group.messages.map(message => (
-                                <MessageScrollerItem
-                                  key={getClientMessageKey(message)}
-                                  messageId={message.id}
-                                  scrollAnchor={threadRailAnchorIds.has(message.id)}
-                                >
-                                  <MessageRow
-                                    message={message}
-                                    hasModelList={hasModelList}
-                                    isSpeaking={isSpeaking}
-                                    onReadAloud={readAloud}
-                                    onStopSpeaking={stopSpeaking}
-                                  />
-                                </MessageScrollerItem>
-                              ))}
-                              {isLiveTurn && delayedPending && <PendingIndicator />}
-                            </div>
-                          );
-                        })}
-                      </MessageScrollerContent>
-                    </ArrivalScope>
-
-                    {!isRunning && <SaveFullConversationAction />}
-                  </div>
-                </div>
+    <ComposerAttachmentsProvider
+      controlled={
+        draft && updateDraft
+          ? {
+              value: draft.attachments,
+              onChange: value =>
+                updateDraft(previous => ({
+                  ...previous,
+                  attachments: typeof value === 'function' ? value(previous.attachments) : value,
+                })),
+            }
+          : undefined
+      }
+    >
+      <ChatShell
+        className="h-full"
+        scroller={{
+          defaultScrollPosition: 'last-anchor',
+          onReachStart: onLoadPrevious,
+          preserveScrollOnPrepend: Boolean(onLoadPrevious),
+        }}
+        data-testid="thread-wrapper"
+      >
+        <ChatShell.Stage>
+          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
+            <ThreadRailLayer turns={threadRailTurns} />
+            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
+              {isLoadingPrevious && (
+                <ChatShell.Column
+                  data-testid="thread-history-older-skeleton"
+                  aria-busy="true"
+                  aria-label="Loading older messages"
+                  className="py-3"
+                >
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
               )}
-            </MessageScrollerViewport>
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
-              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
-            </div>
-          </MessageScroller>
-
-          {showThumbnailInChat && agentId && threadId && (
-            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
-              <BrowserThumbnail agentName={agentName} />
-            </div>
-          )}
-
-          <TaskPanel />
-
-          <AgentComposer
-            agentId={agentId}
-            threadId={threadId}
-            hasModelList={hasModelList}
-            hideModelSwitcher={hideModelSwitcher}
-            runOptionsSlot={runOptionsSlot}
-            refreshThreadList={refreshThreadList}
-          />
-        </div>
-      </MessageScrollerProvider>
+              {isEmpty && isHistoryLoading ? (
+                <ChatShell.Column data-testid="thread-history-skeleton" aria-busy="true" className="flex-1 py-4">
+                  <ChatMessagesLoadingSkeleton />
+                </ChatShell.Column>
+              ) : landingShown ? null : (
+                <ChatShell.Column
+                  ref={messagesContainerRef}
+                  data-testid="thread-message-column"
+                  className="relative flex-1 gap-4 py-4"
+                >
+                  <BracketOverlay containerRef={messagesContainerRef} />
+                  {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                  <ArrivalScope>
+                    {turnGroups.map((group, index) => {
+                      const isLiveTurn = index === turnGroups.length - 1;
+                      // The first turn opens at the top already; room under it would only add empty scroll.
+                      const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
+                      return (
+                        <ChatShell.Turn
+                          key={group.key}
+                          opensTurn={group.opensTurn}
+                          holdsRoom={holdsRoom}
+                          className="gap-4"
+                        >
+                          {group.entries.map(message => (
+                            <MessageScrollerItem
+                              key={getClientMessageKey(message)}
+                              messageId={message.id}
+                              scrollAnchor={threadRailAnchorIds.has(message.id)}
+                            >
+                              <MessageRow
+                                message={message}
+                                hasModelList={hasModelList}
+                                isSpeaking={isSpeaking}
+                                onReadAloud={readAloud}
+                                onStopSpeaking={stopSpeaking}
+                              />
+                            </MessageScrollerItem>
+                          ))}
+                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                        </ChatShell.Turn>
+                      );
+                    })}
+                  </ArrivalScope>
+                  {!isRunning && <SaveFullConversationAction />}
+                </ChatShell.Column>
+              )}
+            </ChatShell.Content>
+            <ChatShell.Dock
+              data-testid={landingShown ? 'thread-landing' : undefined}
+              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+            >
+              {landingShown ? null : <ChatShell.ScrollButton />}
+              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+                {landingShown ? (
+                  <ThreadWelcome agentName={agentName} />
+                ) : (
+                  <>
+                    {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                    <TaskPanel />
+                  </>
+                )}
+                <div className={landingShown ? 'starter-prompt' : undefined}>
+                  <AgentComposer
+                    agentId={agentId}
+                    threadId={threadId}
+                    hasModelList={hasModelList}
+                    hideModelSwitcher={hideModelSwitcher}
+                    runOptionsSlot={runOptionsSlot}
+                    refreshThreadList={refreshThreadList}
+                  />
+                </div>
+                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
     </ComposerAttachmentsProvider>
   );
 };
 
-export interface ThreadWelcomeProps {
-  agentName?: string;
-  suggestedPrompts?: string[];
-}
-
-const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
   return (
-    <div className="flex w-full grow flex-col items-center pt-[15vh]">
-      <Avatar name={agentName || 'Agent'} size="lg" />
-      <p className="mt-4 font-medium">How can I help you today?</p>
-      <SuggestedPromptList prompts={suggestedPrompts} />
+    <div data-testid="thread-welcome" className="flex w-full flex-col items-center gap-4">
+      <div className="starter-heading">
+        <Avatar name={agentName || 'Agent'} size="lg" />
+      </div>
+      <Txt
+        as="h1"
+        variant="display"
+        tone="muted"
+        className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
+      >
+        <span className="starter-shimmer">
+          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
+          do for you today?
+        </span>
+      </Txt>
     </div>
   );
 };
@@ -278,14 +345,25 @@ const AgentComposer = ({
   runOptionsSlot,
   refreshThreadList,
 }: AgentComposerProps) => {
-  const { threadInput: text, setThreadInput } = useThreadInput(threadId);
+  const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preparing = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(
+    () => () => {
+      lifetime.current++;
+    },
+    [],
+  );
+  const [preparationError, setPreparationError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  const inputDisabled = !canExecuteAgent || Boolean(draftStatus?.restoring);
+  useComposerAutofocus(textareaRef, { threadId, disabled: inputDisabled });
   // On a brand-new chat, starting the call must transition the page out of its
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
@@ -294,13 +372,40 @@ const AgentComposer = ({
   const sendBlocked = isRunning && !canSendWhileStreaming;
 
   const submit = async () => {
-    if (isEmpty || sendBlocked || !canExecuteAgent) return;
-    const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
-    const message = text;
-    setThreadInput('');
-    clear();
-    setSendPulseKey(k => k + 1);
-    send({ message, attachments: coreUserMessages });
+    if (
+      isEmpty ||
+      sendBlocked ||
+      !canExecuteAgent ||
+      draftStatus?.restoring ||
+      isAddingAttachments ||
+      preparing.current
+    )
+      return;
+    preparing.current = true;
+    const currentLifetime = lifetime.current;
+    const submittedIds = new Set(attachments.map(attachment => attachment.id));
+    setPreparationError(undefined);
+    try {
+      const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
+      if (lifetime.current !== currentLifetime) return;
+      // Clear only the submitted snapshot; edits made during file conversion belong to the next draft.
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: previous.text === text ? '' : previous.text,
+          attachments: previous.attachments.filter(attachment => !submittedIds.has(attachment.id)),
+        }));
+      else {
+        setThreadInput('');
+        clear();
+      }
+      setSendPulseKey(k => k + 1);
+      send({ message: text, attachments: coreUserMessages });
+    } catch {
+      if (lifetime.current === currentLifetime)
+        setPreparationError('Attachments could not be prepared. Your draft has been kept.');
+    } finally {
+      preparing.current = false;
+    }
   };
 
   return (
@@ -308,66 +413,77 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
-      <Composer
-        className="relative px-2 pb-2"
-        onSubmit={event => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <ComposerAttachments>
-          <ChatComposerAttachments />
-        </ComposerAttachments>
-        <ComposerRing busy={isRunning}>
-          <ComposerBox sendingPulseKey={sendPulseKey}>
-            <ComposerInput
-              ref={textareaRef}
-              value={text}
-              autoFocus={false}
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              onChange={event => {
-                setThreadInput(event.target.value);
-              }}
-              onKeyDown={event => {
-                // Ignore Enter while an IME composition is active (e.g. committing a
-                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-                // `keyCode === 229` fallback covers browsers that fire keydown without it.
-                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  if (sendBlocked) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void submit();
-                }
-              }}
-              disabled={!canExecuteAgent}
-            />
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
-            <ComposerActions>
-              <ComposerActionRow
-                canExecute={canExecuteAgent}
-                agentId={agentId}
-                runOptionsSlot={runOptionsSlot}
-                showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
-                isEmpty={isEmpty}
-                isRunning={isRunning}
-                canSendWhileStreaming={canSendWhileStreaming}
-                onCancel={() => void cancelRun()}
-                onSetText={value => {
-                  setThreadInput(value);
+      {(preparationError || draftStatus?.error) && (
+        <p role="alert" className="text-ui-sm">
+          {preparationError || draftStatus?.error}
+        </p>
+      )}
+      {draftStatus?.restoring && (
+        <p role="status" className="text-ui-sm">
+          Restoring draft…
+        </p>
+      )}
+      <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
+        <Composer
+          className="relative"
+          onSubmit={event => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <ComposerAttachments>
+            <ChatComposerAttachments />
+          </ComposerAttachments>
+          <ComposerRing busy={isRunning}>
+            <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ComposerInput
+                ref={textareaRef}
+                value={text}
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                onChange={event => {
+                  setThreadInput(event.target.value);
                 }}
-                voiceCall={voiceCall}
+                onKeyDown={event => {
+                  // Ignore Enter while an IME composition is active (e.g. committing a
+                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                  if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    if (sendBlocked) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void submit();
+                  }
+                }}
+                disabled={inputDisabled}
               />
-            </ComposerActions>
-          </ComposerBox>
-        </ComposerRing>
-      </Composer>
+              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+              <ComposerActions>
+                <ComposerActionRow
+                  canExecute={canExecuteAgent && !draftStatus?.restoring}
+                  agentId={agentId}
+                  runOptionsSlot={runOptionsSlot}
+                  showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                  isEmpty={isEmpty}
+                  isRunning={isRunning}
+                  canSendWhileStreaming={canSendWhileStreaming}
+                  onCancel={() => void cancelRun()}
+                  onSetText={value => {
+                    setThreadInput(value);
+                  }}
+                  voiceCall={voiceCall}
+                />
+              </ComposerActions>
+            </ComposerBox>
+          </ComposerRing>
+        </Composer>
+      </ComposerFileDrop>
     </div>
   );
 };
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const { requestContext } = usePlaygroundStore();
+  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {
@@ -377,13 +493,13 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 
   return (
     <Button
-      variant="default"
+      variant="ghost"
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
+      {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>
   );
 };
@@ -419,9 +535,7 @@ const ComposerActionRow = ({
         <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
-                <ComposerModelSwitcher />
-              </div>
+              <ComposerModelSwitcher />
               <ComposerModelSettings agentId={agentId} />
             </>
           )}
@@ -430,11 +544,11 @@ const ComposerActionRow = ({
       )}
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <ButtonsGroup spacing="close">
+        <div className="flex items-center gap-2">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
           {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
-        </ButtonsGroup>
+        </div>
         <ComposerSendButton
           canExecute={canExecute}
           isEmpty={isEmpty}
@@ -462,6 +576,7 @@ const ComposerSendButton = ({
   canSendWhileStreaming,
   onCancel,
 }: ComposerSendButtonProps) => {
+  const { isAddingAttachments } = useComposerAttachments();
   // While streaming and not allowed to send mid-stream, the only action is cancel.
   if (isRunning && !canSendWhileStreaming) {
     return (
@@ -478,10 +593,9 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="border-border1 bg-surface5 rounded-full border"
-        disabled={!canExecute || isEmpty}
+        disabled={!canExecute || isEmpty || isAddingAttachments}
       >
-        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
+        <ArrowUp />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
@@ -504,7 +618,7 @@ const CircleStopIcon = () => {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-neutral3 hover:text-neutral6"
+      className={quietTextHover}
     >
       <circle cx="12" cy="12" r="10" />
       <rect width="6" height="6" x="9" y="9" rx="1" />

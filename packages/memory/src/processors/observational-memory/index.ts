@@ -19,6 +19,8 @@ export {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_PROMPT_THREAD,
+  getObservationContextPrompt,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
 } from './constants';
 
@@ -70,6 +72,8 @@ export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveLifecycleHooks,
+  ObserveTransformHooks,
   ObserveHookContext,
   ObserveHookUsage,
   ObserveTrigger,

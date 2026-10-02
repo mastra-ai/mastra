@@ -1,4 +1,5 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
@@ -130,9 +131,9 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full aspect-video bg-surface2 rounded-md overflow-hidden',
-        isInteractive && !isAgentBusy && 'ring-2 ring-accent1',
-        isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
+        'relative aspect-video w-full overflow-hidden rounded-md bg-background',
+        isInteractive && !isAgentBusy && 'ring-2 ring-success-indicator',
+        isInteractive && isAgentBusy && 'ring-2 ring-warning-indicator',
         className,
       )}
     >
@@ -150,7 +151,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         tabIndex={status === 'streaming' ? 0 : -1}
         role="button"
         className={cn(
-          'absolute inset-0 w-full h-full object-contain',
+          'absolute inset-0 h-full w-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
           status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
@@ -167,10 +168,12 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
 
       {/* Reconnecting overlay - shown over last frame */}
       {isReconnecting && (
-        <div className="bg-surface1/80 absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-sidebar/80">
           <div className="flex flex-col items-center gap-2">
-            <div className="border-neutral4 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-            <span className="text-neutral4 text-sm">Reconnecting...</span>
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            <Txt as="span" tone="muted">
+              Reconnecting...
+            </Txt>
           </div>
         </div>
       )}
@@ -178,10 +181,10 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
       {/* Error overlay */}
       {hasError && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20">
+          <div className="flex flex-col items-center gap-3 px-4 py-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive-subtle">
               <svg
-                className="h-7 w-7 text-red-400"
+                className="h-7 w-7 text-destructive-foreground"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -195,8 +198,12 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
               </svg>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-lg font-medium text-white">Connection Error</span>
-              <span className="text-sm text-white/70">Failed to connect to browser</span>
+              <Txt as="span" variant="heading" className="text-white">
+                Connection Error
+              </Txt>
+              <Txt as="span" className="text-white/70">
+                Failed to connect to browser
+              </Txt>
             </div>
           </div>
         </div>

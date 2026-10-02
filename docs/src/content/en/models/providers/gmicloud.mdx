@@ -7,7 +7,7 @@ description: "Browse GMI Cloud model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/gmicloud.svg" alt="GMI Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />GMI Cloud
 
-Access 15 GMI Cloud models through Mastra's model router. Authentication is handled automatically using the `GMICLOUD_API_KEY` environment variable.
+Access 17 GMI Cloud models through Mastra's model router. Authentication is handled automatically using the `GMICLOUD_API_KEY` environment variable.
 
 Learn more in the [GMI Cloud documentation](https://docs.gmicloud.ai).
 
@@ -190,6 +190,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.5
   },
   {
+    "model": "gmicloud/Qwen/Qwen3.8-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048575,
+    "maxOutput": 131072,
+    "inputCost": 0.16,
+    "outputCost": 0.47
+  },
+  {
+    "model": "gmicloud/Qwen/Qwen3.8-Max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
     "model": "gmicloud/zai-org/GLM-5-FP8",
     "imageInput": false,
     "audioInput": false,
@@ -263,5 +287,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

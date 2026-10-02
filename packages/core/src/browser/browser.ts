@@ -121,6 +121,16 @@ export function killProcessGroup(
   logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
 ): void {
   if (pid == null) return;
+  // Defense in depth (issue #23588): refuse to signal a PID that cannot name a
+  // killable local process group. `process.kill(-pid, ...)` targets the group
+  // whose leader is `pid`; a non-integer, negative, or <= 1 value would send the
+  // signal somewhere dangerous — `-1` broadcasts to every process the user owns,
+  // and `-0`/`0` targets the caller's own group. These only occur when a remote
+  // browser's PID leaked in; the caller should never have captured it.
+  if (!Number.isInteger(pid) || pid <= 1) {
+    logger?.debug?.(`Refusing to kill process group for unsafe PID ${pid}`);
+    return;
+  }
   try {
     process.kill(-pid, 'SIGKILL');
     logger?.debug?.(`Killed process group for PID ${pid}`);
@@ -1548,12 +1558,15 @@ export abstract class MastraBrowser extends MastraBase {
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of input processors for this browser instance
    */
-  getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+  getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    options: { stateSignal?: boolean } = {},
+  ): InputProcessor[] {
     const hasProcessor = configuredProcessors.some(
       p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'browser-context',
     );
     if (hasProcessor) return [];
-    return [new BrowserContextProcessor()];
+    return [new BrowserContextProcessor(options)];
   }
 
   // ---------------------------------------------------------------------------

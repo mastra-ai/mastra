@@ -315,9 +315,6 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   provider.packageName = packageName;
   const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
-  // Check for AI SDK docs link if package is available
-  const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
-
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
   const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
@@ -412,26 +409,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-${generateProviderOptionsSection(provider.id)}
-${
-  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
-    ? `
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
-
-\`\`\`bash npm2yarn
-npm install ${provider.packageName}
-\`\`\`
-${
-  aiSdkDocsLink
-    ? `
-For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).`
-    : ''
-}
-`
-    : ''
-}`;
+${generateProviderOptionsSection(provider.id)}`;
 }
 
 async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
@@ -683,6 +661,11 @@ function generateIndexPage(grouped: GroupedProviders): string {
     Array.from(grouped.gateways.values())
       .flat()
       .reduce((sum, p) => sum + p.models.length, 0);
+
+  // Link each provider's markdown page so agents reading /models/llms.txt can reach any provider.
+  const providerLinks = [...grouped.popular, ...grouped.other]
+    .map(provider => `  - [${provider.name}](https://mastra.ai/models/providers/${provider.id})`)
+    .join('\n');
 
   return `---
 title: "Models"
@@ -1098,6 +1081,27 @@ const agent = new Agent({
 })
 \`\`\`
 
+### Select the OpenAI Responses API
+
+Custom \`url\` endpoints use the OpenAI Chat Completions API by default. If your endpoint exposes the OpenAI Responses API (\`/v1/responses\`) — for example to combine function tools with reasoning models on gateways that require it — set \`api: "responses"\`.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1",
+    api: "responses"
+  }
+})
+\`\`\`
+
+When \`api\` is omitted it defaults to \`"chat"\`, so existing configurations are unchanged. Provider options are read from the \`openai\` namespace for the Responses API, whereas the Chat Completions path reads the \`openai-compatible\` namespace.
+
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.
@@ -1113,7 +1117,15 @@ const agent = new Agent({
 })
 \`\`\`
 
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).
+
+<Inject>
+  ## All providers
+
+  Every provider below works with the model router as \`provider/model\`. Read the provider page for its environment variable, setup, and model list.
+
+${providerLinks}
+</Inject>`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {

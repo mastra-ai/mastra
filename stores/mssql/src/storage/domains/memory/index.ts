@@ -547,6 +547,80 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+
+    const tx = this.pool.transaction();
+    try {
+      await tx.begin();
+      // Lock the thread row (UPDLOCK/HOLDLOCK) for the duration of the transaction so concurrent
+      // transfers of the same thread serialize here and cannot interleave the thread and message
+      // updates, which would otherwise leave split ownership.
+      const selectReq = tx.request();
+      selectReq.input('threadId', threadId);
+      const resultSet = await selectReq.query(
+        `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt]
+         FROM ${threadsTable} WITH (UPDLOCK, HOLDLOCK)
+         WHERE id = @threadId`,
+      );
+      const row = resultSet.recordset[0];
+      if (!row) {
+        throw new Error(`Thread "${threadId}" not found`);
+      }
+
+      const normalized: StorageThreadType = {
+        id: row.id,
+        resourceId: row.resourceId,
+        title: row.title,
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+
+      if (row.resourceId === resourceId) {
+        await tx.commit();
+        return normalized;
+      }
+
+      const now = new Date();
+      const updateThreadReq = tx.request();
+      updateThreadReq.input('resourceId', resourceId);
+      updateThreadReq.input('updatedAt', now);
+      updateThreadReq.input('threadId', threadId);
+      await updateThreadReq.query(
+        `UPDATE ${threadsTable} SET [resourceId] = @resourceId, [updatedAt] = @updatedAt WHERE id = @threadId`,
+      );
+
+      const updateMessagesReq = tx.request();
+      updateMessagesReq.input('resourceId', resourceId);
+      updateMessagesReq.input('threadId', threadId);
+      await updateMessagesReq.query(
+        `UPDATE ${messagesTable} SET [resourceId] = @resourceId WHERE [thread_id] = @threadId`,
+      );
+
+      await tx.commit();
+      return { ...normalized, resourceId, updatedAt: now };
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
     const mult = direction === 'ASC' ? 1 : -1;
     return messages.sort((a, b) => {

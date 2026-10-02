@@ -1,14 +1,8 @@
-import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
-import type {
-  MastraDBMessage,
-  MastraMessageV1,
-  MessageSource,
-  MemoryInfo,
-  UIMessageWithMetadata,
-} from '../state/types';
+import type { MastraDBMessage, MastraMessageV1, MessageSource, MemoryInfo } from '../state/types';
 import type { MessageInput } from '../types';
 import { stampMessageParts } from '../utils/stamp-part';
 
@@ -70,10 +64,7 @@ export function inputToMastraDBMessage(
     return stampMessageParts(AIV4Adapter.fromCoreMessage(message, context, messageSource), messageSource);
   }
   if (TypeDetector.isAIV4UIMessage(message)) {
-    return stampMessageParts(
-      AIV4Adapter.fromUIMessage(message as UIMessageV4 | UIMessageWithMetadata, context, messageSource),
-      messageSource,
-    );
+    return stampMessageParts(AIV4Adapter.fromUIMessage(message, context, messageSource), messageSource);
   }
 
   // Use custom ID generator if message doesn't have an ID, otherwise keep the original

@@ -2,12 +2,16 @@ import type { UpdateModelParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, useLLMProviders, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -60,7 +64,7 @@ export const AgentMetadataModelSwitcher = ({
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: fullProviderId as UpdateModelParams['provider'],
+          provider: fullProviderId,
           modelId,
         });
         console.info('Model updated:', result);
@@ -109,7 +113,7 @@ export const AgentMetadataModelSwitcher = ({
         const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
         if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: fullOriginalProviderId as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId,
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
@@ -140,7 +144,9 @@ export const AgentMetadataModelSwitcher = ({
     return (
       <div className="flex items-center gap-2">
         <Spinner />
-        <span className="text-sm text-gray-500">Loading providers...</span>
+        <Txt as="span" tone="muted">
+          Loading providers...
+        </Txt>
       </div>
     );
   }
@@ -177,12 +183,16 @@ export const AgentMetadataModelSwitcher = ({
           : 'Locked by admin';
     return (
       <div
-        className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
+        className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="text-neutral3 h-4 w-4 shrink-0" />
-        <span className="text-ui-sm text-neutral6 truncate">{lockedLabel}</span>
-        <span className="text-ui-xs text-neutral3 ml-auto shrink-0">Set by admin</span>
+        <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <Txt as="span" variant="caption" tone="ink" className="truncate">
+          {lockedLabel}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="ml-auto shrink-0">
+          Set by admin
+        </Txt>
       </div>
     );
   }
@@ -220,7 +230,7 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 border-0! text-xs whitespace-nowrap"
+          className="flex items-center gap-1.5 border-0! text-caption whitespace-nowrap"
           title="Reset to original model"
         >
           <RotateCcw className="h-3.5 w-3.5" />
@@ -231,7 +241,7 @@ export const AgentMetadataModelSwitcher = ({
         <div className="p-2 pt-2" data-testid="agent-metadata-model-stale-warning">
           <Notice variant="warning" title="Model not allowed">
             <Notice.Message>
-              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
+              <code className="rounded bg-fill-hover px-1 py-0.5">
                 {selectedProvider}/{selectedModel}
               </code>{' '}
               is no longer allowed by the admin policy. Pick a different model to save changes.
@@ -246,7 +256,7 @@ export const AgentMetadataModelSwitcher = ({
           <Notice variant="warning" title="Provider not connected">
             <Notice.Message>
               Set the{' '}
-              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
+              <code className="rounded bg-fill-hover px-1 py-0.5">
                 {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
               </code>{' '}
               environment{' '}

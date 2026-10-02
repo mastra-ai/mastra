@@ -385,6 +385,12 @@ A tool is being called.
             description: 'Name of the tool being called',
           },
           {
+            name: 'title',
+            type: 'string',
+            isOptional: true,
+            description: 'Human-readable display name for the tool, when the tool defines one',
+          },
+          {
             name: 'args',
             type: 'Record<string, any>',
             isOptional: true,
@@ -508,6 +514,12 @@ Signals the start of streaming tool call arguments.
             name: 'toolName',
             type: 'string',
             description: 'Name of the tool being called',
+          },
+          {
+            name: 'title',
+            type: 'string',
+            isOptional: true,
+            description: 'Human-readable display name for the tool, when the tool defines one',
           },
           {
             name: 'providerExecuted',

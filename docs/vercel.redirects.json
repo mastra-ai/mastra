@@ -972,7 +972,7 @@
     },
     {
       "source": "/docs/community/discord",
-      "destination": "https://discord.gg/BTYqqHKUrf",
+      "destination": "https://discord.gg/mastra-ai",
       "permanent": true
     },
     {
@@ -2203,6 +2203,21 @@
     {
       "source": "/docs/evals/datasets/running-experiments",
       "destination": "/docs/evals/experiments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/connections/connect-mcp-client",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getTelemetry",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry",
+      "destination": "/reference/client-js/observability",
       "permanent": true
     }
   ]

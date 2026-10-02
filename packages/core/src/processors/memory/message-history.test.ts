@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
 import { createSignal } from '../../agent/signals';
+import { recordTerminalErrorMessage } from '../../loop/shared/record-terminal-error-message';
 import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
 import { RequestContext } from '../../request-context';
@@ -311,11 +312,14 @@ describe('MessageHistory', () => {
       });
 
       const resultMessages = result instanceof MessageList ? result.get.all.db() : result;
-      // msg-1 from history, msg-2 from new (duplicate filtered), msg-3 from new
+      // msg-1 from history, msg-2 once (stored copy is the base), msg-3 from new
       expect(resultMessages).toHaveLength(3);
       expect(resultMessages[0].id).toBe('msg-1');
       expect(resultMessages[1].id).toBe('msg-2');
-      expect(resultMessages[1].content.content).toBe('Message 2 (new)'); // New version kept
+      // An input copy of a stored assistant message only fills in pending tool calls; its text
+      // doesn't replace or add to the stored text.
+      expect(resultMessages[1].content.content).toBe('Message 2');
+      expect(resultMessages[1].content.parts).toEqual([{ type: 'text', text: 'Message 2' }]);
       expect(resultMessages[2].id).toBe('msg-3');
     });
 
@@ -698,6 +702,135 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).toHaveBeenCalled();
     });
 
+    it('should persist a user plus error-only assistant through the ordinary path', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const userMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+        id: 'msg-2',
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add([userMessage], `input`);
+
+      // A terminal failure recorded as an `error` part produces a real assistant
+      // response message, so the input-only orphan guard above no longer applies
+      // and no special empty-message rule is needed.
+      recordTerminalErrorMessage({
+        messageList,
+        attemptId: 'msg-3',
+        activeId: 'msg-3',
+        error: new Error('provider exploded'),
+      });
+
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.all.db(),
+        result: {
+          text: '',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      const saved = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(saved[1]?.id).toBe('msg-3');
+      expect(saved[1]?.content.parts).toEqual([
+        {
+          type: 'error',
+          error: { name: 'Error', message: 'provider exploded' },
+          createdAt: expect.any(Number),
+        },
+      ]);
+    });
+
+    it('should preserve partial parts alongside the persisted error part', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const userMessage: MastraDBMessage = {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+        id: 'msg-2',
+        createdAt: new Date(),
+      };
+      const partialAssistant: MastraDBMessage = {
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Partial response' }] },
+        id: 'msg-3',
+        createdAt: new Date(),
+      };
+      const messageList = new MessageList().add([userMessage], `input`).add([partialAssistant], `response`);
+
+      // The response id rotated after the partial output was stored, so the
+      // error part has to land on the attempt's record instead of a new one.
+      recordTerminalErrorMessage({
+        messageList,
+        attemptId: 'msg-3',
+        activeId: 'msg-rotated',
+        error: new Error('stream broke'),
+      });
+
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.all.db(),
+        result: {
+          text: 'Partial response',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          finishReason: 'error',
+          steps: [],
+        },
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledTimes(1);
+      const saved = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+
+      expect(saved.map(message => message.role)).toEqual(['user', 'assistant']);
+      const assistant = saved.find(message => message.role === 'assistant');
+      expect(assistant?.id).toBe('msg-3');
+      expect(assistant?.content.parts.map(part => part.type)).toEqual(['text', 'error']);
+      expect(assistant?.content.parts.find(part => part.type === 'text')).toMatchObject({ text: 'Partial response' });
+      expect(assistant?.content.parts.find(part => part.type === 'error')).toMatchObject({
+        error: { name: 'Error', message: 'stream broke' },
+      });
+    });
+
     it('should filter out ONLY system messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
@@ -779,6 +912,59 @@ describe('MessageHistory', () => {
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: [expect.objectContaining({ id: 'msg-user', role: 'user' })],
       });
+    });
+
+    it('should drop a step left with only signed reasoning when its updateWorkingMemory call is stripped (#22798)', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', title: 'Test Thread', metadata: {} }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+
+      const reasoning = (signature: string) => ({
+        type: 'reasoning' as const,
+        reasoning: '',
+        details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+        providerMetadata: { anthropic: { signature } },
+      });
+      const workingMemoryCall = {
+        state: 'result' as const,
+        toolCallId: 'wm-1',
+        toolName: 'updateWorkingMemory',
+        args: { memory: '# User\n- Lives in Paris' },
+        result: { success: true },
+      };
+
+      await processor.persistMessages({
+        threadId: 'thread-1',
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'step-start' },
+                reasoning('SIG_A'),
+                { type: 'tool-invocation', toolInvocation: workingMemoryCall },
+                { type: 'step-start' },
+                reasoning('SIG_B'),
+                { type: 'text', text: 'Noted.' },
+              ],
+              toolInvocations: [workingMemoryCall],
+            },
+          },
+        ],
+      });
+
+      const [saved] = (mockStorage.saveMessages as any).mock.calls[0][0].messages as MastraDBMessage[];
+      expect(saved!.content.parts).toEqual([
+        { type: 'step-start' },
+        reasoning('SIG_B'),
+        { type: 'text', text: 'Noted.' },
+      ]);
+      expect(saved!.content.toolInvocations).toBeUndefined();
     });
 
     it('should drop transient signals but keep normal signals when persisting', async () => {

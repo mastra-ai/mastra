@@ -1,8 +1,9 @@
 import { X } from 'lucide-react';
-import type { ElementType, MouseEvent, ReactNode } from 'react';
+import { createElement, type ElementType, type MouseEvent, type ReactNode } from 'react';
 
 import { cn } from '../../../lib/utils';
-import { Button } from '../Button';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button, type ButtonProps } from '../Button';
 import { Txt } from '../Txt';
 
 export interface ThreadListProps {
@@ -21,8 +22,8 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
       <nav
         aria-label={ariaLabel}
         className={cn(
-          'h-full overflow-y-auto p-1',
-          !embedded && 'rounded-studio-panel border border-border1/50 bg-surface3',
+          'flex h-full flex-col gap-1 overflow-y-auto p-1',
+          !embedded && cn(raisedSurfaceStyle, 'rounded-studio-panel'),
         )}
       >
         {children}
@@ -32,22 +33,20 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
 };
 
 export interface ThreadListNewItemProps {
-  as?: ElementType;
-  href?: string;
-  to?: string;
+  render?: ButtonProps['render'];
   children: ReactNode;
 }
 
-export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemProps) => {
+export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) => {
   return (
-    <Button as={as} href={href} to={to} variant="ghost" className="w-full justify-start rounded-xl">
+    <Button render={render} variant="ghost" className="w-full justify-start rounded-xl px-3">
       {children}
     </Button>
   );
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="bg-border1/40 -mx-1 my-1 h-px" />
+  <div role="separator" aria-orientation="horizontal" className="-mx-1 h-px shrink-0 bg-border/40" />
 );
 
 export interface ThreadListItemsProps {
@@ -55,7 +54,7 @@ export interface ThreadListItemsProps {
 }
 
 export const ThreadListItems = ({ children }: ThreadListItemsProps) => (
-  <ol className="flex flex-col gap-px" data-testid="thread-list">
+  <ol className="flex flex-col gap-1" data-testid="thread-list">
     {children}
   </ol>
 );
@@ -68,6 +67,8 @@ export interface ThreadListItemProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete?: () => void;
   deleteLabel?: string;
+  /** Trailing controls (e.g. a menu trigger) shown on hover/focus, and kept visible while a popup they own is open. */
+  actions?: ReactNode;
   className?: string;
   children: ReactNode;
 }
@@ -80,21 +81,20 @@ export const ThreadListItem = ({
   onClick,
   onDelete,
   deleteLabel = 'delete',
+  actions,
   className,
   children,
 }: ThreadListItemProps) => {
   return (
     <li className="group relative">
       <Button
-        as={as}
-        href={href}
-        to={to}
+        render={as ? createElement(as, { href, to }) : undefined}
         onClick={onClick}
         variant="ghost"
         className={cn(
-          'h-auto! min-h-form-md w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
-          onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-neutral6',
+          'w-full min-w-0 justify-start rounded-xl px-3 text-left',
+          (onDelete || actions) && 'pr-9',
+          isActive && 'bg-fill-hover text-foreground',
           className,
         )}
       >
@@ -112,6 +112,12 @@ export const ThreadListItem = ({
           <X />
         </Button>
       )}
+
+      {actions && (
+        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
+          {actions}
+        </div>
+      )}
     </li>
   );
 };
@@ -122,7 +128,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="text-neutral3 px-5 py-3">
+    <Txt as="p" variant="caption" tone="muted" className="px-3 py-2">
       {children}
     </Txt>
   );
