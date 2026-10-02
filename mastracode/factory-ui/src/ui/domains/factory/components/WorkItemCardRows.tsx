@@ -1,6 +1,7 @@
 import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -17,9 +18,7 @@ import { CardActions, CardLabels, CardStatus, SourceTitle } from './BoardCardPar
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
-// The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
   item,
   columnStage,
@@ -40,12 +39,9 @@ export function WorkItemCardRows({
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
-  /** Bottom left, the likeliest first. */
   actions: CardAction[];
   beforeStart?: () => void;
-  /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
   controls: ReactNode;
-  /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
   const labels = metadataLabels(item.metadata);
@@ -59,7 +55,7 @@ export function WorkItemCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
-          <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
+          <Txt as="span" variant="meta" tone="muted" className="min-w-0 truncate">
             {workItemMeta(item)}
           </Txt>
           {relatedLinks}
@@ -67,7 +63,7 @@ export function WorkItemCardRows({
             <Txt
               as="span"
               variant="meta"
-              tone="faint"
+              tone="muted"
               className="flex shrink-0 items-center gap-1"
               aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
             >
@@ -136,7 +132,6 @@ export function WorkItemCardRows({
   );
 }
 
-/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
 export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
   const verdict = metadata.reviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;

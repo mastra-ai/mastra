@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, X } from 'lucide-react';
 import type { FormEvent } from 'react';
@@ -8,7 +9,6 @@ import { useRef, useState } from 'react';
 
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 interface InlineWorkItemComposerProps {
   stage: BoardStageId;
@@ -56,7 +56,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       )}
       onSubmit={event => void submit(event)}
     >
-      <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
+      <Txt as="span" variant="meta" tone="muted" className="truncate pr-14">
         Manual · new
       </Txt>
       <div className="flex min-w-0 items-center gap-1.5">
