@@ -407,6 +407,10 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       let updated: WorkflowRunState | undefined;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
+          // An aborted attempt is retried, so only the committed attempt may
+          // report a win; otherwise a racing claim that lost on retry would
+          // still return the state it computed before the abort.
+          updated = undefined;
           try {
             const [rows] = await tx.run({
               sql: `SELECT snapshot FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
