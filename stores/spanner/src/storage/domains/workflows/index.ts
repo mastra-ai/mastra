@@ -1,15 +1,26 @@
-import type { Database } from '@google-cloud/spanner';
+import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   matchesExpectedWorkflowStatus,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
   WorkflowsStorage,
+  TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
   StorageListWorkflowRunsInput,
+  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
@@ -18,8 +29,41 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
+import { assertRunFence, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import { quoteIdent } from '../../db/utils';
 import { transformFromSpannerRow } from '../utils';
+
+const RUN_OWNERS_TABLE = quoteIdent(TABLE_WORKFLOW_RUN_OWNERS, 'table name');
+const RUN_ID = quoteIdent('runId', 'column name');
+const OWNER_ID = quoteIdent('ownerId', 'column name');
+const LEASE_EXPIRES_AT = quoteIdent('leaseExpiresAt', 'column name');
+
+type RunOwnerRow = {
+  generation: number | string;
+  ownerId: string;
+  leaseExpiresAt: number | string | null;
+  nowMs: number | string;
+};
+
+/** Reads a run's ownership record, judging the lease against the database clock. */
+async function readRunOwner(q: Pick<Transaction, 'run'>, runId: string): Promise<RunOwnershipRecord | null> {
+  const [rows] = await q.run({
+    sql: `SELECT generation, ${OWNER_ID} AS ownerId, ${LEASE_EXPIRES_AT} AS leaseExpiresAt, ${DB_NOW_MS} AS nowMs
+          FROM ${RUN_OWNERS_TABLE} WHERE ${RUN_ID} = @runId`,
+    params: { runId },
+    json: true,
+  });
+  const row = (rows as RunOwnerRow[])[0];
+  if (!row) return null;
+  const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
+  return {
+    runId,
+    generation: Number(row.generation),
+    ownerId: String(row.ownerId),
+    leaseExpiresAt: leaseExpiresAt === null ? null : new Date(leaseExpiresAt),
+    live: leaseExpiresAt !== null && leaseExpiresAt > Number(row.nowMs),
+  };
+}
 
 /**
  * Spanner-backed storage for workflow run snapshots, including persistence,
@@ -107,11 +151,18 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     await this.db.createIndexes(indexes);
   }
 
-  /** Creates the workflow snapshot table, the snapshotStatus generated column, and indexes. */
+  /**
+   * Creates the workflow snapshot and run ownership tables, the snapshotStatus
+   * generated column, and indexes.
+   */
   async init(): Promise<void> {
     await this.db.createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    await this.db.createTable({
+      tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
     });
     // Add the snapshotStatus generated column BEFORE indexes so the index on
     // it can be created in the same init pass.
@@ -176,9 +227,108 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     await this.db.createIndexes(this.indexes);
   }
 
-  /** Removes every workflow snapshot row. Intended for tests. */
+  /** Removes every workflow snapshot and run ownership row. Intended for tests. */
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.db.clearTable({ tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES });
+  }
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  #ownershipError(operation: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('SPANNER', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { runId },
+      },
+      error,
+    );
+  }
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    try {
+      return await inTransaction(this.db, async tx => {
+        // The read locks the row until commit, so a competing claim either
+        // waits for this transaction or aborts it and retries against the
+        // committed claim.
+        const existing = await readRunOwner(tx, runId);
+        if (!existing) {
+          if (expectedGeneration !== undefined && expectedGeneration !== 0) {
+            return { acquired: false, record: null };
+          }
+          await tx.runUpdate({
+            sql: `INSERT INTO ${RUN_OWNERS_TABLE} (${RUN_ID}, generation, ${OWNER_ID}, ${LEASE_EXPIRES_AT})
+                  VALUES (@runId, 1, @ownerId, ${DB_NOW_MS} + @leaseMs)`,
+            params: { runId, ownerId, leaseMs },
+          });
+          return { acquired: true, record: (await readRunOwner(tx, runId))! };
+        }
+        const generationMatches = expectedGeneration === undefined || existing.generation === expectedGeneration;
+        if (!generationMatches || (!force && existing.live)) {
+          return { acquired: false, record: existing };
+        }
+        await tx.runUpdate({
+          sql: `UPDATE ${RUN_OWNERS_TABLE}
+                SET generation = generation + 1, ${OWNER_ID} = @ownerId, ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs
+                WHERE ${RUN_ID} = @runId`,
+          params: { runId, ownerId, leaseMs },
+        });
+        return { acquired: true, record: (await readRunOwner(tx, runId))! };
+      });
+    } catch (error) {
+      throw this.#ownershipError('CLAIM_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    try {
+      return await inTransaction(this.db, async tx => {
+        const [count] = await tx.runUpdate({
+          sql: `UPDATE ${RUN_OWNERS_TABLE}
+                SET ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs
+                WHERE ${RUN_ID} = @runId AND generation = @generation AND ${OWNER_ID} = @ownerId
+                  AND ${LEASE_EXPIRES_AT} IS NOT NULL`,
+          params: { leaseMs, runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        const record = await readRunOwner(tx, fence.runId);
+        return count === 1 && record ? { renewed: true, record } : { renewed: false, record };
+      });
+    } catch (error) {
+      throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    try {
+      return await inTransaction(this.db, async tx => {
+        const [count] = await tx.runUpdate({
+          sql: `UPDATE ${RUN_OWNERS_TABLE} SET ${LEASE_EXPIRES_AT} = NULL
+                WHERE ${RUN_ID} = @runId AND generation = @generation AND ${OWNER_ID} = @ownerId`,
+          params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        return count === 1;
+      });
+    } catch (error) {
+      throw this.#ownershipError('RELEASE_RUN_OWNERSHIP', fence.runId, error);
+    }
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    try {
+      return await readRunOwner(this.database, runId);
+    } catch (error) {
+      throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
   }
 
   /** Decodes a raw Spanner snapshot row into the public `WorkflowRun` shape. */
@@ -210,6 +360,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence: explicitFence,
   }: {
     workflowName: string;
     runId: string;
@@ -217,13 +368,16 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    fence?: RunFence;
   }): Promise<void> {
+    const fence = resolveRunFence(this, explicitFence, runId);
     const now = new Date();
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            if (fence) await assertRunFence(tx, TABLE_WORKFLOW_RUN_OWNERS, fence, 'persistWorkflowSnapshot');
             // Read resourceId alongside createdAt so we can preserve the
             // existing association when the caller omits resourceId on update
             // (Spanner's INSERT OR UPDATE would otherwise null it out).
@@ -260,6 +414,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
         }),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -307,19 +462,23 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    fence: explicitFence,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const fence = resolveRunFence(this, explicitFence, runId);
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
       let mergedContext: Record<string, StepResult<any, any, any, any>> = {};
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            if (fence) await assertRunFence(tx, TABLE_WORKFLOW_RUN_OWNERS, fence, 'updateWorkflowResults');
             // Reading the snapshot row inside a read-write transaction takes a lock on
             // it, protecting against concurrent writers without explicit locking syntax.
             // We also fetch createdAt so the upsert can preserve it on the update path
@@ -380,6 +539,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       );
       return mergedContext;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
@@ -397,17 +557,21 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence: explicitFence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    const fence = resolveRunFence(this, explicitFence, runId);
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
       let updated: WorkflowRunState | undefined;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            if (fence) await assertRunFence(tx, TABLE_WORKFLOW_RUN_OWNERS, fence, 'updateWorkflowState');
             const [rows] = await tx.run({
               sql: `SELECT snapshot FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
               params: { workflow_name: workflowName, run_id: runId },
@@ -514,14 +678,33 @@ export class WorkflowsSpanner extends WorkflowsStorage {
   }
 
   /** Deletes the snapshot row for a `(workflowName, runId)` pair. */
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
-      await this.db.runDml({
-        sql: `DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
-        params: { workflow_name: workflowName, run_id: runId },
-      });
+      await withRunFence(
+        this.db,
+        TABLE_WORKFLOW_RUN_OWNERS,
+        resolveRunFence(this, fence, runId),
+        'deleteWorkflowRunById',
+        tx =>
+          this.db.runDml(
+            {
+              sql: `DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+              params: { workflow_name: workflowName, run_id: runId },
+            },
+            tx,
+          ),
+      );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
