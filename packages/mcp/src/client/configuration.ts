@@ -910,8 +910,10 @@ To fix this you have three different options:
    * connection was established (`serverInfo`: name, version, and optionally
    * title, description, websiteUrl, and icons), keyed by server name.
    *
-   * Servers that have not connected yet return `undefined`. Icon and website
-   * URLs come from the remote server and are not validated.
+   * A server's entry is `undefined` if it has not connected yet, or if it
+   * connected over the 2026-07-28 revision without announcing an identity, so
+   * don't use this to check connection state. Icon and website URLs come from
+   * the remote server and are not validated.
    */
   public getServerInfo(): Record<string, MCPServerImplementation | undefined> {
     const info: Record<string, MCPServerImplementation | undefined> = {};

@@ -919,7 +919,7 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverInstructions;
   }
 
-  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected. */
+  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected or if the server announced none. */
   get serverInfo(): MCPServerImplementation | undefined {
     return this.serverImplementation;
   }
