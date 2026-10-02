@@ -73,7 +73,7 @@ import type { WidenedObservationalMemoryModel } from './processors/observational
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
-import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
+import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
 
 export {
   ModelByInputTokens,
@@ -1226,6 +1226,77 @@ export class Memory extends MastraMemory {
         release();
       }
 
+      span?.end({ output: { success: true } });
+    } catch (error) {
+      span?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
+  }
+
+  /**
+   * Whether the configured storage can merge resource working memory atomically across processes.
+   */
+  override async supportsAtomicWorkingMemoryMerge(): Promise<boolean> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.supportsAtomicWorkingMemoryMerge === true;
+  }
+
+  /**
+   * Deep-merges a partial JSON update into resource-scoped working memory as one
+   * atomic storage operation, so concurrent writers (even in other processes) never
+   * lose each other's fields. `null` values delete fields; arrays are replaced.
+   * Requires schema-based working memory, resource scope, and a storage adapter
+   * that supports atomic merges (e.g. PostgreSQL); otherwise throws.
+   */
+  override async mergeWorkingMemory({
+    threadId,
+    resourceId,
+    workingMemory,
+    memoryConfig,
+    observabilityContext,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string | Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<void> {
+    const config = this.getMergedThreadConfig(memoryConfig || {});
+
+    if (!config.workingMemory?.enabled) {
+      throw new Error('Working memory is not enabled for this memory instance');
+    }
+    if (!config.workingMemory.schema) {
+      throw new Error('Working memory merge requires schema-based (JSON) working memory');
+    }
+    if ((config.workingMemory.scope || 'resource') !== 'resource' || !resourceId) {
+      throw new Error('Working memory merge requires resource-scoped working memory and a resourceId');
+    }
+
+    const patch = typeof workingMemory === 'string' ? JSON.parse(workingMemory) : workingMemory;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new Error('Working memory merge requires a JSON object');
+    }
+
+    const memoryStore = await this.getMemoryStore();
+    if (!memoryStore.supportsAtomicWorkingMemoryMerge) {
+      throw new Error(
+        `Atomic working memory merge is not supported by this storage adapter (${memoryStore.constructor.name}).`,
+      );
+    }
+
+    const span = this.createMemorySpan(
+      'update',
+      observabilityContext,
+      { threadId, resourceId },
+      { workingMemoryEnabled: true },
+    );
+
+    try {
+      await memoryStore.mergeResourceWorkingMemory({
+        resourceId,
+        merge: existing => JSON.stringify(deepMergeWorkingMemory(parseWorkingMemoryJson(existing), patch)),
+      });
       span?.end({ output: { success: true } });
     } catch (error) {
       span?.error({ error: error as Error, endSpan: true });

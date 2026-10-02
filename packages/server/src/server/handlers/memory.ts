@@ -1764,7 +1764,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   description: 'Updates the working memory state for a thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, requestContext }) => {
+  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, mode, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -1792,6 +1792,25 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         effectiveResourceId,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
+
+      if (mode === 'merge') {
+        if (!(await memory.supportsAtomicWorkingMemoryMerge())) {
+          throw new HTTPException(400, {
+            message: 'Working memory merge is not supported by the configured storage adapter',
+          });
+        }
+        try {
+          await memory.mergeWorkingMemory({
+            threadId: effectiveThreadId!,
+            resourceId: effectiveResourceId,
+            workingMemory,
+            memoryConfig,
+          });
+        } catch (error) {
+          throw new HTTPException(400, { message: error instanceof Error ? error.message : String(error) });
+        }
+        return { success: true };
+      }
 
       await memory.updateWorkingMemory({
         threadId: effectiveThreadId!,

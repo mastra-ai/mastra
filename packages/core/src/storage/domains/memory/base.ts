@@ -55,6 +55,12 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsPartialThreadUpdate?: boolean = false;
 
+  /**
+   * Whether this adapter implements `mergeResourceWorkingMemory` as an atomic
+   * read-merge-write that is safe across processes.
+   */
+  readonly supportsAtomicWorkingMemoryMerge?: boolean = false;
+
   private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
   constructor() {
@@ -418,6 +424,19 @@ export abstract class MemoryStorage extends StorageDomain {
         `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
         `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
+  }
+
+  /**
+   * Atomically replaces a resource's working memory with `merge(existing)`.
+   * The read and write happen under a lock held across processes, so concurrent
+   * merges never lose each other's changes. Creates the resource if missing.
+   * Adapters that support this must set `supportsAtomicWorkingMemoryMerge`.
+   */
+  async mergeResourceWorkingMemory(_: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    throw new Error(`Atomic working memory merge is not supported by this storage adapter (${this.constructor.name}).`);
   }
 
   protected parseOrderBy(

@@ -8966,6 +8966,7 @@ export type PostMemoryThreadsThreadIdWorkingMemory_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  mode?: ('replace' | 'merge') | undefined;
 };
 
 export type PostMemoryThreadsThreadIdWorkingMemory_Response = PostAuthRefresh_Response;
