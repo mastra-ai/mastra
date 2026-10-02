@@ -3,7 +3,7 @@ import type { MemoryStorage, RunFence, WorkflowsStorage } from '@mastra/core/sto
 import { isRunFenceConflictError } from '@mastra/core/storage';
 import { createPool } from 'mysql2/promise';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MySQLStore } from '../index';
 import type { MySQLStoreConfig } from '../index';
 
@@ -26,6 +26,9 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
  */
 describe('MySQL run fencing: a takeover racing an in-flight write', () => {
   const LEASE_MS = 30_000;
+  // Own database, so other test files clearing the shared tables never queue behind these locks.
+  const DATABASE = 'run_fence_race';
+  const heldLocks = new Set<() => Promise<void>>();
   let storeA: MySQLStore;
   let storeB: MySQLStore;
   let pool: Pool;
@@ -33,14 +36,6 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
   let monitor: Pool;
 
   beforeAll(async () => {
-    pool = createPool({
-      host: TEST_CONFIG.host,
-      port: TEST_CONFIG.port,
-      user: TEST_CONFIG.user,
-      password: TEST_CONFIG.password,
-      database: TEST_CONFIG.database,
-      connectionLimit: 2,
-    });
     monitor = createPool({
       host: TEST_CONFIG.host,
       port: TEST_CONFIG.port,
@@ -48,10 +43,25 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
       password: process.env.MYSQL_ROOT_PASSWORD || 'root',
       connectionLimit: 1,
     });
-    storeA = new MySQLStore({ ...TEST_CONFIG, id: 'run-fence-a' });
-    storeB = new MySQLStore({ ...TEST_CONFIG, id: 'run-fence-b' });
+    await monitor.query(`CREATE DATABASE IF NOT EXISTS \`${DATABASE}\``);
+    await monitor.query(`GRANT ALL ON \`${DATABASE}\`.* TO ?@'%'`, [TEST_CONFIG.user]);
+    pool = createPool({
+      host: TEST_CONFIG.host,
+      port: TEST_CONFIG.port,
+      user: TEST_CONFIG.user,
+      password: TEST_CONFIG.password,
+      database: DATABASE,
+      connectionLimit: 2,
+    });
+    storeA = new MySQLStore({ ...TEST_CONFIG, database: DATABASE, id: 'run-fence-a' });
+    storeB = new MySQLStore({ ...TEST_CONFIG, database: DATABASE, id: 'run-fence-b' });
     await storeA.init();
     await storeB.init();
+  });
+
+  // A failed assertion must not leave a lock behind for the next test to hang on.
+  afterEach(async () => {
+    await Promise.all([...heldLocks].map(release => release()));
   });
 
   afterAll(async () => {
@@ -65,13 +75,13 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
     await connection.beginTransaction();
     await connection.execute(`SELECT 1 FROM \`${table}\` WHERE ${where} FOR UPDATE`, params);
     const [rows] = await connection.query<RowDataPacket[]>('SELECT CONNECTION_ID() AS id');
-    return {
-      id: Number(rows[0]!.id),
-      release: async () => {
-        await connection.rollback();
-        connection.release();
-      },
+    const release = async () => {
+      if (!heldLocks.delete(release)) return;
+      await connection.rollback();
+      connection.release();
     };
+    heldLocks.add(release);
+    return { id: Number(rows[0]!.id), release };
   }
 
   /** Resolves with the id of a connection blocked by `id`, or null if `settled()` turns true first. */
