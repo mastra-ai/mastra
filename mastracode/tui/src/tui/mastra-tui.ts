@@ -651,14 +651,14 @@ export class MastraTUI {
     flushRender(this.state);
   }
 
-  /**
-   * Stop the TUI and clean up.
-   */
   /** The thread to suggest resuming on exit, or null while waiting for a new thread. */
   getResumeThreadId(): string | null {
     return this.state.pendingNewThread ? null : this.state.session.thread.getId();
   }
 
+  /**
+   * Stop the TUI and clean up.
+   */
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
