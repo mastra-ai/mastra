@@ -34,6 +34,42 @@ function setup() {
 }
 
 describe('durable thread continuation', () => {
+  it('delivers every sibling suspension prompt to a remote subscriber', async () => {
+    const h = setup();
+    const subscriberRuntime = new AgentThreadStreamRuntime();
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    const subscription = await subscriberRuntime.subscribeToThread(
+      h.agent,
+      {
+        threadId: h.options.memory.thread,
+        resourceId: h.options.memory.resource,
+      },
+      h.pubsub,
+    );
+    const parts: any[] = [];
+    const reading = (async () => {
+      for await (const part of subscription.stream) parts.push(part);
+    })();
+
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'one', args: {} });
+    await h.chunk('tool-call-approval', { toolCallId: 'call-2', toolName: 'two', args: {} });
+
+    await vi.waitFor(() =>
+      expect(parts.filter(part => part.type === 'tool-call-approval').map(part => part.payload.toolCallId)).toEqual([
+        'call-1',
+        'call-2',
+      ]),
+    );
+    expect(h.suspensions()).toHaveLength(2);
+
+    subscription.unsubscribe();
+    await reading;
+  });
+
   it.each([false, true])('broadcasts one answer and keeps the prefix with delayed reader=%s', async delayed => {
     const h = setup();
     const initialContext = new RequestContext();

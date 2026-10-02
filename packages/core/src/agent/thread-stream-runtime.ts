@@ -245,8 +245,6 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   createSubscriberStream?: () => ReadableStream<unknown>;
   /** Settles once every stream-part broadcast publish for this run completed. */
   broadcastFinished?: Promise<void>;
-  /** Whether this stream's current suspension boundary was published. */
-  suspensionPublished?: boolean;
   /** Present only while the broadcast may accept resumed execution segments. */
   continuation?: AgentThreadRunContinuation<OUTPUT>;
 };
@@ -2802,7 +2800,6 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
-    existing.suspensionPublished = false;
     existing.streamOptions = streamOptions;
     existing.currentSegmentOutput = output;
     // Resume callers may only send an approval and never read this segment.
@@ -3102,22 +3099,15 @@ export class AgentThreadStreamRuntime {
     key: string,
     record: AgentThreadRunRecord<any>,
   ): Promise<void> {
-    if (record.suspensionPublished) return;
-    record.suspensionPublished = true;
     record.lifecycle = 'suspended';
     // Keep the record intact for resume routing while bounding how long a parked
     // run remains cached in this process.
     record.suspendedAt = Date.now();
-    try {
-      await this.#publishAndWait(pubsub, key, {
-        type: 'run-suspended',
-        runId: record.runId,
-        streamId: record.streamId,
-      });
-    } catch (error) {
-      record.suspensionPublished = false;
-      throw error;
-    }
+    await this.#publishAndWait(pubsub, key, {
+      type: 'run-suspended',
+      runId: record.runId,
+      streamId: record.streamId,
+    });
   }
 
   #watchThreadRunCompletion(
@@ -4093,6 +4083,8 @@ export class AgentThreadStreamRuntime {
     // aborted, or never-terminated (process crash) runs are dropped.
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
     const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const remoteRunLeaseWatchTokens = new Map<string, symbol>();
+    const remoteRunSuspensionPrompts = new Set<string>();
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
     let activeReaderRunId: string | null = null;
     let activeReaderStreamId: string | null = null;
@@ -4127,6 +4119,8 @@ export class AgentThreadStreamRuntime {
 
     const discardDeferredRun = (streamId: string) => {
       deferredRunsByStreamId.delete(streamId);
+      remoteRunSuspensionPrompts.delete(streamId);
+      remoteRunLeaseWatchTokens.delete(streamId);
       const timer = remoteRunLeaseTimers.get(streamId);
       if (timer) clearTimeout(timer);
       remoteRunLeaseTimers.delete(streamId);
@@ -4152,57 +4146,89 @@ export class AgentThreadStreamRuntime {
     };
 
     const stopRemoteRunLeaseWatch = (streamId: string) => {
+      remoteRunLeaseWatchTokens.delete(streamId);
       const timer = remoteRunLeaseTimers.get(streamId);
       if (timer) clearTimeout(timer);
       remoteRunLeaseTimers.delete(streamId);
     };
 
     const startRemoteRunLeaseWatch = (runId: string, streamId: string) => {
-      if (hasFallbackLeaseProvider || remoteRunLeaseTimers.has(streamId)) return;
+      if (hasFallbackLeaseProvider || remoteRunLeaseWatchTokens.has(streamId)) return;
 
+      const watchToken = Symbol(streamId);
+      remoteRunLeaseWatchTokens.set(streamId, watchToken);
+      const scheduleCheck = () => {
+        if (remoteRunLeaseWatchTokens.get(streamId) !== watchToken) return;
+        remoteRunLeaseTimers.set(
+          streamId,
+          setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+        );
+      };
       const checkLease = async () => {
         remoteRunLeaseTimers.delete(streamId);
         const remoteRun = remoteRuns.get(streamId);
-        if (done || !remoteRun || remoteRun.done) return;
+        if (done || remoteRunLeaseWatchTokens.get(streamId) !== watchToken || !remoteRun || remoteRun.done) return;
 
         let owner: string | undefined;
         try {
           owner = await leaseProvider.getLeaseOwner(key);
         } catch {
-          if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
-          remoteRunLeaseTimers.set(
-            streamId,
-            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-          );
+          if (
+            done ||
+            remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+            remoteRuns.get(streamId) !== remoteRun ||
+            remoteRun.done
+          ) {
+            return;
+          }
+          scheduleCheck();
           return;
         }
-        if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+        if (
+          done ||
+          remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+          remoteRuns.get(streamId) !== remoteRun ||
+          remoteRun.done
+        ) {
+          return;
+        }
         if (owner === runId) {
-          remoteRunLeaseTimers.set(
-            streamId,
-            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-          );
+          scheduleCheck();
           return;
         }
 
-        clearActiveIfCurrent(runId, streamId);
-        remoteRun.parts.push({
-          type: 'error',
-          payload: { error: new AgentThreadLeaseLostError(runId) },
-        });
+        stopRemoteRunLeaseWatch(streamId);
+        const parked = remoteRunSuspensionPrompts.delete(streamId);
+        if (parked) {
+          const deferredRecord = deferredRunsByStreamId.get(streamId);
+          if (deferredRecord) {
+            deferredRunsByStreamId.delete(streamId);
+            enqueueRun(deferredRecord);
+          }
+          suspendedStreamIdsByRunId.set(runId, streamId);
+          noteRunHalf(runId);
+          state.suspendedRunIds.add(runId);
+          const record = state.threadRunsByStreamId.get(streamId) ?? state.threadRunsById.get(runId);
+          if (record) record.lifecycle = 'suspended';
+        } else {
+          clearActiveIfCurrent(runId, streamId);
+          remoteRun.parts.push({
+            type: 'error',
+            payload: { error: new AgentThreadLeaseLostError(runId) },
+          });
+        }
         remoteRun.done = true;
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
         remoteRuns.delete(streamId);
         seenStreamIds.delete(streamId);
-        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
+        if (!parked) {
+          await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
+        }
         wake();
       };
 
-      remoteRunLeaseTimers.set(
-        streamId,
-        setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-      );
+      scheduleCheck();
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
@@ -4283,6 +4309,10 @@ export class AgentThreadStreamRuntime {
           if (!remoteRun) return;
         }
         stampPartProducedAt(data.part, data.producedAt ?? new Date(event.createdAt ?? Date.now()).getTime());
+        const typedPart = data.part as { type?: string } | undefined;
+        if (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') {
+          remoteRunSuspensionPrompts.add(data.streamId);
+        }
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;
@@ -4290,6 +4320,7 @@ export class AgentThreadStreamRuntime {
       if (data.type === 'run-failed') {
         const eventStreamId = data.streamId ?? data.runId;
         stopRemoteRunLeaseWatch(eventStreamId);
+        remoteRunSuspensionPrompts.delete(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         if (deferredRunsByStreamId.has(eventStreamId)) {
           // Replayed failure of a run that never persisted anything — drop it.
@@ -4320,6 +4351,7 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-discarded') {
         stopRemoteRunLeaseWatch(data.streamId);
+        remoteRunSuspensionPrompts.delete(data.streamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         localStreamIds.delete(data.streamId);
         replayedStreamIds.delete(data.streamId);
@@ -4346,6 +4378,7 @@ export class AgentThreadStreamRuntime {
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
         const eventStreamId = data.streamId ?? data.runId;
         stopRemoteRunLeaseWatch(eventStreamId);
+        remoteRunSuspensionPrompts.delete(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);
         if (options.withInitialHistory && data.type === 'run-completed' && data.status === 'success') {
           // Judge by publish time, not delivery time: backends such as Redis
@@ -4522,6 +4555,8 @@ export class AgentThreadStreamRuntime {
       done = true;
       for (const timer of remoteRunLeaseTimers.values()) clearTimeout(timer);
       remoteRunLeaseTimers.clear();
+      remoteRunLeaseWatchTokens.clear();
+      remoteRunSuspensionPrompts.clear();
       control.references--;
       control.observers--;
       this.#releaseUnusedThreadControlSubscription(state, key);
@@ -4579,11 +4614,6 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
-                if (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') {
-                  // A replayed prompt proves this stream segment is parked. Older origins may not have
-                  // published run-suspended, so do not convert the valid suspension into lease loss.
-                  stopRemoteRunLeaseWatch(run.streamId);
-                }
                 if (
                   !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
                   !storedStreamIds.has(run.streamId) &&

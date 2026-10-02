@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Publish durable suspension boundaries to thread subscribers and preserve pending AgentController tool suspensions during synthetic lease-loss errors.
+Fixed durable threads that reported suspended tool calls as lost after a restart. Pending tool calls remain available for a response.
