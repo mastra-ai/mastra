@@ -218,6 +218,9 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
 }
 
+// Semver characters only; versions are interpolated into a shell command.
+const SAFE_PACKAGE_VERSION = /^[0-9A-Za-z.+-]+$/;
+
 /**
  * Yarn classic writes `# yarn lockfile v1` within the first two lines; Berry lockfiles never contain it.
  * Only the head of the file is read so large monorepo lockfiles are never loaded into memory.
@@ -290,6 +293,15 @@ export class Deps extends MastraBase {
     let destinationFlag = `--pack-destination ${destination}`;
     if (this.packageManager === 'yarn') {
       if (this.lockFile && (await isYarnClassicLockfile(this.lockFile.path))) {
+        if (!SAFE_PACKAGE_VERSION.test(version)) {
+          throw new MastraError({
+            id: 'DEPLOYER_INVALID_WORKSPACE_PACKAGE_VERSION',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: { dir, version: String(version) },
+            text: `Invalid version ${JSON.stringify(version)} in workspace package at ${dir}`,
+          });
+        }
         // Yarn classic has no --out/%v; --filename takes the full output path.
         destinationFlag = `--filename ${destination}/${sanitizedName}-${version}.tgz`;
       } else {

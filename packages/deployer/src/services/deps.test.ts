@@ -504,6 +504,22 @@ describe('Deps.pack', () => {
     expect(await packWith('yarn.lock', lockfile)).toBe(`yarn pack --filename ${destination}/scope-utilities-1.2.3.tgz`);
   });
 
+  it('rejects a Yarn classic workspace version containing shell metacharacters', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pack-'));
+    tempDirs.push(root);
+    await writeFile(join(root, 'yarn.lock'), '# yarn lockfile v1\n', 'utf-8');
+
+    await expect(
+      new DepsService(root).pack({
+        dir: root,
+        destination,
+        sanitizedName: 'scope-utilities',
+        version: '1.0.0; touch pwned',
+      }),
+    ).rejects.toThrow('Invalid version "1.0.0; touch pwned"');
+    expect(runChildProcess).not.toHaveBeenCalled();
+  });
+
   it('keeps --out with the %v placeholder for Yarn Berry', async () => {
     expect(await packWith('yarn.lock', '__metadata:\n  version: 8\n')).toBe(
       `yarn pack --out ${destination}/scope-utilities-%v.tgz`,
