@@ -69,8 +69,8 @@ export function createAuthMiddleware({
 }
 
 /**
- * Elysia `onAfterHandle` hook that forwards session headers refreshed by `createAuthMiddleware`
- * onto the final response. `Set-Cookie` values are appended alongside any cookies the app set
+ * Elysia `onAfterHandle` and `onError` hook that forwards session headers refreshed by
+ * `createAuthMiddleware` onto the final response, including responses for handlers that throw. `Set-Cookie` values are appended alongside any cookies the app set
  * (via `ctx.cookie`, `set.headers`, or a returned `Response`) so none of them are dropped.
  */
 export function applyAuthRefreshHeaders(ctx: any): globalThis.Response | void {

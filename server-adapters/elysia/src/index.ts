@@ -894,6 +894,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   registerContextMiddleware(): void {
     this.app.derive(this.createContextMiddleware());
     this.app.onAfterHandle({ as: 'global' }, applyAuthRefreshHeaders);
+    this.app.onError({ as: 'global' }, applyAuthRefreshHeaders);
   }
 
   registerAuthMiddleware(): void {

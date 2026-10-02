@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core';
 import { Elysia } from 'elysia';
 import { describe, expect, it } from 'vitest';
 
-import { createAuthMiddleware, MastraServer } from '../index';
+import { applyAuthRefreshHeaders, createAuthMiddleware, MastraServer } from '../index';
 
 function createMastraWithAuth() {
   const mastra = new Mastra({ logger: false });
@@ -118,6 +118,57 @@ describe('Elysia auth middleware helper', () => {
       const response = await app.fetch(expiredRequest('/custom/forbidden'));
 
       expect(response.status).toBe(403);
+      expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
+    });
+
+    it('forwards refreshed session headers when the handler throws', async () => {
+      const { app, auth } = createApp();
+      app.get(
+        '/custom/protected',
+        ctx => {
+          ctx.cookie.app.value = 'one';
+          throw new Error('boom');
+        },
+        { beforeHandle: auth },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(500);
+      expect(response.headers.getSetCookie()).toEqual(['app=one; Path=/', REFRESHED_COOKIE]);
+    });
+
+    it('forwards refreshed session headers to responses from adapter error handling', async () => {
+      const mastra = createMastraWithSessionRefresh();
+      const app = new Elysia();
+      const adapter = new MastraServer({ app, mastra });
+      adapter.registerContextMiddleware();
+      adapter.registerAuthMiddleware();
+      app.get(
+        '/custom/protected',
+        () => {
+          throw new Error('boom');
+        },
+        { beforeHandle: createAuthMiddleware({ mastra }) },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
+    });
+
+    it('forwards refreshed session headers when the hooks are registered without MastraServer', async () => {
+      const mastra = createMastraWithSessionRefresh();
+      const app = new Elysia()
+        .onAfterHandle({ as: 'global' }, applyAuthRefreshHeaders)
+        .onError({ as: 'global' }, applyAuthRefreshHeaders);
+      app.get('/custom/protected', () => ({ ok: true }), { beforeHandle: createAuthMiddleware({ mastra }) });
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
       expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
     });
 
