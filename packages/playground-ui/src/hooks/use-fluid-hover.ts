@@ -104,6 +104,21 @@ export interface PickNearestInput {
   isDisabled?: (index: number) => boolean;
 }
 
+function isOverDisabledItem(
+  items: Iterable<HTMLElement>,
+  point: { clientX: number; clientY: number },
+  isItemDisabled: ((element: HTMLElement) => boolean) | undefined,
+) {
+  for (const element of items) {
+    if (!isItemDisabled?.(element)) continue;
+    const r = element.getBoundingClientRect();
+    if (point.clientX >= r.left && point.clientX <= r.right && point.clientY >= r.top && point.clientY <= r.bottom) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * The rule, as one pure function: an item the pointer is inside wins;
  * otherwise the item whose center is nearest does, so a pointer in a gap, in
@@ -449,6 +464,7 @@ export function useFluidHover<T extends HTMLElement>(
       // a menu, a footer button, a theme toggle) keeps its own click too.
       if (target.closest(CONTROL_BETWEEN_ROWS)) return;
       if (gapClick === false) return;
+      if (isOverDisabledItem(itemsRef.current.values(), e, isItemDisabled)) return;
       const index = activeIndexRef.current;
       if (index === null) return;
       const element = itemsRef.current.get(index);
