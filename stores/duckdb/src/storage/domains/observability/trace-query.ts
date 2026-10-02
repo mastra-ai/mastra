@@ -30,10 +30,21 @@ type FieldRegistry<TField extends string> = Record<TField, FieldDefinition>;
 type SqlFragment = { sql: string; values: unknown[] };
 type RelatedCollection = 'spans' | 'scores' | 'feedback';
 
-const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
+export const TRACE_STATUS_SQL = `CASE WHEN r.error IS NOT NULL THEN 'error' ELSE 'success' END`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `date_diff('millisecond', ${startedAt}, ${endedAt})`;
+}
+
+/**
+ * Top-level string metadata value of the trace root (alias `r`). The SQL binds the JSON path
+ * twice; use `traceMetadataPathValues` for the matching parameters.
+ */
+export const TRACE_METADATA_VALUE_SQL = `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`;
+
+export function traceMetadataPathValues(key: string): [string, string] {
+  const path = `$.${JSON.stringify(key)}`;
+  return [path, path];
 }
 
 const TRACE_FIELDS = {
@@ -158,13 +169,8 @@ function compileScalarPredicate<TField extends string>(
   let fieldValues: unknown[] = [];
   if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
-    const key = predicate.field.slice('metadata.'.length);
-    const path = `$.${JSON.stringify(key)}`;
-    field = {
-      sql: `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
-      parameterType: 'scalar',
-    };
-    fieldValues = [path, path];
+    field = { sql: TRACE_METADATA_VALUE_SQL, parameterType: 'scalar' };
+    fieldValues = traceMetadataPathValues(predicate.field.slice('metadata.'.length));
   } else {
     field = fieldDefinition(registry, predicate.field);
   }
@@ -467,27 +473,38 @@ function compileDuckDBTraceScope(
   return { ctes, values };
 }
 
-export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
+/**
+ * Builds the trace selection stages shared by trace queries and trace aggregates: root scope,
+ * related-collection scopes, and a `candidates` CTE projecting `columns` from matching roots.
+ */
+export function compileDuckDBTraceCandidates(
+  plan: Pick<TrustedTraceQueryPlan, 'timeRange' | 'where' | 'scope'>,
+  columns: string,
+): { ctes: string[]; values: unknown[] } {
   const relatedCollections = collectRelatedCollections(plan.where);
   const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
-  const conditions = [
-    `r.endedAt IS NOT NULL`,
-    `r.startedAt >= CAST(? AS TIMESTAMP)`,
-    `r.startedAt < CAST(? AS TIMESTAMP)`,
-  ];
 
+  let predicateSql = 'TRUE';
   if (plan.where) {
     const predicate = compilePredicate(plan.where);
-    conditions.push(`(${predicate.sql})`);
+    predicateSql = `(${predicate.sql})`;
     values.push(...predicate.values);
   }
 
   ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}
+    SELECT ${columns}
     FROM root_scope r
-    WHERE ${conditions.slice(3).join('\n      AND ') || 'TRUE'}
+    WHERE ${predicateSql}
   )`);
+  return { ctes, values };
+}
+
+export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
+  const { ctes, values } = compileDuckDBTraceCandidates(
+    plan,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r.cursorId AS deltaWatermark' : ''}`,
+  );
 
   const candidates = `WITH ${ctes.join(',\n  ')}`;
 
@@ -702,7 +719,7 @@ LIMIT ?`,
   };
 }
 
-function isDuckDBResourceLimit(error: unknown): boolean {
+export function isDuckDBResourceLimit(error: unknown): boolean {
   return error instanceof Error && error.message.toLowerCase().includes('out of memory');
 }
 
@@ -745,7 +762,7 @@ export async function getTraceQueryValues(
   });
 }
 
-function asIsoTimestamp(value: unknown): string {
+export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
