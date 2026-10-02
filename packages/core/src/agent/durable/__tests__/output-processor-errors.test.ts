@@ -1,8 +1,9 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -11,7 +12,7 @@ import { globalRunRegistry } from '../run-registry';
 
 const sensitiveText = 'card: 4111-1111-1111-1111';
 
-function createModel() {
+function createModel(deltas: string[] = [sensitiveText]) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -20,7 +21,7 @@ function createModel() {
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'response-1', modelId: 'mock-model', timestamp: new Date(0) },
         { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: sensitiveText },
+        ...deltas.map(delta => ({ type: 'text-delta', id: 'text-1', delta })),
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
@@ -90,4 +91,115 @@ describe('durable output processor errors', () => {
     },
     15_000,
   );
+
+  it.each(['durable', 'evented'] as const)(
+    '%s engine stops publishing when an output processor blocks a chunk',
+    async engine => {
+      const pubsub = new EventEmitterPubSub();
+      pubsubs.push(pubsub);
+      const published: any[] = [];
+      const publish = pubsub.publish.bind(pubsub);
+      pubsub.publish = async (topic, event) => {
+        if (topic.startsWith('agent.stream.')) published.push(event);
+        return publish(topic, event);
+      };
+      const agent = new Agent({
+        id: `output-processor-block-${engine}`,
+        name: `Output Processor Block ${engine}`,
+        instructions: 'You are a test agent.',
+        model: createModel(['hello ', 'SECRET ', 'after']) as LanguageModelV2,
+        outputProcessors: [
+          {
+            id: 'guard',
+            name: 'Guard',
+            processOutputStream: async ({ part, abort }) => {
+              if (part.type === 'text-delta' && part.payload.text.includes('SECRET')) {
+                abort('blocked');
+              }
+              return part;
+            },
+          },
+        ],
+      });
+      const outputAgent =
+        engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+
+      new Mastra({
+        agents: { [agent.id]: outputAgent as any },
+        storage: new InMemoryStore(),
+        pubsub,
+        logger: false,
+      });
+
+      const chunks: any[] = [];
+      const { output, cleanup } = await outputAgent.stream('Say hello');
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.filter(chunk => chunk.type === 'tripwire')).toHaveLength(1);
+      await expect(output.text).resolves.toBe('hello ');
+      // Wait for the run to finish so any chunk published after the tripwire is captured.
+      await vi.waitFor(() => expect(published.some(event => event.type === 'finish')).toBe(true));
+      const topic = JSON.stringify(published);
+      expect(topic).not.toContain('SECRET');
+      expect(topic).not.toContain('after');
+      cleanup();
+    },
+    15_000,
+  );
+
+  it('keeps already-streamed output in memory when a later chunk fails processing', async () => {
+    const pubsub = new EventEmitterPubSub();
+    pubsubs.push(pubsub);
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'output-processor-error-memory',
+      name: 'Output Processor Error Memory',
+      instructions: 'You are a test agent.',
+      model: createModel(['hello ', sensitiveText]) as LanguageModelV2,
+      memory,
+      outputProcessors: [
+        {
+          id: 'throwing-redactor',
+          name: 'Throwing redactor',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta' && part.payload.text.includes('4111')) {
+              throw new Error('redactor crashed');
+            }
+            return part;
+          },
+        },
+      ],
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({
+      agents: { [agent.id]: durableAgent as any },
+      storage: new InMemoryStore(),
+      pubsub,
+      logger: false,
+    });
+
+    const threadId = 'thread-output-processor-error';
+    const resourceId = 'resource-output-processor-error';
+    const { output, cleanup } = await durableAgent.stream('Reveal the card number', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    for await (const _chunk of output.fullStream) {
+      // drain
+    }
+    await expect(output.finishReason).resolves.toBe('error');
+
+    await vi.waitFor(async () => {
+      const { messages } = await memory.recall({ threadId, resourceId });
+      expect(messages.some(message => message.role === 'assistant')).toBe(true);
+    });
+    const { messages } = await memory.recall({ threadId, resourceId });
+    const assistantMessage = messages.find(message => message.role === 'assistant');
+    const content = JSON.stringify(assistantMessage?.content);
+    expect(content).toContain('hello');
+    expect(content).not.toContain(sensitiveText);
+    expect(assistantMessage?.content.parts?.some(part => part.type === 'error')).toBe(true);
+    cleanup();
+  }, 15_000);
 });

@@ -1327,6 +1327,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // llm-execution tool-result case. Lazy: most streams carry no
             // provider tool results.
             let toolResultTripwire: TripWire | null = null;
+            let outputStreamBlocked = false;
             let toolResultRunner: ProcessorRunner | undefined;
             const getToolResultRunner = (): ProcessorRunner => {
               toolResultRunner ??= new ProcessorRunner({
@@ -1633,6 +1634,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         messageList,
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
+                          // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
+                          if (chunk.type === 'tripwire') {
+                            outputStreamBlocked = true;
+                          }
                           try {
                             await emitChunkEvent(pubsub, runId, chunk, true);
                           } catch (error) {
@@ -1648,12 +1653,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       });
                     } catch (error) {
                       if (error instanceof DurableOutputProcessorError) {
-                        return emitFatalErrorBail(
-                          error.cause instanceof Error ? error.cause : error,
-                          currentModel.modelId,
-                        );
+                        const processorError = error.cause instanceof Error ? error.cause : error;
+                        // Keep already-published output and the error record; the failing chunk was never collected.
+                        terminalAttemptContext?.recordTerminalError(processorError);
+                        return emitFatalErrorBail(processorError, currentModel.modelId);
                       }
                       throw error;
+                    }
+                    // A blocked chunk ends the stream: it is never collected, and later chunks are never published.
+                    if (outputStreamBlocked) {
+                      break;
                     }
                   } else {
                     await emitChunkEvent(pubsub, runId, clientChunk);
@@ -2039,8 +2048,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // A processToolResult tripwire fired mid-stream (#14282 parity port):
             // the raw provider tool result was never emitted nor persisted. Join
             // the shared tripwire bail path (mirrors processLLMResponse below).
-            if (toolResultTripwire) {
-              if (pubsub) {
+            // A blocked output-stream chunk joins the same path; its tripwire
+            // chunk was already published by processAndEmitChunk.
+            if (toolResultTripwire || outputStreamBlocked) {
+              if (toolResultTripwire && pubsub) {
                 await emitChunkEvent(pubsub, runId, {
                   type: 'tripwire',
                   runId,
