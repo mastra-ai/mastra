@@ -902,6 +902,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         liveParentWorkflow?.stepGraph?.[parentWorkflow.executionPath[0]!] ??
         parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!];
       if (step?.type === 'loop') {
+        // The nested run's final state replaces the parent's: the parent's
+        // `__state` predates this iteration and would win over `state`.
+        const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
           {
@@ -910,7 +913,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             prevResult,
             runId: parentWorkflow.runId,
             executionPath: parentWorkflow.executionPath,
-            stepResults: parentWorkflow.stepResults,
+            stepResults: loopStepResults,
+            state: finalState,
             activeStepsPath: parentWorkflow.activeStepsPath,
             resumeSteps: parentWorkflow.resumeSteps,
             resumeData: parentWorkflow.resumeData,
