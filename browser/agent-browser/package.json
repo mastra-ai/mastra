@@ -30,7 +30,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.19.0"
+    "agent-browser": "0.38.1",
+    "playwright-core": "^1.61.1"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
@@ -41,7 +42,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
-    "playwright-core": "^1.61.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",

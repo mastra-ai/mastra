@@ -7,7 +7,7 @@ packages:
 
 # AgentBrowser
 
-The `@mastra/agent-browser` package provides browser automation using Playwright with accessibility-first element targeting. Elements are identified by refs from the page's accessibility tree, making interactions reliable across different page layouts.
+The `@mastra/agent-browser` package provides browser automation using the agent-browser CLI and Playwright with accessibility-first element targeting. Elements are identified by refs from the page's accessibility tree, making interactions reliable across different page layouts.
 
 ## When to use AgentBrowser
 
@@ -52,7 +52,7 @@ When interacting with pages:
 
 :::note
 
-For local launches (the default), AgentBrowser requires a Chromium binary installed via Playwright. This is normally downloaded automatically when you install `@mastra/agent-browser`. If launching the browser fails with `"browser executable is missing"`, run `npx playwright install chromium`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, the remote browser provides Chromium.
+For local launches (the default), AgentBrowser starts Chrome through the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI, which uses an installed Chrome when it finds one. If launching fails with `"Chrome not found"`, run `npx agent-browser install` to download Chrome for Testing, or set `executablePath`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, the remote browser provides Chromium.
 
 :::
 
