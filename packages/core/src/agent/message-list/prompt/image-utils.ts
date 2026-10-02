@@ -228,106 +228,33 @@ function isHeifImage(bytes: Uint8Array): boolean {
   return false;
 }
 
-const VERIFIED_AUDIO_MEDIA_TYPES = new Set([
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/wave',
-  'audio/vnd.wave',
-  'audio/ogg',
-  'audio/opus',
-  'audio/flac',
-  'audio/x-flac',
-  'audio/aac',
-  'audio/x-aac',
-  'audio/mp4',
-  'audio/m4a',
-  'audio/x-m4a',
-  'audio/webm',
-  'audio/aiff',
-  'audio/x-aiff',
-  'audio/amr',
-  'audio/3gpp',
-]);
+// A relative path such as `/api/attachments/123` or `uploads/abc` is made only of base64
+// characters, so it passes as base64. Real encoded files almost always contain `+` or `=`.
+const PATH_PATTERN = /^\/?[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)+\/?$|^\/[A-Za-z0-9_-]+\/?$/;
 
 /**
- * Recognizes the common audio containers. Like images, any known container passes whatever
- * audio type it's labelled as.
- */
-function isAudio(bytes: Uint8Array): boolean {
-  if (ascii(bytes, 0, 3) === 'ID3') return true; // MP3, AAC, or FLAC with ID3 tags
-  if (bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0) return true; // MPEG audio or AAC ADTS frame
-  if (ascii(bytes, 0) === 'RIFF' && ascii(bytes, 8) === 'WAVE') return true;
-  if (['OggS', 'fLaC', 'ADIF', 'FORM'].includes(ascii(bytes, 0)) || ascii(bytes, 0, 5) === '#!AMR') return true;
-  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM
-  return ascii(bytes, 4) === 'ftyp'; // MP4, M4A, 3GP
-}
-
-function isTextMediaType(mediaType: string): boolean {
-  return (
-    mediaType.startsWith('text/') ||
-    [
-      'application/json',
-      'application/xml',
-      'application/javascript',
-      'application/yaml',
-      'application/x-yaml',
-    ].includes(mediaType) ||
-    mediaType.endsWith('+json') ||
-    mediaType.endsWith('+xml')
-  );
-}
-
-/** Text content must be UTF-8 without control characters other than whitespace. */
-function decodeText(bytes: Uint8Array, truncated: boolean): string | undefined {
-  try {
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes, { stream: truncated });
-    return /[\x00-\x08\x0B\x0E-\x1F\x7F]/.test(text) ? undefined : text;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Checks whether inline base64 content can be decoded and, where its media type allows,
- * whether it looks like that kind of file: image and audio signatures, `%PDF` for PDFs, and
- * UTF-8 text for text types (an SVG must start with `<`). Mislabelled images and audio are
- * fine: any known signature passes. Providers reject anything else on every turn.
+ * Checks whether inline base64 content can be decoded. Images with a known signature and PDFs
+ * (whose `%PDF` header must appear in the first 1 KB) must also look like one; mislabelled
+ * images are fine, since any known image signature passes. Other types can't be validated
+ * exhaustively (audio containers and text encodings vary too much), so they are only rejected
+ * when the content is a path rather than encoded file data.
  */
 function isValidInlineContent(base64: string, mediaType: string | undefined): boolean {
   const payload = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
   if (!payload || !STRICT_BASE64_PATTERN.test(payload)) return false;
   const unpaddedLength = payload.replace(/=+$/, '').length;
   if (unpaddedLength % 4 === 1 || (unpaddedLength !== payload.length && payload.length % 4 !== 0)) return false;
-  if (!mediaType) return true;
 
   // Decode only the start of the payload. Compare decoded bytes: base64 prefixes depend on the
   // bytes that follow a signature (e.g. a WebP's file size), so a real file can fail a text match.
   const head = (chars: number) => convertBase64ToUint8Array(payload.slice(0, chars));
 
-  if (SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+  if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
     const bytes = head(64);
     return detectMediaType({ data: bytes, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(bytes);
   }
-  if (VERIFIED_AUDIO_MEDIA_TYPES.has(mediaType)) return isAudio(head(64));
-  if (mediaType === 'application/pdf') {
-    // The PDF spec allows up to 1 KB of bytes before the `%PDF` header.
-    return ascii(head(1368), 0, 1026).includes('%PDF');
-  }
-  if (isTextMediaType(mediaType)) {
-    const chars = 1368;
-    const text = decodeText(head(chars), payload.length > chars);
-    if (text === undefined) return false;
-    return (
-      mediaType !== 'image/svg+xml' ||
-      text
-        .replace(/^\uFEFF/, '')
-        .trimStart()
-        .startsWith('<')
-    );
-  }
-  return true;
+  if (mediaType === 'application/pdf') return ascii(head(1368), 0, 1026).includes('%PDF');
+  return !PATH_PATTERN.test(base64.trim());
 }
 
 /** Whether a data URL's header declares base64 content (`data:<type>;base64,...`). */
@@ -338,23 +265,23 @@ export function isBase64DataUri(data: string): boolean {
 
 /**
  * Converts a percent-encoded data URL (`data:image/svg+xml,%3Csvg...`) to its base64 form, which
- * is what the AI SDK prompt conversion expects. Returns undefined if an escape is invalid.
+ * is what the AI SDK prompt conversion expects. Decodes like `fetch()` does: the `#fragment` is
+ * not content, and an invalid escape such as `%zz` stays as literal text.
  */
 export function toBase64DataUri(dataUri: string): string | undefined {
   const comma = dataUri.indexOf(',');
-  const bytes = decodePercentEncoded(dataUri.slice(comma + 1));
-  if (comma === -1 || !bytes) return undefined;
-  return `data:${dataUri.slice(5, comma)};base64,${convertUint8ArrayToBase64(bytes)}`;
+  if (comma === -1) return undefined;
+  const hash = dataUri.indexOf('#', comma);
+  const payload = dataUri.slice(comma + 1, hash === -1 ? undefined : hash);
+  return `data:${dataUri.slice(5, comma)};base64,${convertUint8ArrayToBase64(decodePercentEncoded(payload))}`;
 }
 
-/** Decodes a percent-encoded data URL payload to bytes, or undefined if an escape is invalid. */
-function decodePercentEncoded(payload: string): Uint8Array | undefined {
+function decodePercentEncoded(payload: string): Uint8Array {
   const encoder = new TextEncoder();
   const bytes: number[] = [];
   for (let i = 0; i < payload.length;) {
-    if (payload[i] === '%') {
-      const hex = payload.slice(i + 1, i + 3);
-      if (!/^[0-9a-f]{2}$/i.test(hex)) return undefined;
+    const hex = payload.slice(i + 1, i + 3);
+    if (payload[i] === '%' && /^[0-9a-f]{2}$/i.test(hex)) {
       bytes.push(Number.parseInt(hex, 16));
       i += 3;
     } else {

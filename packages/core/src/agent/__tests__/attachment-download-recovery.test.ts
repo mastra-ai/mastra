@@ -469,10 +469,6 @@ describe('attachment download recovery', () => {
         'data:text/plain;base64,/api/files/abc1234',
         'text/plain',
       ],
-      ['SVG data that is not markup', 'input', 'data:image/svg+xml;base64,aGVsbG8=', 'image/svg+xml'],
-      ['WAV data that is not audio', 'input', 'data:audio/wav;base64,aGVsbG8=', 'audio/wav'],
-      ['a percent-encoded data URL that is not markup', 'input', 'data:image/svg+xml,hello', 'image/svg+xml'],
-      ['a data URL with an invalid percent escape', 'input', 'data:image/svg+xml,%3Csvg%zz', 'image/svg+xml'],
     ] as const)(
       'gives %s the placeholder when the model accepts data URLs',
       async (_label, source, data, mediaType) => {
@@ -539,6 +535,15 @@ describe('attachment download recovery', () => {
       ['M4A', 'AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==', 'audio/mp4'],
       ['percent-encoded PNG', 'data:image/png,%89PNG%0D%0A%1A%0A', 'image/png'],
       ['percent-encoded SVG', 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E', 'image/svg+xml'],
+      // Variants a partial sniffer would miss: LOAS AAC, RF64 WAV, and non-UTF-8 text encodings
+      ['LOAS AAC', 'VuAaIAATEFblmIAB', 'audio/aac'],
+      ['RF64 WAV', 'UkY2NP////9XQVZFZHM2NBwAAAA=', 'audio/wav'],
+      ['UTF-16LE text', 'data:text/plain;charset=utf-16le;base64,aABlAGwAbABvAA==', 'text/plain'],
+      ['Latin-1 text', 'data:text/plain;charset=iso-8859-1,caf%E9', 'text/plain'],
+      // Decoded like fetch(): a fragment isn't content, an encoded hash is, and a bad escape stays literal
+      ['a data URL with a fragment', 'data:text/plain,hello#fragment', 'text/plain'],
+      ['a data URL with an encoded hash', 'data:text/plain,hello%23fragment', 'text/plain'],
+      ['a data URL with an invalid escape', 'data:text/plain,50%zz', 'text/plain'],
     ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
       const dataUrlModel = makeModel('data-urls');
       const { run } = setup({ durable, models: [dataUrlModel.model] });
