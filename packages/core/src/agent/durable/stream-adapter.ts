@@ -80,14 +80,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Inclusive, zero-based PubSub event index to replay from, or `latest` to receive new live events only.
-   * If undefined, replays all available cached events before receiving live events.
-   * On transports with numeric offset support, a number replays from that index. On transports
-   * without numeric offset support, a number starts with new live events instead.
-   * On transports with numeric offset support, a number beyond the highest retained index skips replay
-   * and live events with lower indexes. Events arrive only when the published index reaches the requested
-   * offset. If the index counter restarts below that offset and never reaches it, observation remains
-   * pending indefinitely.
+   * Inclusive, zero-based PubSub event index, or `latest` to live-tail. Numeric indexes count all
+   * cached run-topic events, including lifecycle events, not chunks. Omit it to replay all available
+   * cached events; transports without numeric offsets live-tail numeric values instead. A non-zero
+   * number produces partial text and may make structured output fail to parse; beyond retained history,
+   * it also skips lower-index live events on numeric-offset transports. See
+   * `/reference/agents/durable-agent#observerunid-options`.
    */
   offset?: number | 'latest';
   /**

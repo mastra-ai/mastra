@@ -10724,18 +10724,11 @@ export class Agent<
     runId: string,
     options?: {
       /**
-       * Inclusive, zero-based PubSub event index to replay from. The index counts every cached
-       * event on the run topic, including lifecycle events, so it is not a chunk count. Omit it
-       * to replay all available cached events before receiving live events. On PubSub transports
-       * without numeric offset support, providing an offset starts with new live events instead.
-       * On transports with numeric offset support, an offset beyond the highest retained index skips
-       * replay and live events with lower indexes. Events arrive only when the published index reaches
-       * the requested offset. If the index counter restarts below that offset and never reaches it,
-       * observation remains pending indefinitely.
-       *
-       * Public stream chunks do not expose this index. Use an offset only when another integration
-       * tracks the transport position. Starting mid-stream skips earlier deltas, so aggregated text
-       * is partial and structured output may fail validation or parsing.
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. A non-zero offset produces partial text and may
+       * make structured output fail to parse; beyond retained history, it also skips lower-index live
+       * events on numeric-offset transports. See `/reference/agents/durable-agent#observerunid-options`.
        */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
