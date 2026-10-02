@@ -90,6 +90,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { readToolResultFromMessageList, snapshotToolResult } from '../../shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
@@ -203,31 +204,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
    */
   onModelFinished?: () => void;
 };
-
-/**
- * Walk messageList backwards looking for a tool-invocation part with the given
- * toolCallId in result state. Returns the result value if found, undefined otherwise.
- *
- * Used to read the post-processToolResult value back from the message list so we can
- * sync any processor mutations into the downstream tool-result stream chunk.
- */
-function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
-  const messages = messageList.get.all.db();
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
-      if (
-        part?.type === 'tool-invocation' &&
-        part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
-      ) {
-        return part.toolInvocation.result;
-      }
-    }
-  }
-  return undefined;
-}
 
 type ToolResolvers = {
   resolveTool: (toolName: string) => ToolSet[string] | undefined;
@@ -722,6 +698,11 @@ async function processOutputStream<OUTPUT = undefined>({
     });
   };
 
+  const hasProcessToolResult = Boolean(
+    outputProcessors?.some(processor =>
+      isProcessorWorkflow(processor) ? processor.__processToolResult !== false : 'processToolResult' in processor,
+    ),
+  );
   for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -749,11 +730,16 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    chunk = await addToolPayloadTransformToChunk(chunk, {
-      resolveTool,
-      policy: toolPayloadTransform,
-      logger,
-    });
+    // A tool result that processToolResult will see is transformed after the processors
+    // run (in the 'tool-result' case below), so transforms never receive the raw value.
+    const transformAfterProcessors = chunk.type === 'tool-result' && 'result' in chunk.payload && hasProcessToolResult;
+    if (!transformAfterProcessors) {
+      chunk = await addToolPayloadTransformToChunk(chunk, {
+        resolveTool,
+        policy: toolPayloadTransform,
+        logger,
+      });
+    }
 
     let toolInputStartToolDef: ToolSet[string] | undefined;
     if (chunk.type === 'tool-call-input-streaming-start') {
@@ -808,11 +794,12 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     // Collect every chunk for post-stream message building
-    collectedChunks.push({
+    const collectedChunk: CollectedChunk = {
       type: chunk.type,
       payload: 'payload' in chunk ? chunk.payload : undefined,
       metadata: chunk.metadata,
-    });
+    };
+    collectedChunks.push(collectedChunk);
 
     // Track the assistant text emitted so far so an abort can hand the caller
     // the partial response. This sits after the `abortSignal.aborted` break
@@ -1013,7 +1000,8 @@ async function processOutputStream<OUTPUT = undefined>({
           // web_search) whose results arrive in a later LLM stream. Client-executed
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
-          if (outputProcessors && outputProcessors.length > 0) {
+          if (hasProcessToolResult) {
+            const resultBefore = snapshotToolResult(messageList, chunk.payload.toolCallId);
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1034,10 +1022,24 @@ async function processOutputStream<OUTPUT = undefined>({
 
               // Sync any processor mutation back into the chunk so streaming clients
               // see the post-processor value, not the raw tool return.
-              const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
-              if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+              const postProcessorResult = readToolResultFromMessageList(
+                messageList,
+                chunk.payload.toolCallId,
+                resultBefore,
+              );
+              if (postProcessorResult !== undefined) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
               }
+              // Deferred from the top of the loop. Copy only the metadata: rebinding `chunk`
+              // would lose the tool-result narrowing, and titles only apply to tool-call chunks.
+              const transformed = await addToolPayloadTransformToChunk(chunk, {
+                resolveTool,
+                policy: toolPayloadTransform,
+                logger,
+              });
+              chunk.metadata = transformed.metadata;
+              // Same-stream results are persisted from collectedChunks, not updateToolInvocation.
+              collectedChunk.metadata = transformed.metadata;
             } catch (error) {
               if (error instanceof TripWire) {
                 toolResultTripwire = error;

@@ -11,7 +11,7 @@ import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-arg
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
-import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
+import { readToolResultFromMessageList, snapshotToolResult } from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
@@ -1425,6 +1425,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
 
                   if (effectiveOutputProcessors.length > 0) {
+                    const resultBefore = snapshotToolResult(messageList, resultPayload.toolCallId);
                     try {
                       await getToolResultRunner().runProcessToolResult({
                         steps: (inputData as any).accumulatedSteps ?? [],
@@ -1445,8 +1446,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       // Sync any processor mutation (via messageList.updateToolInvocation)
                       // back into the chunk so the emitted client chunk and the
                       // collected chunk both carry the post-processor value.
-                      const postProcessorResult = readToolResultFromMessageList(messageList, resultPayload.toolCallId);
-                      if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
+                      const postProcessorResult = readToolResultFromMessageList(
+                        messageList,
+                        resultPayload.toolCallId,
+                        resultBefore,
+                      );
+                      if (postProcessorResult !== undefined) {
                         resultPayload.result = postProcessorResult;
                       }
                     } catch (error) {

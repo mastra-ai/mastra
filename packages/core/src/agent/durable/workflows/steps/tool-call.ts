@@ -1645,36 +1645,8 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput) {
-          modelOutputComputed = true;
-          const mappingSpan = stepSpan?.createChildSpan({
-            type: SpanType.MAPPING,
-            name: `tool output mapping: '${toolName}'`,
-            entityType: EntityType.TOOL,
-            entityId: toolName,
-            entityName: toolName,
-            input: outcome.rawResult,
-            attributes: {
-              mappingType: 'toModelOutput',
-              toolCallId,
-            },
-          });
-          try {
-            const modelOutput = normalizeModelOutput(await toModelOutput(outcome.rawResult));
-            mappingSpan?.end({ output: modelOutput });
-
-            if (modelOutput != null) {
-              const existingMastra = (providerMetadata as any)?.mastra;
-              providerMetadata = {
-                ...providerMetadata,
-                mastra: { ...existingMastra, modelOutput },
-              };
-            }
-          } catch (mappingError) {
-            mappingSpan?.error({ error: mappingError as Error, endSpan: true });
-            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
-          }
-        }
+        // Mapped after processToolResult runs (below), so the mapper only sees the final value.
+        let modelOutputInput: unknown = outcome.rawResult;
 
         // Run processToolResult hooks before the tool-result chunk is emitted.
         // In this engine subscribers receive tool-result chunks HERE, at
@@ -1732,8 +1704,11 @@ export function createDurableToolCallStep() {
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
             const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
-            if (postProcessorResult !== undefined && postProcessorResult !== result) {
+            // Any result-state value here was written by a processor (the commit
+            // comes later), including an object mutated in place.
+            if (postProcessorResult !== undefined) {
               result = postProcessorResult;
+              modelOutputInput = result;
             }
           } catch (processorError) {
             if (processorError instanceof TripWire) {
@@ -1775,6 +1750,40 @@ export function createDurableToolCallStep() {
             // keeps the run alive.
             logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
             result = { error: 'Tool result processing failed' };
+            modelOutputInput = undefined;
+            // Marked computed so the later mapping step doesn't map the placeholder either.
+            modelOutputComputed = true;
+          }
+        }
+
+        if (toModelOutput && modelOutputInput !== undefined) {
+          modelOutputComputed = true;
+          const mappingSpan = stepSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolName,
+            entityName: toolName,
+            input: modelOutputInput,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId,
+            },
+          });
+          try {
+            const modelOutput = normalizeModelOutput(await toModelOutput(modelOutputInput));
+            mappingSpan?.end({ output: modelOutput });
+
+            if (modelOutput != null) {
+              const existingMastra = (providerMetadata as any)?.mastra;
+              providerMetadata = {
+                ...providerMetadata,
+                mastra: { ...existingMastra, modelOutput },
+              };
+            }
+          } catch (mappingError) {
+            mappingSpan?.error({ error: mappingError as Error, endSpan: true });
+            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
           }
         }
 
