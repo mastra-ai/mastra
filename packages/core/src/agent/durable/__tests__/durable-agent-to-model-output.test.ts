@@ -147,6 +147,80 @@ describe('DurableAgent toModelOutput parity', () => {
   it.each([
     ['DurableAgent', (agent: Agent<any, any, any>) => createDurableAgent({ agent, pubsub })],
     ['EventedAgent', (agent: Agent<any, any, any>) => createEventedAgent({ agent })],
+  ] as const)(
+    'fails the %s run when an awaited background tool toModelOutput throws',
+    async (_agentType, createAgent) => {
+      const mappingError = new Error('awaited background mapping failed');
+      const testTool = createTool({
+        id: 'awaited-background-mapper-tool',
+        description: 'An awaited background tool with a broken output mapper',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ data: z.string() }),
+        execute: async () => ({ data: 'background result' }),
+        toModelOutput: () => {
+          throw mappingError;
+        },
+        background: { enabled: true },
+      });
+      const baseAgent = new Agent({
+        name: 'awaited-background-mapper-agent',
+        instructions: 'Use the tool.',
+        model: createToolCallingModel('awaited-background-mapper-tool', {
+          query: 'test',
+          _background: { disposition: 'awaited' },
+        }),
+        tools: { 'awaited-background-mapper-tool': testTool },
+        backgroundTasks: { tools: { 'awaited-background-mapper-tool': true } },
+      });
+      const agent = createAgent(baseAgent);
+      const mastra = new Mastra({
+        agents: { 'awaited-background-mapper-agent': agent as any },
+        logger: false,
+        storage: new InMemoryStore(),
+        backgroundTasks: { enabled: true },
+        pubsub,
+      });
+      await mastra.startWorkers();
+
+      try {
+        let receivedError: unknown;
+        let finished = false;
+        const { output, cleanup } = await agent.stream('Use the tool', {
+          onError: ({ error }) => {
+            receivedError = error;
+          },
+          onFinish: () => {
+            finished = true;
+          },
+        });
+
+        try {
+          const chunks: any[] = [];
+          for await (const chunk of output.fullStream) {
+            chunks.push(chunk);
+          }
+
+          const streamedError = chunks.find(chunk => chunk.type === 'error')?.payload?.error;
+          expect(receivedError instanceof Error ? receivedError.message : String(receivedError)).toContain(
+            mappingError.message,
+          );
+          expect(streamedError instanceof Error ? streamedError.message : String(streamedError)).toContain(
+            mappingError.message,
+          );
+          expect(finished).toBe(false);
+        } finally {
+          cleanup();
+        }
+      } finally {
+        await mastra.stopWorkers?.();
+      }
+    },
+    30_000,
+  );
+
+  it.each([
+    ['DurableAgent', (agent: Agent<any, any, any>) => createDurableAgent({ agent, pubsub })],
+    ['EventedAgent', (agent: Agent<any, any, any>) => createEventedAgent({ agent })],
   ] as const)('computes toModelOutput for %s', async (_agentType, createAgent) => {
     const toModelOutputSpy = vi.fn(result => ({
       type: 'content',

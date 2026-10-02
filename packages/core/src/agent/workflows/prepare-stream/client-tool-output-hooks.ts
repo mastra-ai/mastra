@@ -214,8 +214,8 @@ export async function applyClientToolModelOutput({
           mastra: nextMastra,
         } as unknown as typeof part.providerMetadata;
       } catch (error) {
-        // A failing toModelOutput must not fail the request: log and let the
-        // model see the raw result (same policy as the execution path).
+        // Client-tool mapping runs during preparation on an already-finished
+        // result, outside the execution path, so log and preserve the raw result.
         logger?.error('Error calling client tool toModelOutput', { error, toolName, toolCallId });
       }
     }
