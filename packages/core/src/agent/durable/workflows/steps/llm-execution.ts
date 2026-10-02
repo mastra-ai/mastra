@@ -219,7 +219,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         mastra: mastra as Mastra,
         runId,
         agentId,
-        input: { ...typedInput, messageListState: readMessageListState(params.state, typedInput) },
+        input: { ...typedInput, messageListState: await readMessageListState(params, typedInput) },
         requestContext,
         logger,
       });
