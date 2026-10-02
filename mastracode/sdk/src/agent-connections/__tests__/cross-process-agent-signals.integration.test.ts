@@ -817,7 +817,9 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     const codes = await closeAll(owner, observer);
 
     expect(discovery).toMatchObject({ hasPeer: true });
-    expect(owner.stderr).toMatch(/Stale broker election lock removed/);
+    // The retry clears the leftover on its own, so neither side warns.
+    expect(owner.stderr).toBe('');
+    expect(observer.stderr).toBe('');
     expect(codes).toEqual([0, 0]);
   }, 30_000);
 

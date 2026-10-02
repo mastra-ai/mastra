@@ -58,10 +58,17 @@ const mocks = vi.hoisted(() => {
       this.published.push({ topic, event });
     }
 
+    // Like core: the callback is registered before the socket starts and
+    // removed again if starting fails.
     async subscribe(topic: string, cb?: (event: unknown) => void): Promise<void> {
       this.subscriptions.push(topic);
-      await subscribeImpl(this.socketPath);
       if (cb) this.callbacks.add(cb);
+      try {
+        await subscribeImpl(this.socketPath);
+      } catch (error) {
+        if (cb) this.callbacks.delete(cb);
+        throw error;
+      }
     }
 
     async unsubscribe(topic: string, cb?: (event: unknown) => void): Promise<void> {
@@ -140,6 +147,7 @@ describe('SignalsPubSub', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -739,7 +747,8 @@ describe('SignalsPubSub', () => {
       expect(socketPaths().some(path => path.includes('_shared'))).toBe(false);
     });
 
-    it('warns once and keeps project-scope discovery when the shared scope fails', async () => {
+    it('keeps project-scope discovery when the shared scope fails, and warns once it keeps failing', async () => {
+      vi.useFakeTimers();
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mocks.setMkdirImpl(async dir => {
         if (dir.endsWith('/_shared')) throw new Error('shared scope unavailable');
@@ -751,9 +760,12 @@ describe('SignalsPubSub', () => {
       await pubsub.subscribe(peerRequestTopic, cb);
       await pubsub.publish(peerRequestTopic, event);
       await pubsub.publish(peerReplyTopic, event);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(warn).not.toHaveBeenCalled();
 
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]![0]).toMatch(/shared scope unavailable/);
+      expect(warn.mock.calls[0]![0]).toMatch(/can't join .*_shared: shared scope unavailable.*still retrying/);
       const project = findSocket(`${root}/${resourceId}/agent_thread-peer-discovery.sock`);
       expect(project?.subscriptions).toEqual([peerRequestTopic]);
       expect(project?.published).toHaveLength(1);
@@ -790,8 +802,8 @@ describe('SignalsPubSub', () => {
         expect(sharedAttempts(peerRequestTopic)).toBe(3);
         findSocket(sharedPeerSocket())!.deliver(event);
         expect(cb).toHaveBeenCalledTimes(1);
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0]![0]).toMatch(/until it recovers. Retrying: Stale broker election lock removed/);
+        // A failure the retry clears isn't worth printing over the TUI.
+        expect(warn).not.toHaveBeenCalled();
         await pubsub.close();
       });
 
@@ -836,16 +848,46 @@ describe('SignalsPubSub', () => {
         await pubsub.close();
       });
 
+      it('keeps a callback subscribed again while a cancelled retry attempt was in flight', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const attempt = deferred();
+        let calls = 0;
+        mocks.setSubscribeImpl(async socketPath => {
+          if (!socketPath.startsWith(`${root}/_shared/`)) return;
+          calls++;
+          if (calls === 1) throw new Error('Broker election in progress by another process');
+          if (calls === 2) await attempt.promise;
+        });
+        const { createSignalsPubSub } = await import('../signals-pubsub.js');
+        const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+        const cb = vi.fn();
+
+        await pubsub.subscribe(peerRequestTopic, cb);
+        await vi.waitFor(() => expect(calls).toBe(2), { timeout: 2_000 });
+        await pubsub.unsubscribe(peerRequestTopic, cb);
+        await pubsub.subscribe(peerRequestTopic, cb);
+        expect(calls).toBe(3);
+        attempt.resolve();
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        expect(findSocket(sharedPeerSocket())?.callbacks.has(cb)).toBe(true);
+        expect(calls).toBe(3);
+        await pubsub.close();
+      });
+
       it('stops retrying on close', async () => {
+        vi.useFakeTimers();
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         failShared(Infinity);
         const { createSignalsPubSub } = await import('../signals-pubsub.js');
         const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
 
         await pubsub.subscribe(peerRequestTopic, vi.fn());
+        expect(vi.getTimerCount()).toBe(1);
         await pubsub.close();
-        await new Promise(resolve => setTimeout(resolve, 400));
 
+        expect(vi.getTimerCount()).toBe(0);
+        await vi.advanceTimersByTimeAsync(10_000);
         expect(sharedAttempts(peerRequestTopic)).toBe(1);
       });
 

@@ -403,7 +403,7 @@ After a send attempt reaches Core routing, the routing result is authoritative. 
 
 ### Discover agents in other projects
 
-With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub, which Mastra Code turns on by default. It doesn't apply on Windows or when you pass your own `pubsub`.
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub. The Mastra Code CLI turns it on by default. Embedded clients pass `unixSocketPubSub: true` alongside `crossAgentSignals: true` to `createMastraCode()`. It doesn't apply on Windows or when you pass your own `pubsub`.
 
 Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project, and finds a thread's owner through a shared `/tmp/mc/_shared` directory. Peer discovery, which lists the threads you can connect to, runs both in the project's own directory and in `/tmp/mc/_shared`. Instances running older versions still find instances in their own project.
 

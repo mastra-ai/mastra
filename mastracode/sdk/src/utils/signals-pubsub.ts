@@ -17,17 +17,20 @@ const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
 const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');
 
-/**
- * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
- * single round trip, and never published to again once the request settles.
- */
 /** Backoff for retrying a shared-scope subscription that failed, e.g. on a stale broker election lock. */
 const SHARED_RETRY_MIN_MS = 100;
 const SHARED_RETRY_MAX_MS = 5_000;
 
+/**
+ * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
+ * single round trip, and never published to again once the request settles.
+ */
+
 function isEphemeralTopic(topic: string): boolean {
   return DISCOVERY_REPLY_TOPIC.test(topic) || IDLE_ACCEPTANCE_REPLY_TOPIC.test(topic);
 }
+
+type SharedRetry = { delayMs: number; timer?: ReturnType<typeof setTimeout> };
 
 export type SignalsPubSubOptions = {
   /**
@@ -189,11 +192,14 @@ class SignalsPubSub extends PubSub {
   readonly #liveSubscriptions = new Map<string, Set<EventCallback>>();
   readonly #clearGenerations = new Map<string, number>();
   readonly #closing = new Map<string, Promise<void>>();
+  /** Callbacks that should be subscribed in the shared scope, per topic. */
+  readonly #sharedWanted = new Map<string, Set<EventCallback>>();
   /**
-   * Shared-scope subscriptions being retried, per topic and callback. The value
-   * is the pending timer, or null while an attempt is in flight.
+   * Shared-scope subscriptions being retried, per topic and callback. Each
+   * retry is its own object, so an attempt that settles after its retry was
+   * cancelled or replaced can tell.
    */
-  readonly #sharedRetries = new Map<string, Map<EventCallback, ReturnType<typeof setTimeout> | null>>();
+  readonly #sharedRetries = new Map<string, Map<EventCallback, SharedRetry>>();
   readonly #leaseProvider: LeaseProvider;
   readonly #sharedPeerDiscovery: boolean;
   #sharedFailureReported = false;
@@ -244,33 +250,50 @@ class SignalsPubSub extends PubSub {
       await this.#publishTo(topic, primary!, event, options);
       return;
     }
-    const [own, other] = await Promise.allSettled([
+    // The shared scope is best effort: the next publish tries it again.
+    const [own] = await Promise.allSettled([
       this.#publishTo(topic, primary!, event, options),
       this.#publishTo(topic, shared, event, options),
     ]);
     if (own.status === 'rejected') throw own.reason;
-    if (other.status === 'rejected') this.#reportSharedFailure(other.reason);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     const [primary, shared] = this.#routes(topic);
     await this.#subscribeTo(topic, primary!, cb, options);
     if (shared === undefined) return;
+    let wanted = this.#sharedWanted.get(topic);
+    if (!wanted) {
+      wanted = new Set();
+      this.#sharedWanted.set(topic, wanted);
+    }
+    wanted.add(cb);
     // A retry is already bringing this callback up in the shared scope.
     if (this.#sharedRetries.get(topic)?.has(cb)) return;
-    await this.#subscribeTo(topic, shared, cb, options).catch(error => {
-      this.#reportSharedFailure(error);
-      // Without a retry, a request-topic subscription that failed once (say, on
-      // a broker election lock a crashed process left behind) would hide this
-      // thread from other projects until restart. A one-shot reply topic lives
-      // for one lookup, and the next lookup tries again.
-      if (!isEphemeralTopic(topic)) this.#retrySharedSubscribe(topic, shared, cb, options, SHARED_RETRY_MIN_MS);
+    await this.#subscribeTo(topic, shared, cb, options).catch(() => {
+      // The shared scope is best effort. A one-shot reply topic lives for one
+      // lookup, and the next lookup tries again. A request-topic subscription
+      // that failed once (say, on a broker election lock a crashed process left
+      // behind) would hide this thread from other projects until restart, so it
+      // is retried.
+      if (isEphemeralTopic(topic) || !this.#sharedWanted.get(topic)?.has(cb)) return;
+      const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
+      let retries = this.#sharedRetries.get(topic);
+      if (!retries) {
+        retries = new Map();
+        this.#sharedRetries.set(topic, retries);
+      }
+      retries.set(cb, retry);
+      this.#scheduleSharedRetry(topic, shared, cb, options, retry);
     });
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     const [primary, shared] = this.#routes(topic);
     this.#cancelSharedRetry(topic, cb);
+    const wanted = this.#sharedWanted.get(topic);
+    wanted?.delete(cb);
+    if (wanted?.size === 0) this.#sharedWanted.delete(topic);
     if (shared !== undefined) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
     await this.#unsubscribeFrom(topic, primary!, cb);
   }
@@ -301,9 +324,10 @@ class SignalsPubSub extends PubSub {
   async close(): Promise<void> {
     this.#closed = true;
     for (const retries of this.#sharedRetries.values()) {
-      for (const timer of retries.values()) if (timer) clearTimeout(timer);
+      for (const retry of retries.values()) clearTimeout(retry.timer);
     }
     this.#sharedRetries.clear();
+    this.#sharedWanted.clear();
     await Promise.allSettled([
       ...[...this.#leaseSockets.values()].map(s => s.close()),
       ...[...this.#sockets.values()].map(s => s.close()),
@@ -329,56 +353,57 @@ class SignalsPubSub extends PubSub {
     return false;
   }
 
-  #reportSharedFailure(error: unknown): void {
+  /**
+   * Warns once per instance, and only for a shared subscription that keeps
+   * failing: a broker election colliding with another starting instance clears
+   * on the first retry and isn't worth printing over the TUI.
+   */
+  #reportSharedFailure(dir: string, error: unknown): void {
     if (this.#sharedFailureReported) return;
     this.#sharedFailureReported = true;
     const message = error instanceof Error ? error.message : String(error);
     console.warn(
-      `Cross-project agent discovery hit an error; other projects may not see this instance until it recovers. Retrying: ${message}`,
+      `Cross-project agent discovery can't join ${join(this.#rootDir, dir)}: ${message}. Other projects may not see this instance's threads; still retrying.`,
     );
   }
 
-  #retrySharedSubscribe(
+  #scheduleSharedRetry(
     topic: string,
     dir: string,
     cb: EventCallback,
     options: SubscribeOptions | undefined,
-    delayMs: number,
+    retry: SharedRetry,
   ): void {
-    if (this.#closed) return;
-    let retries = this.#sharedRetries.get(topic);
-    if (!retries) {
-      retries = new Map();
-      this.#sharedRetries.set(topic, retries);
-    }
-    const timer = setTimeout(() => {
-      const current = this.#sharedRetries.get(topic);
-      if (current?.get(cb) !== timer) return;
-      current.set(cb, null);
+    const isCurrent = () => this.#sharedRetries.get(topic)?.get(cb) === retry;
+    retry.timer = setTimeout(() => {
+      retry.timer = undefined;
+      if (!isCurrent()) return;
       void this.#subscribeTo(topic, dir, cb, options).then(
         () => {
-          if (this.#sharedRetries.get(topic)?.has(cb)) {
+          if (isCurrent()) {
             this.#cancelSharedRetry(topic, cb);
             return;
           }
-          // Unsubscribed while this attempt was in flight.
-          void this.#unsubscribeFrom(topic, dir, cb).catch(() => {});
+          // Unsubscribed while this attempt was in flight. A callback that was
+          // subscribed again since is wanted, and stays.
+          if (!this.#sharedWanted.get(topic)?.has(cb)) void this.#unsubscribeFrom(topic, dir, cb).catch(() => {});
         },
-        () => {
-          if (!this.#sharedRetries.get(topic)?.has(cb)) return;
-          this.#retrySharedSubscribe(topic, dir, cb, options, Math.min(delayMs * 2, SHARED_RETRY_MAX_MS));
+        error => {
+          if (!isCurrent()) return;
+          if (retry.delayMs >= SHARED_RETRY_MAX_MS) this.#reportSharedFailure(dir, error);
+          retry.delayMs = Math.min(retry.delayMs * 2, SHARED_RETRY_MAX_MS);
+          this.#scheduleSharedRetry(topic, dir, cb, options, retry);
         },
       );
-    }, delayMs);
-    timer.unref?.();
-    retries.set(cb, timer);
+    }, retry.delayMs);
+    retry.timer.unref?.();
   }
 
   #cancelSharedRetry(topic: string, cb: EventCallback): void {
     const retries = this.#sharedRetries.get(topic);
-    if (!retries?.has(cb)) return;
-    const timer = retries.get(cb);
-    if (timer) clearTimeout(timer);
+    const retry = retries?.get(cb);
+    if (!retries || !retry) return;
+    clearTimeout(retry.timer);
     retries.delete(cb);
     if (retries.size === 0) this.#sharedRetries.delete(topic);
   }
