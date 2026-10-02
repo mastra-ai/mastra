@@ -3,7 +3,7 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import type { LeaseProvider, PubSub } from '../../events/pubsub';
+import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
@@ -36,8 +36,10 @@ import {
   fencePubSub,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
+  RUN_ACTIVE_ERROR_ID,
   setExecutionClaim,
 } from './execution-fence';
+import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
@@ -55,15 +57,27 @@ import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
-const RECOVERY_LEASE_TTL_MS = 30_000;
-const RECOVERY_LEASE_RENEW_INTERVAL_MS = 10_000;
+/** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
+const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
+const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
+const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
 
-interface RecoveryLease {
-  assertOwned(): void;
-  getLossError(): MastraError | undefined;
-  waitForLoss(): Promise<MastraError>;
-  release(): Promise<void>;
+/** Why `recover()` refused a run that is not orphaned, or `undefined` for a real failure. */
+function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
+  const { id, details } = (error ?? {}) as { id?: unknown; details?: { retryAt?: unknown } };
+  switch (id) {
+    case RUN_ACTIVE_ERROR_ID:
+      return typeof details?.retryAt === 'number'
+        ? { reason: 'run-active', retryAt: details.retryAt }
+        : { reason: 'run-active' };
+    case RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID:
+      return { reason: 'run-active-locally' };
+    case RECOVER_ALREADY_IN_PROGRESS_ERROR_ID:
+      return { reason: 'already-in-progress' };
+    default:
+      return undefined;
+  }
 }
 
 interface RehydratedRecoveryState {
@@ -74,8 +88,6 @@ interface RehydratedRecoveryState {
   recoverAgentSpan: any;
   registryEntry: any;
 }
-
-type RecoveryRaceResult<T> = { kind: 'result'; value: T } | { kind: 'lease-lost'; error: MastraError };
 
 /**
  * Bind live fallback model instances to the persisted ids that llm-execution
@@ -529,13 +541,23 @@ export interface DurableAgentListActiveRunsResult {
  * Outcome of a single run restart attempted by
  * {@link DurableAgent.recoverActiveRuns}. `success` means `run.restart()`
  * returned; `failed` means it threw and the error was captured so recovery
- * of remaining runs could proceed.
+ * of remaining runs could proceed; `skipped` means the run was not orphaned.
  */
 export interface DurableAgentRecoveredRun {
   runId: string;
-  status: 'success' | 'failed';
-  /** Populated only when `status === 'failed'`. */
+  status: 'success' | 'failed' | 'skipped';
+  /** Set when `status` is `failed`. */
   error?: Error;
+  /**
+   * Set when `status` is `skipped`:
+   * - `run-active`: another execution, possibly in another process, is live.
+   *   Check again at `retryAt`.
+   * - `run-active-locally`: this process is executing the run.
+   * - `already-in-progress`: this process is already recovering the run.
+   */
+  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress';
+  /** Epoch ms after which the live execution's claim lapses unless it is renewed. Set for `run-active`. */
+  retryAt?: number;
 }
 
 /**
@@ -589,6 +611,13 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
    * `result.abort()` and the external signal can both cancel the recovered run.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Take the run over even while another execution is live. The other
+   * execution loses the run: its writes are rejected and, on the default
+   * engine, it is aborted. Without `force`, `recover()` throws
+   * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
+   */
+  force?: boolean;
 }
 
 export class DurableAgent<
@@ -715,140 +744,62 @@ export class DurableAgent<
   }
 
   /**
-   * Claim exclusive ownership of a recovery attempt before exposing the run
-   * through the thread stream. The thread lease cannot provide this guarantee:
-   * its owner is the logical runId, so two processes recovering the same run
-   * are indistinguishable to an idempotent lease backend.
+   * Mark `runId` as being recovered by this process, and return the release.
+   * A second `recover()` of the same run in this process fails fast instead
+   * of contending for the claim. Across processes the run's execution claim
+   * picks the winner.
    */
-  async #acquireRecoveryLease(runId: string, abortController: AbortController): Promise<RecoveryLease> {
-    const provider = resolveLeaseProvider(this.pubsub);
-    const key = `mastra:durable-agent-recovery:v1:${JSON.stringify([this.id, runId])}`;
-    const owner = crypto.randomUUID();
-
-    const localOwner = localRecoveryClaims.get(key);
-    if (localOwner) {
+  #claimLocalRecovery(runId: string): () => void {
+    const key = JSON.stringify([this.id, runId]);
+    if (localRecoveryClaims.has(key)) {
       throw new MastraError({
-        id: 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+        id: RECOVER_ALREADY_IN_PROGRESS_ERROR_ID,
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" recover(${runId}): another process is already recovering this run.`,
+        text: `DurableAgent "${this.name}" recover(${runId}): this process is already recovering this run.`,
         details: { agentName: this.name, runId },
       });
     }
-    localRecoveryClaims.set(key, owner);
-
-    const leaseAcquireStartedAt = Date.now();
-    let acquired: Awaited<ReturnType<LeaseProvider['acquireLease']>>;
-    try {
-      acquired = await provider.acquireLease(key, owner, RECOVERY_LEASE_TTL_MS);
-    } catch (cause) {
-      if (localRecoveryClaims.get(key) === owner) localRecoveryClaims.delete(key);
-      throw new MastraError(
-        {
-          id: 'DURABLE_AGENT_RECOVER_LEASE_ACQUIRE_FAILED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          text: `DurableAgent "${this.name}" recover(${runId}): failed to acquire the recovery lease.`,
-          details: { agentName: this.name, runId },
-        },
-        cause,
-      );
-    }
-
-    if (!acquired.acquired) {
-      if (localRecoveryClaims.get(key) === owner) localRecoveryClaims.delete(key);
-      throw new MastraError({
-        id: 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `DurableAgent "${this.name}" recover(${runId}): another process is already recovering this run.`,
-        details: { agentName: this.name, runId },
-      });
-    }
-
-    let released = false;
-    let renewalInFlight = false;
-    let leaseExpiresAt = leaseAcquireStartedAt + RECOVERY_LEASE_TTL_MS;
-    let lossError: MastraError | undefined;
-    let resolveLoss!: (error: MastraError) => void;
-    const loss = new Promise<MastraError>(resolve => {
-      resolveLoss = resolve;
-    });
-    const stopOnLeaseLoss = (cause?: unknown) => {
-      if (released || lossError) return;
-      lossError = new MastraError(
-        {
-          id: 'DURABLE_AGENT_RECOVER_LEASE_LOST',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          text: `DurableAgent "${this.name}" recover(${runId}): recovery lease was lost while the run was active.`,
-          details: { agentName: this.name, runId },
-        },
-        cause,
-      );
-      if (!abortController.signal.aborted) {
-        abortController.abort(lossError);
-      }
-      resolveLoss(lossError);
-      this.#mastra?.getLogger?.()?.error?.(lossError.message);
+    const token = crypto.randomUUID();
+    localRecoveryClaims.set(key, token);
+    return () => {
+      if (localRecoveryClaims.get(key) === token) localRecoveryClaims.delete(key);
     };
-    const renewalTimer = setInterval(() => {
-      if (released) return;
-      if (Date.now() >= leaseExpiresAt) {
-        stopOnLeaseLoss();
-        return;
-      }
-      if (renewalInFlight) return;
-      renewalInFlight = true;
-      const renewalStartedAt = Date.now();
-      void provider
-        .renewLease(key, owner, RECOVERY_LEASE_TTL_MS)
-        .then(renewed => {
-          if (renewed) {
-            leaseExpiresAt = renewalStartedAt + RECOVERY_LEASE_TTL_MS;
-            return;
-          }
-          stopOnLeaseLoss();
-        })
-        .catch(cause => {
-          if (Date.now() >= leaseExpiresAt) {
-            stopOnLeaseLoss(cause);
-            return;
-          }
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] recover(${runId}) lease renewal failed, retrying: ${cause}`);
-        })
-        .finally(() => {
-          renewalInFlight = false;
-        });
-    }, RECOVERY_LEASE_RENEW_INTERVAL_MS);
-    renewalTimer.unref?.();
+  }
 
+  /**
+   * Liveness of a run without an execution claim, i.e. one started before runs
+   * were claimed: a live run keeps renewing its thread's lease. A run without a
+   * thread has no signal and counts as not live.
+   */
+  #untrackedRunLiveness(runId: string, workflowInput: DurableAgenticWorkflowInput): UntrackedRunLiveness | undefined {
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+    if (!threadId) return undefined;
+    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
     return {
-      assertOwned: () => {
-        if (!lossError && Date.now() >= leaseExpiresAt) {
-          stopOnLeaseLoss();
-        }
-        if (lossError) throw lossError;
-      },
-      getLossError: () => lossError,
-      waitForLoss: () => loss,
-      release: async () => {
-        if (released) return;
-        released = true;
-        clearInterval(renewalTimer);
-        try {
-          await provider.releaseLease(key, owner);
-        } catch (error) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn?.(`[DurableAgent] recover(${runId}) failed to release recovery lease: ${error}`);
-        } finally {
-          if (localRecoveryClaims.get(key) === owner) localRecoveryClaims.delete(key);
-        }
-      },
+      isLive: () => agentThreadStreamRuntime.isRunHoldingThreadLease(this.getPubSub(), runId, threadId, resourceId),
+      ttlMs: agentThreadStreamRuntime.threadLeaseTtlMs,
     };
+  }
+
+  /**
+   * Whether the run's persisted snapshot is still `running`. Without storage,
+   * or with an unreadable snapshot, answers true so `recover()` reports why.
+   */
+  async #isRunningSnapshot(runId: string): Promise<boolean> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return true;
+    const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    if (!persisted) return false;
+    if (typeof persisted.snapshot !== 'string') return persisted.snapshot?.status === 'running';
+    try {
+      return (JSON.parse(persisted.snapshot) as WorkflowRunState)?.status === 'running';
+    } catch {
+      return true;
+    }
   }
 
   async #loadRecoverableSnapshot(
@@ -861,7 +812,7 @@ export class DurableAgent<
     });
     if (!persisted) {
       throw new MastraError({
-        id: 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND',
+        id: RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID,
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text:
@@ -896,6 +847,19 @@ export class DurableAgent<
       });
     }
 
+    // A suspended run is not orphaned: it waits for resume(), and restarting
+    // it would fail inside the workflow engine. Checked again after the claim,
+    // since the run may suspend between discovery and the claim.
+    if (snapshot.status === 'suspended') {
+      throw new MastraError({
+        id: RECOVER_RUN_SUSPENDED_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" recover(${runId}): the run is suspended. Call resume() to continue it.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+
     return { snapshot, workflowInput };
   }
 
@@ -913,7 +877,6 @@ export class DurableAgent<
     registryEntry,
     options,
     scheduleAutoCleanup,
-    recoveryLease,
     executionFence,
   }: {
     runId: string;
@@ -925,7 +888,6 @@ export class DurableAgent<
     registryEntry: any;
     options?: DurableAgentRecoverOptions<TOutput>;
     scheduleAutoCleanup: () => void;
-    recoveryLease: RecoveryLease;
     executionFence: ExecutionFence;
   }): Promise<{
     stream: DurableStreamAdapterResult<TOutput>;
@@ -935,14 +897,14 @@ export class DurableAgent<
     let streamOutput: MastraModelOutput<TOutput> | undefined;
     let threadRegistration: AgentThreadRunRegistration | undefined;
     try {
-      recoveryLease.assertOwned();
+      executionFence.throwIfLost();
       registryEntry.messageList = messageList;
       this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
       globalRunRegistry.set(runId, registryEntry);
 
       // Persistent backends may retain chunks from the pre-crash segment.
       const recoverOffset = await this.#getPubsubOffset(runId);
-      recoveryLease.assertOwned();
+      executionFence.throwIfLost();
       const stream = createDurableAgentStream<TOutput>({
         pubsub: this.pubsub,
         runId,
@@ -974,8 +936,7 @@ export class DurableAgent<
       });
       streamCleanup = stream.cleanup;
       streamOutput = stream.output;
-      await this.#raceRecoveryLease(stream.ready, recoveryLease);
-      recoveryLease.assertOwned();
+      await this.#raceFenceLoss(stream.ready, executionFence);
 
       const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
         runId,
@@ -989,7 +950,7 @@ export class DurableAgent<
             }
           : {}),
       } as AgentExecutionOptions<TOutput>;
-      recoveryLease.assertOwned();
+      executionFence.throwIfLost();
       threadRegistration = await agentThreadStreamRuntime.registerRun(
         this as unknown as Agent<any, any, any, any>,
         stream.output,
@@ -998,14 +959,17 @@ export class DurableAgent<
         {
           strict: true,
           continuation: 'across-suspension',
-          validate: () => recoveryLease.assertOwned(),
+          validate: () => executionFence.throwIfLost(),
         },
       );
-      recoveryLease.assertOwned();
+      executionFence.throwIfLost();
       return { stream, threadRegistration };
     } catch (error) {
+      const settlement = await executionFence.settle(async () => {});
       try {
-        await threadRegistration?.rollback({ releaseLease: !recoveryLease.getLossError() });
+        // A superseded execution leaves the thread lease to the new owner,
+        // which holds it under the same runId.
+        await threadRegistration?.rollback({ releaseLease: settlement !== 'superseded' });
       } catch (rollbackError) {
         this.#mastra
           ?.getLogger?.()
@@ -1021,21 +985,16 @@ export class DurableAgent<
       if (globalRunRegistry.get(runId) === registryEntry) {
         globalRunRegistry.delete(runId);
       }
-      const settlement = await executionFence.settle(async () => {});
       if (settlement !== 'superseded') {
-        await this.#reportRecoveryFailure(runId, recoveryLease.getLossError() ?? error);
+        await this.#reportRecoveryFailure(runId, error);
       }
-      await recoveryLease.release();
       throw error;
     }
   }
 
   async #reportRecoveryFailure(runId: string, error: unknown): Promise<boolean> {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
-    if (
-      (normalizedError instanceof MastraError && normalizedError.id === 'DURABLE_AGENT_RECOVER_LEASE_LOST') ||
-      normalizedError instanceof AgentThreadLeaseConflictError
-    ) {
+    if (normalizedError instanceof AgentThreadLeaseConflictError) {
       return false;
     }
 
@@ -1050,30 +1009,16 @@ export class DurableAgent<
     }
   }
 
-  async #raceRecoveryLease<T>(operation: Promise<T>, recoveryLease: RecoveryLease): Promise<T> {
-    const outcome = await Promise.race<RecoveryRaceResult<T>>([
-      operation.then(value => ({ kind: 'result', value })),
-      recoveryLease.waitForLoss().then(error => ({ kind: 'lease-lost', error })),
-    ]);
-    if (outcome.kind === 'lease-lost') throw outcome.error;
-    return outcome.value;
-  }
-
-  #createRecoveryFencedPubSub(recoveryLease: RecoveryLease): PubSub {
-    const pubsub = this.pubsub;
-    const publish: PubSub['publish'] = async (topic, event, options) => {
-      recoveryLease.assertOwned();
-      await pubsub.publish(topic, event, options);
-      recoveryLease.assertOwned();
-    };
-
-    return new Proxy(pubsub, {
-      get(target, property) {
-        if (property === 'publish') return publish;
-        const value = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
+  /**
+   * Settle `operation`, or throw the loss error as soon as the execution loses
+   * its claim. A superseded recovery then unwinds even when the work it waits
+   * on ignores the abort signal.
+   */
+  #raceFenceLoss<T>(operation: Promise<T>, executionFence: ExecutionFence): Promise<T> {
+    const lost = new Promise<never>((_, reject) => executionFence.onLost(reject));
+    // The loser of the race must not surface as an unhandled rejection.
+    lost.catch(() => {});
+    return Promise.race([operation, lost]);
   }
 
   /** Rebuilds process-local recovery state from the persisted durable workflow input. */
@@ -1081,12 +1026,12 @@ export class DurableAgent<
     runId,
     workflowInput,
     abortController,
-    recoveryLease,
+    executionFence,
   }: {
     runId: string;
     workflowInput: DurableAgenticWorkflowInput;
     abortController: AbortController;
-    recoveryLease: RecoveryLease;
+    executionFence: ExecutionFence;
   }): Promise<RehydratedRecoveryState> {
     const requestContext: RequestContext = workflowInput.requestContextEntries
       ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
@@ -1125,7 +1070,7 @@ export class DurableAgent<
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve model during recover(${runId}): ${error}`);
     }
-    recoveryLease.assertOwned();
+    executionFence.throwIfLost();
 
     // Restore the live fallback model list the run was prepared with (#22594).
     // The persisted (enabled-only, ordered) list is the source of truth for
@@ -1157,7 +1102,7 @@ export class DurableAgent<
           ?.warn?.(`[DurableAgent] Failed to resolve model list during recover(${runId}): ${error}`);
       }
     }
-    recoveryLease.assertOwned();
+    executionFence.throwIfLost();
 
     let memory;
     try {
@@ -1165,7 +1110,7 @@ export class DurableAgent<
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve memory during recover(${runId}): ${error}`);
     }
-    recoveryLease.assertOwned();
+    executionFence.throwIfLost();
 
     const saveQueueManager = memory
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
@@ -1185,7 +1130,7 @@ export class DurableAgent<
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) processor resolution failed: ${error}`);
     }
-    recoveryLease.assertOwned();
+    executionFence.throwIfLost();
 
     const processorStates = new Map<string, any>();
     const origAgentSpanData = workflowInput.agentSpanData as { traceId?: string; id?: string } | undefined;
@@ -1218,7 +1163,7 @@ export class DurableAgent<
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
       }
     }
-    recoveryLease.assertOwned();
+    executionFence.throwIfLost();
 
     const registryEntry = {
       // Restore the original run's flag from the persisted snapshot so a
@@ -1960,8 +1905,9 @@ export class DurableAgent<
    */
   async #claimExecution(
     runId: string,
-    mode: 'acquire' | 'takeover',
+    mode: 'acquire' | 'recover' | 'takeover',
     requestContext?: RequestContext,
+    untrackedRun?: UntrackedRunLiveness,
   ): Promise<ExecutionFence> {
     const fence = await ExecutionFence.claim({
       leaseProvider: resolveLeaseProvider(this.pubsub),
@@ -1969,6 +1915,7 @@ export class DurableAgent<
       agentId: this.id,
       runId,
       mode,
+      untrackedRun,
       logger: this.logger,
     });
     if (requestContext) await this.#coverMemory(fence, requestContext);
@@ -3002,6 +2949,13 @@ export class DurableAgent<
    * run; for boot-time bulk recovery of every orphaned run, use
    * `recoverActiveRuns()`.
    *
+   * Only orphaned runs are recovered. If another execution still owns the run
+   * (its lease is live), this throws `DURABLE_AGENT_RUN_ACTIVE` with the
+   * holder and a `retryAt` hint; pass `{ force: true }` to take the run over,
+   * which aborts the other execution and rejects its later writes. A run this
+   * process is already driving or recovering, or one that is suspended, is
+   * refused with its own error id (use `resume()` for suspended runs).
+   *
    * @example
    * ```typescript
    * const { fullStream, output, cleanup } = await durableAgent.recover(runId, {
@@ -3079,9 +3033,10 @@ export class DurableAgent<
       }
     }
 
-    // 2. Claim recovery ownership before resolving any live dependencies so a
-    //    concurrent caller cannot finish first and leave this attempt using a
-    //    stale snapshot.
+    // 2. Claim the run before resolving any live dependencies so a concurrent
+    //    caller cannot finish first and leave this attempt using a stale
+    //    snapshot.
+    const releaseLocalRecovery = this.#claimLocalRecovery(runId);
     const abortController = new AbortController();
     if (options?.abortSignal) {
       if (options.abortSignal.aborted) {
@@ -3094,7 +3049,6 @@ export class DurableAgent<
         );
       }
     }
-    const recoveryLease = await this.#acquireRecoveryLease(runId, abortController);
 
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
@@ -3102,8 +3056,9 @@ export class DurableAgent<
     try {
       // A run this process is still executing is not orphaned. Recovering it
       // here would replace the live execution's registry entry mid-flight
-      // (#23734). Checked after the recovery lease so a concurrent recover()
-      // still reports DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS.
+      // (#23734), so not even `force` takes it over. Checked after the local
+      // recovery claim so a concurrent recover() still reports
+      // DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS.
       const localExecution = ExecutionFence.getLocalActive(runId);
       if (localExecution && !localExecution.isLost()) {
         throw new MastraError({
@@ -3114,13 +3069,18 @@ export class DurableAgent<
           details: { agentName: this.name, runId },
         });
       }
-      // Take the run over from any execution still driving it before reading
-      // its state: from here on that execution can no longer write (#23734).
-      executionFence = await this.#claimExecution(runId, 'takeover');
-      recoveryLease.assertOwned();
-      // The lease RPC itself may have waited while an earlier owner completed.
-      // Re-read after acquisition and recover from that authoritative snapshot,
-      // never from the pre-claim copy.
+      // Claim the run only while no execution is live, or take it over from
+      // the live one under `force`, before reading its state: from here on any
+      // other execution can no longer write (#23734).
+      executionFence = await this.#claimExecution(
+        runId,
+        options?.force ? 'takeover' : 'recover',
+        undefined,
+        this.#untrackedRunLiveness(runId, workflowInput),
+      );
+      // An earlier owner may have completed while this one claimed. Re-read
+      // after the claim and recover from that authoritative snapshot, never
+      // from the pre-claim copy.
       const loaded = await this.#loadRecoverableSnapshot(workflowsStore, runId);
       workflowInput = loaded.workflowInput;
       // map-final-output publishes FINISH before its result is saved, so a saved
@@ -3135,18 +3095,18 @@ export class DurableAgent<
       finishPublishedBeforeCrash =
         this.resolveWorkflowEngine() === 'default' &&
         loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
-      recoveryLease.assertOwned();
+      executionFence.throwIfLost();
       recoveryState = await this.#rehydrateRecoveryState({
         runId,
         workflowInput,
         abortController,
-        recoveryLease,
+        executionFence,
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.#coverMemory(executionFence, recoveryState.requestContext);
     } catch (error) {
       await executionFence?.settle(async () => {});
-      await recoveryLease.release();
+      releaseLocalRecovery();
       throw error;
     }
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, registryEntry } = recoveryState;
@@ -3193,15 +3153,14 @@ export class DurableAgent<
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
     try {
       workflow = this.getWorkflow();
-      recoveryLease.assertOwned();
     } catch (error) {
       await executionFence.settle(async () => {});
-      await recoveryLease.release();
+      releaseLocalRecovery();
       throw error;
     }
 
     // 4. Register the reconstructed state and recovered stream only after
-    //    claiming exclusive recovery ownership.
+    //    claiming the run.
     const { stream, threadRegistration } = await this.#setupRecoveredStream({
       runId,
       workflowInput,
@@ -3212,16 +3171,14 @@ export class DurableAgent<
       registryEntry,
       options,
       scheduleAutoCleanup,
-      recoveryLease,
       executionFence,
+    }).catch(error => {
+      releaseLocalRecovery();
+      throw error;
     });
     const { output, cleanup: createdStreamCleanup, ready } = stream;
     streamCleanup = createdStreamCleanup;
-    const recoveryPubsub = this.fenceRunPubSub(
-      executionFence,
-      abortController,
-      this.#createRecoveryFencedPubSub(recoveryLease),
-    );
+    const recoveryPubsub = this.fenceRunPubSub(executionFence, abortController);
 
     // 5. Re-drive the workflow from the persisted snapshot in the background
     //     and delete snapshot rows on non-suspended terminals (same contract
@@ -3229,40 +3186,37 @@ export class DurableAgent<
     //     observers on the pubsub topic see the failure. Callers who await
     //     the returned `workflowExecution` (e.g. `recoverActiveRuns()`) see
     //     the raw rejection so they can classify the run as failed.
+    // Races the claim's loss so a recovery that lost the run settles promptly
+    // even if the workflow ignores the abort.
     const workflowExecution = executionFence.run(() =>
-      this.#raceRecoveryLease(ready, recoveryLease)
+      this.#raceFenceLoss(ready, executionFence)
         .then(async () => {
-          recoveryLease.assertOwned();
+          executionFence.throwIfLost();
           await this.ensureEngineWorkersStarted();
-          const run = await this.#raceRecoveryLease(
+          const run = await this.#raceFenceLoss(
             workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
-            recoveryLease,
+            executionFence,
           );
-          recoveryLease.assertOwned();
-          const result = await this.#raceRecoveryLease(
+          const result = await this.#raceFenceLoss(
             run.restart({
               requestContext,
               ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
             } as any),
-            recoveryLease,
+            executionFence,
           );
-          recoveryLease.assertOwned();
+          executionFence.throwIfLost();
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.
             const { output: finalOutput, stepResult } = result.result;
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
-            recoveryLease.assertOwned();
           }
           // Snapshot cleanup runs for every non-suspended terminal (success or
           // failed) so storage stays bounded — mirrors the start()/resume()
           // contract — but only while this recovery still owns the run.
           const finished = !!result?.status && result.status !== 'suspended';
           await executionFence.settle(async () => {
-            if (finished) {
-              await this.deleteRunSnapshots(runId);
-              recoveryLease.assertOwned();
-            }
+            if (finished) await this.deleteRunSnapshots(runId);
           });
           if (result?.status === 'failed') {
             throw new Error((result as any).error?.message || 'Workflow recover failed');
@@ -3272,22 +3226,18 @@ export class DurableAgent<
           // Settles a recovery that failed before the run finished; otherwise
           // returns the settlement reached above.
           const settlement = await executionFence.settle(async () => {});
-          const leaseLossError = recoveryLease.getLossError();
-          if (leaseLossError) {
+          if (settlement === 'superseded') {
+            // The execution that took the run over holds the thread lease under
+            // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
             performCleanup();
-          }
-          const recoveryError = leaseLossError ?? error;
-          // Once another execution took the run over, its subscribers share this
-          // run's topic: stay silent.
-          const reported = settlement !== 'superseded' && (await this.#reportRecoveryFailure(runId, recoveryError));
-          if (!reported && !leaseLossError) {
+          } else if (!(await this.#reportRecoveryFailure(runId, error))) {
             await threadRegistration?.rollback();
             performCleanup();
           }
-          throw recoveryError;
+          throw error;
         })
-        .finally(() => recoveryLease.release()),
+        .finally(releaseLocalRecovery),
     );
     const trackedRecoverEntry = globalRunRegistry.get(runId);
     if (trackedRecoverEntry) {
@@ -3836,6 +3786,11 @@ export class DurableAgent<
    * Failures are captured per-run so a single bad run does not block
    * recovery of the rest.
    *
+   * Only orphaned runs are recovered. A run another execution still drives,
+   * in this process or another, is reported as `skipped`; for one live in
+   * another process, `retryAt` says when to check again. A run that finished
+   * or suspended before its turn is left out.
+   *
    * @example
    * ```typescript
    * // Recover every orphaned run for this agent (typical boot-time hook).
@@ -3853,7 +3808,10 @@ export class DurableAgent<
 
     let targetRunIds: string[];
     if (runId) {
-      targetRunIds = [runId];
+      // Like discovery, an explicit run is only recovered while its snapshot is
+      // `running`: a finished run has nothing to recover, and a suspended one
+      // waits for resume().
+      targetRunIds = (await this.#isRunningSnapshot(runId)) ? [runId] : [];
     } else {
       const { runs } = await this.listActiveRuns(discoveryOptions);
       targetRunIds = runs.map(r => r.runId);
@@ -3865,6 +3823,7 @@ export class DurableAgent<
 
     for (const targetRunId of targetRunIds) {
       let runError: Error | undefined;
+      let started = false;
       try {
         // Delegate to the single-run streamable recover path so each run
         // benefits from the rebuilt registry entry (message list, memory,
@@ -3880,6 +3839,7 @@ export class DurableAgent<
             runError = error instanceof Error ? error : new Error(String(error));
           },
         });
+        started = true;
         try {
           const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
           if (workflowExecution) {
@@ -3892,6 +3852,16 @@ export class DurableAgent<
         recovered.push({ runId: targetRunId, status: 'success' });
         succeeded++;
       } catch (error) {
+        if (!started) {
+          // The run finished or suspended between discovery and its recovery.
+          const errorId = (error as { id?: unknown })?.id;
+          if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) continue;
+          const skipped = recoverySkip(error);
+          if (skipped) {
+            recovered.push({ runId: targetRunId, status: 'skipped', ...skipped });
+            continue;
+          }
+        }
         const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
         recovered.push({ runId: targetRunId, status: 'failed', error: err });
         failed++;

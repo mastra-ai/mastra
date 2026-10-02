@@ -288,9 +288,10 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     await pubsub.close();
     pubsub = new EventEmitterPubSub();
 
-    // ---- Process 2: recover the run; the model hangs again. ----
+    // ---- Process 2: recover the run; the model hangs again. Process 1's
+    // claim is still within its lease, so recovering right away takes it over.
     const secondDurable = build();
-    const recovered = await secondDurable.recover(runId);
+    const recovered = await secondDurable.recover(runId, { force: true });
 
     // Read side: the rebuilt registry entry restored the budget from the
     // persisted snapshot.

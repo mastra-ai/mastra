@@ -25,12 +25,17 @@ import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import {
+  EXECUTION_LEASE_RENEW_INTERVAL_MS,
+  EXECUTION_LEASE_TTL_MS,
+  EXECUTION_SUPERSEDED_ERROR_ID,
+  ExecutionFence,
+  RUN_ACTIVE_ERROR_ID,
+} from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 import type { SerializableModelListEntry } from '../types';
 import { serializeModelList } from '../utils/serialize-state';
-
-const RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST = 10_000;
 
 /** Builds the persisted workflow state used to exercise durable recovery paths. */
 function makeSnapshot(
@@ -414,7 +419,7 @@ describe('DurableAgent.recover(runId)', () => {
     recovered.cleanup();
   });
 
-  it('allows only the recovery-lease holder to register and restart a run', async () => {
+  it('refuses a concurrent recover() of a run this process is already recovering', async () => {
     const runId = 'run-concurrent-recovery';
     const sharedStore = new InMemoryStore();
     const sharedPubsub = new EventEmitterPubSub();
@@ -501,6 +506,32 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
+  it('refuses a suspended run without claiming it, and releases the claim when the run suspends during the claim', async () => {
+    const runId = 'run-suspended';
+    const workflows = (await store.getStore('workflows'))!;
+    await seed(store, runId, 'suspended', 'agent-A');
+    const workflow = stubWorkflow(agent, 'success');
+
+    await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED' });
+    expect(await workflows.getRunOwnership({ runId })).toBeNull();
+
+    // The run suspends after recover() read it but before the claim lands.
+    await seed(store, runId, 'running', 'agent-A');
+    const claim = workflows.claimRunOwnership.bind(workflows);
+    vi.spyOn(workflows, 'claimRunOwnership').mockImplementationOnce(async input => {
+      await seed(store, runId, 'suspended', 'agent-A');
+      return claim(input);
+    });
+
+    await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED' });
+    expect(workflow.createRun).not.toHaveBeenCalled();
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    // Nothing is left behind that would make the next recover() see the run as live or in progress.
+    await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED' });
+  });
+
   it('does not let an older cleanup remove a newer recovery of the same run', async () => {
     const runId = 'run-cleanup-generation';
     await seed(store, runId, 'running', 'agent-A');
@@ -529,22 +560,21 @@ describe('DurableAgent.recover(runId)', () => {
     secondRecovery.cleanup();
   });
 
-  it('retries a transient recovery-lease renewal error without aborting the run', async () => {
+  it('keeps the recovered run going through a transient execution-lease renewal error', async () => {
     vi.useFakeTimers();
     const runId = 'run-renewal-retry';
     const retryStore = new InMemoryStore();
     const retryPubsub = new EventEmitterPubSub();
-    const actualRenewLease = retryPubsub.renewLease.bind(retryPubsub);
-    let rejectFirstRecoveryRenewal = true;
-    const renewLease = vi.spyOn(retryPubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
-      if (key.startsWith('mastra:durable-agent-recovery:') && rejectFirstRecoveryRenewal) {
-        rejectFirstRecoveryRenewal = false;
-        throw new Error('temporary lease backend error');
+    const workflows = (await retryStore.getStore('workflows'))!;
+    const actualRenew = workflows.renewRunOwnership.bind(workflows);
+    let rejectFirstRenewal = true;
+    const renewRunOwnership = vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(async input => {
+      if (rejectFirstRenewal) {
+        rejectFirstRenewal = false;
+        throw new Error('temporary storage error');
       }
-      return actualRenewLease(key, owner, ttlMs);
+      return actualRenew(input);
     });
-    const recoveryRenewalCalls = () =>
-      renewLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'));
     const { agent: retryAgent } = createDurableWithStore('agent-renewal', retryStore, retryPubsub);
     await seed(retryStore, runId, 'running', 'agent-renewal');
 
@@ -569,14 +599,18 @@ describe('DurableAgent.recover(runId)', () => {
     try {
       recovery = await retryAgent.recover(runId);
       await restartStarted;
+      const fence = ExecutionFence.getLocalActive(runId)!;
 
-      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
-      expect(recoveryRenewalCalls()).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(renewRunOwnership).toHaveBeenCalledTimes(1);
+      expect(fence.isLost()).toBe(false);
       expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
-      expect(recoveryRenewalCalls()).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(renewRunOwnership).toHaveBeenCalledTimes(2);
+      expect(fence.isLost()).toBe(false);
       expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(false);
+      expect((await workflows.getRunOwnership({ runId }))?.ownerId).toBe(fence.executionId);
     } finally {
       releaseRestart();
       await globalRunRegistry.get(runId)?.workflowExecution?.catch(() => {});
@@ -584,20 +618,15 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
-  it('rolls back before restart when the recovery lease is definitively lost', async () => {
+  it('rolls back before restart when another execution takes the run over during setup', async () => {
     vi.useFakeTimers();
-    const runId = 'run-renewal-lost';
+    const runId = 'run-taken-over-in-setup';
     const lossStore = new InMemoryStore();
     const lossPubsub = new EventEmitterPubSub();
-    const actualRenewLease = lossPubsub.renewLease.bind(lossPubsub);
-    const renewLease = vi.spyOn(lossPubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
-      if (key.startsWith('mastra:durable-agent-recovery:')) return false;
-      return actualRenewLease(key, owner, ttlMs);
-    });
-    const releaseLease = vi.spyOn(lossPubsub, 'releaseLease');
+    const workflows = (await lossStore.getStore('workflows'))!;
     const publish = vi.spyOn(lossPubsub, 'publish');
-    const { agent: lossAgent } = createDurableWithStore('agent-renewal-lost', lossStore, lossPubsub);
-    await seed(lossStore, runId, 'running', 'agent-renewal-lost');
+    const { agent: lossAgent } = createDurableWithStore('agent-taken-over', lossStore, lossPubsub);
+    await seed(lossStore, runId, 'running', 'agent-taken-over');
     const workflow = stubWorkflow(lossAgent, 'success');
 
     let markRegistrationStarted!: () => void;
@@ -611,29 +640,44 @@ describe('DurableAgent.recover(runId)', () => {
     const registerRun = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockImplementation(async () => {
       markRegistrationStarted();
       await registrationGate;
+      return undefined as any;
     });
     const recovery = lossAgent.recover(runId);
 
     try {
       await registrationStarted;
-      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const takeover = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'foreign-execution',
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+      });
+      expect(takeover.acquired).toBe(true);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(true);
 
-      expect(globalRunRegistry.get(runId)?.abortController?.signal.aborted).toBe(true);
       releaseRegistration();
-      await expect(recovery).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
-
+      await expect(recovery).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
       expect(workflow.createRun).not.toHaveBeenCalled();
-      expect(releaseLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(
-        1,
-      );
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
       expect(
         publish.mock.calls.filter(
           ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
         ),
       ).toHaveLength(0);
+      // The new owner keeps the run.
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+        ownerId: 'foreign-execution',
+        generation: takeover.record!.generation,
+        live: true,
+      });
 
-      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST * 2);
-      expect(renewLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(1);
+      // The local claim is gone: a later recover() is refused for the live owner, not as a duplicate.
+      await expect(lossAgent.recover(runId)).rejects.toMatchObject({
+        id: RUN_ACTIVE_ERROR_ID,
+        details: { holder: 'foreign-execution' },
+      });
       expect(workflow.createRun).not.toHaveBeenCalled();
     } finally {
       releaseRegistration();
@@ -642,18 +686,14 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
-  it('settles recovery promptly when lease loss abort is ignored by restart', async () => {
+  it('settles recovery promptly when restart ignores the abort after a takeover, and drops its late output', async () => {
     vi.useFakeTimers();
-    const runId = 'run-lease-loss-race';
+    const runId = 'run-takeover-race';
     const raceStore = new InMemoryStore();
     const racePubsub = new EventEmitterPubSub();
-    const actualRenewLease = racePubsub.renewLease.bind(racePubsub);
-    vi.spyOn(racePubsub, 'renewLease').mockImplementation(async (key, owner, ttlMs) => {
-      if (key.startsWith('mastra:durable-agent-recovery:')) return false;
-      return actualRenewLease(key, owner, ttlMs);
-    });
-    const { agent: raceAgent } = createDurableWithStore('agent-lease-race', raceStore, racePubsub);
-    await seed(raceStore, runId, 'running', 'agent-lease-race');
+    const workflows = (await raceStore.getStore('workflows'))!;
+    const { agent: raceAgent } = createDurableWithStore('agent-takeover-race', raceStore, racePubsub);
+    await seed(raceStore, runId, 'running', 'agent-takeover-race');
     let markRestartStarted!: () => void;
     const restartStarted = new Promise<void>(resolve => {
       markRestartStarted = resolve;
@@ -684,39 +724,60 @@ describe('DurableAgent.recover(runId)', () => {
         return { restart, runId };
       }),
     } as any);
+    const lateOutput = vi.fn();
+    await racePubsub.subscribe('late-recovery-output', lateOutput);
 
     let recovered: Awaited<ReturnType<typeof raceAgent.recover>> | undefined;
     try {
       recovered = await raceAgent.recover(runId);
-      const workflowExecution = globalRunRegistry.get(runId)?.workflowExecution;
+      const entry = globalRunRegistry.get(runId)!;
+      const workflowExecution = entry.workflowExecution;
       await restartStarted;
-      await vi.advanceTimersByTimeAsync(RECOVERY_LEASE_RENEW_INTERVAL_MS_FOR_TEST);
+      await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'foreign-execution',
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+      });
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
 
-      await expect(workflowExecution).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
+      await expect(workflowExecution).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+      expect(entry.abortController?.signal.aborted).toBe(true);
       expect(globalRunRegistry.get(runId)).toBeUndefined();
       expect(agentThreadStreamRuntime.getThreadState({ threadId: 't', resourceId: 'r' }, racePubsub)).toBe('idle');
       releaseRestart();
-      await expect(latePublish).resolves.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_LEASE_LOST' });
+      await expect(latePublish).resolves.toBeUndefined();
+      expect(lateOutput).not.toHaveBeenCalled();
+      expect((await workflows.getRunOwnership({ runId }))?.ownerId).toBe('foreign-execution');
     } finally {
       releaseRestart();
       recovered?.cleanup();
     }
   });
 
-  it('releases recovery ownership when workflow construction throws synchronously', async () => {
+  it('releases the claim when workflow construction throws synchronously', async () => {
     const runId = 'run-workflow-construction-fail';
     const failureStore = new InMemoryStore();
     const failurePubsub = new EventEmitterPubSub();
-    const releaseLease = vi.spyOn(failurePubsub, 'releaseLease');
+    const workflows = (await failureStore.getStore('workflows'))!;
     const { agent: failureAgent } = createDurableWithStore('agent-workflow-fail', failureStore, failurePubsub);
     await seed(failureStore, runId, 'running', 'agent-workflow-fail');
-    vi.spyOn(failureAgent, 'getWorkflow').mockImplementation(() => {
+    const getWorkflow = vi.spyOn(failureAgent, 'getWorkflow').mockImplementation(() => {
       throw new Error('workflow construction failed');
     });
 
     await expect(failureAgent.recover(runId)).rejects.toThrow('workflow construction failed');
-    expect(releaseLease.mock.calls.filter(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toHaveLength(1);
     expect(globalRunRegistry.get(runId)).toBeUndefined();
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+
+    // Both the run claim and this process's recovery claim are free again.
+    getWorkflow.mockRestore();
+    const { createRun } = stubWorkflow(failureAgent, 'success');
+    const recovered = await failureAgent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    expect(createRun).toHaveBeenCalledTimes(1);
+    recovered.cleanup();
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {

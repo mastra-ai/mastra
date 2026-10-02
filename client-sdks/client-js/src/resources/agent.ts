@@ -3290,6 +3290,10 @@ export class Agent extends BaseResource {
    * Only supported when the target agent is a durable agent (createDurableAgent).
    * The server rebuilds the runtime state from the persisted snapshot, replays
    * past chunks, and continues the loop to completion.
+   *
+   * Responds with 409 when the run is not orphaned: another execution still
+   * owns it (retry once its lease lapses), it is already being recovered, or it
+   * is suspended (use `resumeStream` instead). To follow a live run, use `observe`.
    */
   async recover(params: RecoverParams): Promise<
     Response & {

@@ -34,8 +34,10 @@ import { createEventedAgent } from '../create-evented-agent';
 import {
   DurableExecutionFenceError,
   EXECUTION_CONFLICT_ERROR_ID,
+  EXECUTION_LEASE_TTL_MS,
   ExecutionFence,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+  RUN_ACTIVE_ERROR_ID,
   __resetExecutionFencesForTests,
   executionLeaseKey,
   getExecutionClaim,
@@ -465,7 +467,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
-    it('recover() takes the run over from a still-live foreign owner and releases the lease when done', async () => {
+    it('recover() refuses a run a live foreign owner holds; recover({ force: true }) takes it over and releases the lease when done', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
 
@@ -487,11 +489,25 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       globalRunRegistry.clear();
       __resetExecutionFencesForTests();
 
-      // ---- This process recovers it.
+      // ---- This process refuses to drive a run someone still holds.
       const recovering = gatedModel('recovered answer');
       recovering.release();
       const agentB = buildAgent({ model: recovering.model, storage, memory });
-      const recovered = await agentB.recover(runId);
+      const refusedAt = Date.now();
+      const refusal = await agentB.recover(runId).catch(error => error);
+      expect(refusal).toMatchObject({
+        id: RUN_ACTIVE_ERROR_ID,
+        details: { runId, liveBy: 'claim', holder: 'foreign-original' },
+      });
+      expect(refusal.details.retryAt).toBeGreaterThanOrEqual(refusedAt + 1_000);
+      expect(refusal.details.retryAt).toBeLessThanOrEqual(Date.now() + EXECUTION_LEASE_TTL_MS);
+      expect(recovering.calls()).toBe(0);
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+      expect(await foreign.isHeldBy(originalFence.agentId, runId, 'foreign-original')).toBe(true);
+
+      // ---- force takes it over.
+      const recovered = await agentB.recover(runId, { force: true });
       const recoveryFence = ExecutionFence.getLocalActive(runId)!;
       expect(recoveryFence.executionId).not.toBe(originalFence.executionId);
       expect(await foreign.isHeldBy(originalFence.agentId, runId, 'foreign-original')).toBe(false);

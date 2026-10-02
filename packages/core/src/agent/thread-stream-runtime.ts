@@ -589,6 +589,27 @@ export class AgentThreadStreamRuntime {
       .catch(() => false);
   }
 
+  /**
+   * Whether `runId` still holds its thread's lease, which it renews for as
+   * long as it is live in some process. `false` without a lease backend.
+   * Throws when the backend can't answer.
+   */
+  async isRunHoldingThreadLease(
+    pubsub: PubSub | undefined,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<boolean> {
+    const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
+    if (isFallback) return false;
+    return (await provider.getLeaseOwner(this.#threadKey(resourceId, threadId))) === runId;
+  }
+
+  /** How long a thread lease outlives the process that stopped renewing it. */
+  get threadLeaseTtlMs(): number {
+    return AGENT_THREAD_LEASE_TTL_MS;
+  }
+
   #getSourceId(): string {
     this.#id ??= globalThis.crypto.randomUUID();
     return this.#id;

@@ -3,10 +3,11 @@
  *
  * Every execution that drives a durable run (`stream()`, `generate()`,
  * `resume()`, `recover()`) claims the run under a fresh execution id.
- * `recover()` takes the claim over immediately, so a still-running original
- * execution is superseded without waiting for a TTL. The original checks its
- * claim at every step boundary and before its terminal writes, and stops
- * instead of overwriting the recovered answer.
+ * `recover()` claims only a run nobody holds; `recover({ force: true })` takes
+ * the claim over immediately, so a still-running original execution is
+ * superseded without waiting for a TTL. The original checks its claim at
+ * every step boundary and before its terminal writes, and stops instead of
+ * overwriting the recovered answer.
  *
  * Ownership lives in one of two places:
  *
@@ -52,6 +53,9 @@ export const EXECUTION_SUPERSEDED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_SUPERSEDED
 export const EXECUTION_UNVERIFIED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_UNVERIFIED';
 export const EXECUTION_CONFLICT_ERROR_ID = 'DURABLE_AGENT_EXECUTION_CONFLICT';
 export const RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY';
+export const RUN_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RUN_ACTIVE';
+/** Shortest delay {@link RUN_ACTIVE_ERROR_ID} suggests before retrying, so a skewed clock can't cause a tight loop. */
+const MIN_RETRY_DELAY_MS = 1_000;
 
 type ExecutionLossErrorId = typeof EXECUTION_SUPERSEDED_ERROR_ID | typeof EXECUTION_UNVERIFIED_ERROR_ID;
 type ExecutionDetails = { agentId: string; runId: string; executionId: string };
@@ -78,6 +82,38 @@ export class DurableExecutionFenceError extends MastraNonRetryableError {
     this.id = id;
     this.details = details;
   }
+}
+
+/**
+ * `recover()` refused a run that is still live. `details.retryAt` (epoch ms,
+ * local clock) is when the evidence it is live lapses unless renewed, clamped
+ * to at least a second from now and at most one TTL.
+ */
+function runActiveError(args: {
+  agentId: string;
+  runId: string;
+  attempt: ClaimAttempt;
+  untrackedRun?: UntrackedRunLiveness;
+}): MastraError {
+  const { agentId, runId, attempt } = args;
+  const liveBy = attempt.liveBy ?? 'claim';
+  const ttlMs = liveBy === 'thread-lease' && args.untrackedRun ? args.untrackedRun.ttlMs : EXECUTION_LEASE_TTL_MS;
+  const now = Date.now();
+  const remainingMs = attempt.leaseExpiresAt ? attempt.leaseExpiresAt.getTime() - now : ttlMs;
+  return new MastraError({
+    id: RUN_ACTIVE_ERROR_ID,
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Durable run ${runId} is still being executed. Retry once it stops, or call recover(runId, { force: true }) to take it over.`,
+    details: {
+      agentId,
+      runId,
+      liveBy,
+      ...(attempt.holder ? { holder: attempt.holder } : {}),
+      leaseExpiresAt: attempt.leaseExpiresAt?.toISOString() ?? null,
+      retryAt: now + Math.min(Math.max(remainingMs, MIN_RETRY_DELAY_MS), ttlMs),
+    },
+  });
 }
 
 /**
@@ -181,7 +217,25 @@ async function retryOnce<T>(operation: () => Promise<T>, details: ExecutionDetai
   }
 }
 
-type ClaimAttempt = { claimed: boolean; generation?: number; holder?: string };
+type ClaimAttempt = {
+  claimed: boolean;
+  generation?: number;
+  holder?: string;
+  /** When the holder's claim lapses, on the store's clock. Unknown for pubsub leases. */
+  leaseExpiresAt?: Date | null;
+  /** For a refused recovery: what showed the run is still live. */
+  liveBy?: 'claim' | 'thread-lease';
+};
+
+/**
+ * Liveness of a run that has no ownership claim, such as one started by a
+ * version that predates run ownership.
+ */
+export interface UntrackedRunLiveness {
+  isLive(): Promise<boolean>;
+  /** Upper bound on how long the signal behind `isLive` stays up after the run dies. */
+  ttlMs: number;
+}
 
 /** Where a run's ownership lives. One instance per run. */
 interface OwnershipBackend {
@@ -191,6 +245,11 @@ interface OwnershipBackend {
   readonly takeoverAttempts: number;
   tryAcquire(executionId: string): Promise<ClaimAttempt>;
   tryTakeover(executionId: string): Promise<ClaimAttempt>;
+  /**
+   * Claim the run only if nothing shows it is live: no live claim, and, for a
+   * run without a claim, no live `untracked` signal. Never supersedes.
+   */
+  tryRecover(executionId: string, untracked?: UntrackedRunLiveness): Promise<ClaimAttempt>;
   /** Throws a {@link DurableExecutionFenceError} unless `claim` still owns the run. */
   verify(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
   /** Extend `claim`. `false` once another execution owns the run; throws on backend errors. */
@@ -217,6 +276,15 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
         : (await provider.acquireLease(key, executionId, EXECUTION_LEASE_TTL_MS)).acquired;
       return { claimed, holder };
     },
+    // A lease can't tell a released claim from one that never existed, so any
+    // run without a holder also gets the untracked check.
+    async tryRecover(executionId, untracked) {
+      const holder = await provider.getLeaseOwner(key);
+      if (holder) return { claimed: false, holder, liveBy: 'claim' };
+      if (await untracked?.isLive()) return { claimed: false, liveBy: 'thread-lease' };
+      const result = await provider.acquireLease(key, executionId, EXECUTION_LEASE_TTL_MS);
+      return { claimed: result.acquired, holder: result.owner, liveBy: 'claim' };
+    },
     async verify(claim, details) {
       const renewed = await retryOnce(
         () => provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS),
@@ -241,10 +309,11 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     generation: claim.generation!,
     ownerId: claim.executionId,
   });
-  const attempt = ({ acquired, record }: Awaited<ReturnType<WorkflowsStorage['claimRunOwnership']>>) => ({
+  const attempt = ({ acquired, record }: Awaited<ReturnType<WorkflowsStorage['claimRunOwnership']>>): ClaimAttempt => ({
     claimed: acquired,
     generation: acquired ? record.generation : undefined,
     holder: record?.ownerId ?? undefined,
+    leaseExpiresAt: record?.leaseExpiresAt,
   });
   return {
     expires: true,
@@ -265,6 +334,20 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
           expectedGeneration: current?.generation ?? 0,
         }),
       );
+    },
+    // Pinned to the generation that was inspected: a claim made in between
+    // fails here and is reported as that claimant's.
+    async tryRecover(executionId, untracked) {
+      const current = await store.getRunOwnership({ runId });
+      if (current?.live) return { ...attempt({ acquired: false, record: current }), liveBy: 'claim' };
+      if (!current && (await untracked?.isLive())) return { claimed: false, liveBy: 'thread-lease' };
+      const result = await store.claimRunOwnership({
+        runId,
+        ownerId: executionId,
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        expectedGeneration: current?.generation ?? 0,
+      });
+      return { ...attempt(result), liveBy: 'claim' };
     },
     // A read, not a renewal: the heartbeat extends the claim, and the fence on
     // every write rejects a claim that was superseded after this check. Like a
@@ -359,8 +442,11 @@ export class ExecutionFence implements RunFenceScope {
    *
    * - `acquire` (stream/generate/resume) fails with
    *   `DURABLE_AGENT_EXECUTION_CONFLICT` while another execution holds it.
-   * - `takeover` (recover) moves the claim from its current holder to this
-   *   execution immediately, superseding it.
+   * - `recover` (recover) claims a run nobody holds, and fails with
+   *   `DURABLE_AGENT_RUN_ACTIVE` while the run is live: it has a live claim,
+   *   or it has none and `untrackedRun` reports it live.
+   * - `takeover` (recover with `force`) moves the claim from its current
+   *   holder to this execution immediately, superseding it.
    *
    * Ownership lives in `workflowsStore` when it supports run fencing, and in
    * `leaseProvider` otherwise.
@@ -370,7 +456,8 @@ export class ExecutionFence implements RunFenceScope {
     workflowsStore?: WorkflowsStorage;
     agentId: string;
     runId: string;
-    mode: 'acquire' | 'takeover';
+    mode: 'acquire' | 'recover' | 'takeover';
+    untrackedRun?: UntrackedRunLiveness;
     logger?: IMastraLogger;
   }): Promise<ExecutionFence> {
     const { agentId, runId, mode } = args;
@@ -396,6 +483,8 @@ export class ExecutionFence implements RunFenceScope {
         const wait = Math.min(CLAIM_POLL_INTERVAL_MS, deadline - Date.now());
         await (local ? Promise.race([local.whenSettled, sleep(wait)]) : sleep(wait));
       }
+    } else if (mode === 'recover') {
+      attempt = await backend.tryRecover(executionId, args.untrackedRun);
     } else {
       for (let tries = 0; tries < backend.takeoverAttempts && !attempt.claimed; tries++) {
         attemptStartedAt = Date.now();
@@ -403,6 +492,9 @@ export class ExecutionFence implements RunFenceScope {
       }
     }
 
+    if (!attempt.claimed && mode === 'recover') {
+      throw runActiveError({ agentId, runId, attempt, untrackedRun: args.untrackedRun });
+    }
     if (!attempt.claimed) {
       throw new MastraError({
         id: EXECUTION_CONFLICT_ERROR_ID,
@@ -410,7 +502,7 @@ export class ExecutionFence implements RunFenceScope {
         category: ErrorCategory.USER,
         text:
           mode === 'acquire'
-            ? `Durable run ${runId} is already being executed. Wait for it to finish, or call recover(runId) to take it over.`
+            ? `Durable run ${runId} is already being executed. Wait for it to finish, or call recover(runId, { force: true }) to take it over.`
             : `Durable run ${runId}: another execution claimed it while this one was taking it over.`,
         details: { agentId, runId, ...(attempt.holder ? { holder: attempt.holder } : {}) },
       });
@@ -450,6 +542,11 @@ export class ExecutionFence implements RunFenceScope {
 
   isLost(): boolean {
     return this.#lossError !== undefined;
+  }
+
+  /** Throw the loss error once this execution lost the run. Checks local state only. */
+  throwIfLost(): void {
+    if (this.#lossError) throw this.#lossError;
   }
 
   /**
