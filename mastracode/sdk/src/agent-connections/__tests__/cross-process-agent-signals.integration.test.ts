@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -793,6 +793,31 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     expect(owner.stderr.match(/Cross-project agent discovery is disabled/g)).toHaveLength(1);
     expect(owner.stderr).toMatch(/cannot be used as a directory name/);
     expect(observer.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
+
+  it("still finds an instance that started over a crashed process's leftover shared socket and election lock", async () => {
+    // What a process killed mid-election leaves behind: a socket file nobody
+    // listens on, and an election lock older than the broker's staleness bound.
+    const sharedDir = join(root, '_shared');
+    const staleSocket = join(sharedDir, 'agent_thread-peer-discovery.sock');
+    mkdirSync(sharedDir, { recursive: true, mode: 0o700 });
+    execFileSync(process.execPath, [
+      '-e',
+      `require('node:net').createServer().listen(${JSON.stringify(staleSocket)}, () => process.exit(0))`,
+    ]);
+    writeFileSync(`${staleSocket}.elect`, '');
+    const longAgo = new Date(Date.now() - 60_000);
+    utimesSync(`${staleSocket}.elect`, longAgo, longAgo);
+
+    const owner = startChild('owner', projectA, 'claim-only', [], shared(root));
+    await owner.waitFor('thread-owned');
+    const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
+    const discovery = await observer.waitFor('discovered');
+    const codes = await closeAll(owner, observer);
+
+    expect(discovery).toMatchObject({ hasPeer: true });
+    expect(owner.stderr).toMatch(/Stale broker election lock removed/);
     expect(codes).toEqual([0, 0]);
   }, 30_000);
 

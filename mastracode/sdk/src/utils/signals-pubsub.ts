@@ -21,6 +21,10 @@ const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.id
  * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
  * single round trip, and never published to again once the request settles.
  */
+/** Backoff for retrying a shared-scope subscription that failed, e.g. on a stale broker election lock. */
+const SHARED_RETRY_MIN_MS = 100;
+const SHARED_RETRY_MAX_MS = 5_000;
+
 function isEphemeralTopic(topic: string): boolean {
   return DISCOVERY_REPLY_TOPIC.test(topic) || IDLE_ACCEPTANCE_REPLY_TOPIC.test(topic);
 }
@@ -185,6 +189,11 @@ class SignalsPubSub extends PubSub {
   readonly #liveSubscriptions = new Map<string, Set<EventCallback>>();
   readonly #clearGenerations = new Map<string, number>();
   readonly #closing = new Map<string, Promise<void>>();
+  /**
+   * Shared-scope subscriptions being retried, per topic and callback. The value
+   * is the pending timer, or null while an attempt is in flight.
+   */
+  readonly #sharedRetries = new Map<string, Map<EventCallback, ReturnType<typeof setTimeout> | null>>();
   readonly #leaseProvider: LeaseProvider;
   readonly #sharedPeerDiscovery: boolean;
   #sharedFailureReported = false;
@@ -247,11 +256,21 @@ class SignalsPubSub extends PubSub {
     const [primary, shared] = this.#routes(topic);
     await this.#subscribeTo(topic, primary!, cb, options);
     if (shared === undefined) return;
-    await this.#subscribeTo(topic, shared, cb, options).catch(error => this.#reportSharedFailure(error));
+    // A retry is already bringing this callback up in the shared scope.
+    if (this.#sharedRetries.get(topic)?.has(cb)) return;
+    await this.#subscribeTo(topic, shared, cb, options).catch(error => {
+      this.#reportSharedFailure(error);
+      // Without a retry, a request-topic subscription that failed once (say, on
+      // a broker election lock a crashed process left behind) would hide this
+      // thread from other projects until restart. A one-shot reply topic lives
+      // for one lookup, and the next lookup tries again.
+      if (!isEphemeralTopic(topic)) this.#retrySharedSubscribe(topic, shared, cb, options, SHARED_RETRY_MIN_MS);
+    });
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     const [primary, shared] = this.#routes(topic);
+    this.#cancelSharedRetry(topic, cb);
     if (shared !== undefined) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
     await this.#unsubscribeFrom(topic, primary!, cb);
   }
@@ -281,6 +300,10 @@ class SignalsPubSub extends PubSub {
 
   async close(): Promise<void> {
     this.#closed = true;
+    for (const retries of this.#sharedRetries.values()) {
+      for (const timer of retries.values()) if (timer) clearTimeout(timer);
+    }
+    this.#sharedRetries.clear();
     await Promise.allSettled([
       ...[...this.#leaseSockets.values()].map(s => s.close()),
       ...[...this.#sockets.values()].map(s => s.close()),
@@ -311,8 +334,53 @@ class SignalsPubSub extends PubSub {
     this.#sharedFailureReported = true;
     const message = error instanceof Error ? error.message : String(error);
     console.warn(
-      `Cross-project agent discovery hit an error; other projects may not see this instance while it lasts: ${message}`,
+      `Cross-project agent discovery hit an error; other projects may not see this instance until it recovers. Retrying: ${message}`,
     );
+  }
+
+  #retrySharedSubscribe(
+    topic: string,
+    dir: string,
+    cb: EventCallback,
+    options: SubscribeOptions | undefined,
+    delayMs: number,
+  ): void {
+    if (this.#closed) return;
+    let retries = this.#sharedRetries.get(topic);
+    if (!retries) {
+      retries = new Map();
+      this.#sharedRetries.set(topic, retries);
+    }
+    const timer = setTimeout(() => {
+      const current = this.#sharedRetries.get(topic);
+      if (current?.get(cb) !== timer) return;
+      current.set(cb, null);
+      void this.#subscribeTo(topic, dir, cb, options).then(
+        () => {
+          if (this.#sharedRetries.get(topic)?.has(cb)) {
+            this.#cancelSharedRetry(topic, cb);
+            return;
+          }
+          // Unsubscribed while this attempt was in flight.
+          void this.#unsubscribeFrom(topic, dir, cb).catch(() => {});
+        },
+        () => {
+          if (!this.#sharedRetries.get(topic)?.has(cb)) return;
+          this.#retrySharedSubscribe(topic, dir, cb, options, Math.min(delayMs * 2, SHARED_RETRY_MAX_MS));
+        },
+      );
+    }, delayMs);
+    timer.unref?.();
+    retries.set(cb, timer);
+  }
+
+  #cancelSharedRetry(topic: string, cb: EventCallback): void {
+    const retries = this.#sharedRetries.get(topic);
+    if (!retries?.has(cb)) return;
+    const timer = retries.get(cb);
+    if (timer) clearTimeout(timer);
+    retries.delete(cb);
+    if (retries.size === 0) this.#sharedRetries.delete(topic);
   }
 
   /** The directories, under the root, a topic lives in; the first is required. */
