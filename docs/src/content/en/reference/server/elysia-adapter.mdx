@@ -179,6 +179,8 @@ app.get('/custom/public', async ctx => {
 })
 ```
 
+When the auth provider refreshes an expired session, `createAuthMiddleware()` forwards the refreshed session headers (such as `Set-Cookie`) to the response. `MastraServer` registers the `applyAuthRefreshHeaders` response hook during `init()`, so routes added after `init()` get these headers alongside any cookies your route sets. If you use `createAuthMiddleware()` without `MastraServer`, register the hook yourself with `app.onAfterHandle({ as: 'global' }, applyAuthRefreshHeaders)` before defining routes.
+
 ## Accessing context
 
 In Elysia handlers registered after `init()`, access Mastra context from the handler context:

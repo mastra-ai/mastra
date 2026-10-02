@@ -17,7 +17,8 @@ import {
 import type { AnyElysia, MaybePromise } from 'elysia';
 import type Elysia from 'elysia';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-export { createAuthMiddleware } from './auth-middleware';
+import { applyAuthRefreshHeaders } from './auth-middleware';
+export { applyAuthRefreshHeaders, createAuthMiddleware } from './auth-middleware';
 export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 
 // Export helper functions for OpenAPI integration
@@ -892,6 +893,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
   registerContextMiddleware(): void {
     this.app.derive(this.createContextMiddleware());
+    this.app.onAfterHandle({ as: 'global' }, applyAuthRefreshHeaders);
   }
 
   registerAuthMiddleware(): void {

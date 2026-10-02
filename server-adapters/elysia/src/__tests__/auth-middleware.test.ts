@@ -65,4 +65,184 @@ describe('Elysia auth middleware helper', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
+
+  describe('session refresh', () => {
+    const REFRESHED_COOKIE = 'session=valid; HttpOnly; Path=/';
+    const expiredRequest = (path: string) =>
+      new Request(`http://localhost${path}`, { headers: { cookie: 'session=expired' } });
+
+    function createApp() {
+      const mastra = createMastraWithSessionRefresh();
+      const app = new Elysia();
+      const adapter = new MastraServer({ app, mastra });
+      adapter.registerContextMiddleware();
+      return { app, auth: createAuthMiddleware({ mastra }) };
+    }
+
+    function createMastraWithSessionRefresh() {
+      const mastra = new Mastra({ logger: false });
+      const originalGetServer = mastra.getServer.bind(mastra);
+
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (_token: string, request: Request) =>
+              request.headers.get('cookie')?.includes('session=valid') ? { id: 'user-1' } : null,
+            authorize: async (path: string) => path !== '/custom/forbidden',
+            getSessionIdFromRequest: (request: Request) =>
+              request.headers.get('cookie')?.includes('session=expired') ? 'session-1' : null,
+            refreshSession: async () => ({ id: 'session-1' }),
+            getSessionHeaders: () => ({ 'Set-Cookie': REFRESHED_COOKIE }),
+          },
+        }) as any;
+
+      return mastra;
+    }
+
+    it('forwards refreshed session headers on allowed responses', async () => {
+      const { app, auth } = createApp();
+      app.get('/custom/protected', () => ({ ok: true }), { beforeHandle: auth });
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+    });
+
+    it('forwards refreshed session headers on forbidden responses', async () => {
+      const { app, auth } = createApp();
+      app.get('/custom/forbidden', () => ({ ok: true }), { beforeHandle: auth });
+
+      const response = await app.fetch(expiredRequest('/custom/forbidden'));
+
+      expect(response.status).toBe(403);
+      expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
+    });
+
+    it('forwards refreshed session headers when called inside the handler', async () => {
+      const { app, auth } = createApp();
+      app.get('/custom/protected', async ctx => {
+        const authResponse = await auth(ctx);
+        if (authResponse) return authResponse;
+        return { ok: true };
+      });
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual([REFRESHED_COOKIE]);
+    });
+
+    it('does not add headers when no refresh happened', async () => {
+      const { app, auth } = createApp();
+      app.get('/custom/protected', () => ({ ok: true }), { beforeHandle: auth });
+
+      const response = await app.fetch(
+        new Request('http://localhost/custom/protected', { headers: { cookie: 'session=valid' } }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual([]);
+    });
+
+    it('keeps a cookie set through ctx.cookie in an earlier hook', async () => {
+      const { app, auth } = createApp();
+      app.get('/custom/protected', () => ({ ok: true }), {
+        beforeHandle: [
+          ({ cookie }: any) => {
+            cookie.app.value = 'one';
+          },
+          auth,
+        ],
+      });
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual(['app=one; Path=/', REFRESHED_COOKIE]);
+    });
+
+    it('keeps a raw set-cookie header set by the handler', async () => {
+      const { app, auth } = createApp();
+      app.get(
+        '/custom/protected',
+        ({ set }: any) => {
+          set.headers['set-cookie'] = 'raw=one';
+          return { ok: true };
+        },
+        { beforeHandle: auth },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual(['raw=one', REFRESHED_COOKIE]);
+    });
+
+    it('keeps a cookie set through ctx.cookie in the handler', async () => {
+      const { app, auth } = createApp();
+      app.get(
+        '/custom/protected',
+        ({ cookie }: any) => {
+          cookie.handler.value = 'one';
+          return 'ok';
+        },
+        { beforeHandle: auth },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie()).toEqual(['handler=one; Path=/', REFRESHED_COOKIE]);
+      await expect(response.text()).resolves.toBe('ok');
+    });
+
+    it('keeps a cookie on a Response returned by the handler', async () => {
+      const { app, auth } = createApp();
+      app.get(
+        '/custom/protected',
+        () =>
+          new Response('ok', {
+            status: 201,
+            headers: { 'set-cookie': 'response=one', 'x-custom': 'yes' },
+          }),
+        { beforeHandle: auth },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(201);
+      expect(response.headers.get('x-custom')).toBe('yes');
+      expect(response.headers.getSetCookie()).toEqual(['response=one', REFRESHED_COOKIE]);
+      await expect(response.text()).resolves.toBe('ok');
+    });
+
+    it('keeps every app cookie when hooks, set headers, and a returned Response all set cookies', async () => {
+      const { app, auth } = createApp();
+      app.get(
+        '/custom/protected',
+        ({ set }: any) => {
+          set.headers['set-cookie'] = 'raw=one';
+          return new Response('ok', { headers: { 'set-cookie': 'response=one' } });
+        },
+        {
+          beforeHandle: [
+            ({ cookie }: any) => {
+              cookie.hook.value = 'one';
+            },
+            auth,
+          ],
+        },
+      );
+
+      const response = await app.fetch(expiredRequest('/custom/protected'));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.getSetCookie().sort()).toEqual(
+        ['hook=one; Path=/', 'raw=one', 'response=one', REFRESHED_COOKIE].sort(),
+      );
+    });
+  });
 });
