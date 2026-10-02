@@ -81,7 +81,6 @@ const legacyNonBddTests = [
   'src/hooks/traces/__tests__/use-trace-spans.msw.test.tsx',
   'src/hooks/traces/__tests__/use-traces-light-list.test.tsx',
   'src/hooks/traces/__tests__/use-traces.test.ts',
-  'src/hooks/agents/__tests__/use-agent-messages.msw.test.tsx',
   'src/hooks/workflows/__tests__/use-workflow-runs.test.ts',
   'src/hooks/workspace/__tests__/use-stored-workspaces.test.tsx',
 ];

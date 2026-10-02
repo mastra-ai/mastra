@@ -51,34 +51,36 @@ describe('useAgentMessages', () => {
     server.resetHandlers();
   });
 
-  it('walks older pages behind a createdAt cursor, oldest first, without duplicates', async () => {
-    const requests: CursorRequest[] = [];
-    server.use(serveThread(seed(90), requests));
+  describe('when the thread spans several pages', () => {
+    it('walks older pages behind a createdAt cursor, oldest first, without duplicates', async () => {
+      const requests: CursorRequest[] = [];
+      server.use(serveThread(seed(90), requests));
 
-    const { result } = renderHookWithProviders(() =>
-      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
-    );
+      const { result } = renderHookWithProviders(() =>
+        useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+      );
 
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(50, 90)));
-    expect(result.current.hasNextPage).toBe(true);
+      await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(50, 90)));
+      expect(result.current.hasNextPage).toBe(true);
 
-    await act(async () => {
-      await result.current.fetchNextPage();
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      // Inclusive cursor re-serves msg-50, so the page reaches msg-11 instead of msg-10.
+      await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(11, 90)));
+
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 90)));
+      expect(result.current.hasNextPage).toBe(false);
+
+      expect(requests).toEqual([
+        { end: undefined },
+        { end: createdAt(50).toISOString() },
+        { end: createdAt(11).toISOString() },
+      ]);
     });
-    // Inclusive cursor re-serves msg-50, so the page reaches msg-11 instead of msg-10.
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(11, 90)));
-
-    await act(async () => {
-      await result.current.fetchNextPage();
-    });
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 90)));
-    expect(result.current.hasNextPage).toBe(false);
-
-    expect(requests).toEqual([
-      { end: undefined },
-      { end: createdAt(50).toISOString() },
-      { end: createdAt(11).toISOString() },
-    ]);
   });
 
   describe('when messages at the page boundary share the same createdAt', () => {
@@ -126,53 +128,57 @@ describe('useAgentMessages', () => {
     });
   });
 
-  it('keeps older pages stable when new messages land at the end of the thread', async () => {
-    const store = seed(60);
-    server.use(serveThread(store));
+  describe('when new messages land at the end of the thread', () => {
+    it('keeps older pages stable when new messages land at the end of the thread', async () => {
+      const store = seed(60);
+      server.use(serveThread(store));
 
-    const { result } = renderHookWithProviders(() =>
-      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
-    );
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(20, 60)));
+      const { result } = renderHookWithProviders(() =>
+        useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+      );
+      await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(20, 60)));
 
-    store.push(createMessage(60), createMessage(61));
+      store.push(createMessage(60), createMessage(61));
 
-    await act(async () => {
-      await result.current.fetchNextPage();
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 60)));
     });
-    await waitFor(() => expect(ids(result.current.data?.messages)).toEqual(range(0, 60)));
   });
 
-  it('refreshes every loaded page when another feature invalidates the thread by prefix', async () => {
-    const store = seed(60);
-    const requests: CursorRequest[] = [];
-    server.use(serveThread(store, requests));
+  describe('when another feature invalidates the thread by prefix', () => {
+    it('refreshes every loaded page when another feature invalidates the thread by prefix', async () => {
+      const store = seed(60);
+      const requests: CursorRequest[] = [];
+      server.use(serveThread(store, requests));
 
-    const { result, queryClient } = renderHookWithProviders(() =>
-      useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
-    );
-    await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
-    await act(async () => {
-      await result.current.fetchNextPage();
-    });
-    await waitFor(() => expect(result.current.data?.messages).toHaveLength(60));
+      const { result, queryClient } = renderHookWithProviders(() =>
+        useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true }),
+      );
+      await waitFor(() => expect(result.current.data?.messages).toHaveLength(40));
+      await act(async () => {
+        await result.current.fetchNextPage();
+      });
+      await waitFor(() => expect(result.current.data?.messages).toHaveLength(60));
 
-    store[0] = createMessage(0, 'Updated by the voice call');
-    store[59] = createMessage(59, 'Updated by the voice call');
-    requests.length = 0;
+      store[0] = createMessage(0, 'Updated by the voice call');
+      store[59] = createMessage(59, 'Updated by the voice call');
+      requests.length = 0;
 
-    // `useVoiceCall` refreshes the transcript with the thread prefix alone, so the
-    // query key it never spells out in full still has to match.
-    await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ['memory', 'messages', 'thread-1'] });
-    });
+      // `useVoiceCall` refreshes the transcript with the thread prefix alone, so the
+      // query key it never spells out in full still has to match.
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: ['memory', 'messages', 'thread-1'] });
+      });
 
-    expect(requests).toEqual([{ end: undefined }, { end: createdAt(20).toISOString() }]);
-    await waitFor(() => {
-      const messages = result.current.data?.messages ?? [];
-      expect(ids(messages)).toEqual(range(0, 60));
-      expect(messages[0]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
-      expect(messages[59]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
+      expect(requests).toEqual([{ end: undefined }, { end: createdAt(20).toISOString() }]);
+      await waitFor(() => {
+        const messages = result.current.data?.messages ?? [];
+        expect(ids(messages)).toEqual(range(0, 60));
+        expect(messages[0]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
+        expect(messages[59]?.content.parts[0]).toMatchObject({ text: 'Updated by the voice call' });
+      });
     });
   });
 });
