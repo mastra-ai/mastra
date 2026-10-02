@@ -397,6 +397,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // If authentication failed, attempt transparent session refresh before returning 401.
     // This handles expired access tokens without requiring client-side refresh logic.
     if (!user && supportsSessionRefresh(authConfig) && rawRequest instanceof Request) {
+      let retryHttpError: HTTPException | undefined;
       try {
         const sessionId = authConfig.getSessionIdFromRequest(rawRequest);
         if (sessionId) {
@@ -424,7 +425,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
+              try {
+                user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
+              } catch (retryErr) {
+                retryHttpError = retryErr instanceof HTTPException ? retryErr : undefined;
+                throw retryErr;
+              }
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -433,6 +439,8 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         }
       } catch (refreshErr) {
         refreshHeaders = undefined;
+        // An explicit HTTP error from the retried authenticateToken goes to the outer handler.
+        if (retryHttpError === refreshErr) throw refreshErr;
         mastra.getLogger()?.debug('Session refresh failed, falling back to 401', {
           error: refreshErr instanceof Error ? { message: refreshErr.message } : refreshErr,
         });

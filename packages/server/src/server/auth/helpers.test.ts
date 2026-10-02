@@ -862,6 +862,41 @@ describe('auth helpers', () => {
       expect(headers['Set-Cookie']).toContain('Domain=.example.com');
     });
 
+    it('should preserve an HTTPException thrown by the re-authentication after refresh', async () => {
+      let callCount = 0;
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => {
+          callCount++;
+          if (callCount === 1) return null;
+          throw new HTTPException(503, { message: 'Authentication service unavailable' });
+        },
+        getSessionIdFromRequest: () => 'old-session',
+        refreshSession: async () => ({
+          id: 'new-session',
+          userId: 'user-1',
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({ 'Set-Cookie': `wos-session=${session.id}` }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext: createRequestContext(),
+        rawRequest: createRawRequest(),
+      });
+
+      expect(callCount).toBe(2);
+      expect(result).toMatchObject({
+        action: 'error',
+        status: 503,
+        body: { error: 'Authentication service unavailable' },
+      });
+    });
+
     it('should return 401 when refresh token is also expired', async () => {
       const requestContext = createRequestContext();
 
