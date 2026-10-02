@@ -17,10 +17,6 @@ const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
 const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');
 
-/** Backoff for retrying a shared-scope subscription that failed, e.g. on a stale broker election lock. */
-const SHARED_RETRY_MIN_MS = 100;
-const SHARED_RETRY_MAX_MS = 5_000;
-
 /**
  * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
  * single round trip, and never published to again once the request settles.
@@ -29,12 +25,10 @@ function isEphemeralTopic(topic: string): boolean {
   return DISCOVERY_REPLY_TOPIC.test(topic) || IDLE_ACCEPTANCE_REPLY_TOPIC.test(topic);
 }
 
-type SharedRetry = { delayMs: number; timer?: ReturnType<typeof setTimeout> };
-
 export type SignalsPubSubOptions = {
   /**
    * Also list this process's threads to, and find threads in, other projects on
-   * this machine: peer discovery runs in `<root>/_shared/` as well as in this
+   * this machine: peer discovery runs in `<root>/_shared/` instead of this
    * resource's directory.
    */
   sharedAgentDiscovery?: boolean;
@@ -158,13 +152,10 @@ function socketKey(dir: string, topic: string): string {
  * - Thread-owner discovery lives in `<root>/_shared/`, so a process that finds
  *   a thread claimed can reach the owner and hand it the signal. It only
  *   answers for a thread the asker names, so it discloses nothing new.
- * - Everything else, including peer discovery (which lists threads), stays in
- *   this process's own resource directory — unless `sharedAgentDiscovery` is
- *   set, in which case peer discovery also runs in `<root>/_shared/` so other
- *   projects' processes can list this one's threads and it can list theirs.
- *   This resource's directory stays required (same-project processes without
- *   the option still meet there); the shared scope is best effort and its
- *   first failure is reported once.
+ * - Peer discovery (which lists threads) runs in `<root>/_shared/` when
+ *   `sharedAgentDiscovery` is set, so processes in every project can list each
+ *   other's threads. Without it, it stays in this resource's directory.
+ * - Everything else stays in this process's own resource directory.
  *
  * Stale sockets from crashed processes are handled by
  * {@link UnixSocketPubSub}'s built-in election logic: it detects
@@ -191,17 +182,8 @@ class SignalsPubSub extends PubSub {
   readonly #liveSubscriptions = new Map<string, Set<EventCallback>>();
   readonly #clearGenerations = new Map<string, number>();
   readonly #closing = new Map<string, Promise<void>>();
-  /** Callbacks that should be subscribed in the shared scope, per topic. */
-  readonly #sharedWanted = new Map<string, Set<EventCallback>>();
-  /**
-   * Shared-scope subscriptions being retried, per topic and callback. Each
-   * retry is its own object, so an attempt that settles after its retry was
-   * cancelled or replaced can tell.
-   */
-  readonly #sharedRetries = new Map<string, Map<EventCallback, SharedRetry>>();
   readonly #leaseProvider: LeaseProvider;
   readonly #sharedPeerDiscovery: boolean;
-  #sharedFailureReported = false;
   #closed = false;
 
   constructor(resourceId: string, options: SignalsPubSubOptions = {}) {
@@ -244,78 +226,15 @@ class SignalsPubSub extends PubSub {
     event: Omit<Event, 'id' | 'createdAt'>,
     options?: { localOnly?: boolean },
   ): Promise<void> {
-    const [primary, shared] = this.#routes(topic);
-    if (shared === undefined) {
-      await this.#publishTo(topic, primary!, event, options);
-      return;
-    }
-    // The shared scope is best effort: the next publish tries it again.
-    const [own] = await Promise.allSettled([
-      this.#publishTo(topic, primary!, event, options),
-      this.#publishTo(topic, shared, event, options),
-    ]);
-    if (own.status === 'rejected') throw own.reason;
+    await this.#publishTo(topic, this.#dirFor(topic), event, options);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
-    const [primary, shared] = this.#routes(topic);
-    if (shared === undefined) {
-      await this.#subscribeTo(topic, primary!, cb, options);
-      return;
-    }
-    // Wanted before the first await, so an unsubscribe that lands meanwhile
-    // keeps it out of the shared scope.
-    let wanted = this.#sharedWanted.get(topic);
-    if (!wanted) {
-      wanted = new Set();
-      this.#sharedWanted.set(topic, wanted);
-    }
-    const added = !wanted.has(cb);
-    wanted.add(cb);
-    try {
-      await this.#subscribeTo(topic, primary!, cb, options);
-    } catch (error) {
-      if (added) this.#unwantShared(topic, cb);
-      throw error;
-    }
-    if (!this.#sharedWanted.get(topic)?.has(cb)) return;
-    // A retry is already bringing this callback up in the shared scope.
-    if (this.#sharedRetries.get(topic)?.has(cb)) return;
-    await this.#subscribeTo(topic, shared, cb, options).then(
-      async () => {
-        // Unsubscribed while this shared subscribe was in flight.
-        if (!this.#sharedWanted.get(topic)?.has(cb)) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
-      },
-      () => this.#retrySharedSubscribe(topic, shared, cb, options),
-    );
-  }
-
-  /**
-   * The shared scope is best effort. A one-shot reply topic lives for one
-   * lookup, and the next lookup tries again. A request-topic subscription that
-   * failed once (say, on a broker election lock a crashed process left behind)
-   * would hide this thread from other projects until restart, so it is retried.
-   */
-  #retrySharedSubscribe(topic: string, shared: string, cb: EventCallback, options: SubscribeOptions | undefined): void {
-    if (isEphemeralTopic(topic) || !this.#sharedWanted.get(topic)?.has(cb)) return;
-    let retries = this.#sharedRetries.get(topic);
-    if (!retries) {
-      retries = new Map();
-      this.#sharedRetries.set(topic, retries);
-    }
-    // A concurrent subscribe of the same callback already started a retry.
-    if (retries.has(cb)) return;
-    const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
-    retries.set(cb, retry);
-    this.#scheduleSharedRetry(topic, shared, cb, options, retry);
+    await this.#subscribeTo(topic, this.#dirFor(topic), cb, options);
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    const [primary, shared] = this.#routes(topic);
-    this.#cancelSharedRetry(topic, cb);
-    this.#unwantShared(topic, cb);
-    if (shared !== undefined) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
-    await this.#unsubscribeFrom(topic, primary!, cb);
+    await this.#unsubscribeFrom(topic, this.#dirFor(topic), cb);
   }
 
   /**
@@ -326,15 +245,13 @@ class SignalsPubSub extends PubSub {
    */
   override async clearTopic(topic: string): Promise<void> {
     if (!isEphemeralTopic(topic)) return;
-    for (const dir of this.#routes(topic)) {
-      const key = socketKey(dir, topic);
-      if (!this.#refs.has(key)) continue;
-      this.#clearGenerations.set(key, (this.#clearGenerations.get(key) ?? 0) + 1);
-      const subscriptions = this.#liveSubscriptions.get(key);
-      if (!subscriptions) continue;
-      this.#liveSubscriptions.delete(key);
-      for (let i = 0; i < subscriptions.size; i++) this.#release(key);
-    }
+    const key = socketKey(this.#dirFor(topic), topic);
+    if (!this.#refs.has(key)) return;
+    this.#clearGenerations.set(key, (this.#clearGenerations.get(key) ?? 0) + 1);
+    const subscriptions = this.#liveSubscriptions.get(key);
+    if (!subscriptions) return;
+    this.#liveSubscriptions.delete(key);
+    for (let i = 0; i < subscriptions.size; i++) this.#release(key);
   }
 
   async flush(): Promise<void> {
@@ -343,11 +260,6 @@ class SignalsPubSub extends PubSub {
 
   async close(): Promise<void> {
     this.#closed = true;
-    for (const retries of this.#sharedRetries.values()) {
-      for (const retry of retries.values()) clearTimeout(retry.timer);
-    }
-    this.#sharedRetries.clear();
-    this.#sharedWanted.clear();
     await Promise.allSettled([
       ...[...this.#leaseSockets.values()].map(s => s.close()),
       ...[...this.#sockets.values()].map(s => s.close()),
@@ -362,7 +274,7 @@ class SignalsPubSub extends PubSub {
 
   /** Get the underlying socket for a topic (for testing/inspection). */
   getSocket(topic: string): UnixSocketPubSub | undefined {
-    return this.#sockets.get(socketKey(this.#routes(topic)[0]!, topic));
+    return this.#sockets.get(socketKey(this.#dirFor(topic), topic));
   }
 
   #canShareDiscovery(): boolean {
@@ -371,73 +283,6 @@ class SignalsPubSub extends PubSub {
       `Cross-project agent discovery is disabled: resource id ${JSON.stringify(this.#resourceId)} cannot be used as a directory name, so other projects could not reach this instance.`,
     );
     return false;
-  }
-
-  /**
-   * Warns once per instance, and only for a shared subscription that keeps
-   * failing: a broker election colliding with another starting instance clears
-   * on the first retry and isn't worth printing over the TUI.
-   */
-  #reportSharedFailure(dir: string, error: unknown): void {
-    if (this.#sharedFailureReported) return;
-    this.#sharedFailureReported = true;
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `Cross-project agent discovery can't join ${join(this.#rootDir, dir)}: ${message}. Other projects may not see this instance's threads; still retrying.`,
-    );
-  }
-
-  #scheduleSharedRetry(
-    topic: string,
-    dir: string,
-    cb: EventCallback,
-    options: SubscribeOptions | undefined,
-    retry: SharedRetry,
-  ): void {
-    const isCurrent = () => this.#sharedRetries.get(topic)?.get(cb) === retry;
-    retry.timer = setTimeout(() => {
-      retry.timer = undefined;
-      if (!isCurrent()) return;
-      void this.#subscribeTo(topic, dir, cb, options).then(
-        () => {
-          if (isCurrent()) {
-            this.#cancelSharedRetry(topic, cb);
-            return;
-          }
-          // Unsubscribed while this attempt was in flight. A callback that was
-          // subscribed again since is wanted, and stays.
-          if (!this.#sharedWanted.get(topic)?.has(cb)) void this.#unsubscribeFrom(topic, dir, cb).catch(() => {});
-        },
-        error => {
-          if (!isCurrent()) return;
-          if (retry.delayMs >= SHARED_RETRY_MAX_MS) this.#reportSharedFailure(dir, error);
-          retry.delayMs = Math.min(retry.delayMs * 2, SHARED_RETRY_MAX_MS);
-          this.#scheduleSharedRetry(topic, dir, cb, options, retry);
-        },
-      );
-    }, retry.delayMs);
-    retry.timer.unref?.();
-  }
-
-  #unwantShared(topic: string, cb: EventCallback): void {
-    const wanted = this.#sharedWanted.get(topic);
-    wanted?.delete(cb);
-    if (wanted?.size === 0) this.#sharedWanted.delete(topic);
-  }
-
-  #cancelSharedRetry(topic: string, cb: EventCallback): void {
-    const retries = this.#sharedRetries.get(topic);
-    const retry = retries?.get(cb);
-    if (!retries || !retry) return;
-    clearTimeout(retry.timer);
-    retries.delete(cb);
-    if (retries.size === 0) this.#sharedRetries.delete(topic);
-  }
-
-  /** The directories, under the root, a topic lives in; the first is required. */
-  #routes(topic: string): string[] {
-    if (this.#sharedPeerDiscovery && isPeerDiscoveryTopic(topic)) return [this.#resourceId, SHARED_SCOPE_DIR];
-    return [this.#dirFor(topic)];
   }
 
   /**
@@ -536,6 +381,7 @@ class SignalsPubSub extends PubSub {
   /** The directory, under the root, that holds a topic's socket. */
   #dirFor(topic: string): string {
     if (isOwnerDiscoveryTopic(topic)) return SHARED_SCOPE_DIR;
+    if (this.#sharedPeerDiscovery && isPeerDiscoveryTopic(topic)) return SHARED_SCOPE_DIR;
     const decoded = decodeThreadTopic(topic);
     if (decoded !== undefined) return resourceOfThreadKey(decoded) ?? this.#resourceId;
     return this.#resourceId;
@@ -637,7 +483,7 @@ class SignalsPubSub extends PubSub {
  * Topics live under `/tmp/mc/<resourceId>/`, except that a thread's stream and
  * leases live under its own resource's directory and thread-owner discovery
  * under `/tmp/mc/_shared/` (see {@link SignalsPubSub}). With
- * `sharedAgentDiscovery`, peer discovery also runs in `/tmp/mc/_shared/`. Stale sockets from
+ * `sharedAgentDiscovery`, peer discovery runs there too. Stale sockets from
  * crashed processes are handled by the underlying {@link UnixSocketPubSub}'s
  * broker election logic.
  */

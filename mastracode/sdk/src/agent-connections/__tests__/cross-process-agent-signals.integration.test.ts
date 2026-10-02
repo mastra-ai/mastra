@@ -816,7 +816,9 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     };
     const staleIdentity = fileIdentity();
 
-    const owner = startChild('owner', projectA, 'claim-only', [], shared(root));
+    // The first claim trips over the leftover lock; the ownership manager
+    // retries it, as it does for a session.
+    const owner = startChild('owner', projectA, 'managed-claim', [], shared(root));
     await owner.waitFor('thread-owned');
     const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
     const discovery = await observer.waitFor('discovered');
@@ -835,117 +837,41 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     expect(codes).toEqual([0, 0]);
   }, 30_000);
 
-  describe('mixed shared settings in one resource', () => {
-    for (const [ownerShared, senderShared] of [
-      [true, false],
-      [false, true],
-    ] as const) {
-      it(`keeps discovery and signaling working (owner ${ownerShared ? 'shared' : 'project-only'}, sender ${senderShared ? 'shared' : 'project-only'})`, async () => {
-        const owner = startChild(
-          'owner',
-          projectA,
-          'request-reply',
-          [],
-          ownerShared ? shared(root) : projectOnly(root),
-        );
-        await owner.waitFor('thread-owned');
-        const sender = startChild(
-          'sender',
-          projectA,
-          'request-reply',
-          [],
-          senderShared ? shared(root) : projectOnly(root),
-        );
+  it('hands a thread over exactly once on a yield claim', async () => {
+    const owner = startChild('owner', projectA, 'yield-on-demand', [], shared(root));
+    expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
+    const contender = startChild('sender', projectA, 'yield-on-demand', [], shared(root));
+    contender.child.stdin.write('claim\n');
+    expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
 
-        const ownerSend = await owner.waitFor('send-result');
-        const senderSend = await sender.waitFor('send-result');
-        const senderReply = await sender.waitFor('reply');
-        await sender.waitFor('pass');
-        const codes = await closeAll(owner, sender);
+    owner.child.stdin.write('switch\n');
+    await owner.waitFor('switched');
+    await owner.waitFor('yielded');
+    const won = () => contender.events.some(event => event.event === 'claim-attempt' && event.claimed === true);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && !won()) await new Promise(resolve => setTimeout(resolve, 25));
+    // Let any late duplicate claim request settle.
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    const codes = await closeAll(owner, contender);
 
-        expect(senderSend.action).toBe('deliver');
-        expect(ownerSend.action).toBe('deliver');
-        expect(senderReply.text).toBe('sender-response');
-        expect(owner.stderr).toBe('');
-        expect(sender.stderr).toBe('');
-        expect(codes).toEqual([0, 0]);
-      }, 30_000);
-    }
+    expect(owner.events.filter(event => event.event === 'yielded')).toHaveLength(1);
+    expect(contender.events.filter(event => event.event === 'claim-attempt' && event.claimed === true)).toHaveLength(1);
+    expect(owner.stderr).toBe('');
+    expect(contender.stderr).toBe('');
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
 
-    for (const [ownerShared, contenderShared] of [
-      [true, false],
-      [false, true],
-      [true, true],
-    ] as const) {
-      it(`hands a thread over exactly once on a yield claim (owner ${ownerShared ? 'shared' : 'project-only'}, contender ${contenderShared ? 'shared' : 'project-only'})`, async () => {
-        const owner = startChild(
-          'owner',
-          projectA,
-          'yield-on-demand',
-          [],
-          ownerShared ? shared(root) : projectOnly(root),
-        );
-        expect(await owner.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: true });
-        const contender = startChild(
-          'sender',
-          projectA,
-          'yield-on-demand',
-          [],
-          contenderShared ? shared(root) : projectOnly(root),
-        );
-        contender.child.stdin.write('claim\n');
-        expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
+  it('lets exactly one process own a contended thread', async () => {
+    const first = startChild('owner', projectA, 'ownership-contention', [], shared(root));
+    const firstClaim = await first.waitFor('claim-result');
+    const second = startChild('sender', projectA, 'ownership-contention', [], shared(root));
+    const secondClaim = await second.waitFor('claim-result');
+    const codes = await closeAll(first, second);
 
-        owner.child.stdin.write('switch\n');
-        await owner.waitFor('switched');
-        await owner.waitFor('yielded');
-        const won = () => contender.events.some(event => event.event === 'claim-attempt' && event.claimed === true);
-        const deadline = Date.now() + 10_000;
-        while (Date.now() < deadline && !won()) await new Promise(resolve => setTimeout(resolve, 25));
-        // Let any duplicate claim request that arrived through the second scope settle.
-        await new Promise(resolve => setTimeout(resolve, 1_000));
-        const codes = await closeAll(owner, contender);
-
-        expect(owner.events.filter(event => event.event === 'yielded')).toHaveLength(1);
-        expect(
-          contender.events.filter(event => event.event === 'claim-attempt' && event.claimed === true),
-        ).toHaveLength(1);
-        expect(owner.stderr).toBe('');
-        expect(contender.stderr).toBe('');
-        expect(codes).toEqual([0, 0]);
-      }, 30_000);
-    }
-
-    for (const [firstShared, secondShared] of [
-      [true, false],
-      [false, true],
-      [true, true],
-    ] as const) {
-      it(`lets exactly one process own a contended thread (${firstShared ? 'shared' : 'project-only'} first, ${secondShared ? 'shared' : 'project-only'} second)`, async () => {
-        const first = startChild(
-          'owner',
-          projectA,
-          'ownership-contention',
-          [],
-          firstShared ? shared(root) : projectOnly(root),
-        );
-        const firstClaim = await first.waitFor('claim-result');
-        const second = startChild(
-          'sender',
-          projectA,
-          'ownership-contention',
-          [],
-          secondShared ? shared(root) : projectOnly(root),
-        );
-        const secondClaim = await second.waitFor('claim-result');
-        const codes = await closeAll(first, second);
-
-        expect(firstClaim).toMatchObject({ claimed: true });
-        expect(secondClaim).toMatchObject({ claimed: false });
-        expect(codes).toEqual([0, 0]);
-      }, 30_000);
-    }
-  });
+    expect(firstClaim).toMatchObject({ claimed: true });
+    expect(secondClaim).toMatchObject({ claimed: false });
+    expect(codes).toEqual([0, 0]);
+  }, 30_000);
 
   it('cross-resource wake while owner is busy is delivered once', async () => {
     const nonce = randomUUID().slice(0, 8);

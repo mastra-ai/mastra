@@ -162,6 +162,26 @@ async function runClaimOnly() {
   claim.unsubscribe();
 }
 
+/**
+ * Claims the way a session does: through the ownership manager, which retries
+ * a claim that fails (say, on an election lock a crashed process left behind).
+ */
+async function runManagedClaim() {
+  const manager = createThreadOwnershipManager(async claimThreadId => {
+    const claim = await agent.claimThreadOwnership({
+      resourceId: threadResourceId,
+      threadId: claimThreadId,
+      streamOptions: { memory: { resource: threadResourceId, thread: claimThreadId } },
+      peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
+    });
+    if (claim.claimed) emit('thread-owned', { threadId: claimThreadId });
+    return claim;
+  });
+  await manager.claim(threadId).catch(() => {});
+  await waitForCommand('close');
+  manager.close();
+}
+
 async function runDiscoveryProbe() {
   const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
   const peer = peers.find(candidate => candidate.threadId === peerThreadId);
@@ -582,6 +602,7 @@ async function main() {
   else if (scenario === 'stale-lease-takeover') await runStaleLeaseTakeover();
   else if (scenario === 'lease-mutation-hammer') await runLeaseMutationHammer();
   else if (scenario === 'claim-only') await runClaimOnly();
+  else if (scenario === 'managed-claim') await runManagedClaim();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
   else if (scenario === 'discovery-hammer') await runDiscoveryHammer();
   else if (scenario === 'gated-owner') await runGatedOwner();
