@@ -506,6 +506,13 @@ function compileDuckDBTraceScope(
   return { ctes, values };
 }
 
+/**
+ * Stream-wide delta head: the newest root cursor in the whole table. Read from
+ * span_events rather than root_events, which only holds the time range's
+ * traces, so a range with no traces still reports the stream's real head.
+ */
+const ROOT_STREAM_HEAD_SQL = `SELECT coalesce(max(cursorId), 0) FROM span_events WHERE parentSpanId IS NULL`;
+
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.where);
   const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope, plan.timeRange);
@@ -554,7 +561,7 @@ LIMIT ?`,
     values.push(watermark ?? '0', plan.limit + 1);
     return {
       sql: `${candidates},
-  delta_head AS (SELECT coalesce(max(cursorId), 0) AS streamHead FROM root_events),
+  delta_head AS (SELECT (${ROOT_STREAM_HEAD_SQL}) AS streamHead),
   delta_rows AS (
     SELECT * FROM candidates
     WHERE deltaWatermark > CAST(? AS BIGINT) ${watermark === undefined ? 'AND FALSE' : ''}
@@ -585,7 +592,7 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
     SELECT COUNT(*) AS total
     FROM candidates
   )
-SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? ', (SELECT coalesce(max(cursorId), 0) FROM root_events) AS streamHead' : ''}
+SELECT page_rows.*, page_total.total${deltaPollingFeatureEnabled() ? `, (${ROOT_STREAM_HEAD_SQL}) AS streamHead` : ''}
 FROM page_total
 LEFT JOIN page_rows ON TRUE
 ORDER BY page_rows.__row_position ASC NULLS LAST`,
