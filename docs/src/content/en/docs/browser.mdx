@@ -160,7 +160,7 @@ AgentBrowser can call tools that pages expose through WebMCP, so a site can hand
 
 WebMCP is opt-in: pass `webmcp: { enabled: true }`. AgentBrowser then listens for both supported protocols and auto-detects them per page: the W3C `navigator.modelContext` draft (the bridge provides a polyfill) and MCP-B pages running an in-page MCP server over the `@mcp-b/transports` Tab transport. Pass `protocols` to restrict which surfaces the bridge installs.
 
-Attach the browser to an agent and page tools surface automatically — no explicit `prepareStep` wiring:
+Attach the browser to an agent and page tools surface automatically, with no explicit `prepareStep` wiring:
 
 ```typescript
 const browser = new AgentBrowser({

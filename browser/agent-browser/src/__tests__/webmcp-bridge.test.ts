@@ -234,6 +234,27 @@ describe('WebMCP bridge: W3C navigator.modelContext', () => {
     await expect(call(sandbox, `'buy', { sku: 'a', qty: 2 }`)).resolves.toEqual({ sku: 'a', qty: 2 });
   });
 
+  it('enforces required properties that collide with inherited Object keys', async () => {
+    // Regression: `key in value` is true for inherited keys like "toString",
+    // so pages declaring such required props could be bypassed by passing {}.
+    const sandbox = makeSandbox({ protocols: ['w3c'] });
+    vm.runInContext(
+      `navigator.modelContext.registerTool({
+         name: 'inherited',
+         description: 'd',
+         inputSchema: { type: 'object', properties: { toString: { type: 'string' } }, required: ['toString', 'constructor'] },
+         execute: (args) => args,
+       })`,
+      sandbox,
+    );
+    await expect(call(sandbox, `'inherited', {}`)).rejects.toThrow(/missing required property "toString"/);
+    await expect(call(sandbox, `'inherited', {}`)).rejects.toThrow(/missing required property "constructor"/);
+    await expect(call(sandbox, `'inherited', { toString: 'ok', constructor: 'ok' }`)).resolves.toEqual({
+      toString: 'ok',
+      constructor: 'ok',
+    });
+  });
+
   it('throws when a tool has no execute function', async () => {
     const sandbox = makeSandbox({ protocols: ['w3c'] });
     vm.runInContext(`navigator.modelContext.registerTool({ name: 'bare', description: 'd' })`, sandbox);

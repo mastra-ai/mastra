@@ -85,14 +85,19 @@ const BRIDGE_BODY = /* js */ `
       return;
     }
     if (typeOf(value) === 'object') {
+      // Use own-property checks (not the "in" operator) so page-declared
+      // schemas or agent-supplied args that name inherited keys like
+      // "toString" or "constructor" don't bypass required-property
+      // enforcement.
+      var hasOwn = Object.prototype.hasOwnProperty;
       if (Array.isArray(schema.required)) {
         schema.required.forEach(function (key) {
-          if (!(key in value)) problems.push(label + ': missing required property "' + key + '"');
+          if (!hasOwn.call(value, key)) problems.push(label + ': missing required property "' + key + '"');
         });
       }
       if (schema.properties && typeof schema.properties === 'object') {
         Object.keys(schema.properties).forEach(function (key) {
-          if (key in value) validateAgainstSchema(schema.properties[key], value[key], label + '.' + key, problems);
+          if (hasOwn.call(value, key)) validateAgainstSchema(schema.properties[key], value[key], label + '.' + key, problems);
         });
       }
     }

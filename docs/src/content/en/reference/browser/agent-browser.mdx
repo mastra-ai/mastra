@@ -143,7 +143,7 @@ await agent.generate(input)
 
 ### `browser.prepareStep`
 
-A property, not a factory — one stable reference per browser instance. The Agent uses it automatically via `getPrepareStep()`; you only need to touch it directly to compose with other step logic or wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is disabled, it's a no-op that returns `undefined`.
+A stable property on the browser instance (not a factory). The Agent wires it automatically via `getPrepareStep()`. Touch it directly only to compose with other step logic, or to wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is turned off, it's a no-op that returns `undefined`.
 
 The tool list is memoized by the current page URL inside the function, so repeat steps on the same page produce the same tool bytes. Base `browser_*` tools win on name collision.
 
@@ -155,7 +155,7 @@ await agent.generate(input, {
 
 ### `browser_webmcp_discover`
 
-Added to the toolset when `toolDiscovery: 'manual'`. The agent calls it to attach page tools to its own toolset; attached tools surface on the next step.
+Added to the toolset when `toolDiscovery: 'manual'`. The agent calls it to attach page tools to its own toolset. Attached tools surface on the next step.
 
 <PropertiesTable
   content={[
