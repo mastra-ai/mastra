@@ -40,15 +40,18 @@ export const hubspotScenario: Scenario = {
       )),
     );
 
+    // HubSpot's contact email validator rejects reserved TLDs like `.invalid`
+    // and `.test`, so we use the IETF-reserved `example.com` domain — valid
+    // format, guaranteed never to receive mail. `company.domain` below stays
+    // on `.invalid` because HubSpot only validates email addresses, not domains.
     const emailDomain = `${runId}.mastra-smoke.invalid`;
+    const contactEmail = `smoke-${runId}@example.com`;
     let contactId: string | undefined;
     try {
       const contact = await call<{ id: string }>('hubspot_create_contact', {
-        properties: {
-          email: `smoke+${runId}@${emailDomain}`,
-          firstname: 'Mastra',
-          lastname: `Smoke-${runId}`,
-        },
+        email: contactEmail,
+        firstname: 'Mastra',
+        lastname: `Smoke-${runId}`,
       });
       contactId = contact.id;
       steps.push(makeStep('create contact', 'hubspot_create_contact', 'pass', contactId));
@@ -67,7 +70,7 @@ export const hubspotScenario: Scenario = {
     try {
       await call('hubspot_update_contact', {
         contactId,
-        properties: { company: 'mastra-smoke' },
+        company: 'mastra-smoke',
       });
       steps.push(makeStep('update contact', 'hubspot_update_contact', 'pass'));
     } catch (error) {
@@ -78,7 +81,8 @@ export const hubspotScenario: Scenario = {
     if (tools['hubspot_create_company']) {
       try {
         const company = await call<{ id: string }>('hubspot_create_company', {
-          properties: { name: `${runId} smoke company`, domain: emailDomain },
+          name: `${runId} smoke company`,
+          domain: emailDomain,
         });
         companyId = company.id;
         steps.push(makeStep('create company', 'hubspot_create_company', 'pass', companyId));
@@ -106,10 +110,8 @@ export const hubspotScenario: Scenario = {
     if (tools['hubspot_create_deal']) {
       try {
         const deal = await call<{ id: string }>('hubspot_create_deal', {
-          properties: {
-            dealname: `${runId} smoke deal`,
-            amount: '1',
-          },
+          dealName: `${runId} smoke deal`,
+          amount: 1,
         });
         dealId = deal.id;
         steps.push(makeStep('create deal', 'hubspot_create_deal', 'pass', dealId));
@@ -118,11 +120,33 @@ export const hubspotScenario: Scenario = {
       }
     }
 
+    // HubSpot ticket creation requires a pipeline + stage pair; portals ship a
+    // default "Support Pipeline" we can discover via fetch_pipelines. We pass
+    // the stage id of the first stage of the first ticket pipeline so the
+    // ticket lands in a valid state regardless of portal customisation.
+    let ticketPipeline: string | undefined;
+    let ticketStage: string | undefined;
+    if (tools['hubspot_fetch_pipelines']) {
+      try {
+        const pipelines = await call<{ pipelines: Array<{ id: string; stages: Array<{ id: string }> }> }>(
+          'hubspot_fetch_pipelines',
+          { objectType: 'tickets' },
+        );
+        const first = pipelines.pipelines?.[0];
+        ticketPipeline = first?.id;
+        ticketStage = first?.stages?.[0]?.id;
+      } catch (error) {
+        log.error('Failed to resolve ticket pipeline for smoke run', errorMessage(error));
+      }
+    }
+
     let ticketId: string | undefined;
     if (tools['hubspot_create_ticket']) {
       try {
         const ticket = await call<{ id: string }>('hubspot_create_ticket', {
-          properties: { subject: `${runId} smoke ticket` },
+          subject: `${runId} smoke ticket`,
+          ...(ticketPipeline ? { hs_pipeline: ticketPipeline } : {}),
+          ...(ticketStage ? { hs_pipeline_stage: ticketStage } : {}),
         });
         ticketId = ticket.id;
         steps.push(makeStep('create ticket', 'hubspot_create_ticket', 'pass', ticketId));
@@ -134,8 +158,14 @@ export const hubspotScenario: Scenario = {
     let taskId: string | undefined;
     if (tools['hubspot_create_task']) {
       try {
+        // dueDate is required by the create-task schema. One hour from "now"
+        // keeps the task self-contained (we delete it later in cleanup) and
+        // avoids HubSpot flagging it as overdue mid-run.
+        const dueDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
         const task = await call<{ id: string }>('hubspot_create_task', {
-          properties: { hs_task_subject: `${runId} smoke task`, hs_task_status: 'NOT_STARTED' },
+          subject: `${runId} smoke task`,
+          type: 'TODO',
+          dueDate,
         });
         taskId = task.id;
         steps.push(makeStep('create task', 'hubspot_create_task', 'pass', taskId));
@@ -248,14 +278,14 @@ export const hubspotScenario: Scenario = {
     if (tools['hubspot_batch_create_companies']) {
       steps.push(
         await probeTool(call, tools, 'batch create companies (probe)', 'hubspot_batch_create_companies', {
-          companies: [{ properties: { name: `${runId} batch co`, domain: `batch-${runId}.mastra-smoke.invalid` } }],
+          companies: [{ name: `${runId} batch co`, domain: `batch-${runId}.mastra-smoke.invalid` }],
         }),
       );
     }
     if (companyId && tools['hubspot_batch_update_companies']) {
       try {
         await call('hubspot_batch_update_companies', {
-          companies: [{ id: companyId, properties: { name: `${runId} smoke company (batched)` } }],
+          companies: [{ id: companyId, name: `${runId} smoke company (batched)` }],
         });
         steps.push(makeStep('batch update companies', 'hubspot_batch_update_companies', 'pass'));
       } catch (error) {
