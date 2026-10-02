@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ThemedToken } from 'shiki/core';
+import { useThrottledCallback } from 'use-debounce';
 
 import { highlight } from '../CodeEditor/highlight';
 
@@ -10,30 +11,34 @@ export interface Highlighted {
   tokens: ThemedToken[][];
 }
 
-/** Tokens land a pass behind the code, so the value may still describe the previous code. */
+/** Sample tokens every 75 ms; the trailing pass catches the final streamed text. */
 export function useHighlight(code: string, lang: string | undefined): Highlighted | null {
   const [highlighted, setHighlighted] = useState<Highlighted | null>(null);
+  const request = useRef({ id: 0 });
 
-  useEffect(() => {
-    if (!lang) {
-      setHighlighted(null);
-      return;
-    }
-
-    let cancelled = false;
+  const throttledHighlight = useThrottledCallback((code: string, lang: string) => {
+    const id = ++request.current.id;
 
     void highlight(code, lang)
       .then(tokens => {
-        if (!cancelled && tokens?.length) setHighlighted({ code, lang, tokens });
+        if (id === request.current.id && tokens?.length) setHighlighted({ code, lang, tokens });
       })
       .catch(() => {});
+  }, 75);
 
+  useEffect(() => {
+    const currentRequest = request.current;
     return () => {
-      cancelled = true;
+      throttledHighlight.cancel();
+      ++currentRequest.id;
     };
-  }, [code, lang]);
+  }, [lang, throttledHighlight]);
 
-  return highlighted;
+  useEffect(() => {
+    if (lang) throttledHighlight(code, lang);
+  }, [code, lang, throttledHighlight]);
+
+  return lang ? highlighted : null;
 }
 
 export function tokenStyle(token: ThemedToken): CSSProperties | undefined {
