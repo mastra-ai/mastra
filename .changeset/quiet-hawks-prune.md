@@ -8,7 +8,7 @@ Improved ClickHouse query performance by letting filters use table indexes inste
 
 - Delta polling and list cursors for traces, branches, logs, metrics, scores and feedback now read only the rows past the cursor instead of the whole signal table.
 - Score dashboards and `listScores` filtered by trace no longer merge the entire current-scores table.
-- Trace list pages and paginated trace queries load faster and use far less memory on large time ranges.
+- Trace and branch list pages and paginated trace queries use far less memory and load faster. Listing branches no longer runs out of memory on large deployments.
 - Metric, score and feedback percentile charts compute all requested percentiles in one query.
 - Added skip indexes for trace-root and branch lookups by trace, feedback lookups by id, and log filters by trace, thread, resource, user, organization, experiment, run, session and request.
 

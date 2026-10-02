@@ -205,16 +205,23 @@ async function listTraceRows<TSpan>(
   const dataResult = await client.query({
     query: `
       SELECT ${projection.outerSelect} FROM (
-        -- Sort, dedupe and paginate in one scan so the sort can follow the
-        -- (startedAt, ...) key and stop early; duplicates of a dedupeKey are
-        -- byte-identical, so LIMIT 1 BY keeps the same row wherever it lands.
+        -- Deferred join: pick the page's sort keys from a narrow sort, then
+        -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
+        -- own lazy materialization, so sorting SELECT * directly would carry
+        -- every matching row's payload columns through the sort.
         SELECT ${projection.innerSelect}
         FROM ${TABLE_TRACE_ROOTS} r
-        ${whereClause}
+        WHERE (r.startedAt, r.traceId, r.dedupeKey) IN (
+          SELECT startedAt, traceId, dedupeKey
+          FROM ${TABLE_TRACE_ROOTS} r
+          ${whereClause}
+          ORDER BY ${orderClause}, dedupeKey ASC
+          LIMIT 1 BY dedupeKey
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
+        )
         ORDER BY ${orderClause}, dedupeKey ASC
         LIMIT 1 BY dedupeKey
-        LIMIT {limit:UInt32}
-        OFFSET {offset:UInt32}
       )
       ORDER BY ${orderClause}, dedupeKey ASC
     `,

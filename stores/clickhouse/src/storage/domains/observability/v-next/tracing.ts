@@ -515,15 +515,23 @@ export async function listBranches(
   const dataResult = await client.query({
     query: `
       SELECT * FROM (
-        -- Sort, dedupe and paginate in one scan; duplicates of a dedupeKey are
-        -- byte-identical, so LIMIT 1 BY keeps the same row wherever it lands.
+        -- Deferred join: pick the page's sort keys from a narrow sort, then
+        -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
+        -- own lazy materialization, so sorting SELECT * directly would carry
+        -- every matching branch's payload columns through the sort.
         SELECT *
         FROM ${TABLE_TRACE_BRANCHES} b
-        ${whereClause}
+        WHERE (b.spanType, b.startedAt, b.traceId, b.dedupeKey) IN (
+          SELECT b.spanType, b.startedAt, b.traceId, b.dedupeKey
+          FROM ${TABLE_TRACE_BRANCHES} b
+          ${whereClause}
+          ORDER BY b.${sortField} ${sortDirection}, b.dedupeKey ASC
+          LIMIT 1 BY b.dedupeKey
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
+        )
         ORDER BY b.${sortField} ${sortDirection}, b.dedupeKey ASC
         LIMIT 1 BY b.dedupeKey
-        LIMIT {limit:UInt32}
-        OFFSET {offset:UInt32}
       )
       ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
     `,
