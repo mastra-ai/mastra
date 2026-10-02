@@ -259,6 +259,8 @@ export function getDynamicMemory(
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
+  // Instances replaced by a config change may still have background work in flight.
+  const retiredMemories = new Set<Memory>();
 
   // Observer/reflector model functions — read the current model ID from
   // controller state via requestContext (propagated by OM's agent.generate).
@@ -273,7 +275,7 @@ export function getDynamicMemory(
   const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' });
 
-  return ({ requestContext }: { requestContext: RequestContext }) => {
+  const resolveMemory = ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
     const subconsciousEnabled = isSubconsciousEnabled(vector);
@@ -339,6 +341,12 @@ export function getDynamicMemory(
       ? `${DYNAMIC_AGENTS_MD_INSTRUCTION}\n\n${CAVEMAN_OM_INSTRUCTION}`
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
+
+    if (cachedMemory) {
+      const retired = cachedMemory;
+      retiredMemories.add(retired);
+      void retired.settled().finally(() => retiredMemories.delete(retired));
+    }
 
     cachedMemory = new Memory({
       storage,
@@ -407,4 +415,14 @@ export function getDynamicMemory(
 
     return cachedMemory;
   };
+
+  return Object.assign(resolveMemory, {
+    /**
+     * Wait for background memory work (buffered observations, reflections, indexing) in every
+     * instance this factory created. Await before closing storage.
+     */
+    async settled(): Promise<void> {
+      await Promise.all([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
+    },
+  });
 }
