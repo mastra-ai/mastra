@@ -4491,6 +4491,8 @@ export class AgentThreadStreamRuntime {
     const registeredSeqsByRunId = new Map<string, Map<string, number>>();
     /** Registered streams already matched to an explicit or legacy terminal event. */
     const terminalEventStreamIds = new Set<string>();
+    /** Terminal deliveries whose lifecycle side effects completed successfully. */
+    const handledTerminalEventIds = new Set<string>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
     // A run registering a later stream means its suspension was answered. A
@@ -4530,7 +4532,17 @@ export class AgentThreadStreamRuntime {
       // has been inspected — including events this subscriber filters out —
       // because a persistent backend (Redis consumer groups) keeps unacked
       // deliveries pending for the lifetime of the subscription.
-      const processed = eventTail.then(() => handleEvent(event));
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      const terminal =
+        data?.type === 'run-failed' ||
+        data?.type === 'run-completed' ||
+        data?.type === 'run-aborted' ||
+        data?.type === 'run-suspended';
+      const processed = eventTail.then(async () => {
+        if (terminal && handledTerminalEventIds.has(event.id)) return;
+        await handleEvent(event);
+        if (terminal) handledTerminalEventIds.add(event.id);
+      });
       // The tail must survive a failed event so later events still run.
       eventTail = processed.then(
         () => {},
