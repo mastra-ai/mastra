@@ -13,8 +13,10 @@ import { SavedViewEditor, SavedViewTabs, useSavedViews } from '@mastra/playgroun
 
 const views = useSavedViews({ storageKey: 'my-page.views', settingsSchema, activeViewId, onActiveViewChange });
 
+const setFilters = filters => (views.applied ? views.change({ filters }) : setPageFilters(filters));
+
 <SavedViewTabs views={views} fields={fields} operators={operators} defaultLabel="All" newViewSettings={settings} />
 <SavedViewEditor views={views}>
-  <FilterBar fields={fields} value={views.draft?.filters ?? []} onValueChange={filters => views.change({ filters })} />
+  <FilterBar fields={fields} value={views.applied?.filters ?? pageFilters} onValueChange={setFilters} />
 </SavedViewEditor>
 ```

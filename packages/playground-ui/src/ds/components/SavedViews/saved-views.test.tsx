@@ -44,6 +44,9 @@ function Page() {
           Clear draft filters
         </button>
       </SavedViewEditor>
+      <button type="button" onClick={() => setActiveViewId(undefined)}>
+        Navigate to All
+      </button>
       <output data-testid="applied">{applied ? JSON.stringify(applied) : 'page'}</output>
     </>
   );
@@ -132,6 +135,32 @@ describe('SavedViews', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
 
     expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
+  });
+
+  it('marks an edited view unsaved only once it differs from what is stored', async () => {
+    render(<Page />);
+    await createView('Errors');
+
+    fireEvent.contextMenu(tab('Errors'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
+    expect(screen.getByText('Unsaved changes')).toBeTruthy();
+  });
+
+  it('drops an edit when the page navigates away from its view', async () => {
+    render(<Page />);
+    await createView('Errors');
+
+    fireEvent.contextMenu(tab('Errors'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Navigate to All' }));
+    fireEvent.click(tab('Errors'));
+
+    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
   });
 
   it('previews another view on hover and opens the active view menu on click', async () => {

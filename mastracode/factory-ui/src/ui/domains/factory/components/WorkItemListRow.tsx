@@ -44,7 +44,7 @@ export function WorkItemListRow({
     <BoardListRow
       testId="work-item-card"
       title={item.title}
-      cardRef={morph.cardRef}
+      cardRef={morph.setCardElement}
       detailsRef={deepLinkRef}
       expanded={morph.open}
       onOpen={morph.openDetails}

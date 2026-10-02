@@ -29,6 +29,7 @@ export type SavedViewsController<TSettings> = {
   views: SavedView<TSettings>[];
   activeView: SavedView<TSettings> | undefined;
   draft: SavedViewDraft<TSettings> | undefined;
+  unsaved: boolean;
   applied: SavedViewContent<TSettings> | undefined;
   select: (viewId: string | undefined) => void;
   create: (settings: TSettings, filters?: FilterBarItem[]) => void;
@@ -51,6 +52,13 @@ function validViewName(name: string): string | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+function sameViewContent<TSettings>(draft: SavedViewDraft<TSettings>, view: SavedView<TSettings>): boolean {
+  return (
+    JSON.stringify([draft.name, draft.filters, draft.settings]) ===
+    JSON.stringify([view.name, view.filters, view.settings])
+  );
+}
+
 export function useSavedViews<TSettings>({
   storageKey,
   settingsSchema,
@@ -64,8 +72,16 @@ export function useSavedViews<TSettings>({
   );
   const views = parseSavedViews(raw, settingsSchema);
   const [pendingDraft, setDraft] = useState<SavedViewDraft<TSettings>>();
-  // A draft of a view the page navigated away from no longer applies.
+  const [draftScope, setDraftScope] = useState({ storageKey, activeViewId });
+  const draftView = views.find(view => view.id === pendingDraft?.viewId);
+  const draftViewDeleted = pendingDraft?.viewId !== undefined && !draftView;
+  const storageKeyChanged = draftScope.storageKey !== storageKey;
+  if (storageKeyChanged || draftScope.activeViewId !== activeViewId || draftViewDeleted) {
+    setDraftScope({ storageKey, activeViewId });
+    if (storageKeyChanged || draftViewDeleted || pendingDraft?.viewId !== activeViewId) setDraft(undefined);
+  }
   const draft = pendingDraft?.viewId === undefined || pendingDraft.viewId === activeViewId ? pendingDraft : undefined;
+  const unsaved = draft !== undefined && (!draftView || !sameViewContent(draft, draftView));
 
   const activeView = views.find(view => view.id === activeViewId);
   const write = (next: SavedView<TSettings>[]) => writeSavedViewsRaw(storageKey, serializeSavedViews(next));
@@ -74,6 +90,7 @@ export function useSavedViews<TSettings>({
     views,
     activeView,
     draft,
+    unsaved,
     applied: draft ?? activeView,
     select: viewId => {
       setDraft(undefined);

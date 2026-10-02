@@ -64,7 +64,14 @@ export function SavedViewTabs<TSettings>({
       </button>
       {views.views.map(view => {
         if (draft?.viewId === view.id) {
-          return <EditingViewTab key={view.id} name={draft.name} onRename={name => views.change({ name })} />;
+          return (
+            <EditingViewTab
+              key={view.id}
+              name={draft.name}
+              unsaved={views.unsaved}
+              onRename={name => views.change({ name })}
+            />
+          );
         }
         if (renamingViewId === view.id) {
           return (
@@ -95,7 +102,7 @@ export function SavedViewTabs<TSettings>({
         );
       })}
       {creating ? (
-        <EditingViewTab name={draft.name} onRename={name => views.change({ name })} />
+        <EditingViewTab name={draft.name} unsaved onRename={name => views.change({ name })} />
       ) : (
         <Button
           type="button"
@@ -112,7 +119,15 @@ export function SavedViewTabs<TSettings>({
   );
 }
 
-function EditingViewTab({ name, onRename }: { name: string; onRename: (name: string) => void }) {
+function EditingViewTab({
+  name,
+  unsaved,
+  onRename,
+}: {
+  name: string;
+  unsaved: boolean;
+  onRename: (name: string) => void;
+}) {
   const [renaming, setRenaming] = useState(false);
   return (
     <span aria-current="true" className={editingTabClass}>
@@ -128,8 +143,12 @@ function EditingViewTab({ name, onRename }: { name: string; onRename: (name: str
       ) : (
         <>
           <span className="max-w-48 truncate">{name}</span>
-          <span className="bg-warning-indicator size-1.5 shrink-0 rounded-full" aria-hidden />
-          <VisuallyHidden>Unsaved changes</VisuallyHidden>
+          {unsaved && (
+            <>
+              <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />
+              <VisuallyHidden>Unsaved changes</VisuallyHidden>
+            </>
+          )}
           <Button
             type="button"
             variant="ghost"

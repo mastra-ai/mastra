@@ -4,7 +4,7 @@ import { BOARD_LAYOUTS, DEFAULT_BOARD_LAYOUT } from './boardLayout';
 import { BOARD_SORTS } from './boardOrder';
 import { DEFAULT_BOARD_SORT } from './boardSort';
 
-/** Query parameter holding the selected saved view, so a refresh or a shared link keeps it. */
+/** Query parameter holding the selected saved view, so a refresh or a reopen from the sidebar keeps it. */
 export const BOARD_VIEW_QUERY = 'view';
 
 /** A sort or layout the board no longer offers falls back to the default instead of dropping the view. */

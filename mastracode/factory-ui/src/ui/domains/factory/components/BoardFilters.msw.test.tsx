@@ -30,7 +30,7 @@ function FiltersWithFields({
     currentUserId: 'alice',
     teammateSelected: filters.participantIds.size > 0,
   });
-  return <BoardFilters kind={kind} fields={fields} filters={filters} onFiltersChange={onFiltersChange} />;
+  return <BoardFilters kind={kind} fields={fields} filters={filters} onFiltersChange={onFiltersChange} removable />;
 }
 
 function renderFilters(filters: BoardFilterState = NEUTRAL) {

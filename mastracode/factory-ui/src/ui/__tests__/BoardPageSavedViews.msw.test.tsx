@@ -9,20 +9,16 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
-describe('Factory board ordering', () => {
-  it('keeps the sort with the view tabs and the layout inside the view editor', async () => {
+describe('Factory board saved views', () => {
+  it('starts on All cards and offers the layout only inside the view editor', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(<RouterProvider router={router} />);
     const user = userEvent.setup();
 
-    const viewControls = await screen.findByRole('group', { name: 'Board view controls' });
-    expect(within(viewControls).getByRole('group', { name: 'Board filters' })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Sort filed cards' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
-    const views = screen.getByRole('group', { name: 'Board views' });
+    const views = await screen.findByRole('group', { name: 'Board views' });
     expect(within(views).getByRole('button', { name: 'All cards' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'New view' }));
     expect(await screen.findByRole('radio', { name: 'Board' })).toBeChecked();
@@ -46,8 +42,7 @@ describe('Factory board ordering', () => {
     await user.click(screen.getByRole('radio', { name: 'List' }));
     await user.click(screen.getByRole('button', { name: 'Save view' }));
 
-    const savedTab = await screen.findByRole('button', { name: 'Untitled view', pressed: true });
-    expect(savedTab).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     expect(within(screen.getByRole('group', { name: 'View filters' })).getByText('Created')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
@@ -71,7 +66,7 @@ describe('Factory board ordering', () => {
     expect(screen.getByRole('group', { name: 'Board filters' })).toBeInTheDocument();
   });
 
-  it('narrows a saved view with temporary filters until they are saved or canceled', async () => {
+  it('removes a saved view filter only in edit mode, until saved or canceled', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?q=Created`],
@@ -87,12 +82,17 @@ describe('Factory board ordering', () => {
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
 
+    expect(
+      within(screen.getByRole('group', { name: 'View filters' })).queryByRole('button', { name: 'Clear filters' }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Untitled view' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
     await user.click(
       within(screen.getByRole('group', { name: 'View filters' })).getByRole('button', { name: 'Clear filters' }),
     );
     await within(triage).findByText('Moved recently');
-    expect(screen.getByRole('button', { name: 'Save view' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Save view' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument());
@@ -115,7 +115,7 @@ describe('Factory board ordering', () => {
 
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     expect(screen.queryByRole('button', { name: 'Save as view' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(screen.getByRole('button', { name: /^Sort filed cards/ }));
     expect(await screen.findByRole('menuitemradio', { name: 'Newest on board' })).toHaveAttribute(
       'aria-checked',
       'true',

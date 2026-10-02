@@ -17,7 +17,7 @@ describe('Factory board ordering', () => {
     renderWithProviders(<RouterProvider router={router} />);
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(screen.getByRole('button', { name: /^Sort filed cards/ }));
     expect(await screen.findByRole('menuitemradio', { name: 'Recently moved' })).toHaveAttribute(
       'aria-checked',
       'true',
@@ -50,7 +50,7 @@ describe('Factory board ordering', () => {
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Moved recently');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(screen.getByRole('button', { name: /^Sort filed cards/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Newest on board' }));
 
     await waitFor(() => {
@@ -61,7 +61,7 @@ describe('Factory board ordering', () => {
       expect(titles[1]).toContain('Moved recently');
     });
     expect(router.state.location.search).toBe('?sort=created-newest');
-    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(screen.getByRole('button', { name: 'Sort filed cards: Newest on board' }));
     expect(await screen.findByRole('menuitemradio', { name: 'Newest on board' })).toHaveAttribute(
       'aria-checked',
       'true',
@@ -96,7 +96,7 @@ describe('Factory board view memory', () => {
 
     await searchBoard('Created');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(screen.getByRole('button', { name: /^Sort filed cards/ }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Newest on board' }));
     await waitFor(() => expect(first.router.state.location.search).toBe('?q=Created&sort=created-newest'));
     first.view.unmount();

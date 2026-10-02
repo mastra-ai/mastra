@@ -76,12 +76,14 @@ export function BoardFilters({
   fields,
   filters,
   onFiltersChange,
+  removable,
   'aria-label': ariaLabel = 'Board filters',
 }: {
   kind: BoardKind;
   fields: FilterBarField[];
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
+  removable: boolean;
   'aria-label'?: string;
 }) {
   return (
@@ -95,7 +97,7 @@ export function BoardFilters({
       aria-label={ariaLabel}
       className="w-full max-w-full sm:w-auto"
     >
-      <FilterBar.Chips />
+      <FilterBar.Chips renderChip={item => <FilterBar.Chip item={item} removable={removable} />} />
       <FilterBar.Input placeholder="Filter cards…" />
     </FilterBar>
   );

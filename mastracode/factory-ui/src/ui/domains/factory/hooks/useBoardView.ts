@@ -93,13 +93,10 @@ export function useBoardView({
     layout: settings.layout,
     newViewSettings: { ...settings, sort },
     setFilters: (next: BoardFilterState) => {
-      if (applied) {
-        savedViews.change({ filters: boardFilterItems(next, kind) });
-        return;
-      }
-      const params = boardFilterParams(searchParams, next, kind);
+      const params = applied ? new URLSearchParams(searchParams) : boardFilterParams(searchParams, next, kind);
       clearOpenCard(params);
-      replaceParams(params);
+      if (applied) savedViews.change({ filters: boardFilterItems(next, kind) });
+      if (params.toString() !== searchParams.toString()) replaceParams(params);
     },
     setSort: (next: BoardSort) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, sort: next } });

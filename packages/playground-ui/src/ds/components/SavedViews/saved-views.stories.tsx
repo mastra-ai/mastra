@@ -46,7 +46,7 @@ const meta: Meta = {
         component: [
           'Saved views for a `FilterBar` page, stored in localStorage and validated with Zod on every read.',
           '',
-          'A view tab applies its filters and settings without showing them: hover a tab to preview them, right click it to edit, rename, duplicate or delete. The layers button starts a new view from the page filters; `SavedViewEditor` holds the draft until it is saved.',
+          'Clicking the active view tab opens its menu: edit, rename, duplicate or delete. Hovering another tab previews its filters, and right-clicking any tab opens the same menu. The layers button starts an empty view with the current page settings; `SavedViewEditor` holds the draft until it is saved.',
         ].join('\n'),
       },
     },
@@ -68,22 +68,15 @@ export const Default: Story = {
       onActiveViewChange: setActiveViewId,
     });
     const settings = views.applied?.settings ?? { layout: pageLayout };
+    const filters = views.applied?.filters ?? pageFilters;
+    const setFilters = (next: FilterBarItem[]) => {
+      if (views.applied) views.change({ filters: next });
+      else setPageFilters(next);
+    };
     const setLayout = (layout: Settings['layout']) => {
       if (views.applied) views.change({ settings: { layout } });
       else setPageLayout(layout);
     };
-    const filterBar = (filters: FilterBarItem[], onChange: (filters: FilterBarItem[]) => void) => (
-      <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={filters} onValueChange={onChange}>
-        <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter issues…" />
-      </FilterBar>
-    );
-    const editedFilters = views.draft ? (
-      <SavedViewEditor views={views} className="flex-1">
-        {filterBar(views.draft.filters, filters => views.change({ filters }))}
-      </SavedViewEditor>
-    ) : null;
-    const pageFilterBar = views.applied ? null : filterBar(pageFilters, setPageFilters);
     return (
       <div className="grid w-full max-w-3xl gap-3">
         <SavedViewTabs
@@ -98,8 +91,11 @@ export const Default: Story = {
             </Txt>
           )}
         />
-        <div className="flex flex-wrap items-center gap-2">
-          {editedFilters ?? pageFilterBar}
+        <SavedViewEditor views={views}>
+          <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={filters} onValueChange={setFilters}>
+            <FilterBar.Chips />
+            <FilterBar.Input placeholder="Filter issues…" />
+          </FilterBar>
           <SegmentedControl aria-label="Layout" size="sm" iconOnly value={settings.layout} onValueChange={setLayout}>
             <SegmentedControlItem value="list" aria-label="List" title="List">
               <ListIcon aria-hidden />
@@ -108,9 +104,9 @@ export const Default: Story = {
               <KanbanIcon aria-hidden />
             </SegmentedControlItem>
           </SegmentedControl>
-        </div>
-        <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">
-          {JSON.stringify(views.applied ?? { filters: pageFilters, settings }, null, 2)}
+        </SavedViewEditor>
+        <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
+          {JSON.stringify(views.applied ?? { filters, settings }, null, 2)}
         </pre>
       </div>
     );

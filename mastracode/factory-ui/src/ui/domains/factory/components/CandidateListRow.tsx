@@ -29,7 +29,7 @@ export function CandidateListRow({
     <BoardListRow
       testId="candidate-card"
       title={candidate.title}
-      cardRef={morph.cardRef}
+      cardRef={morph.setCardElement}
       expanded={morph.open}
       onOpen={morph.openDetails}
       dragPayload={candidatePayload(candidate)}

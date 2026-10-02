@@ -48,17 +48,6 @@ export function BoardViewControls({
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });
-  const filtersSlot = (
-    <div className="max-w-full min-w-0">
-      <BoardFilters
-        kind={kind}
-        fields={fields}
-        filters={view.filters}
-        onFiltersChange={view.setFilters}
-        aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
-      />
-    </div>
-  );
   const saveAsView = () => savedViews.create(view.newViewSettings, boardFilterItems(view.filters, kind));
   const pageFiltersActive = !savedViews.applied && boardFiltersActive(view.filters, kind);
   const unsaved = Boolean(savedViews.draft) || pageFiltersActive;
@@ -88,9 +77,18 @@ export function BoardViewControls({
           unsaved && 'bg-fill-subtle',
         )}
       >
-        {savedViews.draft ? (
-          <SavedViewEditor views={savedViews} className="flex-1">
-            {filtersSlot}
+        <SavedViewEditor views={savedViews} className="flex-1">
+          <div className="max-w-full min-w-0">
+            <BoardFilters
+              kind={kind}
+              fields={fields}
+              filters={view.filters}
+              onFiltersChange={view.setFilters}
+              removable={!savedViews.activeView || Boolean(savedViews.draft)}
+              aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
+            />
+          </div>
+          {savedViews.draft && (
             <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
               <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
                 <List aria-hidden />
@@ -99,15 +97,13 @@ export function BoardViewControls({
                 <Kanban aria-hidden />
               </SegmentedControlItem>
             </SegmentedControl>
-          </SavedViewEditor>
-        ) : (
-          filtersSlot
-        )}
-        {pageFiltersActive && (
-          <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
-            Save as view
-          </Button>
-        )}
+          )}
+          {pageFiltersActive && (
+            <Button type="button" variant="ghost" size="sm" onClick={saveAsView}>
+              Save as view
+            </Button>
+          )}
+        </SavedViewEditor>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export function BoardSortControl({
       <DropdownMenu.Trigger
         size="icon-sm"
         variant={value === DEFAULT_BOARD_SORT ? 'default' : 'primary'}
-        aria-label="Sort filed cards"
+        aria-label={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
         tooltip={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
       >
         <ArrowUpDown aria-hidden />
