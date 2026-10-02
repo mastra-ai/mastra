@@ -232,6 +232,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   generation?: number;
   /** Registered by a recovering process: the run's streams under earlier generations are superseded. */
   supersedes?: boolean;
+  /** See {@link AgentThreadRunClaim.ownershipLost}. */
+  ownershipLost?: () => boolean;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
@@ -406,7 +408,17 @@ export type ActiveThreadRun = { runId: string; resourceId?: string; threadId: st
 
 type AgentThreadRunContinuationMode = 'across-suspension';
 
-export type AgentThreadStrictRegistrationOptions = {
+/** The durable execution claim producing a run, when the run is fenced. */
+type AgentThreadRunClaim = {
+  /**
+   * Whether the execution producing the run lost its claim to another
+   * process. That process holds the run's thread lease under the same runId,
+   * so a run that ends after losing its claim leaves the lease alone.
+   */
+  ownershipLost?: () => boolean;
+};
+
+export type AgentThreadStrictRegistrationOptions = AgentThreadRunClaim & {
   strict: true;
   continuation?: AgentThreadRunContinuationMode;
   /**
@@ -423,7 +435,7 @@ export type AgentThreadStrictRegistrationOptions = {
   generation?: number;
 };
 
-type AgentThreadStreamRegistrationOptions = {
+type AgentThreadStreamRegistrationOptions = AgentThreadRunClaim & {
   strict?: false;
   continuation?: AgentThreadRunContinuationMode;
   /**
@@ -2809,7 +2821,7 @@ export class AgentThreadStreamRuntime {
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
-    generation?: number,
+    claim?: AgentThreadRunClaim & { generation?: number },
   ): boolean {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
     if (!threadId) return false;
@@ -2839,7 +2851,8 @@ export class AgentThreadStreamRuntime {
     existing.lifecycle = 'running';
     existing.streamOptions = streamOptions;
     existing.currentSegmentOutput = output;
-    if (generation !== undefined) existing.generation = generation;
+    if (claim?.generation !== undefined) existing.generation = claim.generation;
+    if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
     // Resume callers may only send an approval and never read this segment.
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
@@ -2912,6 +2925,7 @@ export class AgentThreadStreamRuntime {
       streamId,
       streamSeq,
       generation: registrationOptions?.generation,
+      ownershipLost: registrationOptions?.ownershipLost,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -3022,6 +3036,7 @@ export class AgentThreadStreamRuntime {
       streamSeq,
       generation: registrationOptions.generation,
       supersedes: registrationOptions.generation !== undefined,
+      ownershipLost: registrationOptions.ownershipLost,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -3217,7 +3232,26 @@ export class AgentThreadStreamRuntime {
                 : undefined,
           )
           .catch(() => {});
-        if (this.#hasPendingThreadWork(state, key)) {
+        if (record.ownershipLost?.()) {
+          // The process that took the run over holds its lease under the same
+          // runId, so neither release it nor hand it to queued work here. Hand
+          // queued follow-ups to that process instead; it ignores ones it
+          // already admitted.
+          this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+          for (const preRun of [true, false]) {
+            const queues = preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+            for (const signal of queues.get(key) ?? []) {
+              void this.#publishAndWait(pubsub, key, {
+                type: 'signal-enqueued',
+                runId: record.runId,
+                signal: this.#serializeSignal(signal),
+                sourceId: this.#getSourceId(),
+                preRun,
+              }).catch(() => {});
+            }
+            queues.delete(key);
+          }
+        } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
           this.#releaseThreadLease(pubsub, key, record.runId);

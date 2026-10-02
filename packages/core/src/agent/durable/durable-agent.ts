@@ -971,6 +971,7 @@ export class DurableAgent<
           continuation: 'across-suspension',
           validate: () => executionFence.throwIfLost(),
           generation: executionFence.generation,
+          ownershipLost: () => executionFence.isLost(),
         },
       );
       executionFence.throwIfLost();
@@ -2453,6 +2454,7 @@ export class DurableAgent<
       {
         continuation: closeOnSuspend ? undefined : 'across-suspension',
         generation: executionFence.generation,
+        ownershipLost: () => executionFence.isLost(),
       },
     );
 
@@ -2931,7 +2933,7 @@ export class DurableAgent<
       output,
       resumeStreamOptions,
       this.getPubSub(),
-      executionFence.generation,
+      { generation: executionFence.generation, ownershipLost: () => executionFence.isLost() },
     );
     if (!continued) {
       await agentThreadStreamRuntime.registerRun(
@@ -2942,6 +2944,7 @@ export class DurableAgent<
         {
           continuation: closeOnSuspend ? undefined : 'across-suspension',
           generation: executionFence.generation,
+          ownershipLost: () => executionFence.isLost(),
         },
       );
     }

@@ -228,6 +228,56 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     earlyReader.unsubscribe();
   });
 
+  it.each([
+    ['nothing is queued', undefined],
+    ['a follow-up was queued before the recovery', 'before'],
+    ['a follow-up was queued after the recovery', 'after'],
+  ] as const)('leaves the run to the recovery when the superseded execution ends and %s', async (_case, queued) => {
+    const { pubsub, original, recovering, subscription } = await setup({ read: false });
+    const threadKey = 'generation-user\u0000generation-thread';
+    const queueFollowUp = () =>
+      original.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'follow-up' },
+        { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+        pubsub,
+      ).accepted;
+
+    let originalLost = false;
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, {
+      generation: 1,
+      ownershipLost: () => originalLost,
+    });
+    a.push(start);
+    await nextTicks(10);
+    if (queued === 'before') await queueFollowUp();
+
+    const b = controlledOutput('run-1');
+    await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    b.push(start);
+    if (queued === 'after') await queueFollowUp();
+    await nextTicks(10);
+    originalLost = true;
+    a.end('failed');
+    await nextTicks(40);
+
+    // The recovery still holds the thread, and gets the follow-up exactly once.
+    expect(await pubsub.getLeaseOwner(threadKey)).toBe('run-1');
+    const other = controlledOutput('run-2');
+    await expect(
+      new AgentThreadStreamRuntime().registerRun(agent, other.output, options, pubsub, { strict: true }),
+    ).rejects.toThrow(/run-1/);
+    expect(recovering.drainPendingSignals('run-1', pubsub).map(signal => signal.contents)).toEqual(
+      queued ? ['follow-up'] : [],
+    );
+
+    b.push(finish);
+    b.end();
+    await vi.waitFor(async () => expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined());
+    subscription.unsubscribe();
+  });
+
   it('keeps a suspended half readable when another process resumes the run under a later generation', async () => {
     // The reader starts only after the resume registers, so the suspended half is still unread.
     const { pubsub, original, recovering, subscription, read, startReader } = await setup({ read: false });
