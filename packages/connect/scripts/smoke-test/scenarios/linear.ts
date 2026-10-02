@@ -87,6 +87,145 @@ export const linearScenario: Scenario = {
       steps.push(makeStep('update issue title', 'linear_update_issue', 'fail', errorMessage(error)));
     }
 
+    // get_* read lookups that take a specific id. Pull one of each from the
+    // lists we already fetched so every single-id getter is exercised.
+    try {
+      const users = await call<{ items?: Array<{ id?: string }> }>('linear_list_users', { first: 1 });
+      const userId = users.items?.[0]?.id;
+      if (userId && tools['linear_get_user']) {
+        await call('linear_get_user', { userId });
+        steps.push(makeStep('get user', 'linear_get_user', 'pass'));
+      }
+    } catch (error) {
+      steps.push(makeStep('get user', 'linear_get_user', 'fail', errorMessage(error)));
+    }
+
+    try {
+      const states = await call<{ items?: Array<{ id?: string }> }>('linear_list_workflow_states', {
+        first: 1,
+        teamId: team.id,
+      });
+      const stateId = states.items?.[0]?.id;
+      if (stateId && tools['linear_get_workflow_state']) {
+        await call('linear_get_workflow_state', { stateId });
+        steps.push(makeStep('get workflow state', 'linear_get_workflow_state', 'pass'));
+      }
+    } catch (error) {
+      steps.push(makeStep('get workflow state', 'linear_get_workflow_state', 'fail', errorMessage(error)));
+    }
+
+    // Archive + unarchive the issue to exercise the pair without losing it.
+    if (tools['linear_archive_issue'] && tools['linear_unarchive_issue']) {
+      try {
+        await call('linear_archive_issue', { id: issueId });
+        steps.push(makeStep('archive issue', 'linear_archive_issue', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('archive issue', 'linear_archive_issue', 'fail', errorMessage(error)));
+      }
+      try {
+        await call('linear_unarchive_issue', { id: issueId });
+        steps.push(makeStep('unarchive issue', 'linear_unarchive_issue', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('unarchive issue', 'linear_unarchive_issue', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Create a second issue so we can exercise the issue-relation surface
+    // (create + update + delete + list variants need two real issues).
+    let secondIssueId: string | undefined;
+    if (tools['linear_create_issue']) {
+      try {
+        const other = await call<{ id: string }>('linear_create_issue', {
+          teamId: team.id,
+          title: `${runId} smoke related issue`,
+          description: 'Second issue for relation lifecycle. Safe to delete.',
+        });
+        secondIssueId = other.id;
+      } catch {
+        // Second-issue creation failing isn't fatal; relation steps just skip.
+      }
+    }
+
+    let relationId: string | undefined;
+    if (secondIssueId && tools['linear_create_issue_relation']) {
+      try {
+        const relation = await call<{ id: string }>('linear_create_issue_relation', {
+          issueId,
+          relatedIssueId: secondIssueId,
+          type: 'related',
+        });
+        relationId = relation.id;
+        steps.push(makeStep('create issue relation', 'linear_create_issue_relation', 'pass', relationId));
+      } catch (error) {
+        steps.push(makeStep('create issue relation', 'linear_create_issue_relation', 'fail', errorMessage(error)));
+      }
+    }
+    if (relationId && tools['linear_update_issue_relation']) {
+      try {
+        await call('linear_update_issue_relation', {
+          id: relationId,
+          issueId,
+          relatedIssueId: secondIssueId,
+          type: 'blocks',
+        });
+        steps.push(makeStep('update issue relation', 'linear_update_issue_relation', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update issue relation', 'linear_update_issue_relation', 'fail', errorMessage(error)));
+      }
+    }
+    if (relationId && tools['linear_delete_issue_relation']) {
+      try {
+        await call('linear_delete_issue_relation', { id: relationId });
+        steps.push(makeStep('delete issue relation', 'linear_delete_issue_relation', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete issue relation', 'linear_delete_issue_relation', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Cycle CRUD. Cycles live under a team; create → read → update →
+    // archive. Cycles can't be hard-deleted, archive is the terminal state.
+    let cycleId: string | undefined;
+    if (tools['linear_create_cycle']) {
+      try {
+        const now = Date.now();
+        const cycle = await call<{ id: string }>('linear_create_cycle', {
+          teamId: team.id,
+          name: `${runId} smoke cycle`,
+          startsAt: new Date(now + 7 * 86400_000).toISOString(),
+          endsAt: new Date(now + 14 * 86400_000).toISOString(),
+        });
+        cycleId = cycle.id;
+        steps.push(makeStep('create cycle', 'linear_create_cycle', 'pass', cycleId));
+      } catch (error) {
+        steps.push(makeStep('create cycle', 'linear_create_cycle', 'fail', errorMessage(error)));
+      }
+    }
+    if (cycleId && tools['linear_get_cycle']) {
+      try {
+        await call('linear_get_cycle', { id: cycleId });
+        steps.push(makeStep('get cycle', 'linear_get_cycle', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get cycle', 'linear_get_cycle', 'fail', errorMessage(error)));
+      }
+    }
+    if (cycleId && tools['linear_update_cycle']) {
+      try {
+        await call('linear_update_cycle', { id: cycleId, name: `${runId} smoke cycle (renamed)` });
+        steps.push(makeStep('update cycle', 'linear_update_cycle', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update cycle', 'linear_update_cycle', 'fail', errorMessage(error)));
+      }
+    }
+    if (cycleId && tools['linear_archive_cycle']) {
+      try {
+        await call('linear_archive_cycle', { id: cycleId });
+        steps.push(makeStep('archive cycle', 'linear_archive_cycle', 'pass'));
+      } catch (error) {
+        log.error(`Failed to archive smoke cycle ${cycleId}`, errorMessage(error));
+        steps.push(makeStep('archive cycle', 'linear_archive_cycle', 'fail', errorMessage(error)));
+      }
+    }
+
     // Create a comment on the issue, then update + resolve/unresolve + delete.
     if (tools['linear_create_comment']) {
       let commentId: string | undefined;
@@ -136,6 +275,15 @@ export const linearScenario: Scenario = {
         }
       }
 
+      if (commentId && tools['linear_get_comment']) {
+        try {
+          await call('linear_get_comment', { commentId });
+          steps.push(makeStep('get comment', 'linear_get_comment', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get comment', 'linear_get_comment', 'fail', errorMessage(error)));
+        }
+      }
+
       if (commentId && tools['linear_delete_comment']) {
         resources.push({
           kind: 'comment',
@@ -158,6 +306,23 @@ export const linearScenario: Scenario = {
         steps.push(makeStep('create label', 'linear_create_issue_label', 'pass', labelId));
       } catch (error) {
         steps.push(makeStep('create label', 'linear_create_issue_label', 'fail', errorMessage(error)));
+      }
+
+      if (labelId && tools['linear_get_issue_label']) {
+        try {
+          await call('linear_get_issue_label', { id: labelId });
+          steps.push(makeStep('get issue label', 'linear_get_issue_label', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get issue label', 'linear_get_issue_label', 'fail', errorMessage(error)));
+        }
+      }
+      if (labelId && tools['linear_update_issue_label']) {
+        try {
+          await call('linear_update_issue_label', { id: labelId, name: `${runId}-label-renamed` });
+          steps.push(makeStep('update issue label', 'linear_update_issue_label', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('update issue label', 'linear_update_issue_label', 'fail', errorMessage(error)));
+        }
       }
 
       if (labelId && tools['linear_add_issue_label']) {
@@ -200,6 +365,14 @@ export const linearScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('create attachment', 'linear_create_attachment', 'fail', errorMessage(error)));
       }
+      if (attachmentId && tools['linear_get_attachment']) {
+        try {
+          await call('linear_get_attachment', { id: attachmentId });
+          steps.push(makeStep('get attachment', 'linear_get_attachment', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get attachment', 'linear_get_attachment', 'fail', errorMessage(error)));
+        }
+      }
       if (attachmentId && tools['linear_delete_attachment']) {
         resources.push({
           kind: 'attachment',
@@ -222,6 +395,14 @@ export const linearScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('create project', 'linear_create_project', 'fail', errorMessage(error)));
       }
+      if (projectId && tools['linear_get_project']) {
+        try {
+          await call('linear_get_project', { projectId });
+          steps.push(makeStep('get project', 'linear_get_project', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get project', 'linear_get_project', 'fail', errorMessage(error)));
+        }
+      }
       if (projectId && tools['linear_update_project']) {
         try {
           await call('linear_update_project', { id: projectId, name: `${runId} smoke project (renamed)` });
@@ -230,8 +411,22 @@ export const linearScenario: Scenario = {
           steps.push(makeStep('update project', 'linear_update_project', 'fail', errorMessage(error)));
         }
       }
-      // Linear projects don't have a hard delete via API; archive it instead.
-      // Many connections ship the project update tool with a `state` flag.
+      // Projects: archive via archive_project (if present) + unarchive to
+      // exercise both. Projects don't have a hard delete via API.
+      if (projectId && tools['linear_archive_project'] && tools['linear_unarchive_project']) {
+        try {
+          await call('linear_archive_project', { id: projectId });
+          steps.push(makeStep('archive project', 'linear_archive_project', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('archive project', 'linear_archive_project', 'fail', errorMessage(error)));
+        }
+        try {
+          await call('linear_unarchive_project', { projectId });
+          steps.push(makeStep('unarchive project', 'linear_unarchive_project', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('unarchive project', 'linear_unarchive_project', 'fail', errorMessage(error)));
+        }
+      }
     }
 
     // Cleanup created resources first, in reverse creation order.
@@ -242,6 +437,16 @@ export const linearScenario: Scenario = {
       } catch (error) {
         log.error(`Failed to delete smoke ${resource.kind} ${resource.id} — clean up manually.`, errorMessage(error));
         steps.push(makeStep(`delete ${resource.kind}`, undefined, 'fail', errorMessage(error)));
+      }
+    }
+
+    // Clean up the second issue we created for the relation test, if any.
+    if (secondIssueId) {
+      try {
+        await call('linear_delete_issue', { id: secondIssueId });
+        steps.push(makeStep('delete related issue', 'linear_delete_issue', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete related smoke issue ${secondIssueId}`, errorMessage(error));
       }
     }
 

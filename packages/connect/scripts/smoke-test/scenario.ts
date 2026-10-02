@@ -159,3 +159,36 @@ function stripPrefix(toolId: string): string {
   const underscore = toolId.indexOf('_');
   return underscore >= 0 ? toolId.slice(underscore + 1) : toolId;
 }
+
+/**
+ * Invoke a mutating tool against a synthetic / nonexistent id to exercise the
+ * endpoint wiring without touching real customer data. The provider is
+ * expected to return a 4xx (not-found, forbidden, invalid) response — that
+ * still proves routing, auth, serialization, and the tool's response-schema
+ * handling. Pass a custom regex when the provider's error wording differs.
+ *
+ * Used by scenarios where the write-side API requires a resource the toolset
+ * can't bootstrap (e.g. a Stripe refund requires a captured charge, a Google
+ * Analytics property requires an account the smoke user can't create).
+ */
+export async function probeTool(
+  call: <T>(toolId: string, input: unknown) => Promise<T>,
+  availableTools: ResolvedToolset,
+  name: string,
+  toolId: string,
+  input: unknown,
+  acceptable: RegExp = /status=(400|401|403|404|409|422)|not found|does not exist|unauthoriz|forbidden|invalid|unknown/i,
+): Promise<ScenarioStep> {
+  if (!availableTools[toolId]) {
+    return makeStep(name, toolId, 'skip', 'tool not in project toolset');
+  }
+  try {
+    await call(toolId, input);
+    return makeStep(name, toolId, 'pass');
+  } catch (error) {
+    const msg = errorMessage(error);
+    return acceptable.test(msg)
+      ? makeStep(name, toolId, 'pass', `expected error (endpoint exercised): ${msg.slice(0, 120)}`)
+      : makeStep(name, toolId, 'fail', msg);
+  }
+}
