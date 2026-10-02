@@ -137,18 +137,21 @@ export type TrustedTraceAggregateOrderBy =
  *   `tokens.<x>.sum` sums over the group's usage-bearing traces, `tokens.<x>.avg` divides by
  *   their count, and both are null when the group has none.
  * - **Cost.** Only `TRACE_AGGREGATE_COST_METRIC_NAMES` rows carry cost. Such a row is priced when
- *   `estimatedCost` is not null and `costMetadata.error` is not set (a `partial_cost` row is
- *   unpriced even though it carries a partial cost). A trace is priced when it has at least one
- *   priced row; its cost is the sum of its priced rows' `estimatedCost`. Unpriced rows contribute
- *   nothing to cost, cost unit, or coverage. `cost.sum` sums over priced traces, `cost.avg`
- *   divides by their count.
+ *   it has an `estimatedCost`, a `costUnit`, and no `costMetadata.error`. It failed to price when
+ *   `costMetadata.error` is set (including `partial_cost`, even though it carries a partial cost)
+ *   or it has a cost without a unit. A row with neither a cost nor an error is neither: when the
+ *   provider reports cost, only one of the call's total rows carries it. A trace's cost is the sum
+ *   of its priced rows' `estimatedCost`; rows that are not priced contribute nothing to cost or
+ *   cost unit. `cost.sum` sums over traces with at least one priced row, `cost.avg` divides by
+ *   their count.
  * - **Row cost.** Whenever any `cost.*` measure is requested, every row also carries
- *   `cost.coverage` (priced traces ÷ usage-bearing traces; null when the group has no
- *   usage-bearing traces) and `cost.unit` (the priced rows' single `costUnit`, `'mixed'` when they
- *   use more than one, null when there are no priced rows; a null unit counts as its own value).
- *   `cost.sum` and `cost.avg` measures are null when the group has no priced traces or
- *   `cost.unit` is `'mixed'`. Row cost fields are not measures: they cannot be requested,
- *   filtered on, or ordered by.
+ *   `cost.coverage` and `cost.unit`. A trace is covered when it has at least one priced row and
+ *   no row that failed to price; `cost.coverage` is covered traces ÷ usage-bearing traces, null
+ *   when the group has no usage-bearing traces. A trace with partial cost still adds that cost to
+ *   `cost.sum` but is not covered. `cost.unit` is the priced rows' single `costUnit`, `'mixed'`
+ *   when they use more than one, and null exactly when there are no priced rows. `cost.sum` and
+ *   `cost.avg` are null when the group has no priced rows or `cost.unit` is `'mixed'`. Row cost
+ *   fields are not measures: they cannot be requested, filtered on, or ordered by.
  * - Measures are computed independently for the whole-window group (for `having` / `orderBy`) and
  *   for each bucket row.
  */

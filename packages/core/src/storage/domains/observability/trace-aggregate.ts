@@ -142,7 +142,10 @@ const traceAggregateRowMeasuresSchema = z.record(traceAggregateMeasureSchema, z.
 /** Returned on every row whenever any `cost.*` measure is requested. */
 export const traceAggregateRowCostSchema = z
   .object({
-    /** Covered traces ÷ usage-bearing traces; null when the group has no usage-bearing traces. */
+    /**
+     * Covered traces ÷ usage-bearing traces; null when the group has no usage-bearing traces. A trace
+     * is covered when it has priced cost and no total row failed to price.
+     */
     coverage: z.number().min(0).max(1).nullable(),
     /** The priced rows' cost unit, `'mixed'` when they use more than one, null when none are priced. */
     unit: z.string().nullable(),

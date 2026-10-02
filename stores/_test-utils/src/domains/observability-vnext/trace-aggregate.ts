@@ -70,18 +70,32 @@ interface TraceUsage {
   cost: number;
   /** Whether at least one total row is priced. */
   priced: boolean;
-  /** `costUnit` of every priced row; a null unit is its own value. */
-  costUnits: Set<string | null>;
+  /** Whether any total row failed to price. */
+  hasPricingFailure: boolean;
+  /** `costUnit` of every priced row. */
+  costUnits: Set<string>;
 }
 
 const usageMetricNames = new Set<string>(TRACE_AGGREGATE_USAGE_METRIC_NAMES);
 const costMetricNames = new Set<string>(TRACE_AGGREGATE_COST_METRIC_NAMES);
 
-/** A total row is unpriced when `costMetadata.error` is set (including `partial_cost`) or it has no cost. */
-function isPricedMetric(metric: RawTraceAggregateMetric): boolean {
-  if (!costMetricNames.has(metric.name) || metric.estimatedCost === null) return false;
+function hasCostError(metric: RawTraceAggregateMetric): boolean {
   const error = metric.costMetadata?.error;
-  return error === undefined || error === null;
+  return error !== undefined && error !== null;
+}
+
+/** A total row is priced when it has an `estimatedCost`, a `costUnit`, and no `costMetadata.error`. */
+function isPricedMetric(metric: RawTraceAggregateMetric): boolean {
+  return metric.estimatedCost !== null && metric.costUnit !== null && !hasCostError(metric);
+}
+
+/**
+ * A total row failed to price when `costMetadata.error` is set (including `partial_cost`) or it
+ * has a cost without a unit. A total row with neither a cost nor an error is not a failure: when
+ * the provider reports cost, only one of the call's total rows carries it.
+ */
+function isPricingFailure(metric: RawTraceAggregateMetric): boolean {
+  return hasCostError(metric) || (metric.estimatedCost !== null && metric.costUnit === null);
 }
 
 /**
@@ -109,14 +123,17 @@ function computeTraceUsage(
 
     let trace = usage.get(metric.traceId);
     if (!trace) {
-      trace = { tokens: new Map(), cost: 0, priced: false, costUnits: new Set() };
+      trace = { tokens: new Map(), cost: 0, priced: false, hasPricingFailure: false, costUnits: new Set() };
       usage.set(metric.traceId, trace);
     }
     trace.tokens.set(metric.name, (trace.tokens.get(metric.name) ?? 0) + metric.value);
+    if (!costMetricNames.has(metric.name)) continue;
     if (isPricedMetric(metric)) {
       trace.cost += metric.estimatedCost!;
       trace.priced = true;
-      trace.costUnits.add(metric.costUnit);
+      trace.costUnits.add(metric.costUnit!);
+    } else if (isPricingFailure(metric)) {
+      trace.hasPricingFailure = true;
     }
   }
   return usage;
@@ -162,6 +179,7 @@ function computeMeasures(
   const count = roots.length;
   const usageBearing = roots.flatMap(root => usage.get(root.traceId!) ?? []);
   const priced = usageBearing.filter(trace => trace.priced);
+  const covered = priced.filter(trace => !trace.hasPricingFailure).length;
   const costUnits = new Set(priced.flatMap(trace => [...trace.costUnits]));
   const mixedUnits = costUnits.size > 1;
   const costSum = priced.length === 0 || mixedUnits ? null : priced.reduce((sum, trace) => sum + trace.cost, 0);
@@ -234,7 +252,7 @@ function computeMeasures(
   return {
     measures: values,
     cost: {
-      coverage: usageBearing.length === 0 ? null : priced.length / usageBearing.length,
+      coverage: usageBearing.length === 0 ? null : covered / usageBearing.length,
       unit: priced.length === 0 ? null : mixedUnits ? TRACE_AGGREGATE_MIXED_COST_UNIT : [...costUnits][0]!,
     },
   };
@@ -1217,7 +1235,7 @@ function tokenMetric(
     name,
     value,
     estimatedCost: cost.estimatedCost,
-    costUnit: cost.estimatedCost === null && cost.costUnit === undefined ? null : (cost.costUnit ?? 'usd'),
+    costUnit: cost.costUnit !== undefined ? cost.costUnit : cost.estimatedCost === null ? null : 'usd',
     costMetadata: cost.error ? { error: cost.error } : null,
     provider: 'openai',
     model: 'gpt-4o-mini',
@@ -1241,32 +1259,33 @@ const {
 /**
  * Token usage in the window `[2026-06-01, 2026-09-01)`; every root is `production` /
  * `org-a`. `in` / `out` are the `TOTAL_INPUT` / `TOTAL_OUTPUT` sums per trace; cost is the sum of
- * priced total rows only.
+ * priced total rows only. A trace is covered when it has a priced total row and no total row failed
+ * to price.
  *
- * | trace     | entity    | day   | in   | out | rsn | cache | cost      | priced | notes                                       |
- * |-----------|-----------|-------|------|-----|-----|-------|-----------|--------|---------------------------------------------|
- * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes    | pre-`from` row (999 in, 9 usd) pruned       |
- * | sup-1     | support   | 08-14 | 1000 | 200 | 50  | 400   | 0.75 usd  | yes    | costed detail rows ignored; dup `metricId`  |
- * | sup-2     | support   | 08-14 | 2000 | 400 |     |       | 1 usd     | yes    | cost on the input row only (`query_total`)  |
- * | sup-3     | support   | 08-15 | 500  | 100 |     |       | —         | no     | both rows `no_matching_model`               |
- * | sup-4     | support   | 08-31 | 3000 | 600 |     |       | 2 usd     | yes    | ends and emits metrics after `to`           |
- * | res-1     | research  | 08-14 | 800  | 100 |     |       | 0.75 usd  | yes    |                                             |
- * | res-2     | research  | 08-15 | 1200 | 300 |     |       | 1.5 eur   | yes    | second unit → group is `mixed`              |
- * | bil-1     | billing   | 08-20 | 1000 | 120 |     |       | —         | no     | `partial_cost` row with 0.75; null-cost row |
- * | bil-2     | billing   | 08-20 | 600  | 80  |     |       | 0.25 usd  | yes    | error-tagged output row with 0.125 ignored  |
- * | sch-1     | scheduler | 08-21 |      |     |     |       |           |        | no metric rows (retention skew)             |
- * | sch-2     | scheduler | 08-22 |      |     |     |       |           |        | no metric rows (retention skew)             |
- * | resume-1  | planner   | 08-26 | 1000 | 300 |     |       | 1.25 usd  | yes    | resumed: two roots, spend from both         |
+ * | trace     | entity    | day   | in   | out | rsn | cache | cost      | covered | notes                                         |
+ * |-----------|-----------|-------|------|-----|-----|-------|-----------|---------|-----------------------------------------------|
+ * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes     | pre-`from` row (999 in, 9 usd) pruned         |
+ * | sup-1     | support   | 08-14 | 1000 | 200 | 50  | 400   | 0.75 usd  | yes     | costed detail rows ignored; dup `metricId`    |
+ * | sup-2     | support   | 08-14 | 2000 | 400 |     |       | 1 usd     | yes     | cost on the input row only (`query_total`)    |
+ * | sup-3     | support   | 08-15 | 500  | 100 |     |       | —         | no      | both rows `no_matching_model`                 |
+ * | sup-4     | support   | 08-31 | 3000 | 600 |     |       | 2 usd     | yes     | ends and emits metrics after `to`             |
+ * | res-1     | research  | 08-14 | 800  | 100 |     |       | 0.75 usd  | yes     |                                               |
+ * | res-2     | research  | 08-15 | 1200 | 300 |     |       | 1.5 eur   | yes     | second unit → group is `mixed`                |
+ * | bil-1     | billing   | 08-20 | 1000 | 120 |     |       | —         | no      | `partial_cost` row with 0.75; unitless 0.125  |
+ * | bil-2     | billing   | 08-20 | 600  | 80  |     |       | 0.25 usd  | no      | output row errored (its 0.125 is ignored)     |
+ * | sch-1     | scheduler | 08-21 |      |     |     |       |           |         | no metric rows (retention skew)               |
+ * | sch-2     | scheduler | 08-22 |      |     |     |       |           |         | no metric rows (retention skew)               |
+ * | resume-1  | planner   | 08-26 | 1000 | 300 |     |       | 1.25 usd  | yes     | resumed: two roots, spend from both           |
  *
  * `resume-1` has an older root (`entityName: 'planner-suspended'`, 08-25) carrying 400 in / 100
  * out / 0.5 usd, and the current root (`planner`, 08-26, `metadata.resumedFromSpanId`) whose
  * 600 in / 200 out / 0.75 usd rows reference a model span that was never persisted. The trace
  * counts once, groups as `planner`, buckets on 08-26, and sums usage from both attempts.
  *
- * Whole-window groups by `entityName` (usage-bearing / priced → coverage):
+ * Whole-window groups by `entityName` (usage-bearing / covered → coverage):
  * support 4 traces, in 6500, out 1300, cost 3.75 usd (4 / 3 → 0.75); planner 1, in 1000, out
  * 300, cost 1.25 usd (1 / 1); triage 1, in 100, out 20, cost 0.25 usd (1 / 1); billing 2, in
- * 1600, out 200, cost 0.25 usd (2 / 1 → 0.5); research 2, in 2000, out 400, cost null `mixed`
+ * 1600, out 200, cost 0.25 usd (2 / 0 → 0); research 2, in 2000, out 400, cost null `mixed`
  * (2 / 2); scheduler 2, no usage (tokens, cost, coverage, unit all null).
  *
  * Outside that window: `tenant-check` (`org-a`, 09-10) has 100 in / 10 out / 0.25 usd of
@@ -1426,7 +1445,10 @@ export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
       costUnit: 'usd',
       error: 'partial_cost',
     }),
-    tokenMetric('bil-1-out', 'bil-1', 'bil-1', OUTPUT, 120, after('2026-08-20T10:00:00.000Z', 1)),
+    tokenMetric('bil-1-out', 'bil-1', 'bil-1', OUTPUT, 120, after('2026-08-20T10:00:00.000Z', 1), {
+      estimatedCost: 0.125,
+      costUnit: null,
+    }),
     tokenMetric('bil-2-in', 'bil-2', 'bil-2', INPUT, 600, after('2026-08-20T11:00:00.000Z', 1), usd(0.25)),
     tokenMetric('bil-2-out', 'bil-2', 'bil-2', OUTPUT, 80, after('2026-08-20T11:00:00.000Z', 1), {
       estimatedCost: 0.125,
@@ -1540,7 +1562,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.output.sum': 200,
             'cost.sum': 0.25,
           },
-          cost: { coverage: 0.5, unit: 'usd' },
+          cost: { coverage: 0, unit: 'usd' },
         },
         {
           dimensions: triageDims,
@@ -1616,7 +1638,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
         {
           dimensions: billingDims,
           measures: { 'cost.sum': 0.25, 'cost.avg': 0.25 },
-          cost: { coverage: 0.5, unit: 'usd' },
+          cost: { coverage: 0, unit: 'usd' },
         },
         {
           dimensions: triageDims,
@@ -1657,7 +1679,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     expected: {
       rows: [
         {
-          // 7 traces; 5 usage-bearing (not sch-1/2); 4 priced (not sup-3).
+          // 7 traces; 5 usage-bearing (not sch-1/2); 4 covered (not sup-3).
           measures: {
             count: 7,
             'tokens.input.sum': 7500,
@@ -1685,9 +1707,9 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     expected: {
       rows: [
         {
-          // 12 traces; 10 usage-bearing; 8 priced (not sup-3, bil-1).
+          // 12 traces; 10 usage-bearing; 7 covered (not sup-3, bil-1, bil-2).
           measures: { count: 12, 'tokens.total.sum': 13420, 'cost.sum': null },
-          cost: { coverage: 0.8, unit: 'mixed' },
+          cost: { coverage: 0.7, unit: 'mixed' },
         },
       ],
       truncated: false,
