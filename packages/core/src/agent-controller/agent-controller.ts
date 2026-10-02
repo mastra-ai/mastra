@@ -443,8 +443,11 @@ export class AgentController<TState = {}> {
   /**
    * Create a new, fully-wired {@link Session} and bring it online: it starts in
    * the default mode with the seeded model, is connected to the AgentController's shared
-   * machinery (agent, storage/lock, config catalog), and has a current thread
-   * (the most recent thread for `resourceId`, or a freshly created one).
+   * machinery (agent, storage/lock, config catalog), and normally has a current
+   * thread (the most recent matching thread, or a freshly created one). When
+   * `createInitialThread` is false and no thread matches, the returned session
+   * has no current thread; the first operation that needs one (sending a
+   * message, {@link SessionThread.ensureId}) creates it.
    *
    * The AgentController owns no session of its own — every consumer creates its own
    * session and drives all work through it (`session.sendMessage`,
@@ -459,6 +462,7 @@ export class AgentController<TState = {}> {
    * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the controller `id`.
    * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the controller `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
+   * @param createInitialThread - Create a thread when no existing thread matches. Defaults to true.
    */
   async createSession({
     resourceId,
@@ -467,6 +471,7 @@ export class AgentController<TState = {}> {
     scope,
     tags,
     threadId,
+    createInitialThread = true,
     workspace,
     browser,
     requestContext,
@@ -494,6 +499,8 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>;
     /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
     threadId?: string;
+    /** Create a thread when no existing thread matches. Set false to defer creation until first use, so unused sessions leave no empty thread behind. */
+    createInitialThread?: boolean;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -555,6 +562,8 @@ export class AgentController<TState = {}> {
           } else {
             await session.thread.create({ id: threadId, requestContext });
           }
+        } else if (createInitialThread && session.thread.getId() === null) {
+          await session.thread.create({ requestContext });
         }
         // A deletion may have started during the thread-rebinding awaits.
         pendingDeletion = this.#deletionsInProgress.get(registryKey);
@@ -576,6 +585,7 @@ export class AgentController<TState = {}> {
       const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
         scope,
         threadId,
+        createInitialThread,
         workspace,
         browser,
         requestContext,
@@ -609,6 +619,7 @@ export class AgentController<TState = {}> {
     overrides?: {
       scope?: string;
       threadId?: string;
+      createInitialThread?: boolean;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -721,9 +732,9 @@ export class AgentController<TState = {}> {
         return scopeEntries.every(([key, value]) => metadata[key] === value);
       });
 
-      if (candidates.length === 0) {
+      if (candidates.length === 0 && overrides?.createInitialThread !== false) {
         await session.thread.create({ requestContext });
-      } else {
+      } else if (candidates.length > 0) {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });

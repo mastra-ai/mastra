@@ -69,6 +69,11 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  // Stamps from the step's *effective* tool set so the durable foreach
+  // concurrency gate can see approval/suspension capability that the run-start
+  // `toolsMetadata` lacks (e.g. tools added by input processors, issue #24377).
+  requireApproval: z.boolean().optional(),
+  hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
 });
@@ -1069,6 +1074,7 @@ export function createDurableToolCallStep() {
       const toolOptions = {
         toolCallId,
         messages: [],
+        getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
         mcp: registryEntry?.mcp,

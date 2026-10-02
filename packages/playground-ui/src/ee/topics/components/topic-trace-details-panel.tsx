@@ -51,6 +51,7 @@ export function TopicTraceDetailsPanel({
           isLoading={spanDetail.isLoading}
           onPrevious={handlePreviousSpan}
           onNext={handleNextSpan}
+          onClose={onSpanSelect ? () => onSpanSelect(undefined) : undefined}
         />
       ) : null}
     </div>

@@ -1,5 +1,5 @@
 import type { TraceListMode } from '../trace-filters';
-import type { SearchableSpan } from '../types';
+import type { LightSpanRecord } from '../types';
 import { useBranch } from './use-branch';
 import { useTraceSpans } from './use-trace-spans';
 
@@ -14,7 +14,7 @@ export interface UseTraceOrBranchSpansArgs {
 }
 
 export interface UseTraceOrBranchSpansResult {
-  spans: SearchableSpan[] | undefined;
+  spans: LightSpanRecord[] | undefined;
   /** Set in branches mode; undefined in traces mode (which uses parentSpanId == null). */
   anchorSpanId: string | undefined;
   isLoading: boolean;

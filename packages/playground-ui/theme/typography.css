@@ -9,8 +9,10 @@
      reads these names off `ds/tokens/fonts.ts`) and a later role cleanly replaces
      an earlier one.
 
-     500 is the weight ceiling: a role marks what a piece of text IS, and nothing
-     in an application shell needs to shout louder than a page title. */
+     500 is the weight ceiling for general application-shell roles: hierarchy
+     comes from size and tone. Factory card titles are the exception: their 550
+     and 600 weights preserve the existing emphasis of work-item and candidate
+     titles when those styles move into shared roles. */
   --text-display: 1.375rem; /* 22px — onboarding hero */
   --text-display--line-height: 127%;
   --text-display--font-weight: 500;
@@ -35,6 +37,21 @@
   --text-label: 0.8125rem; /* 13px — control labels, nav items, buttons */
   --text-label--line-height: 150%;
   --text-label--font-weight: 500;
+
+  --text-card-title: 0.8125rem;
+  --text-card-title--line-height: 150%;
+  --text-card-title--font-weight: 550;
+  --text-card-title--letter-spacing: 0em;
+
+  --text-card-title-tight: var(--text-card-title);
+  --text-card-title-tight--line-height: var(--text-card-title--line-height);
+  --text-card-title-tight--font-weight: var(--text-card-title--font-weight);
+  --text-card-title-tight--letter-spacing: -0.025rem;
+
+  --text-card-title-strong: var(--text-card-title);
+  --text-card-title-strong--line-height: var(--text-card-title--line-height);
+  --text-card-title-strong--font-weight: 600;
+  --text-card-title-strong--letter-spacing: var(--text-card-title--letter-spacing);
 
   --text-body-sm: 0.8125rem; /* 13px — dense body: table cells, menus, field values */
   --text-body-sm--line-height: 150%;

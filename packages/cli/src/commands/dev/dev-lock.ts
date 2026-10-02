@@ -10,16 +10,55 @@ export interface LockData {
   pid: number;
   host?: string;
   port?: number;
+  /**
+   * Start time of the owning process (Linux `/proc/<pid>/stat` starttime).
+   * Lets a lock whose PID has since been reused by an unrelated process
+   * (e.g. after `docker restart`) be recognised as stale.
+   */
+  startTime?: string;
 }
 
-function isProcessRunning(pid: number): boolean {
+/**
+ * Returns the start time of `pid` in clock ticks since boot, or `undefined`
+ * when it can't be determined (non-Linux, no /proc, process gone).
+ */
+export function getProcessStartTime(pid: number): string | undefined {
+  if (process.platform !== 'linux') return undefined;
   try {
-    process.kill(pid, 0);
-    return true;
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    // The process name (field 2) is wrapped in parentheses and may itself
+    // contain spaces or parentheses, so parse from after the last ")".
+    // Remaining fields start at field 3 (state); starttime is field 22.
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return fields[19] || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLockOwnerAlive(lock: LockData): boolean {
+  try {
+    process.kill(lock.pid, 0);
   } catch (err: unknown) {
     // EPERM means the process exists but we don't have permission to signal it.
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
+    if ((err as NodeJS.ErrnoException).code !== 'EPERM') return false;
   }
+
+  if (lock.startTime) {
+    const currentStartTime = getProcessStartTime(lock.pid);
+    if (currentStartTime !== undefined && currentStartTime !== lock.startTime) {
+      // The PID is alive but belongs to a different process than the one
+      // that wrote the lock.
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function ownLockData(extra?: Pick<LockData, 'host' | 'port'>): LockData {
+  const startTime = getProcessStartTime(process.pid);
+  return { pid: process.pid, ...(startTime ? { startTime } : {}), ...extra };
 }
 
 function getLockPath(dotMastraPath: string): string {
@@ -33,6 +72,9 @@ function parseLockContents(contents: string): LockData | null {
   try {
     const data = JSON.parse(trimmed) as LockData;
     if (typeof data.pid === 'number' && data.pid > 0) {
+      if (data.startTime !== undefined && typeof data.startTime !== 'string') {
+        delete data.startTime;
+      }
       return data;
     }
   } catch {
@@ -73,11 +115,11 @@ async function checkAndRemoveStaleLock(lockPath: string): Promise<void> {
     const contents = await readFile(lockPath, 'utf-8');
     const lock = parseLockContents(contents);
 
-    if (lock && isProcessRunning(lock.pid)) {
+    if (lock && isLockOwnerAlive(lock)) {
       printDuplicateError(lock);
     }
 
-    // Stale lockfile — the process is gone. Remove it.
+    // Stale lockfile — the owning process is gone. Remove it.
     await unlink(lockPath);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -94,7 +136,7 @@ async function checkAndRemoveStaleLock(lockPath: string): Promise<void> {
  */
 export async function acquireDevLock(dotMastraPath: string): Promise<void> {
   const lockPath = getLockPath(dotMastraPath);
-  const data: LockData = { pid: process.pid };
+  const data = ownLockData();
 
   // First attempt: try to atomically create the lockfile
   try {
@@ -118,7 +160,7 @@ export async function acquireDevLock(dotMastraPath: string): Promise<void> {
       // Another process claimed the lock between our check and write
       const contents = await readFile(lockPath, 'utf-8');
       const lock = parseLockContents(contents);
-      if (lock && isProcessRunning(lock.pid)) {
+      if (lock && isLockOwnerAlive(lock)) {
         printDuplicateError(lock);
       }
       // If the PID is dead, overwrite as a last resort
@@ -132,7 +174,7 @@ export async function acquireDevLock(dotMastraPath: string): Promise<void> {
  */
 export async function updateDevLock(dotMastraPath: string, host: string, port: number): Promise<void> {
   const lockPath = getLockPath(dotMastraPath);
-  const data: LockData = { pid: process.pid, host, port };
+  const data = ownLockData({ host, port });
   try {
     await writeFile(lockPath, JSON.stringify(data), 'utf-8');
   } catch {
@@ -154,7 +196,7 @@ export async function readLiveDevLock(dotMastraPath: string): Promise<LockData |
   try {
     const contents = await readFile(lockPath, 'utf-8');
     const lock = parseLockContents(contents);
-    return lock && isProcessRunning(lock.pid) ? lock : null;
+    return lock && isLockOwnerAlive(lock) ? lock : null;
   } catch {
     return null;
   }

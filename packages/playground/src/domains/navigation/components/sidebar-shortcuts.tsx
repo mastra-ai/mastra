@@ -8,7 +8,7 @@ import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 export const SidebarShortcuts = () => {
   const { toggleSidebar } = useMainSidebar();
 
-  useKeydown({ '[': toggleSidebar });
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
 
   return null;
 };

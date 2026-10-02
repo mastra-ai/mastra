@@ -411,6 +411,14 @@ Return the active thread ID, or `null` when no thread is bound.
 const threadId = session.thread.getId()
 ```
 
+### `session.thread.ensureId({ requestContext? })`
+
+Return the active thread ID, creating and binding a new thread when none is bound. Concurrent calls share one thread. Use it with sessions created with `createInitialThread: false`.
+
+```typescript
+const threadId = await session.thread.ensureId()
+```
+
 ### `session.thread.list(options?)`
 
 List threads from storage. By default only threads for the current resource are returned, and transient forked subagent threads are hidden.

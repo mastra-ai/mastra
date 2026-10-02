@@ -10,6 +10,8 @@ export interface UseTracesListSourceArgs {
   initialAutoRefetch?: boolean;
   withQueryTrace?: boolean;
   legacyFilters?: UseTraceQueryArgs['legacyFilters'];
+  /** Rows per page; defaults to `TRACE_QUERY_PER_PAGE`. */
+  limit?: number;
   enabled?: boolean;
 }
 
@@ -20,6 +22,7 @@ export function useTracesListSource({
   initialAutoRefetch = true,
   withQueryTrace,
   legacyFilters,
+  limit,
   enabled,
 }: UseTracesListSourceArgs) {
   const [now, setNow] = useState(() => new Date());
@@ -30,6 +33,7 @@ export function useTracesListSource({
     refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
+    limit,
     enabled,
   });
 

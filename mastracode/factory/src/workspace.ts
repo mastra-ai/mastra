@@ -29,7 +29,12 @@ import {
   runTeardownCommand,
   SetupCommandError,
 } from './integrations/github/sandbox.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import {
+  registerGithubPatKind,
+  registerGithubRefreshTarget,
+  registerGithubTokenInjector,
+  registerGithubTokenInjectorResolver,
+} from './integrations/github/token-refresh.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
@@ -468,6 +473,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`${sourceControl.id} installation ${connection.installationId} was not found`);
     }
     const repoFullName = repository.slug;
+    if (githubProvider)
+      registerGithubRefreshTarget(requestContext, { orgId: session.orgId, repositoryId: repository.id });
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
@@ -499,7 +506,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
-      await guardedSetup(args);
+      let setupError: SetupCommandError | undefined;
+      try {
+        await guardedSetup(args);
+      } catch (error) {
+        if (!(error instanceof SetupCommandError)) throw error;
+        setupError = error;
+      }
       // Re-check after the (long) setup: a session retired mid-setup must not
       // register credentials for a workspace whose retirement teardown has
       // already run — the entry would leak forever. The VM itself is left to
@@ -530,8 +543,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           ?.skills?.refresh()
           .catch(() => {});
       };
-      if (!githubProvider) {
+      const finishStart = async () => {
         await publishStartSideEffects();
+        if (setupError) throw setupError;
+      };
+      if (!githubProvider) {
+        await finishStart();
         return;
       }
       const existingRegistration = githubTokenInjectors.get(workspaceId);
@@ -554,11 +571,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         existingRegistration.inject(existingRegistration.ghToken);
-        await publishStartSideEffects();
+        await finishStart();
         return;
       }
-      // First start: resolve the credential and authorize the constructing
-      // request context. The `gh` CLI needs a PAT when the org configured one
+      // First start: resolve the credential and authorize every request that
+      // resolved this pending workspace. The `gh` CLI needs a PAT when the org configured one
       // (installation tokens 403 on integration-restricted endpoints); git
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
@@ -582,7 +599,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      await publishStartSideEffects();
+      await finishStart();
     };
     const constructSessionEntry = () =>
       getSessionSandbox(session.id, repoFullName, () => {
@@ -691,16 +708,34 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return fallback;
       }
     };
+    const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
+      if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
+        throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+      }
+      registered.inject(token);
+    };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      const generation = registered.generation;
-      registerGithubTokenInjector(requestContext, token => {
-        if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
-          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
-        }
-        registered.inject(token);
-      });
+      registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
     };
+    if (githubProvider) {
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) {
+        registerGithubTokenContext(registered);
+      } else {
+        registerGithubTokenInjectorResolver(requestContext, () => {
+          if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+            throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+          }
+          const active = githubTokenInjectors.get(workspaceId);
+          if (!active) {
+            throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
+          }
+          registerGithubPatKind(requestContext, active.patKind);
+          return githubTokenInjector(active, 0);
+        });
+      }
+    }
     const reconcileGithubToken = async (): Promise<void> => {
       if (!githubProvider) return;
       const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();

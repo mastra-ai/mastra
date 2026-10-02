@@ -364,32 +364,28 @@ export class TelegramProvider implements ChannelProvider {
         'TelegramProvider needs a baseUrl to register a webhook. Set `baseUrl`, configure the Mastra server, or use `mode: "polling"`.',
       );
     }
-    if (mode === 'webhook') {
-      if (this.#connectingBotTokens.has(botToken)) {
-        throw new Error('This Telegram bot is already being connected. Wait for that connection to finish.');
-      }
-      // Reserve before the storage lookup so concurrent calls cannot both register a webhook.
-      this.#connectingBotTokens.add(botToken);
+    if (this.#connectingBotTokens.has(botToken)) {
+      throw new Error('This Telegram bot is already being connected. Wait for that connection to finish.');
     }
+    // Reserve before the storage lookup so concurrent calls cannot both register the bot.
+    this.#connectingBotTokens.add(botToken);
     try {
       const me = await getMe(botToken, this.#apiBaseUrl());
-      if (mode === 'webhook') {
-        // Two agents on one bot would clobber each other's webhook. Prefer
-        // botUserId (which we just fetched via getMe) whenever the existing
-        // record has one — token comparison alone lets a rotated-and-repasted
-        // token slip past when the same bot was previously connected with a
-        // stale token still stored.
-        const duplicate = (await store.list()).find(
-          i =>
-            i.status === 'active' &&
-            i.agentId !== agentId &&
-            (i.botUserId !== undefined ? i.botUserId === me.id : i.botToken === botToken),
+      // Two agents on one bot would clobber each other's webhook, and two pollers get 409 from
+      // getUpdates. Prefer botUserId (which we just fetched via getMe) whenever the existing
+      // record has one — token comparison alone lets a rotated-and-repasted
+      // token slip past when the same bot was previously connected with a
+      // stale token still stored.
+      const duplicate = (await store.list()).find(
+        i =>
+          i.status === 'active' &&
+          i.agentId !== agentId &&
+          (i.botUserId !== undefined ? i.botUserId === me.id : i.botToken === botToken),
+      );
+      if (duplicate) {
+        throw new Error(
+          `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
         );
-        if (duplicate) {
-          throw new Error(
-            `This Telegram bot is already connected to agent "${duplicate.agentId}". Disconnect it before connecting another agent.`,
-          );
-        }
       }
       const installationId = existing?.id ?? globalThis.crypto.randomUUID();
       const webhookId = existing?.webhookId ?? globalThis.crypto.randomUUID();
@@ -421,7 +417,7 @@ export class TelegramProvider implements ChannelProvider {
       await this.#config.onInstall?.(installation);
       return { type: 'immediate', installationId };
     } finally {
-      if (mode === 'webhook') this.#connectingBotTokens.delete(botToken);
+      this.#connectingBotTokens.delete(botToken);
     }
   }
 

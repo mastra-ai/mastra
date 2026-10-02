@@ -65,7 +65,11 @@ function createToolCallThenTextModel(tool: { name: string; args: object }) {
   });
 }
 
-async function runApprovalGatedTool(pubsub: EventEmitterPubSub, resumeData: Record<string, unknown>) {
+async function runApprovalGatedTool(
+  pubsub: EventEmitterPubSub,
+  resumeData: Record<string, unknown>,
+  useSendToolApproval = false,
+) {
   const seenResumeData: unknown[] = [];
   const approvalTool = createTool({
     id: 'approvalTool',
@@ -91,8 +95,10 @@ async function runApprovalGatedTool(pubsub: EventEmitterPubSub, resumeData: Reco
     agents: { approvalResumeDataAgent: durableAgent },
   });
 
+  const memory = { thread: 'approval-resume-data-thread', resource: 'approval-resume-data-resource' };
   let suspendedData: unknown;
   const initial = await durableAgent.stream('Run the approval tool', {
+    ...(useSendToolApproval ? { memory } : {}),
     onSuspended: data => {
       suspendedData = data;
     },
@@ -101,14 +107,30 @@ async function runApprovalGatedTool(pubsub: EventEmitterPubSub, resumeData: Reco
   expect(suspendedData).toMatchObject({ type: 'approval', toolCallId: 'call-1' });
 
   let finishData: unknown;
-  const resumed = await durableAgent.resume(initial.runId, resumeData, {
-    onFinish: data => {
-      finishData = data;
-    },
-  });
+  let resumed: { cleanup: () => void } | undefined;
+  if (useSendToolApproval) {
+    await durableAgent.sendToolApproval({
+      threadId: memory.thread,
+      resourceId: memory.resource,
+      toolCallId: 'call-1',
+      approved: true,
+      resumeData,
+      streamOptions: {
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    });
+  } else {
+    resumed = await durableAgent.resume(initial.runId, resumeData, {
+      onFinish: data => {
+        finishData = data;
+      },
+    });
+  }
   await vi.waitFor(() => expect(finishData).toBeDefined());
 
-  resumed.cleanup();
+  resumed?.cleanup();
   initial.cleanup();
   return seenResumeData;
 }
@@ -132,5 +154,10 @@ describe('DurableAgent approval resume data', () => {
   it('does not forward a bare { approved } payload to the tool', async () => {
     const seen = await runApprovalGatedTool(pubsub, { approved: true });
     expect(seen).toEqual([undefined]);
+  });
+
+  it('merges the separate approval decision into custom sendToolApproval resume data', async () => {
+    const seen = await runApprovalGatedTool(pubsub, { note: 'hello' }, true);
+    expect(seen).toEqual([{ approved: true, note: 'hello' }]);
   });
 });

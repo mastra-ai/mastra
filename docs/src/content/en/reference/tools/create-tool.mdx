@@ -210,7 +210,15 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
                       {
                         name: 'messages',
                         type: 'CoreMessage[]',
-                        description: 'All messages in the current conversation.',
+                        description:
+                          'Messages supplied by the tool invocation contract. For ordinary tools in the standard agent loop, this contains input messages only. It does not include the complete current conversation.',
+                      },
+                      {
+                        name: 'getMessages',
+                        type: '() => readonly MastraDBMessage[]',
+                        isOptional: true,
+                        description:
+                          'Reads the current in-memory conversation, including remembered messages and responses produced during this run. Available in the standard and durable agent loops. Reflects message-list removals, but not transient provider-prompt transforms. Treat the returned messages as read-only.',
                       },
                       {
                         name: 'suspend',

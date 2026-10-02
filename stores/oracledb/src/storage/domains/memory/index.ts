@@ -91,6 +91,7 @@ const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 export class MemoryOracle extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
   // Memory owns all tables needed for normal message history plus observational memory state.
   static readonly MANAGED_TABLES = [
     TABLE_THREADS,
