@@ -1264,7 +1264,7 @@ const {
  *
  * | trace     | entity    | day   | in   | out | rsn | cache | cost      | covered | notes                                         |
  * |-----------|-----------|-------|------|-----|-----|-------|-----------|---------|-----------------------------------------------|
- * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes     | pre-`from` row (999 in, 9 usd) pruned         |
+ * | early-1   | triage    | 06-01 | 100  | 20  |     |       | 0.25 usd  | yes     | resumed; pre-`from` spend (999 in) pruned      |
  * | sup-1     | support   | 08-14 | 1000 | 200 | 50  | 400   | 0.75 usd  | yes     | costed detail rows ignored; dup `metricId`    |
  * | sup-2     | support   | 08-14 | 2000 | 400 |     |       | 1 usd     | yes     | cost on the input row only (`query_total`)    |
  * | sup-3     | support   | 08-15 | 500  | 100 |     |       | —         | no      | both rows `no_matching_model`                 |
@@ -1282,6 +1282,9 @@ const {
  * 600 in / 200 out / 0.75 usd rows reference a model span that was never persisted. The trace
  * counts once, groups as `planner`, buckets on 08-26, and sums usage from both attempts.
  *
+ * `early-1` was suspended before `from`: its older root (`triage-suspended`, 05-31) carries a
+ * 999 in / 9 usd row recorded before `from`, which never counts. The current root is in the window.
+ *
  * Whole-window groups by `entityName` (usage-bearing / covered → coverage):
  * support 4 traces, in 6500, out 1300, cost 3.75 usd (4 / 3 → 0.75); planner 1, in 1000, out
  * 300, cost 1.25 usd (1 / 1); triage 1, in 100, out 20, cost 0.25 usd (1 / 1); billing 2, in
@@ -1294,6 +1297,13 @@ const {
  */
 export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
   spans: [
+    span(990, 'early-1', 'early-1-a', {
+      entityName: 'triage-suspended',
+      organizationId: 'org-a',
+      threadId: 't-20',
+      startedAt: '2026-05-31T23:59:00.000Z',
+      endedAt: '2026-05-31T23:59:59.500Z',
+    }),
     ...aggregateRoot({
       cursorId: 1000,
       traceId: 'early-1',
@@ -1409,7 +1419,7 @@ export const TRACE_AGGREGATE_TOKEN_FIXTURE_DATA: TraceAggregateFixtureData = {
   scores: [],
   feedback: [],
   metrics: [
-    tokenMetric('early-1-pre', 'early-1', 'early-1', INPUT, 999, '2026-05-31T23:59:59.000Z', usd(9)),
+    tokenMetric('early-1-pre', 'early-1', 'early-1-a', INPUT, 999, '2026-05-31T23:59:59.000Z', usd(9)),
     tokenMetric('early-1-in', 'early-1', 'early-1', INPUT, 100, '2026-06-01T00:00:11.000Z', usd(0.125)),
     tokenMetric('early-1-out', 'early-1', 'early-1', OUTPUT, 20, '2026-06-01T00:00:11.000Z', usd(0.125)),
 

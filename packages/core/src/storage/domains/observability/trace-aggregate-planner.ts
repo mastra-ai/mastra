@@ -127,10 +127,14 @@ export type TrustedTraceAggregateOrderBy =
  *   candidate trace T when its `traceId` is T, its `name` is in
  *   `TRACE_AGGREGATE_USAGE_METRIC_NAMES`, its `timestamp >= timeRange.from` (no upper bound; a
  *   trace that starts in the window may finish after it), and it matches `scope` when present.
- *   There is no current-span or current-attempt filter: every row for the trace counts, including
- *   spend before a suspend/resume and rows whose `spanId` has no span row. Rows collapse on
- *   `metricId` (exporter retries); ClickHouse dedupes inside this stage without relying on merges.
- *   Grouping, `where`, and `interval` still use the current root.
+ *   The `from` bound is for pruning: rows recorded before `from` never count, even for a trace
+ *   whose current root is in the window (for example, spend before a suspend that happened
+ *   before `from`). Within that bound there is no current-span or current-attempt filter: every
+ *   row for the trace counts, including spend before a suspend/resume and rows whose `spanId` has
+ *   no span row. Rows sharing a `metricId` are exporter retries of one emission and carry
+ *   identical values, so they collapse to one row and which copy survives does not matter;
+ *   ClickHouse dedupes inside this stage without relying on merges. Grouping, `where`, and
+ *   `interval` still use the current root.
  * - **Tokens.** A trace is usage-bearing when at least one metric row belongs to it. Its
  *   `tokens.<x>` value is the sum of `value` over the rows named by the measure's
  *   `metricNames` (0 when there are none); a trace that is not usage-bearing has no token value.
