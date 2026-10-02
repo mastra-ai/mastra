@@ -580,12 +580,16 @@ export async function evaluateGoal(deps: {
   const continuation = shouldContinue
     ? `[Goal attempt ${runsUsed}/${effective.maxRuns}] The goal is not yet complete. Judge feedback: ${feedback}\n\nContinue working toward the goal: ${record.objective}`
     : `${status} (${runsUsed}/${effective.maxRuns})\n${goalEvaluationPayload.reason ?? ''}`;
-  await sendSignal({
-    type: 'system-reminder',
-    contents: continuation,
-    attributes: { type: 'goal-judge' },
-    metadata: { goalEvaluation: goalEvaluationPayload },
-  });
+  try {
+    await sendSignal({
+      type: 'system-reminder',
+      contents: continuation,
+      attributes: { type: 'goal-judge' },
+      metadata: { goalEvaluation: goalEvaluationPayload },
+    });
+  } catch {
+    // Best-effort — the signal is already in the transcript; only the transport write failed.
+  }
 
   // Emit the final goal chunk for external observers.
   try {
