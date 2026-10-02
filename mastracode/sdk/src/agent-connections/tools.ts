@@ -451,6 +451,17 @@ The target must already be saved and freshly advertise the same exact thread end
             accepted = { action: 'persist' };
           } else if (notification.decision.action === 'discard') {
             accepted = { action: 'discard' };
+          } else if (notification.record.status === 'pending') {
+            // Nothing acknowledged the delivery, but the record is still
+            // deliverable in the target thread's inbox. A wake that requires a
+            // claimed owner cannot complete while the peer's session holds no
+            // live claim on that thread (the peer is not running, is
+            // mid-restart, or is between claims), and the owner-discovery
+            // deadline can lapse before a claim is (re)established. The signal
+            // is therefore queued rather than lost: it surfaces on the peer's
+            // next turn. Reporting this as a failed send claimed the message was
+            // undelivered when it had already been persisted.
+            accepted = { action: 'persist' };
           } else {
             return {
               content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,
