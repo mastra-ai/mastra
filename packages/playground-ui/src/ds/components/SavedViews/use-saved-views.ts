@@ -72,7 +72,7 @@ export function useSavedViews<TSettings>({
     () => null,
   );
   const views = parseSavedViews(raw, settingsSchema);
-  const [storageError, setStorageError] = useState<string>();
+  const [failedStorageKey, setFailedStorageKey] = useState<string>();
   const [pendingDraft, setDraft] = useState<SavedViewDraft<TSettings>>();
   const [draftScope, setDraftScope] = useState({ storageKey, activeViewId });
   const draftView = views.find(view => view.id === pendingDraft?.viewId);
@@ -88,7 +88,7 @@ export function useSavedViews<TSettings>({
   const activeView = views.find(view => view.id === activeViewId);
   const write = (next: SavedView<TSettings>[]) => {
     const saved = writeSavedViewsRaw(storageKey, serializeSavedViews(next));
-    setStorageError(saved ? undefined : 'Could not save changes. Check your browser storage settings and try again.');
+    setFailedStorageKey(saved ? undefined : storageKey);
     return saved;
   };
 
@@ -97,10 +97,13 @@ export function useSavedViews<TSettings>({
     activeView,
     draft,
     unsaved,
-    storageError,
+    storageError:
+      failedStorageKey === storageKey
+        ? 'Could not save changes. Check your browser storage settings and try again.'
+        : undefined,
     applied: draft ?? activeView,
     select: viewId => {
-      setStorageError(undefined);
+      setFailedStorageKey(undefined);
       setDraft(undefined);
       onActiveViewChange(viewId);
     },
@@ -135,7 +138,7 @@ export function useSavedViews<TSettings>({
       if (saved.id !== activeViewId) onActiveViewChange(saved.id);
     },
     discard: () => {
-      setStorageError(undefined);
+      setFailedStorageKey(undefined);
       setDraft(undefined);
     },
     rename: (viewId, name) => {

@@ -18,10 +18,10 @@ const FIELDS: FilterBarField[] = [{ id: 'status', label: 'Status', operators: ['
 const OPERATORS: FilterBarOperator[] = [{ id: 'is', label: 'is' }];
 const ERRORS: FilterBarItem = { id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' };
 
-function Page() {
+function Page({ storageKey = STORAGE_KEY }: { storageKey?: string }) {
   const [activeViewId, setActiveViewId] = useState<string>();
   const views = useSavedViews<Settings>({
-    storageKey: STORAGE_KEY,
+    storageKey,
     settingsSchema,
     activeViewId,
     onActiveViewChange: setActiveViewId,
@@ -132,6 +132,22 @@ describe('SavedViews', () => {
     expect(stored()).toMatchObject([{ filters: [ERRORS] }]);
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
+  });
+
+  it('does not carry a failed save into another board', () => {
+    const page = render(<Page />);
+    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage full', 'QuotaExceededError');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    page.rerender(<Page storageKey="another-board" />);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
+    expect(applied()).toBe('page');
   });
 
   it('applies edits live and drops them on cancel', async () => {
