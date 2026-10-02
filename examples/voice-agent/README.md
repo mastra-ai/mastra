@@ -179,13 +179,15 @@ See the [recording guide](https://mastra.ai/integrations/voice/livekit#record-ca
 
 For a browser-call test with real AWS S3 credentials, follow [Test recording with AWS S3](#test-recording-with-aws-s3) below.
 
+For local playback, set `LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO=true` in `.env` and restart `pnpm dev`. The example denies recording access by default; this explicit demo policy allows all traces and refuses access when `NODE_ENV=production`.
+
 Open a `voice call` trace under **Observability → Traces**, then select **Review Audio** in the trace panel. The player supports playback, pause, and seeking. If the upload is still finishing, select **Refresh recording** when the file is ready. Closing the dialog stops playback; reopening it requests a new link.
 
 The registered `liveKitRecordingRoute()` reads the room name from the stored trace. `src/mastra/recording-playback.ts` checks for `voice-agent/<room-name>.ogg` in S3 and creates a playback URL that expires after 15 minutes. The browser receives the signed URL, never the S3 secret. Historical recordings remain reviewable when `LIVEKIT_RECORDING_ENABLED` is set back to `false`, provided the storage settings and objects remain available.
 
 The configured S3 credentials now need `s3:GetObject` for playback as well as upload permissions. `s3:ListBucket` allows S3 to report a missing file as `404`; without it, missing files may appear as access errors. You can use separate read credentials in the playback resolver. For S3-compatible storage, set `RECORDINGS_S3_ENDPOINT` to an endpoint reachable by the recording service, the Mastra server, and the browser.
 
-This example disables authentication on both custom routes for local development. Protect the review route before deployment and use its `authorize({ traceId, context })` callback to enforce tenant or user access. Signed URLs grant temporary access to an individual file and must not be logged or stored in trace metadata. Existing timestamped recordings need a room-to-object mapping in the resolver; this example looks up the exact filename shown above.
+This example disables authentication on both custom routes for local development. Before deployment, restore `requiresAuth: true`, configure server authentication, and replace the demo `authorize({ traceId, context })` callback with a check of the authenticated user's access to the requested trace. The callback is required even when authentication is disabled. Returning anything other than `true` denies access before trace lookup or URL signing. Signed URLs grant temporary access to an individual file and must not be logged or stored in trace metadata. Existing timestamped recordings need a room-to-object mapping in the resolver; this example looks up the exact filename shown above.
 
 ### Test recording with AWS S3
 

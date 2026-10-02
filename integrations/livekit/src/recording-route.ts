@@ -28,14 +28,17 @@ export interface LiveKitRecordingRouteOptions {
   path?: string;
   /** Defaults to true. Only disable for a local demo. */
   requiresAuth?: boolean;
-  /** Additional application/tenant authorization, checked before reading the trace. */
-  authorize?: (args: { traceId: string; context: ContextWithMastra }) => boolean | Promise<boolean>;
+  /** Required trace-specific access policy. Only true permits trace lookup and URL resolution. */
+  authorize: (args: { traceId: string; context: ContextWithMastra }) => boolean | Promise<boolean>;
   /** Return a playable URL, or undefined if the recording is not available yet. */
   resolveRecording: (args: LiveKitRecordingResolverArgs) => Promise<LiveKitRecording | undefined>;
 }
 
 /** Resolves a voice call trace to a recording without persisting signed URLs in traces. */
 export function liveKitRecordingRoute(options: LiveKitRecordingRouteOptions): ApiRoute {
+  if (typeof options.authorize !== 'function') {
+    throw new Error('liveKitRecordingRoute requires an authorize callback.');
+  }
   return {
     path: options.path ?? '/voice/livekit/recordings/:traceId',
     method: 'GET',
@@ -46,7 +49,7 @@ export function liveKitRecordingRoute(options: LiveKitRecordingRouteOptions): Ap
       if (!input.success) return context.json({ error: 'A valid trace ID is required.' }, 400);
       const traceId = input.data;
       try {
-        if (options.authorize && !(await options.authorize({ traceId, context }))) {
+        if ((await options.authorize({ traceId, context })) !== true) {
           return context.json({ error: 'Access to this recording is denied.' }, 403);
         }
         const store = await context.get('mastra').getStorage()?.getStore('observability');

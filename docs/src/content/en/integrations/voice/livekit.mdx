@@ -545,6 +545,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { liveKitRecordingRoute } from '@mastra/livekit'
+import { authorizeRecording } from './recording-access'
 
 const s3 = new S3Client({
   region: process.env.RECORDINGS_S3_REGION!,
@@ -555,6 +556,7 @@ const s3 = new S3Client({
 })
 
 export const recordingReviewRoute = liveKitRecordingRoute({
+  authorize: authorizeRecording,
   resolveRecording: async ({ roomName }) => {
     const object = {
       Bucket: process.env.RECORDINGS_S3_BUCKET!,
@@ -582,7 +584,15 @@ export const recordingReviewRoute = liveKitRecordingRoute({
 
 Add `recordingReviewRoute` to `server.apiRoutes` alongside `liveKitConnectionRoute({ recording })`. Keep the default path, `GET /voice/livekit/recordings/:traceId`, for Studio discovery. Both the connection route and server-initiated dispatch recordings can be reviewed, as long as the worker persisted the call trace and your resolver can locate its file.
 
-The review route requires authentication by default. Configure your server's authentication before exposing it. For application or tenant rules, supply an `authorize({ traceId, context })` callback that returns a boolean; it runs before the trace is read or a playback URL is generated. The resolver also receives the stored `span` and request `context` for application-specific lookup. Routes with `requiresAuth: false` are appropriate only for a local demo.
+The review route requires authentication by default and an explicit `authorize({ traceId, context })` callback. Implement the `authorizeRecording` helper in your application to check the authenticated user's access to the requested trace against your trusted ownership or tenant records. Return `true` only when access is allowed. Authentication alone doesn't establish recording ownership.
+
+The route rejects missing authorization callbacks at registration, including when `requiresAuth` is `false`. A denied request returns `403` before trace storage is read or a playback URL is generated. Policy errors also stop resolution. The resolver receives the stored `span` and request `context` only after authorization succeeds.
+
+:::warning
+
+Use `requiresAuth: false` only for a local demo. It doesn't bypass the required recording authorization callback. If a demo policy allows all recordings, keep that policy explicitly limited to local development and replace it before deployment.
+
+:::
 
 Recording upload permissions alone don't grant playback access. The signing credentials need `s3:GetObject` for the recording objects, including the `HEAD` check. S3 also requires `s3:ListBucket` to return a missing-object `404` instead of `403`. Your application can use separate read credentials for playback. The browser receives a temporary URL that authorizes access to that file, so treat it as sensitive. See [S3 object permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html) and [presigned URLs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html).
 

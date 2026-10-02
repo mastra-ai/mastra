@@ -48,7 +48,9 @@ export const mastra = new Mastra({
       }),
       liveKitRecordingRoute({
         resolveRecording: resolveCallRecording,
-        // Local demo only. Use the default authentication and an authorize callback in production.
+        // Explicit local-demo opt-in. Replace with authenticated, trace-specific access in production.
+        authorize: () =>
+          process.env.LIVEKIT_RECORDING_REVIEW_LOCAL_DEMO === 'true' && process.env.NODE_ENV !== 'production',
         requiresAuth: false,
       }),
     ],
