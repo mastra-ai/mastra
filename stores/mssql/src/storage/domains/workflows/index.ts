@@ -8,6 +8,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -19,6 +20,24 @@ import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
@@ -123,13 +142,15 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
 
@@ -168,9 +189,16 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
       }
 
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+      if (!claimWorkflowExecution(snapshot, executionClaim)) {
+        await transaction.rollback();
+        return;
+      }
+
+      if (!executionClaim?.preserveResult) {
+        // Merge the new step result and request context
+        snapshot.context[stepId] = result;
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+      }
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);

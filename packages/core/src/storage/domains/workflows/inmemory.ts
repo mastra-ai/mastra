@@ -8,7 +8,8 @@ import type {
   UpdateWorkflowStateOptions,
 } from '../../types';
 import { matchesExpectedWorkflowStatus } from '../../types';
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
+import type { WorkflowExecutionClaim } from '../../workflow-snapshot';
+import { claimWorkflowExecution, createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
@@ -195,13 +196,15 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -225,7 +228,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+    if (!claimWorkflowExecution(snapshot, executionClaim)) {
+      return;
+    }
+
+    const context = executionClaim?.preserveResult
+      ? snapshot.context
+      : mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
     this.db.workflows.set(key, {
       ...run,

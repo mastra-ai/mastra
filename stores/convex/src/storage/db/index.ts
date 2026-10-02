@@ -7,7 +7,12 @@ import {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { StorageColumn, StorageResourceType, UpdateWorkflowStateOptions } from '@mastra/core/storage';
+import type {
+  StorageColumn,
+  StorageResourceType,
+  UpdateWorkflowStateOptions,
+  WorkflowExecutionClaim,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
@@ -266,13 +271,15 @@ export class ConvexDB extends MastraBase {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const context = await this.client.callStorage<string>({
       op: 'mergeWorkflowStepResult',
       tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -281,8 +288,14 @@ export class ConvexDB extends MastraBase {
       stepId,
       result: JSON.stringify(result),
       requestContext: JSON.stringify(requestContext),
+      executionClaim: executionClaim?.key,
+      preserveResult: executionClaim?.preserveResult,
+      requireRunningStepId: executionClaim?.requireRunningStepId,
     });
     if (!context) {
+      if (executionClaim) {
+        return;
+      }
       throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
     }
     return JSON.parse(context);

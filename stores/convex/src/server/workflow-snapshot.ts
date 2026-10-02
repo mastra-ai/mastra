@@ -52,6 +52,31 @@ export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> 
   };
 }
 
+export function claimWorkflowExecution(
+  snapshot: Record<string, any>,
+  key?: string,
+  requireRunningStepId?: string,
+): boolean {
+  if (requireRunningStepId) {
+    // Guarded recovery: accept only while the previous owner's running record is
+    // still in place. A rejection leaves the snapshot untouched, so a completed
+    // result is never overwritten by a redelivery. The claim ledger is not
+    // consulted or appended, so a recovery can be retried after another crash.
+    return snapshot.context?.[requireRunningStepId]?.status === 'running';
+  }
+
+  if (!key) {
+    return true;
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), key];
+  return true;
+}
+
 export function mergeWorkflowStepResult({
   snapshot,
   stepId,

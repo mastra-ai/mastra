@@ -6,6 +6,7 @@ import {
   matchesExpectedWorkflowStatus,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
   WorkflowRun,
@@ -19,6 +20,24 @@ import { OracleDB, createOracleIndex, filterIndexesForTables } from '../../db';
 import type { OracleCreateIndexOptions, OracleTxClient } from '../../db';
 import { createOracleStorageError, toDate } from '../../domain-utils';
 import type { OracleDomainConfig } from '../../types';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 // Workflows persist resumable run snapshots in Oracle JSON and lock rows before
 // patching step results so concurrent updates do not lose state.
@@ -75,13 +94,15 @@ export class WorkflowsOracle extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       return await this.db.tx(async client => {
         await this.ensureWorkflowRunRow(client, workflowName, runId);
@@ -93,8 +114,13 @@ export class WorkflowsOracle extends WorkflowsStorage {
         );
 
         const snapshot = parseSnapshot(existing.snapshot);
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...(snapshot.requestContext ?? {}), ...requestContext };
+        if (!claimWorkflowExecution(snapshot, executionClaim)) {
+          return;
+        }
+        if (!executionClaim?.preserveResult) {
+          snapshot.context[stepId] = result;
+          snapshot.requestContext = { ...(snapshot.requestContext ?? {}), ...requestContext };
+        }
 
         await client.none(this.workflowMergeSql(), {
           workflowName,

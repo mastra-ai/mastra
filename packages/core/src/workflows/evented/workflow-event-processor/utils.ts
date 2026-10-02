@@ -5,6 +5,20 @@ import type { SingleStepEntry } from '../../types';
 import { isSingleStepEntry } from '../../utils';
 import type { ParentWorkflow } from '.';
 
+export function createStepExecutionClaimKey({
+  sourceEventId,
+  executionPath,
+  retryCount = 0,
+  forEachIndex,
+}: {
+  sourceEventId?: string;
+  executionPath: number[];
+  retryCount?: number;
+  forEachIndex?: number;
+}): string {
+  return JSON.stringify({ sourceEventId, executionPath, retryCount, forEachIndex: forEachIndex ?? null });
+}
+
 export function getNestedWorkflow(
   mastra: Mastra,
   { workflowId, executionPath, parentWorkflow, runId }: ParentWorkflow,

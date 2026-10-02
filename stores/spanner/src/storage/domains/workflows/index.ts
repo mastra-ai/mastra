@@ -9,6 +9,7 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   StorageListWorkflowRunsInput,
   WorkflowRun,
   WorkflowRuns,
@@ -20,6 +21,24 @@ import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
 import { quoteIdent } from '../../db/utils';
 import { transformFromSpannerRow } from '../utils';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 /**
  * Spanner-backed storage for workflow run snapshots, including persistence,
@@ -307,16 +326,18 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const table = quoteIdent(TABLE_WORKFLOW_SNAPSHOT, 'table name');
     try {
-      let mergedContext: Record<string, StepResult<any, any, any, any>> = {};
+      let mergedContext: Record<string, StepResult<any, any, any, any>> | undefined;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -351,8 +372,14 @@ export class WorkflowsSpanner extends WorkflowsStorage {
               const raw = existing.snapshot;
               snapshot = (typeof raw === 'string' ? JSON.parse(raw) : raw) as WorkflowRunState;
             }
-            snapshot.context[stepId] = result;
-            snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            if (!claimWorkflowExecution(snapshot, executionClaim)) {
+              await tx.rollback();
+              return;
+            }
+            if (!executionClaim?.preserveResult) {
+              snapshot.context[stepId] = result;
+              snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+            }
             const now = new Date();
             const resolvedCreatedAt = existing?.createdAt
               ? new Date(existing.createdAt instanceof Date ? existing.createdAt.getTime() : existing.createdAt)

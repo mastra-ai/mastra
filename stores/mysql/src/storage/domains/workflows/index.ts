@@ -7,6 +7,7 @@ import {
   matchesExpectedWorkflowStatus,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   CreateIndexOptions,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
@@ -18,6 +19,24 @@ import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 interface WorkflowRow {
   workflow_name: string;
@@ -169,13 +188,15 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext?: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -194,14 +215,22 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       }
 
       const currentSnapshot = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
+      if (!claimWorkflowExecution(currentSnapshot, executionClaim)) {
+        await connection.rollback();
+        return;
+      }
       const context = { ...(currentSnapshot.context ?? {}) };
 
-      context[stepId] = result;
+      if (!executionClaim?.preserveResult) {
+        context[stepId] = result;
+      }
 
       const updatedSnapshot: WorkflowRunState = {
         ...currentSnapshot,
         context,
-        requestContext: { ...(currentSnapshot.requestContext ?? {}), ...(requestContext ?? {}) },
+        requestContext: executionClaim?.preserveResult
+          ? currentSnapshot.requestContext
+          : { ...(currentSnapshot.requestContext ?? {}), ...(requestContext ?? {}) },
       };
 
       await connection.execute(

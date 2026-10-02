@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
+  WorkflowExecutionClaim,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -25,6 +26,24 @@ import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/
 import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
   /**
@@ -140,13 +159,15 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     return this.executeWithRetry(
       () =>
         // Serialize the interactive transaction against all other writes on the shared
@@ -184,9 +205,16 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
             }
 
-            // Merge the new step result using element-wise array merging
-            // (critical for concurrent foreach iteration results)
-            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            if (!claimWorkflowExecution(snapshot, executionClaim)) {
+              await tx.rollback();
+              return;
+            }
+
+            if (!executionClaim?.preserveResult) {
+              // Merge the new step result using element-wise array merging
+              // (critical for concurrent foreach iteration results)
+              mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            }
 
             // Upsert the snapshot within the same transaction
             const now = new Date().toISOString();

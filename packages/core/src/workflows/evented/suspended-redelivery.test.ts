@@ -17,7 +17,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import type { Event } from '../../events';
+import type { Event, EventCallback, SubscribeOptions } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
@@ -25,16 +25,25 @@ import { createStep, createWorkflow } from '.';
 
 const looseObject = z.looseObject({});
 
-/** Captures `workflow.step.run` publishes so a delivery can be replayed. */
+/** Captures delivered workflow-step events so the same broker event can be redelivered. */
 class RedeliveryPubSub extends EventEmitterPubSub {
-  captured: { topic: string; event: Omit<Event, 'id' | 'createdAt'> }[] = [];
+  captured: { topic: string; event: Event }[] = [];
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
-    if (event?.type === 'workflow.step.run') {
-      // Snapshot at publish time — the engine may mutate `data` afterwards.
-      this.captured.push({ topic, event: structuredClone(event) });
-    }
-    await super.publish(topic, event, options);
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions) {
+    await super.subscribe(
+      topic,
+      (event, ack, nack) => {
+        if (event.type === 'workflow.step.run' || event.type === 'workflow.step.end') {
+          this.captured.push({ topic, event: structuredClone(event) });
+        }
+        return cb(event, ack, nack);
+      },
+      options,
+    );
+  }
+
+  redeliver(topic: string, event: Event) {
+    (this as any).emitter.emit(topic, structuredClone(event));
   }
 }
 
@@ -97,11 +106,7 @@ describe('evented suspended-record redelivery guard', () => {
       );
       expect(original).toBeTruthy();
 
-      const loadSpy = vi.spyOn(workflowsStore, 'loadWorkflowSnapshot');
-      await pubsub.publish(original!.topic, original!.event);
-      // The guard reads the snapshot before deciding — wait for the
-      // redelivered event to be picked up, then let processing settle.
-      await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
+      pubsub.redeliver(original!.topic, original!.event);
       await new Promise(resolve => setTimeout(resolve, 50));
 
       // The step did not re-execute and the suspended record survived.
@@ -118,6 +123,128 @@ describe('evented suspended-record redelivery guard', () => {
       const resumeResult = await run.resume({ step: 'step1', resumeData: { approved: true } });
       expect(resumeResult.status).toBe('success');
       expect((resumeResult as any).result).toEqual({ approved: true });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('drops a redelivered step.run for a completed step instead of re-executing it', async () => {
+    const storage = new MockStore();
+    const pubsub = new RedeliveryPubSub();
+    const step1Execute = vi.fn(async () => ({ value: 'once' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: step1Execute,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+    });
+    const workflow = createWorkflow({
+      id: 'completed-redelivery-wf',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      steps: [step1],
+    })
+      .then(step1)
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [workflow.id]: workflow as any },
+      pubsub,
+    });
+    await mastra.startWorkers();
+    try {
+      const runId = `completed-redelivery-${Date.now()}`;
+      const run = await workflow.createRun({ runId });
+      const result = await run.start({ inputData: { value: 'go' } });
+      expect(result.status).toBe('success');
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+
+      const original = pubsub.captured.find(
+        ({ event }) => event.type === 'workflow.step.run' && (event.data as any)?.runId === runId,
+      );
+      expect(original).toBeTruthy();
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      pubsub.redeliver(original!.topic, original!.event);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
+      expect((snapshot!.context as any)?.step1?.status).toBe('success');
+      expect((snapshot!.context as any)?.step1?.output).toEqual({ value: 'once' });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('drops a successor step.run republished by a redelivered step.end', async () => {
+    const storage = new MockStore();
+    const pubsub = new RedeliveryPubSub();
+    const step1Execute = vi.fn(async () => ({ value: 'first' }));
+    const step2Execute = vi.fn(async () => ({ value: 'second' }));
+    const step1 = createStep({
+      id: 'step1',
+      execute: step1Execute,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+    });
+    const step2 = createStep({
+      id: 'step2',
+      execute: step2Execute,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+    });
+    const workflow = createWorkflow({
+      id: 'step-end-redelivery-wf',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      steps: [step1, step2],
+    })
+      .then(step1)
+      .then(step2)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [workflow.id]: workflow as any },
+      pubsub,
+    });
+
+    await mastra.startWorkers();
+    try {
+      const runId = `step-end-redelivery-${Date.now()}`;
+      const run = await workflow.createRun({ runId });
+      expect((await run.start({ inputData: { value: 'go' } })).status).toBe('success');
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1);
+
+      const step1End = pubsub.captured.find(
+        ({ event }) =>
+          event.type === 'workflow.step.end' &&
+          (event.data as any)?.runId === runId &&
+          (event.data as any)?.executionPath?.[0] === 0,
+      );
+      expect(step1End).toBeTruthy();
+
+      // A transport redelivery keeps the event id.
+      pubsub.redeliver(step1End!.topic, step1End!.event);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1);
+
+      // A superseded worker republishes the same completion under a fresh
+      // event id. Successor identity is derived from the `step.run` event that
+      // scheduled step1, so both workers schedule the same successor and
+      // storage drops the second one.
+      pubsub.redeliver(step1End!.topic, { ...step1End!.event, id: `${step1End!.event.id}-superseded` });
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1);
     } finally {
       await mastra.stopWorkers();
     }

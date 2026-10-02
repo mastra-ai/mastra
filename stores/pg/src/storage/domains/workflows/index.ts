@@ -9,6 +9,7 @@ import {
   createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
+  WorkflowExecutionClaim,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -27,6 +28,24 @@ import type { PgDomainConfig } from '../../db';
 import { buildConstraintName } from '../../db/constraint-utils';
 import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
+
+// Keep this check store-local so the package remains compatible with its @mastra/core peer floor.
+function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -320,13 +339,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    executionClaim,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    executionClaim?: WorkflowExecutionClaim;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
     try {
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
@@ -362,9 +383,15 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result using element-wise array merging
-        // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        if (!claimWorkflowExecution(snapshot, executionClaim)) {
+          return;
+        }
+
+        if (!executionClaim?.preserveResult) {
+          // Merge the new step result using element-wise array merging
+          // (critical for concurrent foreach iteration results)
+          mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        }
 
         // Upsert the snapshot within the same transaction
         const now = new Date();

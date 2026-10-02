@@ -54,6 +54,45 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
   } as WorkflowRunState;
 }
 
+export type WorkflowExecutionClaim = {
+  /** Identity of the logical execution this update belongs to. */
+  key: string;
+  /** Keep the stored step result instead of merging the incoming one. */
+  preserveResult?: boolean;
+  /**
+   * Step that must still be recorded as `running` for this update to be
+   * accepted.
+   *
+   * Used to recover a claimed step whose owner disappeared: the step fence
+   * guarantees a single recoverer, and this guard turns the recovery write into
+   * a compare-and-set so it cannot resurrect a step that completed in the
+   * meantime. Guarded claims are validated against the stored step status
+   * instead of the claim ledger — `key` is not appended — so a recovery can be
+   * retried after another crash.
+   */
+  requireRunningStepId?: string;
+};
+
+export function claimWorkflowExecution(snapshot: WorkflowRunState, claim?: WorkflowExecutionClaim): boolean {
+  if (!claim) {
+    return true;
+  }
+
+  if (claim.requireRunningStepId) {
+    // Guarded recovery: accept only while the previous owner's running record is
+    // still in place. A rejection leaves the snapshot untouched, so a completed
+    // result is never overwritten by a redelivery.
+    return snapshot.context?.[claim.requireRunningStepId]?.status === 'running';
+  }
+
+  if (snapshot.eventedExecutionClaims?.includes(claim.key)) {
+    return false;
+  }
+
+  snapshot.eventedExecutionClaims = [...(snapshot.eventedExecutionClaims ?? []), claim.key];
+  return true;
+}
+
 export function mergeWorkflowStepResult({
   snapshot,
   stepId,

@@ -7,6 +7,7 @@ import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
+import { createStepExecutionClaimKey } from './utils';
 import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
@@ -32,6 +33,7 @@ export async function processWorkflowLoop(
     perStep,
     state,
     outputOptions,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -78,6 +80,7 @@ export async function processWorkflowLoop(
     workflowId,
     runId,
     executionPath,
+    executionClaimKey: createStepExecutionClaimKey({ sourceEventId, executionPath, retryCount }),
     resumeSteps: [] as string[],
     // Carry the iteration count forward on the loop body's stepResults entry. The
     // loop-again path does not merge the body result back into stepResults[bodyStepId]
@@ -154,6 +157,7 @@ export async function processWorkflowForEach(
     state,
     outputOptions,
     forEachIndex,
+    sourceEventId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -292,6 +296,11 @@ export async function processWorkflowForEach(
           workflowId,
           runId,
           executionPath: [executionPath[0]!, forEachIndex],
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: [executionPath[0]!, forEachIndex],
+            forEachIndex,
+          }),
           resumeSteps,
           timeTravel,
           restart,
@@ -393,6 +402,11 @@ export async function processWorkflowForEach(
               workflowId,
               runId,
               executionPath: [executionPath[0]!, suspIdx],
+              executionClaimKey: createStepExecutionClaimKey({
+                sourceEventId,
+                executionPath: [executionPath[0]!, suspIdx],
+                forEachIndex: suspIdx,
+              }),
               resumeSteps,
               timeTravel,
               restart,
@@ -483,6 +497,11 @@ export async function processWorkflowForEach(
             workflowId,
             runId,
             executionPath: [executionPath[0]!, index],
+            executionClaimKey: createStepExecutionClaimKey({
+              sourceEventId,
+              executionPath: [executionPath[0]!, index],
+              forEachIndex: index,
+            }),
             resumeSteps,
             timeTravel,
             restart,
@@ -559,6 +578,10 @@ export async function processWorkflowForEach(
         workflowId,
         runId,
         executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+        executionClaimKey: createStepExecutionClaimKey({
+          sourceEventId,
+          executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
+        }),
         resumeSteps,
         stepResults,
         timeTravel,
@@ -622,6 +645,11 @@ export async function processWorkflowForEach(
           workflowId,
           runId,
           executionPath: [executionPath[0]!, i],
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId,
+            executionPath: [executionPath[0]!, i],
+            forEachIndex: i,
+          }),
           resumeSteps,
           stepResults,
           timeTravel,
@@ -676,6 +704,11 @@ export async function processWorkflowForEach(
       workflowId,
       runId,
       executionPath: [executionPath[0]!, idx],
+      executionClaimKey: createStepExecutionClaimKey({
+        sourceEventId,
+        executionPath: [executionPath[0]!, idx],
+        forEachIndex: idx,
+      }),
       resumeSteps,
       timeTravel,
       restart,

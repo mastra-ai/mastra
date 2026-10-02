@@ -37,7 +37,7 @@ import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
-import { getNestedWorkflow, getStepId, isExecutableStep } from './utils';
+import { createStepExecutionClaimKey, getNestedWorkflow, getStepId, isExecutableStep } from './utils';
 
 export type ProcessorArgs = {
   activeStepsPath: Record<string, number[]>;
@@ -79,6 +79,17 @@ export type ProcessorArgs = {
    * from) so the persisted run snapshot records the schedule's `resourceId`.
    */
   resourceId?: string;
+  /** Broker event currently causing this processor action. Stable across redelivery. */
+  sourceEventId?: string;
+  /**
+   * `workflow.step.run` event that scheduled the step this event completes.
+   * Successor scheduling keys off this instead of the event that delivers the
+   * completion, so a superseded worker cannot schedule the same successor
+   * under a fresh event id.
+   */
+  stepRunEventId?: string;
+  /** Stable identity for this logical step execution, propagated by the event that scheduled it. */
+  executionClaimKey?: string;
 };
 
 export type ParentWorkflow = {
@@ -151,7 +162,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
-  /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
+  /** TTL of the lease fencing a running logical `workflow.step.run`; renewed every ttl/3. */
   static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
@@ -651,6 +662,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     resourceId: eventResourceId,
+    sourceEventId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
@@ -743,6 +755,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowId,
         runId,
         executionPath: startExecutionPath,
+        executionClaimKey: createStepExecutionClaimKey({
+          sourceEventId,
+          executionPath: startExecutionPath,
+          forEachIndex,
+        }),
         resumeSteps,
         stepResults: {
           ...(stepResults ?? {
@@ -776,6 +793,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       activeStepsPath,
       executionPath,
       parentWorkflow,
+      sourceEventId,
     } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
@@ -863,6 +881,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults,
       state,
       workflowId,
+      sourceEventId,
     } = args;
 
     // Extract final state from stepResults or args
@@ -917,6 +936,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow: parentWorkflow.parentWorkflow,
             requestContext,
             actor,
+            sourceEventId,
             retryCount: 0,
           },
           {
@@ -1183,6 +1203,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       state,
       outputOptions,
       forEachIndex,
+      sourceEventId,
     } = args;
     // Get current state from stepResults.__state or from passed state
     const currentState = resolveCurrentState({ stepResults, state });
@@ -1290,6 +1311,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1316,6 +1338,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1343,6 +1366,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1370,6 +1394,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1397,6 +1422,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
           state: currentState,
           outputOptions,
@@ -1452,6 +1478,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       forEachIndex,
       step,
       actor,
+      sourceEventId,
     } = args;
     let requestContext = args.requestContext;
     const streamFormat = this.runFormats.get(runId);
@@ -1520,41 +1547,58 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Record first, then routing state: if the process dies between the two
       // writes recovery still routes through the old path, whereas the reverse
       // order would point restart at a step whose input was never recorded.
-      if (!isResumedEntry && step.type !== 'foreach') {
-        // Redelivery guard: a `step.run` redelivered (at-least-once transport)
-        // after the step suspended must not clobber the stored 'suspended'
-        // record — its suspendPayload is the resume artifact (stream state,
-        // nested-run ids). Both conditions matter: a suspended leaf record
-        // alone is NOT proof of a spurious delivery — after a resume, a loop
-        // re-entry (dountil around a suspending nested workflow, bug #5650)
-        // publishes a fresh non-resume `step.run` while the leaf record still
-        // reads 'suspended' (the resume path deliberately leaves it
-        // untouched). What discriminates the spurious case is the RUN being
-        // parked too: no legitimate non-resume delivery for a suspended leaf
-        // exists while the whole run sits in 'suspended'. Read-then-write
-        // narrows the race window rather than closing it — closing it needs
-        // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters.
-        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-        if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
-          return;
-        }
-        await workflowsStore.updateWorkflowResults({
+      const preserveResult = isResumedEntry || step.type === 'foreach';
+      const runningResult = {
+        // Loop re-entries overwrite the previous iteration's completion
+        // fields (like the default engine's stepInfo) while preserving
+        // e.g. metadata.nestedRunId for nested-run recovery.
+        ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+        payload: prevResult.status === 'success' ? prevResult.output : undefined,
+        startedAt: Date.now(),
+        status: 'running',
+      } as any;
+      // `#dispatch` stamps `executionClaimKey` on every `workflow.step.run`, so
+      // the fallback only runs for events built by hand. It must stay derived
+      // from the execution path: keying off the source event alone would make
+      // every entry scheduled by that event (parallel branches, conditional
+      // branches, foreach iterations) share one claim, and the first would win.
+      const executionClaimKey =
+        args.executionClaimKey ?? createStepExecutionClaimKey({ executionPath, retryCount, forEachIndex });
+      let claimedResults = await workflowsStore.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: leafId,
+        result: runningResult,
+        requestContext,
+        executionClaim: {
+          key: executionClaimKey,
+          preserveResult,
+        },
+      });
+      if (!claimedResults) {
+        // The logical claim outlived the worker that recorded it: the step is
+        // still marked `running`, which means the previous owner died before
+        // committing anything. Resume from the recorded running input instead
+        // of acking the redelivery as a duplicate — on transports without a
+        // lease that ack would strand the run forever. The write is guarded by
+        // the stored step status — a compare-and-set instead of a
+        // read-then-write — so it cannot resurrect a step whose previous owner
+        // committed a result before losing the fence. The guard ignores the
+        // claim key, so a recovery can be retried after another crash.
+        claimedResults = await workflowsStore.updateWorkflowResults({
           workflowName: workflowId,
           runId,
           stepId: leafId,
-          result: {
-            // Loop re-entries overwrite the previous iteration's completion
-            // fields (like the default engine's stepInfo) while preserving
-            // e.g. metadata.nestedRunId for nested-run recovery.
-            ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt: Date.now(),
-            status: 'running',
-          } as any,
+          result: runningResult,
           requestContext,
+          executionClaim: {
+            key: executionClaimKey,
+            preserveResult: true,
+            requireRunningStepId: leafId,
+          },
         });
       }
+      if (!claimedResults) return;
       // `expectedStatus` makes this a compare-and-set: the row is 'running' on
       // the normal path (written by processWorkflowStart for both start and
       // resume), and if a concurrent sibling already committed a suspension
@@ -2101,6 +2145,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowId,
             runId,
             executionPath,
+            stepRunEventId: sourceEventId,
             resumeSteps,
             stepResults,
             prevResult: stepResult,
@@ -2120,6 +2165,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowId,
             runId,
             executionPath,
+            executionClaimKey: createStepExecutionClaimKey({
+              sourceEventId,
+              executionPath,
+              retryCount: retryCount + 1,
+              forEachIndex,
+            }),
             resumeSteps,
             stepResults,
             timeTravel,
@@ -2149,6 +2200,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
+          stepRunEventId: sourceEventId,
           resumeSteps,
           timeTravel,
           restart,
@@ -2186,6 +2238,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
+          sourceEventId,
           retryCount: retryCount + 1,
         },
         {
@@ -2207,6 +2260,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath,
+          stepRunEventId: sourceEventId,
           resumeSteps,
           timeTravel, //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
           restart,
@@ -2443,7 +2497,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
     nestedRunId,
+    sourceEventId,
+    stepRunEventId,
   }: ProcessorArgs) {
+    // Identity of the step execution whose completion this event reports.
+    // Callers that schedule a successor from a step completion carry it so the
+    // successor claim is stable across redeliveries *and* across two workers
+    // that both committed the same step; step.end events published by helpers
+    // that don't carry it keep keying off their own delivery id.
+    const successorSourceEventId = stepRunEventId ?? sourceEventId;
     // Extract state from prevResult if it was updated by the step
     // For nested workflow completion (parentContext present), prefer the passed state
     // as it contains the nested workflow's updated state
@@ -2550,6 +2612,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             activeStepsPath,
             requestContext,
             actor,
+            sourceEventId,
             perStep,
             state: currentState,
             outputOptions,
@@ -2699,6 +2762,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentWorkflow,
               requestContext,
               actor,
+              sourceEventId,
               perStep,
               state: currentState,
               outputOptions,
@@ -2840,6 +2904,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             parentWorkflow,
             requestContext,
             actor,
+            sourceEventId,
             perStep,
             state: currentState,
             outputOptions,
@@ -3094,6 +3159,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
         });
       } else {
@@ -3109,6 +3175,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath,
           requestContext,
           actor,
+          sourceEventId,
           perStep,
         });
       }
@@ -3142,6 +3209,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: executionPath.slice(0, -1),
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId: successorSourceEventId,
+            executionPath: executionPath.slice(0, -1),
+            forEachIndex,
+          }),
           resumeSteps,
           parentWorkflow,
           stepResults,
@@ -3169,6 +3241,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         activeStepsPath,
         requestContext,
         actor,
+        sourceEventId,
         state: currentState,
         outputOptions,
       });
@@ -3181,6 +3254,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           runId,
           executionPath: nextExecutionPath,
+          executionClaimKey: createStepExecutionClaimKey({
+            sourceEventId: successorSourceEventId,
+            executionPath: nextExecutionPath,
+          }),
           resumeSteps,
           parentWorkflow,
           stepResults,
@@ -3223,17 +3300,21 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
-    // Fence step execution so a broker redelivery of a still-running
-    // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
-    // running the step concurrently (#24589). Redeliveries keep the same event
-    // id, so the id identifies the logical delivery; genuinely new executions
-    // (loop iterations, retries, foreach items) are published as new events.
     if (event.type !== 'workflow.step.run' || !event.id) {
       return this.#handle(event);
     }
 
-    const leaseProvider = this.#getLeaseProvider();
-    const key = `workflow-step-run:${event.runId}:${event.id}`;
+    const { provider: leaseProvider, isFallback } = this.#getLeaseProvider();
+    if (isFallback) {
+      // No lease backend: exclusivity cannot be established, so delivery stays
+      // at-least-once. A redelivery whose claim is already recorded still
+      // resumes a step a crashed worker left `running` — see the guarded
+      // recovery in `runLeafStep`.
+      return this.#handle(event);
+    }
+
+    const executionClaimKey = (event.data as Partial<ProcessorArgs>)?.executionClaimKey ?? event.id;
+    const key = `workflow-step-run:${event.runId}:${executionClaimKey}`;
     const owner = globalThis.crypto.randomUUID();
     const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
 
@@ -3241,7 +3322,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
     } catch (err) {
-      // Fencing is best-effort; never block execution on a lease backend error.
+      // Fencing is best-effort; preserve the existing retry behavior if the
+      // lease backend itself is unavailable.
       this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
       return this.#handle(event);
     }
@@ -3250,18 +3332,42 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.mastra.getLogger()?.debug('WorkflowEventProcessor.handle: dropping duplicate delivery of running step', {
         runId: event.runId,
         eventId: event.id,
+        executionClaimKey,
         deliveryAttempt: event.deliveryAttempt,
       });
       return { ok: true };
     }
 
-    const renewal = setInterval(
+    let renewal: ReturnType<typeof setInterval> | undefined;
+    renewal = setInterval(
       () => {
-        leaseProvider.renewLease(key, owner, ttl).catch(err => {
-          this.mastra
-            .getLogger()
-            ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
-        });
+        void leaseProvider
+          .renewLease(key, owner, ttl)
+          .then(renewed => {
+            if (renewed) {
+              return;
+            }
+            // The lease is no longer ours: it lapsed while this handler was
+            // stalled and was taken over (or expired). Treat a `false` result as
+            // a lost fence instead of ignoring it — stop renewing and report the
+            // loss. This handler is superseded; the successor it may still
+            // schedule is keyed on the step execution rather than on this
+            // delivery, so storage rejects the duplicate and the run advances
+            // exactly once under the new owner.
+            clearInterval(renewal);
+            this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: lost step fence', {
+              key,
+              runId: event.runId,
+              eventId: event.id,
+              executionClaimKey,
+              deliveryAttempt: event.deliveryAttempt,
+            });
+          })
+          .catch(err => {
+            this.mastra
+              .getLogger()
+              ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
+          });
       },
       Math.max(1, Math.floor(ttl / 3)),
     );
@@ -3272,22 +3378,40 @@ export class WorkflowEventProcessor extends EventProcessor {
       return result;
     } finally {
       clearInterval(renewal);
-      // On success keep the lease until it expires so a late duplicate of the
-      // completed delivery is still dropped. On failure release it so the
-      // transport's retry can run the step.
+      // Keep successful fences until their TTL expires so late concurrent
+      // duplicates are dropped. Failed handlers release immediately so the
+      // transport retry can acquire the fence; a lease left behind here would
+      // make that retry look like a duplicate and get acked, stranding the step
+      // for the rest of the TTL, so the release is retried before giving up.
       if (!result?.ok) {
-        await leaseProvider.releaseLease(key, owner).catch(() => {});
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await leaseProvider.releaseLease(key, owner);
+            break;
+          } catch (err) {
+            if (attempt === 2) {
+              this.mastra
+                .getLogger()
+                ?.warn('WorkflowEventProcessor.handle: failed to release step fence', { key, error: err });
+            } else {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          }
+        }
       }
     }
   }
 
-  #getLeaseProvider(): LeaseProvider {
+  #getLeaseProvider(): { provider: LeaseProvider; isFallback: boolean } {
     const pubsub = this.mastra.pubsub as unknown;
     const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined } | undefined)?.getLeaseProvider;
-    if (typeof unwrap === 'function') {
-      return unwrap.call(pubsub) ?? NoopLeaseProvider;
-    }
-    return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
+    const provider =
+      typeof unwrap === 'function'
+        ? (unwrap.call(pubsub) ?? NoopLeaseProvider)
+        : isLeaseProvider(pubsub)
+          ? pubsub
+          : NoopLeaseProvider;
+    return { provider, isFallback: provider === NoopLeaseProvider };
   }
 
   async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
@@ -3409,7 +3533,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #dispatch(event: Event) {
     const { type, data } = event;
 
-    const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
+    const workflowData = {
+      ...(data as Omit<ProcessorArgs, 'workflow' | 'sourceEventId'>),
+      sourceEventId: event.id,
+      executionClaimKey:
+        type === 'workflow.step.run'
+          ? ((data as Partial<ProcessorArgs>).executionClaimKey ?? event.id)
+          : (data as Partial<ProcessorArgs>).executionClaimKey,
+    } satisfies Omit<ProcessorArgs, 'workflow'>;
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,
