@@ -121,18 +121,19 @@ export function ProviderAccessSection({
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
+  const pinnedScope: CredentialScope | undefined = fixedScope === 'org' && !authEnabled ? 'user' : fixedScope;
   const fixedSettingsScope: SettingsScope | undefined =
-    fixedScope === 'org' ? 'org' : fixedScope ? 'personal' : undefined;
+    pinnedScope === 'org' ? 'org' : pinnedScope ? 'personal' : undefined;
   const scopeOptions: SettingsScope[] = fixedSettingsScope
     ? [fixedSettingsScope]
     : authEnabled
       ? ['personal', 'org']
       : ['personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
-  const selectedScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
-  const scope: CredentialScope = authEnabled ? selectedScope : 'user';
+  const scope: CredentialScope = pinnedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
+  const orgScopeUnresolved = fixedScope === 'org' && authQuery.isPending;
   const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
-  const actionsDisabled = authQuery.isPending || readOnly;
+  const actionsDisabled = orgScopeUnresolved || readOnly;
   const rowScope: RowScope = { scope, authEnabled, showOrgCoverage };
   const scopeArg = authEnabled ? { scope } : {};
 

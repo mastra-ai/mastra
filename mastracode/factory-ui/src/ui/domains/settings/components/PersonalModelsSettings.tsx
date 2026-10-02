@@ -1,18 +1,13 @@
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { useCustomProvidersQuery } from '../../../../hooks/use-custom-providers';
+import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { ModelPacksSection } from './ModelPacksSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
 export function PersonalModelsSettings({ models }: { models: AvailableModelOption[] }) {
-  const providersQuery = useProvidersQuery();
-  const customProvidersQuery = useCustomProvidersQuery();
-  const anyConnected =
-    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
-  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
+  const { anyConnected, providersKnown } = useProviderConnectionState();
 
   return (
     <div className="flex flex-col gap-8">

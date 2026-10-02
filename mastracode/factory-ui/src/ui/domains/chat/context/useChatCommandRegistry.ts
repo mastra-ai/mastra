@@ -267,7 +267,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Connect a model provider',
       requiresSession: false,
       execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
       },
     },
     {
@@ -275,7 +275,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Sign in with a provider account',
       requiresSession: false,
       execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'models'), { state: { from: location } });
+        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
       },
     },
     {

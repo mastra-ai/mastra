@@ -5,8 +5,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { useCustomProvidersQuery } from '../../../../hooks/use-custom-providers';
+import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
@@ -20,12 +19,8 @@ interface MemorySettingsProps {
 }
 
 export function MemorySettings({ scope, factoryId, models, sessionResourceId, sessionScope }: MemorySettingsProps) {
-  const providersQuery = useProvidersQuery();
-  const customProvidersQuery = useCustomProvidersQuery();
+  const { anyConnected, providersKnown } = useProviderConnectionState();
   const factoryView = scope === 'factory' && factoryId;
-  const anyConnected =
-    (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
-  const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
 
   if (providersKnown && !anyConnected) {
     return (
