@@ -302,3 +302,66 @@ describe('stored-agents schemas – conditional fields & requestContextSchema', 
     });
   });
 });
+
+describe('stored-agents schemas – memory references', () => {
+  const base = { name: 'Support Agent', instructions: 'Help', model: { provider: 'openai', name: 'gpt-4o' } };
+  const parseMemory = (memory: unknown) => createStoredAgentBodySchema.safeParse({ ...base, memory });
+
+  it('accepts a registered memory reference', () => {
+    const result = parseMemory({ type: 'id', memoryId: 'chat' });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ type: 'id', memoryId: 'chat' });
+  });
+
+  it('accepts a tagged inline config', () => {
+    const result = parseMemory({ type: 'inline', config: { options: { lastMessages: 10 } } });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ type: 'inline', config: { options: { lastMessages: 10 } } });
+  });
+
+  it('accepts a legacy untagged inline config', () => {
+    const result = parseMemory({ options: { lastMessages: 10 }, observationalMemory: true });
+    expect(result.success).toBe(true);
+    expect(result.data?.memory).toEqual({ options: { lastMessages: 10 }, observationalMemory: true });
+  });
+
+  it('accepts references and inline configs in conditional variants', () => {
+    const result = parseMemory([
+      { value: { options: { lastMessages: 5 } } },
+      {
+        value: { type: 'id', memoryId: 'premium' },
+        rules: { operator: 'AND', conditions: [{ field: 'tier', operator: 'equals', value: 'premium' }] },
+      },
+    ]);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a reference without a memoryId instead of treating it as empty inline config', () => {
+    expect(parseMemory({ type: 'id' }).success).toBe(false);
+    expect(parseMemory({ type: 'id', memoryId: '' }).success).toBe(false);
+  });
+
+  it('rejects unknown memory types', () => {
+    expect(parseMemory({ type: 'memory_ref', key: 'chat' }).success).toBe(false);
+  });
+
+  it('still enforces semantic recall dependencies on legacy and tagged inline configs', () => {
+    const config = { options: { semanticRecall: true } };
+    expect(parseMemory(config).success).toBe(false);
+    expect(parseMemory({ type: 'inline', config }).success).toBe(false);
+  });
+
+  it('accepts references on update and in the response schema', () => {
+    expect(updateStoredAgentBodySchema.safeParse({ memory: { type: 'id', memoryId: 'chat' } }).success).toBe(true);
+    const response = storedAgentSchema.safeParse({
+      id: 'support',
+      status: 'published',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...base,
+      memory: { type: 'id', memoryId: 'chat' },
+    });
+    expect(response.success).toBe(true);
+    expect(response.data?.memory).toEqual({ type: 'id', memoryId: 'chat' });
+  });
+});
