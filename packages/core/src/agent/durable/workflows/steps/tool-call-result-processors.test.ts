@@ -315,4 +315,27 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(output.result).toEqual(RAW_RESULT);
     expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringContaining('pubsub closed'));
   });
+
+  it('keeps the step alive when publishing a processor writer chunk fails', async () => {
+    const messageList = seedMessageList();
+    setupRegistry(
+      {
+        id: 'progress-writer',
+        name: 'progress-writer',
+        processOutputStream: async ({ part, writer }: any) => {
+          await writer.custom({ type: 'data-progress', data: { step: 'redacting' } });
+          return part;
+        },
+      },
+      messageList,
+    );
+    vi.mocked(emitChunkEvent).mockRejectedValueOnce(new Error('pubsub closed'));
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toEqual(RAW_RESULT);
+    expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringContaining('pubsub closed'));
+    expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
+  });
 });

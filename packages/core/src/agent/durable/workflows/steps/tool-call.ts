@@ -257,7 +257,11 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            try {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            } catch (error) {
+              throw new DurableChunkPublishError(error);
+            }
           },
         }
       : undefined,
