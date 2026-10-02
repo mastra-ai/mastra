@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { useTraceQueryAvailable } from '../use-trace-query-available';
+import { useObservabilityCapabilities } from '../use-observability-capabilities';
 import { legacyTraceCapabilities, traceQueryCapabilities } from './fixtures/observability-capabilities';
+import { MastraReactProvider } from '@/mastra-react-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -25,45 +25,35 @@ afterEach(() => {
   cleanup();
 });
 
-describe('useTraceQueryAvailable', () => {
-  describe('while capabilities are loading', () => {
-    it('is loading and not enabled', () => {
-      server.use(http.get(CAPABILITIES_URL, () => new Promise(() => {})));
-
-      const { result } = renderHook(() => useTraceQueryAvailable(), { wrapper: makeWrapper() });
-
-      expect(result.current).toEqual({ isLoading: true, enabled: false });
-    });
-  });
-
+describe('useObservabilityCapabilities', () => {
   describe('when the server supports trace query', () => {
-    it('is enabled', async () => {
+    it('reports traceQuery as available', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(traceQueryCapabilities)));
 
-      const { result } = renderHook(() => useTraceQueryAvailable(), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useObservabilityCapabilities(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: true }));
+      await waitFor(() => expect(result.current.data?.capabilities.traceQuery).toBe(true));
     });
   });
 
   describe('when the server does not support trace query', () => {
-    it('is not enabled', async () => {
+    it('reports traceQuery as unavailable', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(legacyTraceCapabilities)));
 
-      const { result } = renderHook(() => useTraceQueryAvailable(), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useObservabilityCapabilities(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.enabled).toBe(false);
+      await waitFor(() => expect(result.current.data?.capabilities.traceQuery).toBe(false));
     });
   });
 
-  describe('when the capabilities endpoint is missing', () => {
-    it('falls back to enabled', async () => {
+  describe('when the endpoint fails', () => {
+    it('exposes the error', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json({ error: 'Not found' }, { status: 404 })));
 
-      const { result } = renderHook(() => useTraceQueryAvailable(), { wrapper: makeWrapper() });
+      const { result } = renderHook(() => useObservabilityCapabilities(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: true }));
+      await waitFor(() => expect(result.current.error).toBeTruthy());
+      expect(result.current.data).toBeUndefined();
     });
   });
 });

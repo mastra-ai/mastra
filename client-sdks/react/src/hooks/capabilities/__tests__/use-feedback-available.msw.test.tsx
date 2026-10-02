@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -7,6 +6,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useFeedbackAvailable } from '../use-feedback-available';
 import { noFeedbackCapabilities, traceQueryCapabilities } from './fixtures/observability-capabilities';
+import { MastraReactProvider } from '@/mastra-react-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
