@@ -107,7 +107,9 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
-    if (duration < 0 || row.durationMs !== duration) {
+    // Date.parse truncates each timestamp to milliseconds; store durations may retain
+    // sub-millisecond precision, so their difference can be strictly less than 1 ms.
+    if (duration < 0 || Math.abs(row.durationMs - duration) >= 1) {
       context.addIssue({
         code: 'custom',
         path: ['durationMs'],

@@ -233,6 +233,18 @@ describe('bounded result contract', () => {
   });
 
   it.each([
+    ['2026-10-01T12:00:00.000100Z', '2026-10-01T12:00:01.000600Z', 1000.5],
+    ['2026-10-01T12:00:00.000Z', '2026-10-01T12:00:01.000Z', 1000.5],
+    ['2026-10-01T12:00:00.000900Z', '2026-10-01T12:00:01.000100Z', 999.2],
+  ])('accepts sub-millisecond duration precision for %s to %s', (startedAt, endedAt, durationMs) => {
+    expect(spanQueryRowSchema.safeParse({ ...row, startedAt, endedAt, durationMs }).success).toBe(true);
+  });
+
+  it.each([999, 1001])('rejects a duration discrepancy of at least one millisecond: %s', durationMs => {
+    expect(spanQueryRowSchema.safeParse({ ...row, durationMs }).success).toBe(false);
+  });
+
+  it.each([
     { status: 'running' },
     { endedAt: null },
     { endedAt: '2026-10-01T11:59:59Z' },
