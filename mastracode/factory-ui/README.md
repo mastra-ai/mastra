@@ -14,14 +14,6 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
-## Settings
-
-**Your settings** contains your account, browser preferences, provider credentials, default model pack, interactive-chat memory, and connected accounts. **Factory settings** contains shared models and memory, skills, behavior, repositories, intake, and Factory management. Lane controls stay on the board.
-
-The pages use the existing storage scopes. Choosing a default pack is personal; creating or removing a pack still changes the organization’s shared list. Organization credentials, custom providers, Factory chat defaults, and deployment thinking defaults retain their scope labels. Members can inspect organization credentials; editing them requires the existing organization admin permission.
-
-Existing Models URLs open Factory models. Model-pack links with `#model-packs` redirect to Your models. Existing Memory URLs continue to open personal memory; Factory memory has its own destination.
-
 ## Board activity
 
 Cards on the **Work** and **Review** boards show the last person recorded in the work item's audit history. Hover over the person's name or profile image to open the recent event timeline for that card.
