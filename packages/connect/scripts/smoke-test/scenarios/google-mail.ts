@@ -367,20 +367,17 @@ export const googleMailScenario: Scenario = {
         );
       }
     }
+    // update_auto_forwarding_settings is a Google Workspace-only endpoint:
+    // Gmail returns 403 "Access restricted to service accounts that have been
+    // delegated domain-wide authority" on consumer Gmail accounts. Probe so
+    // routing + request validation are exercised; it executes as a real call
+    // on Workspace connections with domain-wide delegation.
     if (tools['google_mail_update_auto_forwarding_settings']) {
-      try {
-        await call('google_mail_update_auto_forwarding_settings', { enabled: false });
-        steps.push(makeStep('update auto-forwarding', 'google_mail_update_auto_forwarding_settings', 'pass'));
-      } catch (error) {
-        steps.push(
-          makeStep(
-            'update auto-forwarding',
-            'google_mail_update_auto_forwarding_settings',
-            'fail',
-            errorMessage(error),
-          ),
-        );
-      }
+      steps.push(
+        await probeTool(call, tools, 'update auto-forwarding (probe)', 'google_mail_update_auto_forwarding_settings', {
+          enabled: false,
+        }),
+      );
     }
     if (tools['google_mail_update_imap_settings']) {
       try {
