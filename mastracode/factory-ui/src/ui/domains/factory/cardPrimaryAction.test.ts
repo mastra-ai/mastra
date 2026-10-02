@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { boardCardState } from './boardCardState';
+import { boardCardState } from './boardCardStatus';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
@@ -263,7 +263,7 @@ describe('cardActions', () => {
   it('replaces the run with a disabled progress action until there is a session to open', () => {
     const state = boardCardState({ moving: { stage: 'review', label: 'Reviewing' } });
     expect(cardActions({ state, run: { ...run, ariaLabel: 'Start suggested run: Review' } })).toEqual([
-      expect.objectContaining({ label: 'Moving…', ariaLabel: undefined, disabled: true, urgent: false }),
+      { label: 'Moving…', start: run.start, disabled: true },
     ]);
     expect(cardActions({ state, session, run })).toEqual([session]);
   });
@@ -274,7 +274,7 @@ describe('cardActions', () => {
       expect.objectContaining({ ariaLabel: 'Start suggested run: Review', urgent: true }),
     ]);
     expect(cardActions({ state: boardCardState({ proposal, preparing: 'Starting…' }), run })).toEqual([
-      expect.objectContaining({ label: 'Starting…', ariaLabel: undefined, disabled: true, urgent: false }),
+      { label: 'Starting…', start: run.start, disabled: true },
     ]);
   });
 });

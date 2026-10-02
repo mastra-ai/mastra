@@ -1,3 +1,4 @@
+import type { InstalledPhaseInfo } from '../../../api/types';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -10,6 +11,18 @@ export type BoardCardStatus =
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
 
+export type BoardCardOwner =
+  | { kind: 'free' }
+  | { kind: 'you'; action: string }
+  | { kind: 'automation'; action: string }
+  | { kind: 'session'; status: SessionRowStatus };
+
+export interface BoardCardState {
+  status: BoardCardStatus;
+  owner: BoardCardOwner;
+  wick?: SessionRowStatus;
+}
+
 export interface BoardCardStatusInput {
   /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
@@ -17,6 +30,8 @@ export interface BoardCardStatusInput {
   moving?: { stage: string; label: string };
   /** Status text for the window between the click and the session mutation. */
   preparing?: string;
+  /** The user's retry request has not yet been reflected in the decision query. */
+  retrying?: boolean;
   /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
   /** Why the server refused the last move. */
@@ -64,22 +79,33 @@ function linkedSourceName(source: FactoryDecisionSummary['source']): string {
 function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'>): {
   busy: string;
   failed: string;
+  action: string;
 } {
   switch (decision.type) {
     case 'invokeSkill':
-      return { busy: 'Starting an automated run…', failed: 'Automated run could not start' };
+      return { busy: 'Starting an automated run…', failed: 'Automated run could not start', action: 'Starting…' };
     case 'transition':
-      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed' };
+      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed', action: 'Moving…' };
     case 'upsertLinkedWorkItem': {
       const source = linkedSourceName(decision.source);
-      return { busy: `Syncing ${source}…`, failed: `Couldn't sync ${source}` };
+      return { busy: `Syncing ${source}…`, failed: `Couldn't sync ${source}`, action: 'Syncing…' };
     }
     case 'sendMessage':
     case 'notify':
-      return { busy: 'Notifying the session…', failed: 'Session could not be notified' };
+      return { busy: 'Notifying the session…', failed: 'Session could not be notified', action: 'Notifying…' };
     default:
-      return { busy: 'Automation is working on this card…', failed: 'Automation failed' };
+      return { busy: 'Automation is working on this card…', failed: 'Automation failed', action: 'Working…' };
   }
+}
+
+function yourRequest(input: BoardCardStatusInput): { row: string; action: string } | undefined {
+  const { moving } = input;
+  if (moving) {
+    return { row: moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…`, action: 'Moving…' };
+  }
+  if (input.preparing !== undefined) return { row: input.preparing, action: 'Starting…' };
+  if (input.retrying) return { row: 'Retrying…', action: 'Retrying…' };
+  return undefined;
 }
 
 /**
@@ -101,10 +127,28 @@ function runAnnouncedByWick(
  * it and no error, and calling it a failure makes the board cry wolf. A real
  * failure has been tried at least once, or left an error to show.
  */
-export function retriesAfterFailure(
-  decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>,
-): boolean {
+function retriesAfterFailure(decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>): boolean {
   return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
+}
+
+function cardOwner(input: BoardCardStatusInput): BoardCardOwner {
+  const request = yourRequest(input);
+  if (request) return { kind: 'you', action: request.action };
+  if (input.sessionStatus) return { kind: 'session', status: input.sessionStatus };
+  const { decision } = input;
+  if (decision === undefined || decision.status === 'failed') return { kind: 'free' };
+  return { kind: 'automation', action: retriesAfterFailure(decision) ? 'Retrying…' : automationCopy(decision).action };
+}
+
+export function boardCardState(input: BoardCardStatusInput): BoardCardState {
+  return { status: boardCardStatus(input), owner: cardOwner(input), wick: input.sessionStatus };
+}
+
+/** An unknown phase counts as one that starts a run. */
+export function blocksMove(owner: BoardCardOwner, toKind: InstalledPhaseInfo['kind'] | undefined): boolean {
+  if (owner.kind === 'free') return false;
+  if (owner.kind === 'you') return true;
+  return toKind !== 'resting' && toKind !== 'terminal';
 }
 
 /**
@@ -113,11 +157,9 @@ export function retriesAfterFailure(
  * outrank a parked run.
  */
 export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
-  const { moving, decision } = input;
-  if (moving) {
-    return { kind: 'busy', label: moving.stage === 'done' ? 'Marking done…' : `Moving to ${moving.label}…` };
-  }
-  if (input.preparing !== undefined) return { kind: 'busy', label: input.preparing };
+  const { decision } = input;
+  const request = yourRequest(input);
+  if (request) return { kind: 'busy', label: request.row };
   if (input.transitionReason !== undefined) return { kind: 'error', label: input.transitionReason };
   if (decision?.status === 'failed') {
     return {

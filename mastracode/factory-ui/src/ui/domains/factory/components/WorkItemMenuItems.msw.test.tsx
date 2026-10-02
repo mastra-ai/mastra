@@ -1,10 +1,10 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
-import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
@@ -39,7 +39,7 @@ const item: WorkItem = {
 function renderMenu(
   stage: string,
   boards: BoardCatalogResponse['boards'] = [releaseBoard],
-  proposal?: { proposal: WorkItemMenuProps['proposal']; proposedRunLabel?: string },
+  props: Partial<WorkItemMenuProps> = {},
 ) {
   server.use(
     http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
@@ -54,8 +54,8 @@ function renderMenu(
             item={{ ...item, stages: [stage] }}
             columnStage={stage}
             moves={[]}
-            activity="idle"
-            {...proposal}
+            owner={{ kind: 'free' }}
+            {...props}
             onMove={onMove}
             onRemove={vi.fn()}
             onApproveProposal={vi.fn()}
@@ -103,5 +103,22 @@ describe('custom-board card menu', () => {
     const { client } = renderMenu('queued', []);
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('menuitem', { name: /Move to|Mark done/ })).toBeNull();
+  });
+});
+
+describe('held card menu', () => {
+  const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
+  const choices = ['Accept and plan', 'Accept and build', 'Close'];
+
+  it.each([
+    [{ kind: 'session', status: 'ready' } as const, [true, true, false]],
+    [{ kind: 'automation', action: 'Retrying…' } as const, [true, true, false]],
+    [{ kind: 'you', action: 'Moving…' } as const, [true, true, true]],
+  ])('keeps Close open unless your own request is in flight (%o)', async (owner, disabled) => {
+    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(
+      choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),
+    ).toEqual(disabled);
   });
 });

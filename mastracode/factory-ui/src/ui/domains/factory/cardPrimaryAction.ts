@@ -1,7 +1,6 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
-import { isCardActionPending, PENDING_ACTION_LABEL } from './boardCardState';
-import type { BoardCardState } from './boardCardState';
+import type { BoardCardState } from './boardCardStatus';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
@@ -186,7 +185,7 @@ export function retryButton({
 }: {
   decisionId?: string;
   onRetry: (decisionId: string) => void;
-}): CardAction | undefined {
+}): CardPrimaryAction | undefined {
   if (decisionId === undefined) return undefined;
   return { label: 'Retry', start: () => onRetry(decisionId) };
 }
@@ -200,20 +199,14 @@ export function cardActions({
 }: {
   state: BoardCardState;
   session?: CardAction;
-  retry?: CardAction;
-  run?: CardAction;
+  retry?: CardPrimaryAction;
+  run?: CardPrimaryAction;
 }): CardAction[] {
-  const { activity, status } = state;
-  // Opening an existing session stays useful throughout kickoff and execution.
-  if (activity !== 'idle') {
+  const { owner, status } = state;
+  if (owner.kind !== 'free') {
     if (session !== undefined) return [session];
-    if (!isCardActionPending(activity)) return [];
-    const pendingAction = retry ?? run;
-    if (pendingAction === undefined) return [];
-    // Drop the old accessible name too: a disabled suggestion is no longer asking to be started.
-    return [
-      { ...pendingAction, label: PENDING_ACTION_LABEL[activity], ariaLabel: undefined, disabled: true, urgent: false },
-    ];
+    if (owner.kind === 'session' || run === undefined) return [];
+    return [{ label: owner.action, start: run.start, disabled: true }];
   }
   const waiting = status.kind === 'waiting' || status.kind === 'held';
   const nextRun =

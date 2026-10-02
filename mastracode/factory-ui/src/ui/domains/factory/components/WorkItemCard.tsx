@@ -6,7 +6,7 @@ import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { boardCardState, isCardActionPending } from '../boardCardState';
+import { boardCardState } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -98,7 +98,6 @@ export function WorkItemCard({
   const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
 
-  const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
@@ -110,7 +109,6 @@ export function WorkItemCard({
   const nextPhaseId = definition?.phases.find(phase => phase.id === columnStage)?.transitions?.[0]?.to;
   const nextPhaseDef = definition?.phases.find(phase => phase.id === nextPhaseId);
   const nextPhase = nextPhaseDef === undefined ? undefined : { id: nextPhaseDef.id, label: nextPhaseDef.title };
-  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =
     threadSession === undefined
       ? undefined
@@ -145,7 +143,8 @@ export function WorkItemCard({
     sessionStatus,
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
-  const { status, activity: cardActivity } = state;
+  const { status, owner, wick } = state;
+  const lockedByYou = owner.kind === 'you';
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
@@ -167,7 +166,7 @@ export function WorkItemCard({
     proposal,
     proposedRunLabel,
     approvingDecisionId,
-    activity: cardActivity,
+    owner,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -228,25 +227,24 @@ export function WorkItemCard({
     <>
       <article
         ref={morph.cardRef}
-        draggable={!evaluating}
+        draggable={!lockedByYou}
         aria-label={item.title}
-        aria-busy={isCardActionPending(cardActivity) || undefined}
+        aria-busy={owner.kind === 'you' || owner.kind === 'automation' || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}
         onDragStart={event => {
-          if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+          if (!lockedByYou) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
         className={cn(
           'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
-          wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
-          evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-          busyLabel !== undefined && 'opacity-70',
+          wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
+          lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
           highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
         )}
       >
-        {wickStatus && <ActivityWick status={wickStatus} />}
+        {wick && <ActivityWick status={wick} />}
         <button
           ref={deepLinkRef}
           type="button"
@@ -275,7 +273,7 @@ export function WorkItemCard({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      disabled={evaluating}
+                      disabled={lockedByYou}
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >

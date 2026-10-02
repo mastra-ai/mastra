@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardCardStatus, itemAwaitsPerson } from './boardCardStatus';
-import { boardCardState } from './boardCardState';
+import { blocksMove, boardCardState, boardCardStatus, itemAwaitsPerson } from './boardCardStatus';
 import { cardActions } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
@@ -199,44 +198,55 @@ describe('boardCardStatus', () => {
 });
 
 describe('boardCardState', () => {
-  it.each(['pending', 'leased', 'retry'] as const)('blocks another run while a %s decision has no session', status => {
-    const state = boardCardState({ decision: decision({ status, lastError: status === 'retry' ? 'Timeout' : null }) });
-    const run = { label: 'Review', start: () => {} };
-    expect(cardActions({ state, run })).toEqual([
-      expect.objectContaining({ label: status === 'retry' ? 'Retrying…' : 'Starting…', disabled: true }),
-    ]);
+  const run = { label: 'Review', start: () => {} };
+
+  it.each([
+    [decision({ status: 'pending' }), 'Starting an automated run…', 'Starting…'],
+    [decision({ type: 'transition', status: 'pending' }), 'Moving this card automatically…', 'Moving…'],
+    [
+      decision({ type: 'upsertLinkedWorkItem', source: 'github-pr', status: 'retry', attempts: 0 }),
+      'Syncing GitHub pull request…',
+      'Syncing…',
+    ],
+    [decision({ status: 'retry', lastError: 'Timeout' }), 'Automated run could not start — retrying…', 'Retrying…'],
+  ])('names the in-flight effect the same way on the row and the disabled button', (effect, row, button) => {
+    const state = boardCardState({ decision: effect });
+    expect(state.status).toEqual(expect.objectContaining({ label: row }));
+    expect(cardActions({ state, run })).toEqual([{ label: button, start: run.start, disabled: true }]);
   });
 
   it('keeps a retry request busy before the failed decision refreshes', () => {
-    expect(boardCardState({ decision: decision({ status: 'failed' }), retrying: true })).toEqual({
-      status: { kind: 'busy', label: 'Retrying…' },
-      activity: 'retrying',
+    const state = boardCardState({ decision: decision({ status: 'failed' }), retrying: true });
+    expect(state.status).toEqual({ kind: 'busy', label: 'Retrying…' });
+    expect(cardActions({ state, run })).toEqual([{ label: 'Retrying…', start: run.start, disabled: true }]);
+  });
+
+  it('ranks your request over a session, a session over a queued effect, and frees a final failure', () => {
+    const pending = decision({ status: 'pending' });
+    expect(boardCardState({ moving: { stage: 'done', label: 'Done' }, sessionStatus: 'working' }).owner).toEqual({
+      kind: 'you',
+      action: 'Moving…',
     });
-  });
-
-  it('starts, not retries, a linked-card replay the server reset to retry without a failure', () => {
-    const state = boardCardState({
-      decision: decision({ type: 'upsertLinkedWorkItem', source: 'github-pr', status: 'retry', attempts: 0 }),
+    expect(boardCardState({ sessionStatus: 'ready', decision: pending }).owner).toEqual({
+      kind: 'session',
+      status: 'ready',
     });
-    expect(state.status).toEqual({ kind: 'busy', label: 'Syncing GitHub pull request…' });
-    expect(cardActions({ state, run: { label: 'Review', start: () => {} } })).toEqual([
-      expect.objectContaining({ label: 'Starting…', disabled: true }),
-    ]);
+    expect(boardCardState({ transitionReason: 'Move rejected', decision: pending }).owner.kind).toBe('automation');
+    expect(boardCardState({ decision: decision({ status: 'failed' }) }).owner).toEqual({ kind: 'free' });
   });
 
-  it('allows recovery from a final failure while keeping live and parked sessions occupied', () => {
-    expect(boardCardState({ decision: decision({ status: 'failed' }) }).activity).toBe('idle');
-    expect(boardCardState({ sessionStatus: 'ready' }).activity).toBe('awaiting');
-    expect(boardCardState({ sessionStatus: 'initializing' }).activity).toBe('running');
-    expect(boardCardState({ sessionStatus: 'working', decision: decision({ status: 'failed' }) }).activity).toBe(
-      'running',
-    );
-  });
-
-  it('keeps an in-flight effect busy even when a transition error takes the status row', () => {
-    const state = boardCardState({ transitionReason: 'Move rejected', decision: decision({ status: 'pending' }) });
-    expect(state.status).toEqual({ kind: 'error', label: 'Move rejected' });
-    expect(state.activity).toBe('starting');
+  it('lets an occupied card leave for a resting or terminal phase, but locks it while your request is in flight', () => {
+    const occupied = [
+      boardCardState({ sessionStatus: 'ready' }).owner,
+      boardCardState({ decision: decision({ status: 'retry', lastError: 'Timeout' }) }).owner,
+    ];
+    for (const owner of occupied) {
+      expect([blocksMove(owner, 'terminal'), blocksMove(owner, 'resting')]).toEqual([false, false]);
+      expect([blocksMove(owner, 'working'), blocksMove(owner, undefined)]).toEqual([true, true]);
+    }
+    const yours = boardCardState({ preparing: 'Starting…' }).owner;
+    expect(blocksMove(yours, 'terminal')).toBe(true);
+    expect(blocksMove(boardCardState({}).owner, undefined)).toBe(false);
   });
 });
 
