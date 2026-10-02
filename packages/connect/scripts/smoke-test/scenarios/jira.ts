@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep Jira scenario: issue + comment + worklog + transition CRUD against the
@@ -185,6 +185,194 @@ export const jiraScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('list transitions', 'jira_list_transitions', 'fail', errorMessage(error)));
       }
+    }
+
+    // Transition the issue to the first available transition (if any).
+    if (tools['jira_transition_issue']) {
+      try {
+        const t = await call<{ transitions?: Array<{ id?: string }> }>('jira_list_transitions', {
+          issueIdOrKey: issueKey,
+        });
+        const transitionId = t.transitions?.[0]?.id;
+        if (transitionId) {
+          await call('jira_transition_issue', { issueIdOrKey: issueKey, transitionId });
+          steps.push(makeStep('transition issue', 'jira_transition_issue', 'pass', transitionId));
+        } else {
+          steps.push(
+            makeStep('transition issue', 'jira_transition_issue', 'skip', 'No transitions available for issue.'),
+          );
+        }
+      } catch (error) {
+        steps.push(makeStep('transition issue', 'jira_transition_issue', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Changelog + edit-metadata + search read surface on the created issue.
+    if (tools['jira_get_issue_changelog']) {
+      try {
+        await call('jira_get_issue_changelog', { issueIdOrKey: issueKey });
+        steps.push(makeStep('get issue changelog', 'jira_get_issue_changelog', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get issue changelog', 'jira_get_issue_changelog', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_get_edit_issue_metadata']) {
+      try {
+        await call('jira_get_edit_issue_metadata', { issueIdOrKey: issueKey });
+        steps.push(makeStep('get edit metadata', 'jira_get_edit_issue_metadata', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get edit metadata', 'jira_get_edit_issue_metadata', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_get_create_issue_metadata']) {
+      try {
+        await call('jira_get_create_issue_metadata', { projectKeys: [project.key] });
+        steps.push(makeStep('get create metadata', 'jira_get_create_issue_metadata', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get create metadata', 'jira_get_create_issue_metadata', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_search_issues']) {
+      try {
+        await call('jira_search_issues', { jql: `project = ${project.key}`, maxResults: 5 });
+        steps.push(makeStep('search issues', 'jira_search_issues', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search issues', 'jira_search_issues', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Watcher read + remove on the created issue.
+    if (tools['jira_list_watchers']) {
+      try {
+        await call('jira_list_watchers', { issueIdOrKey: issueKey });
+        steps.push(makeStep('list watchers', 'jira_list_watchers', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list watchers', 'jira_list_watchers', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_remove_watcher']) {
+      steps.push(
+        await probeTool(call, tools, 'remove watcher (probe)', 'jira_remove_watcher', {
+          issueIdOrKey: issueKey,
+          accountId: 'smoke-nonexistent-account',
+        }),
+      );
+    }
+    if (tools['jira_list_worklogs']) {
+      try {
+        await call('jira_list_worklogs', { issueIdOrKey: issueKey });
+        steps.push(makeStep('list worklogs', 'jira_list_worklogs', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list worklogs', 'jira_list_worklogs', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Project / field / status / priority / issue-type / user getters.
+    if (tools['jira_get_project']) {
+      try {
+        await call('jira_get_project', { projectIdOrKey: project.key });
+        steps.push(makeStep('get project', 'jira_get_project', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get project', 'jira_get_project', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_get_issue_type']) {
+      try {
+        await call('jira_get_issue_type', { id: issueType.id });
+        steps.push(makeStep('get issue type', 'jira_get_issue_type', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get issue type', 'jira_get_issue_type', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['jira_get_status']) {
+      steps.push(await probeTool(call, tools, 'get status (probe)', 'jira_get_status', { statusIdOrName: 'To Do' }));
+    }
+    if (tools['jira_get_priority']) {
+      steps.push(await probeTool(call, tools, 'get priority (probe)', 'jira_get_priority', { priorityId: '1' }));
+    }
+    if (tools['jira_get_field']) {
+      steps.push(await probeTool(call, tools, 'get field (probe)', 'jira_get_field', { fieldId: 'summary' }));
+    }
+    if (tools['jira_get_user']) {
+      steps.push(await probeTool(call, tools, 'get user (probe)', 'jira_get_user', { accountId: 'smoke-nonexistent' }));
+    }
+
+    // Issue-link lifecycle: create second issue for linking, then link + unlink.
+    let secondIssueKey: string | undefined;
+    if (tools['jira_create_issue_link']) {
+      try {
+        const second = await call<{ key: string }>('jira_create_issue', {
+          fields: {
+            project: { key: project.key },
+            issuetype: { id: issueType.id },
+            summary: `${summary} (link target)`,
+          },
+        });
+        secondIssueKey = second.key;
+        steps.push(makeStep('create second issue (for link)', 'jira_create_issue', 'pass', secondIssueKey));
+      } catch (error) {
+        steps.push(makeStep('create second issue (for link)', 'jira_create_issue', 'fail', errorMessage(error)));
+      }
+    }
+    let linkId: string | undefined;
+    if (secondIssueKey && tools['jira_create_issue_link']) {
+      try {
+        const link = await call<{ id?: string }>('jira_create_issue_link', {
+          type: 'Relates',
+          inwardIssueKey: issueKey,
+          outwardIssueKey: secondIssueKey,
+        });
+        linkId = link.id;
+        steps.push(makeStep('create issue link', 'jira_create_issue_link', 'pass', linkId));
+      } catch (error) {
+        steps.push(makeStep('create issue link', 'jira_create_issue_link', 'fail', errorMessage(error)));
+      }
+    }
+    if (linkId && tools['jira_delete_issue_link']) {
+      try {
+        await call('jira_delete_issue_link', { linkId });
+        steps.push(makeStep('delete issue link', 'jira_delete_issue_link', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete issue link', 'jira_delete_issue_link', 'fail', errorMessage(error)));
+      }
+    } else if (tools['jira_delete_issue_link']) {
+      steps.push(
+        await probeTool(call, tools, 'delete issue link (probe)', 'jira_delete_issue_link', {
+          linkId: `smoke-${runId}`,
+        }),
+      );
+    }
+    if (secondIssueKey) {
+      try {
+        await call('jira_delete_issue', { issueIdOrKey: secondIssueKey });
+        steps.push(makeStep('delete second issue', 'jira_delete_issue', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete second smoke issue ${secondIssueKey}`, errorMessage(error));
+        steps.push(makeStep('delete second issue', 'jira_delete_issue', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Attachment delete probe (Jira attachments need multipart upload, which
+    // we don't bootstrap; probe with synthetic id proves routing).
+    if (tools['jira_delete_attachment']) {
+      steps.push(
+        await probeTool(call, tools, 'delete attachment (probe)', 'jira_delete_attachment', {
+          id: `smoke-${runId}`,
+        }),
+      );
+    }
+
+    // update_comment requires Atlassian Document Format body + visibility
+    // object; probe with minimal payload accepting 400/404 as endpoint proof.
+    if (tools['jira_update_comment']) {
+      steps.push(
+        await probeTool(call, tools, 'update comment (probe)', 'jira_update_comment', {
+          issueIdOrKey: issueKey,
+          commentId: `smoke-${runId}`,
+          body: { type: 'doc', version: 1, content: [] },
+          visibility: { type: 'role', value: 'Administrators' },
+        }),
+      );
     }
 
     try {
