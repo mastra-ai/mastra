@@ -1374,9 +1374,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
       existingEntry.workflowExecution = workflowExecution;
 
+      // Await the dispatch itself (not workflow completion) so a failure to hand the
+      // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
+      // resume() resolved successfully while the run stayed parked and resumable, and
+      // the only signal was a terminal error on the stream.
+      try {
+        await dispatch;
+      } catch (error) {
+        // A run that was never resumed must not keep its registry entry or stream
+        // subscription, otherwise a later resume of the same runId is blocked.
+        streamCleanup();
+        finalizeResumeRegistry();
+        throw error;
+      }
+
       const resumeStreamOptions = {
         ...(resumeOptions ?? {}),
         runId,
+        memory: {
+          resource: resumeOptions?.resourceId,
+          thread: resumeOptions?.threadId,
+        },
       } as AgentExecutionOptions<TOutput>;
       const continued = agentThreadStreamRuntime.continueRun(
         proxyRef as unknown as Agent<any, any, any, any>,
@@ -1392,20 +1410,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           agent.getPubSub(),
           resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
         );
-      }
-
-      // Await the dispatch itself (not workflow completion) so a failure to hand the
-      // resume event to Inngest rejects the caller. Previously it was fire-and-forget:
-      // resume() resolved successfully while the run stayed parked and resumable, and
-      // the only signal was a terminal error on the stream.
-      try {
-        await dispatch;
-      } catch (error) {
-        // A run that was never resumed must not keep its registry entry or stream
-        // subscription, otherwise a later resume of the same runId is blocked.
-        streamCleanup();
-        finalizeResumeRegistry();
-        throw error;
       }
 
       const abort = async (reason?: unknown) => {

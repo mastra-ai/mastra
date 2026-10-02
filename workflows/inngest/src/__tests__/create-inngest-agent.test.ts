@@ -762,7 +762,12 @@ describe('InngestAgent parity surface', () => {
       expect(continueSpy).toHaveBeenCalledWith(
         durableAgent,
         result.output,
-        expect.objectContaining({ runId, threadId: 'thread-1', resourceId: 'user-1' }),
+        expect.objectContaining({
+          runId,
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+          memory: { thread: 'thread-1', resource: 'user-1' },
+        }),
         durableAgent.agent.getPubSub(),
       );
       expect(registerSpy).not.toHaveBeenCalled();
@@ -787,12 +792,24 @@ describe('InngestAgent parity surface', () => {
       const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
       const runId = `resume-thread-replacement-${closeOnSuspend}-run`;
 
-      const result = await durableAgent.resume(runId, { approved: true }, { closeOnSuspend });
+      const result = await durableAgent.resume(
+        runId,
+        { approved: true },
+        {
+          closeOnSuspend,
+          threadId: 'thread-1',
+          resourceId: 'user-1',
+        },
+      );
       try {
         expect(registerSpy).toHaveBeenCalledWith(
           durableAgent,
           result.output,
-          expect.objectContaining({ runId, closeOnSuspend }),
+          expect.objectContaining({
+            runId,
+            closeOnSuspend,
+            memory: { thread: 'thread-1', resource: 'user-1' },
+          }),
           durableAgent.agent.getPubSub(),
           registrationOptions,
         );
@@ -1396,13 +1413,21 @@ describe('InngestAgent parity surface', () => {
       });
       const runId = 'resume-dispatch-failure-run';
       const sendSpy = vi.spyOn(inngest as any, 'send').mockRejectedValue(new Error('inngest unavailable'));
+      const continueSpy = vi.spyOn(agentThreadStreamRuntime, 'continueRun');
+      const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun');
 
-      await expect(durableAgent.resume(runId, { answer: 'yes' })).rejects.toThrow('inngest unavailable');
-      // A run that was never resumed must not hold on to its registry entry,
-      // otherwise a retry of the same runId is blocked.
-      expect(globalRunRegistry.get(runId)).toBeUndefined();
-
-      sendSpy.mockRestore();
+      try {
+        await expect(durableAgent.resume(runId, { answer: 'yes' })).rejects.toThrow('inngest unavailable');
+        // A run that was never resumed must not hold on to its registry entry,
+        // otherwise a retry of the same runId is blocked.
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+        expect(continueSpy).not.toHaveBeenCalled();
+        expect(registerSpy).not.toHaveBeenCalled();
+      } finally {
+        registerSpy.mockRestore();
+        continueSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
     });
 
     it('rejects resume() instead of starting a fresh run when the run never becomes suspended', async () => {
