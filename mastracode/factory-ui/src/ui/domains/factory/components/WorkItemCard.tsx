@@ -6,7 +6,7 @@ import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { boardCardState } from '../boardCardStatus';
+import { boardCardState } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -98,7 +98,7 @@ export function WorkItemCard({
   const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
 
-  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
@@ -136,8 +136,8 @@ export function WorkItemCard({
               definition?.phases.find(phase => phase.id === evaluatingStage)?.title ??
               itemStageLabel(item, evaluatingStage),
           },
-    preparing: busyLabel,
-    retrying: decision !== undefined && retryingDecisionId === decision.id,
+    preparing: startingLabel,
+    retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
     transitionReason,
     sessionStatus,

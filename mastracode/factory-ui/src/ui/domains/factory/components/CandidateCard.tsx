@@ -6,7 +6,7 @@ import type { ReactElement } from 'react';
 import { useId } from 'react';
 
 import { useCardMorph } from '../hooks/useCardMorph';
-import { boardCardStatus } from '../boardCardStatus';
+import { boardCardState } from '../boardCardState';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
@@ -37,7 +37,7 @@ export function CandidateCard({
 
   const moves = cardMoves(candidate, candidate.column);
   const [defaultMove] = moves;
-  const status = boardCardStatus({});
+  const { status } = boardCardState({});
 
   const menuItems: ReactElement[] = [
     ...moves.map(move => (

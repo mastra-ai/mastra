@@ -1,6 +1,6 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
-import type { BoardCardState } from './boardCardStatus';
+import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
@@ -202,20 +202,25 @@ export function cardActions({
   retry?: CardPrimaryAction;
   run?: CardPrimaryAction;
 }): CardAction[] {
-  const { owner, status } = state;
-  if (owner.kind !== 'free') {
-    if (session !== undefined) return [session];
-    if (owner.kind === 'session' || run === undefined) return [];
-    return [{ label: owner.action, start: run.start, disabled: true }];
-  }
-  const waiting = status.kind === 'waiting' || status.kind === 'held';
-  const nextRun =
+  const { owner } = state;
+  if (owner.kind === 'free') return freeCardActions(state.status, { session, retry, run });
+  if (session !== undefined) return [session];
+  if (owner.kind === 'session' || run === undefined) return [];
+  return [{ label: owner.progressLabel, start: run.start, disabled: true }];
+}
+
+function freeCardActions(
+  status: BoardCardStatus,
+  { session, retry, run }: { session?: CardAction; retry?: CardPrimaryAction; run?: CardPrimaryAction },
+): CardAction[] {
+  const namedRun =
     run !== undefined && status.kind === 'waiting'
       ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
       : run;
-  const main = retry ?? nextRun ?? session;
+  const main = retry ?? namedRun ?? session;
   if (main === undefined) return [];
-  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === retry || (waiting && action === nextRun);
-  return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
+  const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';
+  const isUrgent = (action: CardAction) => action === retry || (awaitsPerson && action === namedRun);
+  const rest = [session, namedRun].filter(action => action !== undefined).filter(action => action !== main);
+  return [main, ...rest].map(action => ({ ...action, urgent: isUrgent(action) }));
 }

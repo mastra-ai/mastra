@@ -6,8 +6,8 @@ import { Link, useParams } from 'react-router';
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
-import { blocksMove } from '../boardCardStatus';
-import type { BoardCardOwner } from '../boardCardStatus';
+import { canMoveTo } from '../boardCardState';
+import type { BoardCardOwner } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { workItemPrompt } from '../../supervisor/services/supervisor';
@@ -80,25 +80,25 @@ export function WorkItemMenuItems({
   // restarts, or releases a run is offered until the card is accepted: every
   // one of those would advance it as a side effect. Dismissing a stale
   // suggestion stays, since that starts nothing.
-  const decision = !custom && awaitsTriageDecision(item, columnStage);
-  const runBlocked = blocksMove(owner, 'working');
-  const moveBlocked = (stage: string) => blocksMove(owner, board?.phases.find(phase => phase.id === stage)?.kind);
+  const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
+  const canStartRun = owner.kind === 'free';
+  const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
   return (
     <>
-      {decision &&
+      {awaitsTriage &&
         TRIAGE_DECISIONS.map(choice => (
           <DropdownMenu.Item
             key={choice.stage}
-            disabled={moveBlocked(choice.stage)}
+            disabled={!canMoveTo(owner, phaseKind(choice.stage))}
             onClick={() => onMove(choice.stage)}
           >
             <BoardStageIcon stage={choice.stage} />
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {!decision && moves.map(move => moveItem(move, onMove, runBlocked))}
-      {suggestion !== undefined && !decision && (
-        <DropdownMenu.Item disabled={runBlocked} onClick={() => onApproveProposal(suggestion.id)}>
+      {!awaitsTriage && moves.map(move => moveItem(move, onMove, !canStartRun))}
+      {suggestion !== undefined && !awaitsTriage && (
+        <DropdownMenu.Item disabled={!canStartRun} onClick={() => onApproveProposal(suggestion.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestion.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
@@ -121,9 +121,13 @@ export function WorkItemMenuItems({
       </DropdownMenu.Item>
       {stages
         .filter(stage => stage.id !== columnStage)
-        .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
+        .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
-          <DropdownMenu.Item key={stage.id} disabled={moveBlocked(stage.id)} onClick={() => onMove(stage.id)}>
+          <DropdownMenu.Item
+            key={stage.id}
+            disabled={!canMoveTo(owner, phaseKind(stage.id))}
+            onClick={() => onMove(stage.id)}
+          >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
             <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
           </DropdownMenu.Item>

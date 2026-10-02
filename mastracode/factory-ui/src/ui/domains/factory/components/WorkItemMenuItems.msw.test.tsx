@@ -8,6 +8,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-c
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
+import type { BoardCardOwner } from '../boardCardState';
 import type { WorkItem } from '../services/workItems';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
@@ -110,11 +111,11 @@ describe('held card menu', () => {
   const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
   const choices = ['Accept and plan', 'Accept and build', 'Close'];
 
-  it.each([
-    [{ kind: 'session', status: 'ready' } as const, [true, true, false]],
-    [{ kind: 'automation', action: 'Retrying…' } as const, [true, true, false]],
-    [{ kind: 'you', action: 'Moving…' } as const, [true, true, true]],
-  ])('keeps Close open unless your own request is in flight (%o)', async (owner, disabled) => {
+  it.each<[string, BoardCardOwner, boolean[]]>([
+    ['a parked session', { kind: 'session', status: 'ready' }, [true, true, false]],
+    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false]],
+    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true]],
+  ])('keeps Close open unless your own request is in flight: %s', async (_, owner, disabled) => {
     const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(

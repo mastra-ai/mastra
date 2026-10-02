@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { boardCardState } from './boardCardStatus';
+import { boardCardState } from './boardCardState';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
