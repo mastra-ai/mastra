@@ -7,11 +7,12 @@ import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardPath, orderedBoards } from '../boardCatalog';
 import { useOverlays } from '../../../lib/overlays';
+import { SidebarSectionHeading } from '../../../SidebarSectionHeading';
 
 /**
- * The Factory menu: Board navigation plus whatever the caller nests under it
- * (the factory Sessions list). Renders for any server-backed Factory — a
- * Factory with no linked repositories (or a disconnected GitHub integration)
+ * The Factory menu: main navigation, boards, and whatever the caller nests
+ * under it (the factory Sessions list). Renders for any server-backed Factory —
+ * a Factory with no linked repositories (or a disconnected GitHub integration)
  * still has a Board; those states surface connect CTAs inside the pages
  * instead of hiding the navigation.
  */
@@ -27,28 +28,33 @@ export function FactorySection({ children }: { children?: ReactNode }) {
       <MainSidebar.NavList>
         <FactoryLink to={`/factories/${factoryId}/overview`} icon={House} label="Overview" />
         <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
-        {catalog.isPending ? (
-          <li role="status">Loading boards…</li>
-        ) : catalog.isError ? (
-          <li role="alert">Unable to load boards.</li>
-        ) : catalog.data.length === 0 ? (
-          <li>No boards installed.</li>
-        ) : (
-          orderedBoards(catalog.data).map(board => (
-            <FactoryLink
-              key={board.id}
-              to={boardPath(factoryId, board.id)}
-              icon={board.id === 'review' ? GitPullRequest : SquareKanban}
-              label={board.title}
-            />
-          ))
-        )}
         <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
         <FactoryLink to={`/factories/${factoryId}/audit`} icon={Logs} label="Audit log" />
         {features.data?.knowledge ? (
           <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
         ) : null}
       </MainSidebar.NavList>
+      <section className="flex flex-col gap-1" aria-label="Boards">
+        <SidebarSectionHeading icon={<SquareKanban />}>Boards</SidebarSectionHeading>
+        <MainSidebar.NavList>
+          {catalog.isPending ? (
+            <li role="status">Loading boards…</li>
+          ) : catalog.isError ? (
+            <li role="alert">Unable to load boards.</li>
+          ) : catalog.data.length === 0 ? (
+            <li>No boards installed.</li>
+          ) : (
+            orderedBoards(catalog.data).map(board => (
+              <FactoryLink
+                key={board.id}
+                to={boardPath(factoryId, board.id)}
+                icon={board.id === 'review' ? GitPullRequest : SquareKanban}
+                label={board.title}
+              />
+            ))
+          )}
+        </MainSidebar.NavList>
+      </section>
       {children}
     </nav>
   );
