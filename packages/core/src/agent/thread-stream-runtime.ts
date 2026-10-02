@@ -4253,8 +4253,11 @@ export class AgentThreadStreamRuntime {
     // stream never terminates) or may still be relaying output it no longer owns.
     // A resume also claims a later generation, but its suspended half ended
     // cleanly and stays readable, so only a recovery registration supersedes.
+    // A superseded stream's own terminal event (its abort, failure, or
+    // completion once it notices the loss) must not end the recovered stream.
     const supersededBelowByRunId = new Map<string, number>();
     const generationsByStreamId = new Map<string, { runId: string; generation: number }>();
+    const supersededStreamIds = new Set<string>();
     const isSuperseded = (runId: string, generation: number | undefined) =>
       generation !== undefined && generation < (supersededBelowByRunId.get(runId) ?? -Infinity);
     const noteGeneration = (
@@ -4270,6 +4273,7 @@ export class AgentThreadStreamRuntime {
       for (const [olderStreamId, older] of generationsByStreamId) {
         if (older.runId !== runId || older.generation >= generation) continue;
         generationsByStreamId.delete(olderStreamId);
+        supersededStreamIds.add(olderStreamId);
         discardStream(runId, olderStreamId);
       }
     };
@@ -4278,6 +4282,7 @@ export class AgentThreadStreamRuntime {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
+      if ('streamId' in data && data.streamId !== undefined && supersededStreamIds.has(data.streamId)) return;
       if (data.type === 'run-registered') {
         if (isSuperseded(data.runId, data.generation)) return;
         noteGeneration(data.runId, data.streamId, data.generation, data.supersedes);
@@ -4450,7 +4455,12 @@ export class AgentThreadStreamRuntime {
         }
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
-        if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+        if (
+          data.type === 'run-aborted' &&
+          activeReaderRunId === data.runId &&
+          (data.streamId === undefined || activeReaderStreamId === data.streamId) &&
+          currentReader
+        ) {
           cancelledByAbort = true;
           try {
             void currentReader.cancel();

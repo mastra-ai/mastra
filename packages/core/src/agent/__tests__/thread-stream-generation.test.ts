@@ -22,7 +22,7 @@ function controlledOutput(runId: string) {
   return {
     output,
     push: (part: any) => controller.enqueue(part),
-    end: (status: 'success' | 'suspended' = 'success') => {
+    end: (status: 'success' | 'suspended' | 'failed' = 'success') => {
       output.status = status;
       controller.close();
       finish();
@@ -38,24 +38,26 @@ const finish = { type: 'finish', payload: {} };
 const summarize = (parts: any[]) =>
   parts.map(part => (part.type === 'text-delta' ? `text:${part.payload.text}` : part.type));
 
-/** Three processes on one bus: two that drive the run in turn, and one whose subscriber reads the thread. */
+/** Processes on one bus: two that drive the run in turn, and observers whose subscribers read the thread. */
 async function setup({ read: startReading = true } = {}) {
   const pubsub = new LeasePubSub();
   const original = new AgentThreadStreamRuntime();
   const recovering = new AgentThreadStreamRuntime();
-  const observer = new AgentThreadStreamRuntime();
-  const subscription = await observer.subscribeToThread(
-    agent,
-    { threadId: 'generation-thread', resourceId: 'generation-user' },
-    pubsub,
-  );
-  const read: any[] = [];
-  const startReader = () =>
-    void (async () => {
-      for await (const part of subscription.stream) read.push(part);
-    })();
-  if (startReading) startReader();
-  return { pubsub, original, recovering, subscription, read, startReader };
+  const join = async ({ read: startNow = true } = {}) => {
+    const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
+      agent,
+      { threadId: 'generation-thread', resourceId: 'generation-user' },
+      pubsub,
+    );
+    const read: any[] = [];
+    const startReader = () =>
+      void (async () => {
+        for await (const part of subscription.stream) read.push(part);
+      })();
+    if (startNow) startReader();
+    return { subscription, read, startReader };
+  };
+  return { pubsub, original, recovering, join, ...(await join({ read: startReading })) };
 }
 
 describe('thread stream: runs taken over by a later claim generation', () => {
@@ -130,6 +132,100 @@ describe('thread stream: runs taken over by a later claim generation', () => {
 
     expect(summarize(read)).toEqual(['start', 'text:B-answer', 'finish']);
     subscription.unsubscribe();
+  });
+
+  /** The thread topic and stream the superseded execution registered under generation 1. */
+  const originalRegistration = (pubsub: LeasePubSub) => {
+    const delivery = pubsub.deliveries.find(
+      ({ event }) => event.data?.type === 'run-registered' && event.data.generation === 1,
+    )!;
+    return { topic: delivery.topic, streamId: delivery.event.data.streamId as string };
+  };
+  const publishTerminal = async (pubsub: LeasePubSub, data: (streamId: string) => Record<string, unknown>) => {
+    const { topic, streamId } = originalRegistration(pubsub);
+    await pubsub.publish(topic, { type: data(streamId).type, runId: 'run-1', data: data(streamId) });
+  };
+
+  it.each([
+    [
+      'run-aborted',
+      (_a: ReturnType<typeof controlledOutput>, pubsub: LeasePubSub) =>
+        publishTerminal(pubsub, streamId => ({ type: 'run-aborted', runId: 'run-1', streamId })),
+    ],
+    [
+      'run-failed',
+      (_a: ReturnType<typeof controlledOutput>, pubsub: LeasePubSub) =>
+        publishTerminal(pubsub, streamId => ({
+          type: 'run-failed',
+          runId: 'run-1',
+          streamId,
+          error: 'ownership lost',
+        })),
+    ],
+    ['run-completed', (a: ReturnType<typeof controlledOutput>) => a.end('failed')],
+  ] as const)(
+    'keeps the recovered stream going when the superseded execution ends with %s mid-recovery',
+    async (terminal, endOriginal) => {
+      const { pubsub, original, recovering, subscription, read } = await setup();
+
+      const a = controlledOutput('run-1');
+      await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+      a.push(start);
+      a.push(text('A-partial '));
+      await nextTicks(10);
+
+      const b = controlledOutput('run-1');
+      await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+      b.push(start);
+      b.push(text('B1 '));
+      await vi.waitFor(() => expect(summarize(read)).toContain('text:B1 '));
+
+      await endOriginal(a, pubsub);
+      const { streamId } = originalRegistration(pubsub);
+      await vi.waitFor(() =>
+        expect(
+          pubsub.deliveries.some(({ event }) => event.data?.type === terminal && event.data.streamId === streamId),
+        ).toBe(true),
+      );
+      await nextTicks(30);
+
+      b.push(text('B2'));
+      b.push(finish);
+      b.end();
+      await vi.waitFor(() => expect(read.some(part => part.type === 'finish')).toBe(true));
+      await nextTicks(20);
+      expect(summarize(read)).toEqual(['start', 'text:A-partial ', 'start', 'text:B1 ', 'text:B2', 'finish']);
+      subscription.unsubscribe();
+    },
+  );
+
+  it('keeps a reader that joined after the recovery on the recovered stream when the superseded execution aborts', async () => {
+    const { pubsub, original, recovering, join, subscription: earlyReader } = await setup();
+
+    const a = controlledOutput('run-1');
+    await original.registerRun(agent, a.output, options, pubsub, { generation: 1 });
+    a.push(start);
+    await nextTicks(10);
+    const b = controlledOutput('run-1');
+    await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: 2 });
+    b.push(start);
+    await nextTicks(10);
+
+    // This reader never saw either registration, so it cannot know the original's stream was superseded.
+    const { subscription, read } = await join();
+    b.push(text('B1 '));
+    await vi.waitFor(() => expect(summarize(read)).toContain('text:B1 '));
+
+    await publishTerminal(pubsub, streamId => ({ type: 'run-aborted', runId: 'run-1', streamId }));
+    await nextTicks(20);
+    b.push(text('B2'));
+    b.push(finish);
+    b.end();
+    await vi.waitFor(() => expect(read.some(part => part.type === 'finish')).toBe(true));
+    await nextTicks(20);
+    expect(summarize(read)).toEqual(['text:B1 ', 'text:B2', 'finish']);
+    subscription.unsubscribe();
+    earlyReader.unsubscribe();
   });
 
   it('keeps a suspended half readable when another process resumes the run under a later generation', async () => {
