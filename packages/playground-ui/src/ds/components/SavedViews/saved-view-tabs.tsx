@@ -192,41 +192,32 @@ function SavedViewTab<TSettings>({
     { label: 'Duplicate', icon: <CopyIcon aria-hidden />, onClick: onDuplicate },
     { label: 'Delete view', icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
   ];
-  const tabClassName = cn(selected ? selectedTabClass : restingTabClass, 'gap-1.5');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const changeMenuOpen = (open: boolean) => {
+    if (selected) setMenuOpen(open);
+    else if (open) onSelect();
+  };
 
   return (
     <ContextMenu>
-      {selected ? (
-        <DropdownMenu>
-          <ContextMenu.Trigger
-            render={
-              <DropdownMenu.Trigger
-                render={<button type="button" aria-pressed className={tabClassName} aria-haspopup="menu" />}
-              />
-            }
-          >
-            <SavedViewTabIcon />
-            <span className="max-w-48 truncate">{view.name}</span>
-          </ContextMenu.Trigger>
-          <DropdownMenu.Content align="start">
-            {actions.map(action => (
-              <Fragment key={action.label}>
-                {action.destructive && <DropdownMenu.Separator />}
-                <DropdownMenu.Item variant={action.destructive ? 'destructive' : 'default'} onClick={action.onClick}>
-                  {action.icon}
-                  {action.label}
-                </DropdownMenu.Item>
-              </Fragment>
-            ))}
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      ) : (
-        <HoverCard>
+      <DropdownMenu open={selected && menuOpen} onOpenChange={changeMenuOpen}>
+        <HoverCard open={!selected && previewOpen} onOpenChange={setPreviewOpen}>
           <ContextMenu.Trigger
             render={
               <HoverCardTrigger
                 delay={400}
-                render={<button type="button" aria-pressed={false} className={tabClassName} onClick={onSelect} />}
+                render={
+                  <DropdownMenu.Trigger
+                    render={
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        className={cn(selected ? selectedTabClass : restingTabClass, 'gap-1.5')}
+                      />
+                    }
+                  />
+                }
               />
             }
           >
@@ -237,7 +228,18 @@ function SavedViewTab<TSettings>({
             <SavedViewSummary filters={view.filters} fields={fields} operators={operators} settings={settings} />
           </HoverCardContent>
         </HoverCard>
-      )}
+        <DropdownMenu.Content align="start">
+          {actions.map(action => (
+            <Fragment key={action.label}>
+              {action.destructive && <DropdownMenu.Separator />}
+              <DropdownMenu.Item variant={action.destructive ? 'destructive' : 'default'} onClick={action.onClick}>
+                {action.icon}
+                {action.label}
+              </DropdownMenu.Item>
+            </Fragment>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu>
       <ContextMenu.Content>
         {actions.map(action => (
           <Fragment key={action.label}>

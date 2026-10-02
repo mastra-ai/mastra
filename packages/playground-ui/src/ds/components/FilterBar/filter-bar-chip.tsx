@@ -100,6 +100,11 @@ export const formatValue = (value: FilterBarValue, field: FilterBarField | undef
   return Array.isArray(value) ? value.map(label).join(', ') : label(value);
 };
 
+const formatValueCompact = (value: FilterBarValue, field: FilterBarField | undefined): string => {
+  if (!Array.isArray(value) || value.length < 2) return formatValue(value, field);
+  return `${formatValue(value.slice(0, 1), field)} +${value.length - 1}`;
+};
+
 type ChipContext = {
   item: FilterBarItem;
   index: number;
@@ -564,7 +569,7 @@ function ValueEditor() {
     <SegmentCombobox<FilterBarOption>
       segment="value"
       ariaLabel="Value"
-      label={formatValue(chip.item.value, chip.field) || '…'}
+      label={formatValueCompact(chip.item.value, chip.field) || '…'}
       items={step.options}
       itemToString={optionLabel}
       filter={null}

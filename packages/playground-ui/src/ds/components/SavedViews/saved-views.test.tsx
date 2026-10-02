@@ -150,6 +150,19 @@ describe('SavedViews', () => {
     expect(screen.queryByRole('button', { name: 'Edit view' })).toBeNull();
   });
 
+  it('keeps focus on a tab when it becomes the active view', async () => {
+    render(<Page />);
+    await createView('Errors');
+    fireEvent.click(tab('All'));
+
+    const errors = tab('Errors');
+    errors.focus();
+    fireEvent.click(errors);
+
+    expect(errors.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(errors);
+  });
+
   it('renames from the context menu and restores the name on Escape', async () => {
     render(<Page />);
     await createView('Errors');
