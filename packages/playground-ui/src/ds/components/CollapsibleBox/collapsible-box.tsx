@@ -13,7 +13,7 @@ export interface CollapsibleBoxProps extends ComponentProps<'div'> {
 
 /**
  * Clips its content to `state.collapsedHeight` and fades the bottom when it overflows.
- * Clicking the faded area expands the box. The overflow is measured on the rendered
+ * While clipped, clicking anywhere on the box expands it; the content is not interactive until then. The overflow is measured on the rendered
  * content, so it tracks resizes and late content.
  */
 export function CollapsibleBox({ state, expandLabel, children, className, style, ...props }: CollapsibleBoxProps) {
@@ -39,7 +39,7 @@ export function CollapsibleBox({ state, expandLabel, children, className, style,
     <div
       data-slot="collapsible-box"
       {...(showClipHint ? { 'data-clipped': '' } : {})}
-      className={cn('relative min-w-0', className)}
+      className={cn('min-w-0', className, 'relative')}
       style={style}
       {...props}
     >
@@ -54,7 +54,7 @@ export function CollapsibleBox({ state, expandLabel, children, className, style,
       {showClipHint && (
         <div
           data-slot="collapsible-box-fade"
-          className="absolute inset-x-0 bottom-0 flex h-20 max-h-[40%] cursor-pointer items-end justify-center pb-2"
+          className="absolute inset-0 z-10 flex cursor-pointer items-end justify-center pb-2"
           onClick={() => setExpanded(true)}
         >
           {expandLabel && (

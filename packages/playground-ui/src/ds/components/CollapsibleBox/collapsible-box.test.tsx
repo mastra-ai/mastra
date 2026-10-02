@@ -71,6 +71,15 @@ describe('CollapsibleBox', () => {
       );
     }
 
+    function CollapsibleBoxWithClass({ className, children }: { className: string; children: string }) {
+      const state = useCollapsibleBox();
+      return (
+        <CollapsibleBox state={state} className={className}>
+          {children}
+        </CollapsibleBox>
+      );
+    }
+
     it('expands the box when clicked', () => {
       mockScrollHeight(1000);
       render(<Bare />);
@@ -85,6 +94,37 @@ describe('CollapsibleBox', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
       expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('covers the whole box, anchored to the box root even when a consumer passes `static`', () => {
+      mockScrollHeight(1000);
+      render(<CollapsibleBoxWithClass className="static">content</CollapsibleBoxWithClass>);
+      expect(fade()?.classList.contains('inset-0')).toBe(true);
+      expect(fade()?.parentElement).toBe(box());
+      expect(box()?.classList.contains('relative')).toBe(true);
+      expect(box()?.classList.contains('static')).toBe(false);
+    });
+
+    it('catches clicks over the content and expands, then lets them through once expanded', () => {
+      mockScrollHeight(1000);
+      const onContentClick = vi.fn();
+      function Clickable() {
+        const state = useCollapsibleBox();
+        return (
+          <CollapsibleBox state={state}>
+            <button type="button" onClick={onContentClick}>
+              Span row
+            </button>
+          </CollapsibleBox>
+        );
+      }
+      render(<Clickable />);
+      // jsdom has no hit testing: the overlay is what sits on top of the content.
+      fireEvent.click(fade() as HTMLElement);
+      expect(onContentClick).not.toHaveBeenCalled();
+      expect(fade()).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Span row' }));
+      expect(onContentClick).toHaveBeenCalledTimes(1);
     });
 
     it('is not rendered when the content fits', () => {
