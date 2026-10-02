@@ -80,9 +80,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based).
-   * If undefined, uses full replay (subscribeWithReplay).
-   * If specified, uses efficient indexed replay (subscribeFromOffset).
+   * Inclusive, zero-based PubSub event index to replay from.
+   * If undefined, replays all available cached events before receiving live events.
+   * On transports with numeric offset support, replays from this index. On transports
+   * without numeric offset support, starts with new live events instead.
+   * An offset past retained history waits for later live events.
    */
   offset?: number;
   /**
