@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -7,7 +7,7 @@ import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 export const listOrganizationInvitationsInputSchema = z.object({
   cursor: z.string().optional().describe('Pagination cursor returned by a previous request. Omit for the first page.'),
   limit: z.number().int().min(1).max(500).optional(),
-  organization_id: z.string(),
+  organization_id: z.string().min(1),
   status: z.enum(['pending', 'accepted', 'revoked', 'expired']).optional(),
   email_address: z.string().optional(),
   order_by: z.string().optional(),
@@ -20,7 +20,7 @@ const ResourceSchema = z
     email_address: z.string(),
     organization_id: z.string().optional(),
     role: z.string().optional(),
-    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).optional(),
+    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).or(z.string()).optional(),
     created_at: z.number().optional(),
     updated_at: z.number().optional(),
   })
@@ -42,8 +42,8 @@ export function listOrganizationInvitationsTool(proxy: PlatformProxy) {
     outputSchema: listOrganizationInvitationsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationInvitationsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : Number.parseInt(input.cursor, 10);
-      if (!Number.isInteger(offset) || offset < 0)
+      const offset = input.cursor === undefined ? 0 : /^\d+$/.test(input.cursor) ? Number(input.cursor) : Number.NaN;
+      if (!Number.isSafeInteger(offset) || offset < 0)
         throw new platformProxy.ActionError({
           type: 'invalid_cursor',
           message: 'Cursor must be a non-negative integer.',

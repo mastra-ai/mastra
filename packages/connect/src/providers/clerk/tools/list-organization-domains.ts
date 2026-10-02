@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -11,10 +11,14 @@ const EnrollmentModeSchema = z.enum([
   'enterprise_sso',
 ]);
 
+const EnrollmentModeSchemaWidened = z
+  .enum(['manual_invitation', 'automatic_invitation', 'automatic_suggestion', 'enterprise_sso'])
+  .or(z.string());
+
 export const listOrganizationDomainsInputSchema = z.object({
   cursor: z.string().optional().describe('Pagination cursor returned by a previous request. Omit for the first page.'),
   limit: z.number().int().min(1).max(500).optional(),
-  organization_id: z.string(),
+  organization_id: z.string().min(1),
   verified: z.boolean().optional(),
   enrollment_mode: EnrollmentModeSchema.optional(),
 });
@@ -25,12 +29,17 @@ const ResourceSchema = z
     object: z.string().optional(),
     organization_id: z.string().optional(),
     name: z.string(),
-    enrollment_mode: EnrollmentModeSchema.optional(),
+    enrollment_mode: EnrollmentModeSchemaWidened.optional(),
     affiliation_verification: z
       .object({ attempts: z.number().optional(), status: z.string().optional() })
       .passthrough()
+      .nullable()
       .optional(),
-    verification: z.object({ attempts: z.number().optional(), status: z.string().optional() }).passthrough().optional(),
+    verification: z
+      .object({ attempts: z.number().optional(), status: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
     verified: z.boolean().optional(),
     created_at: z.number().optional(),
     updated_at: z.number().optional(),
@@ -53,8 +62,8 @@ export function listOrganizationDomainsTool(proxy: PlatformProxy) {
     outputSchema: listOrganizationDomainsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationDomainsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : Number.parseInt(input.cursor, 10);
-      if (!Number.isInteger(offset) || offset < 0)
+      const offset = input.cursor === undefined ? 0 : /^\d+$/.test(input.cursor) ? Number(input.cursor) : Number.NaN;
+      if (!Number.isSafeInteger(offset) || offset < 0)
         throw new platformProxy.ActionError({
           type: 'invalid_cursor',
           message: 'Cursor must be a non-negative integer.',
