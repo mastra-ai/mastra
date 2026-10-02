@@ -1,5 +1,4 @@
-import { useWorkflows, useProcessors } from '@mastra/react/hooks';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import type { TargetRegistries } from '@/domains/experiments/utils/target-name';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 

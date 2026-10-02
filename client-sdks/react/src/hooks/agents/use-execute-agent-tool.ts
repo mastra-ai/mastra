@@ -1,7 +1,6 @@
 import { RequestContext } from '@mastra/core/di';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface ExecuteToolInput {
   agentId: string;
@@ -18,16 +17,7 @@ export const useExecuteAgentTool = () => {
       Object.entries(playgroundRequestContext ?? {}).forEach(([key, value]) => {
         requestContext.set(key, value);
       });
-      try {
-        const agent = client.getAgent(agentId);
-        const response = await agent.executeTool(toolId, { data: input, requestContext });
-
-        return response;
-      } catch (error) {
-        toast.error('Error executing agent tool');
-        console.error('Error executing tool:', error);
-        throw error;
-      }
+      return client.getAgent(agentId).executeTool(toolId, { data: input, requestContext });
     },
   });
 };

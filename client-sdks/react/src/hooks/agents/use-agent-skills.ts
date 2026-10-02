@@ -1,7 +1,7 @@
 import type { StoredAgentSkillConfig, UpdateStoredAgentParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 import { useStoredAgent } from './use-stored-agents';
 
 /**

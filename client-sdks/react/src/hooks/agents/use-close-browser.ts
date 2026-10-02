@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 interface CloseBrowserParams {
   agentId: string;

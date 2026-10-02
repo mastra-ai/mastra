@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useAgent = (agentId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();

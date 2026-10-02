@@ -1,7 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { useWorkflows, useProcessors } from '@mastra/react/hooks';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 

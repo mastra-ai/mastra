@@ -1,7 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { useWorkflows } from '@mastra/react/hooks';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useWorkflows, useAgents } from '@mastra/react/hooks';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';

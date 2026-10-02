@@ -1,7 +1,16 @@
-import type { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
-
+import type {
+  MastraClient,
+  ReorderModelListParams,
+  UpdateModelInModelListParams,
+  UpdateModelParams,
+} from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UseMutationResult } from '@tanstack/react-query';
+
+import { useMastraClient } from '../../mastra-client-context';
+
+type Agent = ReturnType<MastraClient['getAgent']>;
+type ModelUpdateResponse = Awaited<ReturnType<Agent['updateModel']>>;
 
 export const useAgents = (options?: { enabled?: boolean }, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
@@ -13,7 +22,9 @@ export const useAgents = (options?: { enabled?: boolean }, requestContext?: Reco
   });
 };
 
-export const useUpdateAgentModel = (agentId: string) => {
+export const useUpdateAgentModel = (
+  agentId: string,
+): UseMutationResult<ModelUpdateResponse, Error, UpdateModelParams> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -28,7 +39,9 @@ export const useUpdateAgentModel = (agentId: string) => {
   });
 };
 
-export const useReorderModelList = (agentId: string) => {
+export const useReorderModelList = (
+  agentId: string,
+): UseMutationResult<ModelUpdateResponse, Error, ReorderModelListParams> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -43,7 +56,9 @@ export const useReorderModelList = (agentId: string) => {
   });
 };
 
-export const useUpdateModelInModelList = (agentId: string) => {
+export const useUpdateModelInModelList = (
+  agentId: string,
+): UseMutationResult<ModelUpdateResponse, Error, UpdateModelInModelListParams> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -59,7 +74,7 @@ export const useUpdateModelInModelList = (agentId: string) => {
   });
 };
 
-export const useResetAgentModel = (agentId: string) => {
+export const useResetAgentModel = (agentId: string): UseMutationResult<ModelUpdateResponse, Error, void> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 

@@ -1,7 +1,7 @@
 import type { CreateStoredAgentParams, UpdateStoredAgentParams, ListStoredAgentsParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isModelNotAllowedError } from '@/domains/agent-builder/services/is-model-not-allowed';
+import { useMastraClient } from '../../mastra-client-context';
+import { isModelNotAllowedError } from './is-model-not-allowed';
 
 export const useStoredAgents = (params?: ListStoredAgentsParams, options?: { enabled?: boolean }) => {
   const client = useMastraClient();

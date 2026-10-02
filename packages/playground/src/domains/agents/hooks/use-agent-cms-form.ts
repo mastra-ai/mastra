@@ -2,6 +2,7 @@ import { MastraClientError, type CreateStoredAgentParams } from '@mastra/client-
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
+import { useStoredAgentMutations } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -27,7 +28,6 @@ import {
   type PromptBlockPublicationStatus,
   type UnresolvedPromptBlock,
 } from '../utils/instruction-blocks-runtime';
-import { useStoredAgentMutations } from './use-stored-agents';
 
 type CreateOptions = {
   mode: 'create';

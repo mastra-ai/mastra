@@ -1,8 +1,7 @@
-import { useBrowserSessionProbe } from '@mastra/react/hooks';
+import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
-import { useCloseBrowser } from '../hooks/use-close-browser';
 import { createBrowserFrameStore } from './browser-frame-store';
 import { BrowserFrameStoreContext, BrowserSessionContext } from './browser-session-context';
 import type { BrowserViewMode } from './browser-session-context';

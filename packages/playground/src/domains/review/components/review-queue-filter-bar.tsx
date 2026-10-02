@@ -3,12 +3,11 @@ import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
-import { useWorkflows, useProcessors } from '@mastra/react/hooks';
+import { useWorkflows, useProcessors, useAgents } from '@mastra/react/hooks';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import {
   DATASET_TARGET_TYPES,
   isDatasetTargetType,

@@ -7,8 +7,8 @@ import type {
   ActivateAgentVersionResponse,
   DeleteAgentVersionResponse,
 } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation, useQueryClient, skipToken } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
 
