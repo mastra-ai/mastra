@@ -191,5 +191,24 @@
     "@mastra/s3": "0.6.3",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20261001-182907",
+    "calm-owls-hold",
+    "durable-processor-approval-concurrency",
+    "empty-pans-wash",
+    "famous-rice-give",
+    "giant-rice-tie",
+    "google-analytics-provider",
+    "lucky-trams-lick",
+    "mesa-sdk-0-49",
+    "perky-points-repair",
+    "preserve-thinking-signatures",
+    "quiet-threads-wait",
+    "rare-ants-speak",
+    "salty-bikes-add",
+    "sweet-flies-dig",
+    "sweet-lies-dress",
+    "tender-aliens-melt",
+    "tidy-words-smile"
+  ]
 }
