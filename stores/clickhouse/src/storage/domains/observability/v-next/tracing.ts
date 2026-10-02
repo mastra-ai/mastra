@@ -44,7 +44,7 @@ import {
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
-import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 const BRANCH_SPAN_TYPE_SQL_LIST = BRANCH_SPAN_TYPES.map(t => `'${t}'`).join(', ');
 
@@ -515,15 +515,25 @@ export async function listBranches(
   const dataResult = await client.query({
     query: `
       SELECT * FROM (
+        -- Deferred join: pick the page's sort keys from a narrow sort, then
+        -- read full rows only for those keys. LIMIT 1 BY disables ClickHouse's
+        -- own lazy materialization, so sorting SELECT * directly would carry
+        -- every matching branch's payload columns through the sort.
         SELECT *
         FROM ${TABLE_TRACE_BRANCHES} b
-        ${whereClause}
-        ORDER BY b.dedupeKey
+        WHERE (b.spanType, b.startedAt, b.traceId, b.dedupeKey) IN (
+          SELECT b.spanType, b.startedAt, b.traceId, b.dedupeKey
+          FROM ${TABLE_TRACE_BRANCHES} b
+          ${whereClause}
+          ORDER BY b.${sortField} ${sortDirection}, b.dedupeKey ASC
+          LIMIT 1 BY b.dedupeKey
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
+        )
+        ORDER BY b.${sortField} ${sortDirection}, b.dedupeKey ASC
         LIMIT 1 BY b.dedupeKey
       )
       ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
-      LIMIT {limit:UInt32}
-      OFFSET {offset:UInt32}
     `,
     query_params: {
       ...params,
@@ -564,6 +574,9 @@ async function queryBranchesAfterCursor(
   limit: number,
   cursorId: string,
 ): Promise<BranchDeltaRow[]> {
+  // trace_branches drives the scan and is narrowed to the delta keys by its
+  // full sort key; only the small delta slice is built into the hash table.
+  const deltaKeys = `SELECT spanType, startedAt, traceId, dedupeKey FROM ${TABLE_TRACE_BRANCHES_DELTA} WHERE cursorId > {afterCursor:UInt64}`;
   return (await (
     await client.query({
       query: `
@@ -575,14 +588,18 @@ async function queryBranchesAfterCursor(
           b.spanId AS spanId,
           b.dedupeKey AS dedupeKey,
           toString(d.cursorId) AS cursorId
-        FROM ${TABLE_TRACE_BRANCHES_DELTA} d
-        INNER JOIN ${TABLE_TRACE_BRANCHES} b
+        FROM ${TABLE_TRACE_BRANCHES} b
+        INNER JOIN (
+          SELECT cursorId, spanType, startedAt, traceId, spanId, dedupeKey
+          FROM ${TABLE_TRACE_BRANCHES_DELTA}
+          WHERE cursorId > {afterCursor:UInt64}
+        ) d
           ON b.spanType = d.spanType
          AND b.startedAt = d.startedAt
          AND b.traceId = d.traceId
          AND b.spanId = d.spanId
          AND b.dedupeKey = d.dedupeKey
-        ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+        ${appendWhere(whereClause, `(b.spanType, b.startedAt, b.traceId, b.dedupeKey) IN (${deltaKeys})`)}
         ORDER BY d.cursorId ASC
         LIMIT {fetchLimit:UInt32}
       `,
@@ -597,23 +614,28 @@ async function queryBranchesAfterCursor(
   ).json()) as BranchDeltaRow[];
 }
 
+/**
+ * Newest delta cursor whose branch matches the filters. Without filters this
+ * is the stream head; with filters, the branch scan is bounded below by the
+ * oldest `startedAt` still in the delta table.
+ */
 async function getDeltaCursor(
   client: ClickHouseClient,
   whereClause: string,
   params: Record<string, unknown>,
 ): Promise<string> {
+  if (!whereClause) return getStreamHeadCursor(client);
+
   const rows = (await (
     await client.query({
       query: `
         SELECT toString(max(d.cursorId)) AS cursorId
         FROM ${TABLE_TRACE_BRANCHES_DELTA} d
-        INNER JOIN ${TABLE_TRACE_BRANCHES} b
-          ON b.spanType = d.spanType
-         AND b.startedAt = d.startedAt
-         AND b.traceId = d.traceId
-         AND b.spanId = d.spanId
-         AND b.dedupeKey = d.dedupeKey
-        ${whereClause}
+        WHERE (d.spanType, d.startedAt, d.traceId, d.spanId, d.dedupeKey) IN (
+          SELECT b.spanType, b.startedAt, b.traceId, b.spanId, b.dedupeKey
+          FROM ${TABLE_TRACE_BRANCHES} b
+          ${appendWhere(whereClause, `b.startedAt >= (SELECT min(startedAt) FROM ${TABLE_TRACE_BRANCHES_DELTA})`)}
+        )
       `,
       query_params: params,
       format: 'JSONEachRow',
@@ -626,15 +648,7 @@ async function getDeltaCursor(
     return cursorId;
   }
 
-  const streamRows = (await (
-    await client.query({
-      query: `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_TRACE_BRANCHES_DELTA}`,
-      format: 'JSONEachRow',
-      clickhouse_settings: CH_SETTINGS,
-    })
-  ).json()) as Array<{ cursorId?: string | null }>;
-
-  return streamRows[0]?.cursorId ?? '0';
+  return getStreamHeadCursor(client);
 }
 
 async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
