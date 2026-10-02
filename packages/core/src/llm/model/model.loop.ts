@@ -1,5 +1,4 @@
-import { stepCountIs } from '@internal/ai-sdk-v5';
-import type { ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StopCondition, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -17,6 +16,12 @@ import { delay } from '../../utils';
 import type { ModelLoopStreamArgs } from './model.loop.types';
 import { resolveResponseModelId } from './server-side-fallback';
 import type { MastraModelOptions } from './shared.types';
+
+// Like `stepCountIs`, but processor retry steps re-run the same step, so they
+// do not count against `maxSteps`. Retries stay bounded by maxProcessorRetries.
+function llmStepCountIs(maxSteps: number): StopCondition<any> {
+  return ({ steps }) => steps.filter(step => (step.finishReason as string) !== 'retry').length >= maxSteps;
+}
 
 export class MastraLLMVNext extends MastraBase {
   #models: ModelManagerModelConfig[];
@@ -158,9 +163,9 @@ export class MastraLLMVNext extends MastraBase {
     let stopWhenToUse;
     if (maxSteps && typeof maxSteps === 'number') {
       const userConditions = stopWhen ? (Array.isArray(stopWhen) ? stopWhen : [stopWhen]) : [];
-      stopWhenToUse = [stepCountIs(maxSteps), ...userConditions];
+      stopWhenToUse = [llmStepCountIs(maxSteps), ...userConditions];
     } else {
-      stopWhenToUse = stopWhen ?? stepCountIs(5);
+      stopWhenToUse = stopWhen ?? llmStepCountIs(5);
     }
 
     const messages = messageList.get.all.aiV5.model();

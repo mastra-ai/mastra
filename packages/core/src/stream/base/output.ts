@@ -544,6 +544,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
@@ -577,6 +578,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               for (const r of reprocessed) {
                 if (r.blocked) {

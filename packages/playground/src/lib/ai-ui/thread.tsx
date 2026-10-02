@@ -205,6 +205,7 @@ export const Thread = ({
       <ChatShell
         className="h-full"
         scroller={{
+          autoScroll: true,
           defaultScrollPosition: 'last-anchor',
           onReachStart: onLoadPrevious,
           preserveScrollOnPrepend: Boolean(onLoadPrevious),
@@ -278,7 +279,7 @@ export const Thread = ({
               className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
             >
               {landingShown ? null : <ChatShell.ScrollButton />}
-              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+              <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
                 {landingShown ? (
                   <ThreadWelcome agentName={agentName} />
                 ) : (
