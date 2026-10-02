@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { HTTPException } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
@@ -65,6 +66,32 @@ describe('Hono auth middleware helper', () => {
     });
     expect(authenticated.status).toBe(200);
     await expect(authenticated.json()).resolves.toEqual({ userId: 'user-1' });
+  });
+
+  it('preserves an explicit HTTPException thrown on authentication service failure', async () => {
+    const mastra = new Mastra({ logger: false });
+    const originalGetServer = mastra.getServer.bind(mastra);
+    mastra.getServer = () =>
+      ({
+        ...originalGetServer(),
+        auth: {
+          authenticateToken: async () => {
+            throw new HTTPException(503, { message: 'Authentication service unavailable' });
+          },
+        },
+      }) as any;
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    adapter.registerContextMiddleware();
+
+    app.get('/custom/protected', createAuthMiddleware({ mastra }), c => c.json({ ok: true }));
+
+    const response = await app.request('http://localhost/custom/protected', {
+      headers: { Authorization: 'Bearer any-token' },
+    });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: 'Authentication service unavailable' });
   });
 
   it('allows opting a raw Hono route out with requiresAuth false', async () => {
