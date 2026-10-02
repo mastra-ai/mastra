@@ -1834,6 +1834,7 @@ export class Workflow<
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
   #nestedWorkflowInput?: TInput;
+  #nestedWorkflowInitialState?: TState;
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -2969,7 +2970,9 @@ export class Workflow<
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
         status: 'pending',
-        value: {},
+        // A nested run restarted before its first step only has this snapshot to rebuild from,
+        // so it must carry the parent's state alongside the input.
+        value: this.#nestedWorkflowInitialState ?? {},
         // @ts-expect-error - context type mismatch
         context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
         activePaths: [],
@@ -3130,6 +3133,7 @@ export class Workflow<
 
     if (!restart && !isResume) {
       this.#nestedWorkflowInput = inputData;
+      this.#nestedWorkflowInitialState = state;
     }
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);

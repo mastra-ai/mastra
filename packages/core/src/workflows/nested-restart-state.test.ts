@@ -3,11 +3,12 @@
  * run's workflow state back to the parent, like start() and resume() do.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
 const stateSchema = z.object({ log: z.array(z.string()) });
@@ -98,6 +99,56 @@ describe('nested workflow restart state', () => {
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.result).toEqual({ log: ['first', 'second'] });
+    }
+  });
+
+  it('keeps the parent state when the nested run restarts before its first step', async () => {
+    const storage1 = new MockStore();
+    const store1 = (await storage1.getStore('workflows'))!;
+    let pendingNested: unknown;
+    const persist = store1.persistWorkflowSnapshot.bind(store1);
+    vi.spyOn(store1, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      if (args.workflowName === 'nested' && args.snapshot.status === 'pending') {
+        pendingNested = JSON.parse(JSON.stringify(args.snapshot));
+      }
+      return persist(args);
+    });
+    let markRunning!: () => void;
+    const running = new Promise<void>(r => (markRunning = r));
+    const p1 = build(async () => {
+      markRunning();
+      await new Promise(() => {}); // process "dies" here
+    });
+    new Mastra({ logger: false, storage: storage1, workflows: { parent: p1.parent, nested: p1.nested } });
+
+    const run1 = await p1.parent.createRun();
+    void run1.start({ inputData: {}, initialState: { log: ['parent'] } });
+    await running;
+
+    // Recreate the crash window where the nested run only has its pending snapshot.
+    const storage2 = new MockStore();
+    const store2 = (await storage2.getStore('workflows'))!;
+    const parentSnapshot = await store1.loadWorkflowSnapshot({ workflowName: 'parent', runId: run1.runId });
+    await store2.persistWorkflowSnapshot({
+      workflowName: 'parent',
+      runId: run1.runId,
+      snapshot: JSON.parse(JSON.stringify(parentSnapshot)),
+    });
+    expect(pendingNested).toBeDefined();
+    await store2.persistWorkflowSnapshot({
+      workflowName: 'nested',
+      runId: run1.runId,
+      snapshot: pendingNested as WorkflowRunState,
+    });
+
+    const p2 = build(async () => {});
+    new Mastra({ logger: false, storage: storage2, workflows: { parent: p2.parent, nested: p2.nested } });
+
+    const result = await (await p2.parent.createRun({ runId: run1.runId })).restart();
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ log: ['parent', 'first', 'second'] });
     }
   });
 });
