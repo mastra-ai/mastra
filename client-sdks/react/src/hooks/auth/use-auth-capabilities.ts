@@ -1,9 +1,9 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
-import type { AuthCapabilities } from '../types';
 import { getClientQueryKey } from './get-client-query-key';
+import type { AuthCapabilities } from './types';
 
 /**
  * Makes a request to the auth capabilities endpoint.
@@ -43,8 +43,7 @@ export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise
  *
  * @example
  * ```tsx
- * import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { isAuthenticated } from '@/domains/auth/types';
+ * import { useAuthCapabilities } from '@mastra/react/hooks';
  *
  * function AuthStatus() {
  *   const { data: capabilities, isLoading } = useAuthCapabilities();

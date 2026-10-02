@@ -8,6 +8,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useCurrentUser } from '@mastra/react/hooks';
 import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -19,7 +20,6 @@ import {
 } from '@/domains/agent-builder/components/skill-list/skill-builder-list';
 import { useBuilderRegistries } from '@/domains/agent-builder/hooks/use-builder-registries';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsPage() {

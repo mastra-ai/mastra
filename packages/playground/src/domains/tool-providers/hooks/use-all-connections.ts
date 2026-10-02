@@ -1,9 +1,9 @@
 import { useMastraClient } from '@mastra/react';
+import { isUnauthenticatedError, useCurrentUser } from '@mastra/react/hooks';
 import { useQueries } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { useToolProviders } from './use-tool-providers';
-import { isUnauthenticatedError, useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 /**
  * Stale time long enough to avoid refetching on every picker re-render but

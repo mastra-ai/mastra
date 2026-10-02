@@ -1,7 +1,6 @@
 import { useMastraClient } from '@mastra/react';
+import { isUnauthenticatedError, useCurrentUser } from '@mastra/react/hooks';
 import { useQuery } from '@tanstack/react-query';
-
-import { isUnauthenticatedError, useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface UseExistingConnectionsOptions {
   /**

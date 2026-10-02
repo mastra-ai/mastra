@@ -1,8 +1,8 @@
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
-import type { CurrentUser } from '../types';
 import { fetchWithRefresh } from './fetch-with-refresh';
+import type { CurrentUser } from './types';
 
 const AUTH_TRANSIENT_MAX_RETRIES = 3;
 const AUTH_TRANSIENT_MAX_BACKOFF_MS = 8_000;
@@ -29,7 +29,7 @@ export function isUnauthenticatedError(error: unknown): boolean {
  *
  * @example
  * ```tsx
- * import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+ * import { useCurrentUser } from '@mastra/react/hooks';
  *
  * function UserMenu() {
  *   const { data: user, isLoading } = useCurrentUser();

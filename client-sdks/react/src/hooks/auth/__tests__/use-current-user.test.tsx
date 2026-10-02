@@ -1,11 +1,12 @@
-import { MastraReactProvider } from '@mastra/react';
+// @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useCurrentUser } from '../use-current-user';
-import { server } from '@/test/msw-server';
 
 /**
  * Guards the transient-vs-terminal retry contract for /api/auth/me.

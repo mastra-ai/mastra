@@ -1,10 +1,9 @@
 import type { MastraClient } from '@mastra/client-js';
-import { makeSSOLoginRequest } from '@mastra/playground-ui/domains/auth/services/sso-login';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
-import type { LogoutResponse } from '../types';
-import { clearDraftsOnLogout } from '@/domains/conversation/context/thread-draft-state';
+import { makeSSOLoginRequest } from './sso-login';
+import type { LogoutResponse } from './types';
 
 /**
  * Hook to initiate SSO login.
@@ -13,7 +12,7 @@ import { clearDraftsOnLogout } from '@/domains/conversation/context/thread-draft
  *
  * @example
  * ```tsx
- * import { useSSOLogin } from '@/domains/auth/hooks/use-auth-actions';
+ * import { useSSOLogin } from '@mastra/react/hooks';
  *
  * function SSOLoginButton() {
  *   const { mutate: login, isPending } = useSSOLogin();
@@ -50,7 +49,7 @@ export function useSSOLogin() {
  *
  * @example
  * ```tsx
- * import { useLogout } from '@/domains/auth/hooks/use-auth-actions';
+ * import { useLogout } from '@mastra/react/hooks';
  *
  * function LogoutButton({ userId }: { userId: string }) {
  *   const { mutate: logout, isPending } = useLogout();
@@ -104,17 +103,22 @@ export async function makeLogoutRequest(client: Pick<MastraClient, 'options'>): 
   return response.json();
 }
 
-export function useLogout() {
+export interface UseLogoutOptions {
+  /**
+   * Runs once the server has ended the session, before the mutation resolves.
+   * Failures are ignored so cleanup never turns a completed sign-out into an error.
+   */
+  onLoggedOut?: (variables: { userId: string }) => Promise<void>;
+}
+
+export function useLogout({ onLoggedOut }: UseLogoutOptions = {}) {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation<LogoutResponse, Error, { userId: string }>({
-    mutationFn: async ({ userId }) => {
+    mutationFn: async variables => {
       const response = await makeLogoutRequest(client);
-      // Clear only once the session has ended, so a failed sign-out keeps the user's drafts.
-      // Cleanup is best-effort and must not turn a completed sign-out into an error.
-      const scope = JSON.stringify([client.options.baseUrl, client.options.apiPrefix, userId]);
-      await clearDraftsOnLogout(scope).catch(() => {});
+      await onLoggedOut?.(variables).catch(() => {});
       return response;
     },
     onSuccess: () => {

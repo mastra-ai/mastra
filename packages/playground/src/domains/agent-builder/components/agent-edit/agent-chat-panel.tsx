@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useAgentMessages } from '@mastra/react/hooks';
+import { useAgentMessages, useCurrentUser } from '@mastra/react/hooks';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -15,7 +15,6 @@ import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 interface AgentChatPanelProviderProps {
   agentId: string;

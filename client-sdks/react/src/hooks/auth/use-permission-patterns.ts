@@ -1,10 +1,10 @@
 import type { PermissionPattern } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 
-import { isAuthenticated } from '../types';
 import { getClientQueryKey } from './get-client-query-key';
+import { isAuthenticated } from './types';
 import { useAuthCapabilities } from './use-auth-capabilities';
 
 /**

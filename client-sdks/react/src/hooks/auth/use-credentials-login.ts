@@ -1,6 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export type CredentialsLoginRequest = {
   email: string;
@@ -23,7 +23,7 @@ export type CredentialsLoginResponse = {
  *
  * @example
  * ```tsx
- * import { useCredentialsLogin } from '@/domains/auth/hooks/use-credentials-login';
+ * import { useCredentialsLogin } from '@mastra/react/hooks';
  *
  * function LoginForm() {
  *   const { mutate: login, isPending, error } = useCredentialsLogin();

@@ -1,12 +1,13 @@
-import { MastraReactProvider } from '@mastra/react';
+// @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useCredentialsLogin } from '../use-credentials-login';
 import { useCredentialsSignUp } from '../use-credentials-signup';
-import { server } from '@/test/msw-server';
 
 /**
  * Tests for credentials auth hooks (sign-in, sign-up).
