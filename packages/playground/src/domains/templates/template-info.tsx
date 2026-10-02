@@ -24,14 +24,12 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
   return (
     <>
       <div className={cn('mt-5 grid items-center')}>
-        <div
-          className={cn(
-            'flex items-center gap-3 text-title',
-            '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50',
-            {
-              '[&>svg]:opacity-20': isLoading,
-            },
-          )}
+        <Txt
+          as="div"
+          variant="title"
+          className={cn('flex items-center gap-3', '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50', {
+            '[&>svg]:opacity-20': isLoading,
+          })}
         >
           <PackageIcon />
           <h2
@@ -41,7 +39,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           >
             {isLoading ? <>&nbsp;</> : title}
           </h2>
-        </div>
+        </Txt>
       </div>
       <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
@@ -67,28 +65,33 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
                     A new Git branch will be created
                   </Txt>
                 </div>
-                <div className="space-y-1 text-caption text-muted-foreground">
+                <Txt as="div" variant="caption" tone="muted" className="space-y-1">
                   <div>
-                    <span className="font-medium">Branch name:</span> <InlineCode>{branchName}</InlineCode>
+                    <Txt as="span" variant="column">
+                      Branch name:
+                    </Txt>{' '}
+                    <InlineCode>{branchName}</InlineCode>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
                   </div>
-                </div>
+                </Txt>
               </div>
             </div>
           )}
 
           {githubUrl && (
-            <a
+            <Txt
+              as="a"
+              variant="body"
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={cn(quietTextHover, 'mt-auto flex items-center gap-2 text-body')}
+              className={cn(quietTextHover, 'mt-auto flex items-center gap-2')}
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}
-            </a>
+            </Txt>
           )}
         </div>
 

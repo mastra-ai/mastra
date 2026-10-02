@@ -604,20 +604,23 @@ function IntakeSourceSwitch({
   return (
     <div role="group" aria-label="Intake source" className="flex items-center gap-1">
       {INTAKE_SOURCES.filter(source => available.includes(source.id)).map(source => (
-        <button
+        <Txt
+          as="button"
+          variant="meta"
+          tone="ink"
           key={source.id}
           type="button"
           aria-pressed={active === source.id}
           onClick={() => onSelect(source.id)}
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-meta transition',
+            'rounded-full border px-2.5 py-0.5 transition',
             active === source.id
-              ? 'border-badge-green-indicator bg-fill text-foreground'
-              : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
+              ? 'border-badge-green-indicator bg-fill'
+              : 'border-border bg-transparent hover:text-foreground',
           )}
         >
           {source.label}
-        </button>
+        </Txt>
       ))}
     </div>
   );

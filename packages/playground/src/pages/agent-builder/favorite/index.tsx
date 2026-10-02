@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -137,26 +138,32 @@ export default function AgentBuilderFavoritePage() {
               <ActionRow.Start>
                 {features.skills && (
                   <div className="flex overflow-hidden rounded-lg border border-border">
-                    <button
+                    <Txt
+                      as="button"
+                      variant="column"
+                      tone="ink"
                       onClick={() => setTab('agents')}
                       className={cn(
-                        'px-3 py-1.5 text-column',
+                        'px-3 py-1.5',
                         controlStateColorTransition,
-                        tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                        tab === 'agents' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
                       Agents
-                    </button>
-                    <button
+                    </Txt>
+                    <Txt
+                      as="button"
+                      variant="column"
+                      tone="ink"
                       onClick={() => setTab('skills')}
                       className={cn(
-                        'px-3 py-1.5 text-column',
+                        'px-3 py-1.5',
                         controlStateColorTransition,
-                        tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                        tab === 'skills' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
                       Skills
-                    </button>
+                    </Txt>
                   </div>
                 )}
                 <div className="max-w-120 flex-1">

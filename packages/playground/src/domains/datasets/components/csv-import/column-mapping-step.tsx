@@ -47,7 +47,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="flex flex-col gap-4">
-        <div className="text-body text-muted-foreground">Drag columns to assign them to dataset fields</div>
+        <Txt as="div" variant="body" tone="muted">
+          Drag columns to assign them to dataset fields
+        </Txt>
 
         {ZONES.map(zone => {
           const columnsInZone = getColumnsForZone(zone.id);
@@ -89,11 +91,14 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                       <Draggable key={column} draggableId={column} index={index}>
                         {(provided, snapshot) => {
                           const child = (
-                            <div
+                            <Txt
+                              as="div"
+                              variant="subheading"
+                              tone="faint"
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
-                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-subheading text-placeholder ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
+                              className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 ${snapshot.isDragging ? 'ring-2 shadow-overlay ring-border-strong' : 'hover:bg-fill-subtle'}`}
                             >
                               <span
                                 {...provided.dragHandleProps}
@@ -104,7 +109,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                                 </Icon>
                               </span>
                               <span>{column}</span>
-                            </div>
+                            </Txt>
                           );
 
                           // Portal dragged item to document.body to avoid
@@ -128,7 +133,9 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
         {/* Validation message */}
         {!inputHasColumns && (
-          <div className="text-body text-warning-foreground">At least one column must be mapped to Input</div>
+          <Txt as="div" variant="body" className="text-warning-foreground">
+            At least one column must be mapped to Input
+          </Txt>
         )}
       </div>
     </DragDropContext>

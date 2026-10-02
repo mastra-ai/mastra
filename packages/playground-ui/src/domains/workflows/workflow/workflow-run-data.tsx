@@ -35,7 +35,10 @@ export function WorkflowRunData({ input, result }: { input: unknown; result: Wor
 
   return (
     <Collapsible className="border-t border-border/50" data-testid="workflow-run-data">
-      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-caption text-muted-foreground">
+      <CollapsibleTrigger
+        textVariant="caption"
+        className="flex min-h-11 w-full items-center gap-2 px-5 py-3 text-muted-foreground"
+      >
         <Database aria-hidden className="size-3.5 text-muted-foreground" />
         <span>Run data</span>
         <ChevronRight aria-hidden className="ml-auto size-4 text-muted-foreground" />

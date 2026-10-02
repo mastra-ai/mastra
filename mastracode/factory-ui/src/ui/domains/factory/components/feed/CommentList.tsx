@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
@@ -187,15 +188,18 @@ export function CommentList({
           {/* Chat anchoring: a short stream sits against the composer, not the description. */}
           <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
             {!showSkeleton && leading !== undefined && (
-              <div
+              <Txt
+                as="div"
+                variant="meta"
+                tone="muted"
                 aria-hidden
-                className="text-meta text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
+                className="stream-landing flex items-center gap-2 px-3 pb-1"
                 style={landingStyle(1)}
               >
                 <span className="bg-border h-px flex-1" />
                 Activity
                 <span className="bg-border h-px flex-1" />
-              </div>
+              </Txt>
             )}
             {showSkeleton ? (
               <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
@@ -205,19 +209,24 @@ export function CommentList({
               </div>
             ) : null}
             {comments.isError ? (
-              <div className="text-caption text-muted-foreground flex items-center gap-2 px-2 py-2">
+              <Txt as="div" variant="caption" tone="muted" className="flex items-center gap-2 px-2 py-2">
                 <span>Unable to load comments.</span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
                 </Button>
-              </div>
+              </Txt>
             ) : null}
             {!showSkeleton && !comments.isError && rows.length === 0 ? (
-              <div className="text-caption text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
+              <Txt
+                as="div"
+                variant="caption"
+                tone="muted"
+                className="flex items-center justify-center gap-1.5 px-2 py-6"
+              >
                 <MessageCircle size={14} aria-hidden />
                 <span>No activity yet</span>
-              </div>
+              </Txt>
             ) : null}
             {/* Mounted through loading so the live region exists before the first addition. */}
             <Comment

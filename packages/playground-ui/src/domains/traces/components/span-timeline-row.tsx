@@ -67,10 +67,13 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
       <div className="flex min-w-0 items-stretch" style={{ paddingLeft: `${depth}rem` }}>
         {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
 
-        <button
+        <Txt
+          as="button"
+          variant="caption"
+          tone="ink"
           type="button"
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-caption text-foreground',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left',
             focusRingInset,
           )}
         >
@@ -90,7 +93,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
           >
             {span.name}
           </span>
-        </button>
+        </Txt>
 
         {/* Slot is always present so names stay aligned whether or not the span has children. */}
         <div className="flex w-7 shrink-0 items-center justify-center">

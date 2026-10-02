@@ -59,7 +59,7 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
         </Notice>
       )}
 
-      <div className="divide-y divide-border rounded border border-border text-body">
+      <Txt as="div" variant="body" className="divide-y divide-border rounded border border-border">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
@@ -73,12 +73,12 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
                 {formatArgs(row.args)}
               </Txt>
             </span>
-            <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
+            <Txt as="span" variant="caption" className={`shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
               {row.outcome}
-            </span>
+            </Txt>
           </div>
         ))}
-      </div>
+      </Txt>
     </div>
   );
 }

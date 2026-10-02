@@ -11,10 +11,10 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
       <div className="w-full max-w-2xl text-left" aria-hidden="true">
         <div className="grid grid-cols-3 gap-3">
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-meta text-muted-foreground mb-3 flex items-center gap-2">
+            <Txt as="div" variant="meta" tone="muted" className="mb-3 flex items-center gap-2">
               <span className="bg-placeholder size-2 rounded-full" />
               To do
-            </div>
+            </Txt>
             <div className="relative min-h-[140px]">
               <div className="animate-factory-ticket-move bg-card shadow-raised absolute inset-x-0 top-0 z-10 h-[64px] rounded-lg px-3 py-2.5 motion-reduce:animate-none">
                 <Txt as="span" variant="meta" tone="muted" className="block">
@@ -35,23 +35,23 @@ export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
             </div>
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-meta text-muted-foreground mb-3 flex items-center gap-2">
+            <Txt as="div" variant="meta" tone="muted" className="mb-3 flex items-center gap-2">
               <span className="bg-badge-green-indicator size-2 rounded-full" />
               In progress
-            </div>
+            </Txt>
             <div className="min-h-[140px]" />
           </div>
           <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="text-meta text-muted-foreground mb-3 flex items-center gap-2">
+            <Txt as="div" variant="meta" tone="muted" className="mb-3 flex items-center gap-2">
               <span className="bg-badge-blue-indicator size-2 rounded-full" />
               Deployed
-            </div>
+            </Txt>
             <div className="min-h-[140px]" />
           </div>
         </div>
       </div>
 
-      <Button variant="primary" size="lg" className="mt-8 min-h-14 text-base" onClick={onContinue}>
+      <Button variant="primary" size="lg" className="mt-8 min-h-14" onClick={onContinue}>
         Create my first factory
       </Button>
     </>

@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
@@ -166,15 +167,17 @@ function WorkItemActions({
 
         if (!session) {
           return (
-            <Link
+            <Txt
               key={related.id}
-              to={relationshipPath(related, factoryId)}
-              className="text-caption text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
-              aria-label={`Open ${label}: ${related.title}`}
+              as="span"
+              variant="caption"
+              render={<Link to={relationshipPath(related, factoryId)} aria-label={`Open ${label}: ${related.title}`} />}
+              tone="muted"
+              className="hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
               <Link2 size={13} aria-hidden />
               {label}
-            </Link>
+            </Txt>
           );
         }
 

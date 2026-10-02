@@ -81,14 +81,7 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <Txt
-                  as="h2"
-                  variant="caption"
-                  tone="muted"
-                  font="mono"
-                  id="noise-summary-heading"
-                  className="tracking-wider uppercase"
-                >
+                <Txt as="h2" variant="eyebrow" tone="muted" id="noise-summary-heading">
                   Summary
                 </Txt>
                 <Txt tone="ink" className="mt-3">
@@ -104,7 +97,7 @@ export function NoiseDetailPanel({
                   <Txt className="mt-4 text-destructive-foreground">Unable to load noise details.</Txt>
                 )}
                 {noiseQuery.data && (
-                  <Txt tone="ink" font="mono" className="mt-4 tabular-nums">
+                  <Txt tone="ink" className="mt-4 tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
@@ -114,14 +107,7 @@ export function NoiseDetailPanel({
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <Txt
-                  as="h2"
-                  variant="caption"
-                  tone="muted"
-                  font="mono"
-                  id="noise-examples-heading"
-                  className="tracking-wider uppercase"
-                >
+                <Txt as="h2" variant="eyebrow" tone="muted" id="noise-examples-heading">
                   Example summaries
                 </Txt>
                 {examplesQuery.isPending && (
@@ -142,17 +128,20 @@ export function NoiseDetailPanel({
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
                           <li key={example.traceId}>
-                            <button
+                            <Txt
+                              as="button"
+                              variant="body"
+                              tone="ink"
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
                               className={cn(
                                 raisedSurfaceStyle,
-                                'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
+                                'state-layer w-full cursor-pointer rounded-md p-3 text-left',
                               )}
                               onClick={() => setInsightTraceId(example.traceId)}
                             >
                               {example.signalText}
-                            </button>
+                            </Txt>
                           </li>
                         ))}
                       </ul>

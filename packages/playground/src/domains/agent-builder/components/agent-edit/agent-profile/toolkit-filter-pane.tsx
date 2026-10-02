@@ -47,10 +47,11 @@ const ToolkitFilterRow = memo(
       <li className="flex items-center gap-1">
         <Field disabled={disabled} className="min-w-0 flex-1">
           <FieldLabel
+            textVariant="caption"
             data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
             data-checked={checked ? 'true' : 'false'}
             className={cn(
-              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 select-none hover:bg-fill-subtle',
               disabled && 'opacity-60',
             )}
           >
@@ -150,7 +151,7 @@ const ProviderToolkitSection = ({
         variant="meta"
         tone="muted"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="px-2 pt-1 tracking-wide uppercase"
+        className="px-2 pt-1 uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -226,7 +227,7 @@ export const ToolkitFilterPane = ({
         onValueChange={setSearch}
       />
 
-      <div className="flex shrink-0 items-center gap-2 text-meta">
+      <Txt as="div" variant="meta" className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
@@ -248,7 +249,7 @@ export const ToolkitFilterPane = ({
         >
           Clear all
         </button>
-      </div>
+      </Txt>
 
       <ScrollArea className="min-h-0 flex-1">
         <ScrollAreaViewport className="pr-2">

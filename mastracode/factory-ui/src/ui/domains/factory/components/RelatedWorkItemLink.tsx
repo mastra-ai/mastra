@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { MessageSquare } from 'lucide-react';
@@ -10,7 +11,7 @@ import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
-const RELATED_ITEM_LINK_CLASS = `text-meta text-muted-foreground hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
+const RELATED_ITEM_LINK_CLASS = `  hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
 export function RelatedWorkItemLink({
   item,
@@ -55,7 +56,10 @@ export function RelatedWorkItemLink({
   if (statusLabel !== undefined) tooltip = `${tooltip} · ${statusLabel}`;
   if (live) tooltip = `${tooltip} · Live session`;
   const link = external ? (
-    <a
+    <Txt
+      as="a"
+      variant="meta"
+      tone="muted"
       href={href}
       target="_blank"
       rel="noreferrer"
@@ -64,11 +68,17 @@ export function RelatedWorkItemLink({
       aria-label={ariaLabel}
     >
       {content}
-    </a>
+    </Txt>
   ) : (
-    <Link to={href} draggable={false} className={RELATED_ITEM_LINK_CLASS} aria-label={ariaLabel}>
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
+      render={<Link to={href} draggable={false} aria-label={ariaLabel} />}
+      className={RELATED_ITEM_LINK_CLASS}
+    >
       {content}
-    </Link>
+    </Txt>
   );
 
   return (

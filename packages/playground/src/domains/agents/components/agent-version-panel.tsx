@@ -55,14 +55,17 @@ export function AgentVersionPanel({
 
               return (
                 <li key={version.id}>
-                  <button
+                  <Txt
+                    as="button"
+                    variant="body"
+                    tone="ink"
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full border-l-2 px-3 py-2.5 text-left text-body',
+                      'w-full border-l-2 px-3 py-2.5 text-left',
                       controlStateColorTransition,
                       isSelected
-                        ? 'border-border-strong bg-fill-hover text-foreground'
+                        ? 'border-border-strong bg-fill-hover'
                         : `border-transparent hover:bg-fill-subtle ${quietTextHover}`,
                     )}
                   >
@@ -76,7 +79,7 @@ export function AgentVersionPanel({
                     <Txt variant="meta" tone="faint" className="mt-0.5">
                       {formatDate(version.createdAt, 'date-time') ?? ''}
                     </Txt>
-                  </button>
+                  </Txt>
                 </li>
               );
             })}

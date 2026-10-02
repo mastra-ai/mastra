@@ -62,12 +62,13 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-muted-foreground shrink-0" />
         <Input
+          textVariant="card-title-strong"
           ref={inputRef}
           variant="unstyled"
           autoFocus
           aria-label="Work item title"
           autoComplete="off"
-          className="text-card-title-strong text-foreground placeholder:text-muted-foreground h-auto min-w-0 flex-1 p-0"
+          className="text-foreground placeholder:text-muted-foreground h-auto min-w-0 flex-1 p-0"
           value={title}
           onChange={event => {
             setTitle(event.target.value);

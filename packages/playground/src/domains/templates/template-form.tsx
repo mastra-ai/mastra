@@ -77,15 +77,18 @@ export function TemplateForm({
             </Txt>
             <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
               {isLoadingEnvVars ? (
-                <div
+                <Txt
+                  as="div"
+                  variant="caption"
+                  tone="muted"
                   className={cn(
-                    'col-span-2 flex items-center justify-center gap-4 text-caption text-muted-foreground',
+                    'col-span-2 flex items-center justify-center gap-4',
                     '[&_svg]:h-[1.1em] [&_svg]:w-[1.1em] [&_svg]:opacity-50',
                     'animate-in duration-300 fade-in',
                   )}
                 >
                   <Spinner /> Loading variables...
-                </div>
+                </Txt>
               ) : (
                 Object.entries(variables).map(([key, value]) => (
                   <Fragment key={key}>
@@ -109,9 +112,14 @@ export function TemplateForm({
               )}
             </div>
             <div className="relative mt-3.5 border-t border-border pt-12">
-              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background text-caption text-muted-foreground">
+              <Txt
+                as="div"
+                variant="caption"
+                tone="muted"
+                className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background"
+              >
                 And
-              </div>
+              </Txt>
 
               <Txt as="h3" tone="muted">
                 Set AI Model for Template Installation
@@ -135,7 +143,7 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'state-layer mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card text-body text-foreground',
+              'state-layer mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card text-foreground',
               '[&_svg]:h-[1.1em] [&_svg]:text-foreground [&>svg]:w-[1.1em]',
             )}
             onClick={handleInstallTemplate}

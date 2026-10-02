@@ -2,6 +2,7 @@ import { getSignalAreaClass, getSignalColor } from './signal-colors';
 import { formatSnapshotDate, traceLabel } from './signal-formatting';
 import type { ThemeHistoryPoint } from './theme-trend';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 const TREND_CHART_HEIGHT = 32;
 
@@ -64,10 +65,10 @@ export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPo
           );
         })}
       </div>
-      <div className="mt-1 flex justify-between font-mono text-caption text-muted-foreground">
+      <Txt as="div" variant="caption" tone="muted" className="mt-1 flex justify-between">
         <span>{formatSnapshotDate(firstPoint.startedAt)}</span>
         <span>{formatSnapshotDate(lastPoint.startedAt)}</span>
-      </div>
+      </Txt>
     </div>
   );
 }

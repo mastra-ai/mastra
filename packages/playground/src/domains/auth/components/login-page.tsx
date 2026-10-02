@@ -188,14 +188,14 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </Button>
 
           {signUpEnabled && (
-            <div className="text-center text-body">
+            <Txt as="div" variant="body" className="text-center">
               <span className="text-muted-foreground">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
               <button type="button" onClick={toggleMode} className="text-foreground hover:underline">
                 {isSignIn ? 'Sign up' : 'Sign in'}
               </button>
-            </div>
+            </Txt>
           )}
         </Form>
       )}
@@ -205,9 +205,9 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-border" />
           </div>
-          <div className="relative flex justify-center text-body">
+          <Txt as="div" variant="body" className="relative flex justify-center">
             <span className="bg-sidebar px-2 text-muted-foreground">or continue with</span>
-          </div>
+          </Txt>
         </div>
       )}
 

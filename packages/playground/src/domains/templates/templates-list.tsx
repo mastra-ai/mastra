@@ -85,13 +85,13 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                   {template.title}
                 </Txt>
                 <Txt className={cn(quietTextHoverInGroup, controlStateColorTransition)}>{template.description}</Txt>
-                <div className="mt-3 hidden flex-wrap items-center gap-4 text-body text-muted-foreground 2xl:flex">
+                <Txt as="div" variant="body" tone="muted" className="mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
                   {hasMetaInfo && (
-                    <ul
-                      className={cn(
-                        'm-0 flex list-none gap-4 p-0 text-body text-muted-foreground',
-                        'text-muted-foreground [&>li]:flex [&>li]:items-center [&>li]:gap-0.5',
-                      )}
+                    <Txt
+                      as="ul"
+                      variant="body"
+                      tone="muted"
+                      className={cn('m-0 flex list-none gap-4 p-0', '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5')}
                     >
                       {template?.agents && template.agents.length > 0 && (
                         <li>
@@ -118,22 +118,22 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                           <McpServerIcon /> {template.mcp.length}
                         </li>
                       )}
-                    </ul>
+                    </Txt>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
                   <div className="flex items-center gap-4 text-muted-foreground">
                     {template.supportedProviders.map(provider => (
-                      <span key={provider} className="">
-                        {provider}
-                      </span>
+                      <span key={provider}>{provider}</span>
                     ))}
                   </div>
-                </div>
+                </Txt>
               </div>
             </LinkComponent>
-            <a
+            <Txt
+              as="a"
+              variant="body"
               href={template.githubUrl}
-              className={cn('group ml-auto hidden items-center gap-2 pr-4 text-body', 'lg:flex')}
+              className={cn('group ml-auto hidden items-center gap-2 pr-4', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -147,7 +147,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               >
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
-            </a>
+            </Txt>
           </article>
         );
       })}

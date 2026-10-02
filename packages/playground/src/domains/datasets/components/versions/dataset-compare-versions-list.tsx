@@ -169,14 +169,19 @@ export function DatasetCompareVersionsList({
           });
 
           return (
-            <li
+            <Txt
+              as="li"
+              variant="body"
+              tone="ink"
               key={id}
               className={cn(
-                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] text-body text-foreground first:border-t-transparent',
+                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] first:border-t-transparent',
                 transitions.colors,
               )}
             >
-              <div className="truncate py-[0.6rem] text-body text-placeholder">{id}</div>
+              <Txt as="div" variant="body" tone="faint" className="truncate py-[0.6rem]">
+                {id}
+              </Txt>
               {status !== 'same' ? (
                 <>
                   {itemA?.datasetVersion ? (
@@ -233,7 +238,7 @@ export function DatasetCompareVersionsList({
                   <EmptyCell tooltip="Comparing is available only for changed items" />
                 </div>
               )}
-            </li>
+            </Txt>
           );
         })}
       </ul>

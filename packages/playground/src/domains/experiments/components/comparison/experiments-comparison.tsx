@@ -115,7 +115,11 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="py-5 text-center text-body text-muted-foreground">No comparison data</div>;
+    return (
+      <Txt as="div" variant="body" tone="muted" className="py-5 text-center">
+        No comparison data
+      </Txt>
+    );
   }
 
   return (
@@ -126,13 +130,16 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
           role="row"
           className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
         >
-          <div
+          <Txt
+            as="div"
+            variant="caption"
+            tone="muted"
             role="columnheader"
             aria-label="Items"
-            className={`${cell} text-caption text-muted-foreground uppercase`}
+            className={`${cell} uppercase`}
           >
             Items
-          </div>
+          </Txt>
           <div role="columnheader" aria-label="Baseline" className={cell}>
             <ComparisonSideHeader
               side="baseline"
@@ -165,18 +172,21 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
               className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
             >
               <div role="cell" className={`${cell} grid content-start gap-1`}>
-                <Link
-                  href={paths.datasetItemLink(datasetId, row.itemId)}
-                  aria-label={`Open item ${row.itemId}`}
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone={row.baseline.present && row.contender.present ? 'muted' : 'faint'}
+                  render={
+                    <Link href={paths.datasetItemLink(datasetId, row.itemId)} aria-label={`Open item ${row.itemId}`} />
+                  }
                   className={cn(
-                    'flex items-start gap-1.5 text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
-                    row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
+                    'flex items-start gap-1.5 break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                   )}
                 >
                   <Txt as="span" variant="caption" font="mono" className="min-w-0">
                     {row.itemId}
                   </Txt>
-                </Link>
+                </Txt>
                 {deltas.length > 0 && (
                   <span className="flex flex-wrap items-center gap-2">
                     {deltas.map(({ scorerId, delta }) => (

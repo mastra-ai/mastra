@@ -14,6 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 import { toast } from '@/utils/toast';
 
 export type SaveAsDatasetItemDialogProps = {
@@ -240,7 +241,9 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="div" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>

@@ -98,7 +98,7 @@ export function RunWorkflowHeader({
           {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
+      <Txt as="div" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
         <Txt as="span" variant="meta" font="mono" className="min-w-0 truncate" title={runId}>
           {runId}
         </Txt>
@@ -106,7 +106,7 @@ export function RunWorkflowHeader({
         {timestamp !== undefined && Number.isFinite(timestamp) ? (
           <RelativeTimestamp value={timestamp} className="ml-auto shrink-0" />
         ) : null}
-      </div>
+      </Txt>
     </div>
   );
 }

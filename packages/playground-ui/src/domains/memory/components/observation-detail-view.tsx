@@ -237,12 +237,15 @@ function ObservationHistoryPanel({
         {records.map(record => {
           const isSelected = record.id === selectedRecordId;
           return (
-            <button
+            <Txt
+              as="button"
+              variant="caption"
+              tone="ink"
               key={record.id}
               type="button"
               className={cn(
-                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left text-caption text-muted-foreground hover:bg-fill-subtle',
-                isSelected && 'border-l-foreground bg-fill-hover text-foreground',
+                'w-full cursor-pointer truncate border-l-2 border-l-transparent px-3 py-2 text-left hover:bg-fill-subtle',
+                isSelected && 'border-l-foreground bg-fill-hover',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
@@ -251,7 +254,7 @@ function ObservationHistoryPanel({
                   {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
                 </span>
               )}
-            </button>
+            </Txt>
           );
         })}
       </div>

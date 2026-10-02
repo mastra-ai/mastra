@@ -101,8 +101,7 @@ export function ThemeDetailPanel({
             <Txt
               as="span"
               variant="column"
-              font="mono"
-              className="tracking-widest"
+
               style={{ color: getSignalColor(signalName) }}
             >
               {signalDisplayDescription ? (
@@ -143,20 +142,13 @@ export function ThemeDetailPanel({
               {detailQuery.data?.theme && (
                 <>
                   <section aria-labelledby="theme-summary-heading">
-                    <Txt
-                      as="h2"
-                      variant="caption"
-                      tone="muted"
-                      font="mono"
-                      id="theme-summary-heading"
-                      className="tracking-wider uppercase"
-                    >
+                    <Txt as="h2" variant="eyebrow" tone="muted" id="theme-summary-heading">
                       Summary
                     </Txt>
                     <Txt tone="ink" className="mt-3">
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </Txt>
-                    <Txt tone="ink" font="mono" className="mt-3 tabular-nums">
+                    <Txt tone="ink" className="mt-3 tabular-nums">
                       {shareSentence(
                         filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
                         filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
@@ -165,14 +157,7 @@ export function ThemeDetailPanel({
                   </section>
 
                   <section aria-labelledby="theme-examples-heading">
-                    <Txt
-                      as="h2"
-                      variant="caption"
-                      tone="muted"
-                      font="mono"
-                      id="theme-examples-heading"
-                      className="tracking-wider uppercase"
-                    >
+                    <Txt as="h2" variant="eyebrow" tone="muted" id="theme-examples-heading">
                       Examples
                     </Txt>
                     {examplesQuery.isPending && (
@@ -193,17 +178,20 @@ export function ThemeDetailPanel({
                           <ul className="mt-3 space-y-3">
                             {examplesQuery.data.examples.map(example => (
                               <li key={example.traceId}>
-                                <button
+                                <Txt
+                                  as="button"
+                                  variant="body"
+                                  tone="ink"
                                   type="button"
                                   aria-label={`View trace insight for ${example.signalText}`}
                                   className={cn(
                                     raisedSurfaceStyle,
-                                    'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
+                                    'state-layer w-full cursor-pointer rounded-md p-3 text-left',
                                   )}
                                   onClick={() => setInsightTraceId(example.traceId)}
                                 >
                                   {example.signalText}
-                                </button>
+                                </Txt>
                               </li>
                             ))}
                           </ul>
@@ -219,14 +207,7 @@ export function ThemeDetailPanel({
 
                   {snapshotTotal > 1 && (
                     <section aria-labelledby="theme-trend-heading">
-                      <Txt
-                        as="h2"
-                        variant="caption"
-                        tone="muted"
-                        font="mono"
-                        id="theme-trend-heading"
-                        className="tracking-wider uppercase"
-                      >
+                      <Txt as="h2" variant="eyebrow" tone="muted" id="theme-trend-heading">
                         Trend
                       </Txt>
                       {historyQuery.isPending && (

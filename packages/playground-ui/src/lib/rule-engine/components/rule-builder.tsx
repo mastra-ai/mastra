@@ -75,18 +75,20 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
         <div key={index} className="border-b border-dashed border-border last:border-b-0">
           <div className={cn('relative', isRule(condition) && 'border-l-4 border-border p-4')}>
             {index > 0 && (
-              <button
+              <Txt
+                as="button"
+                variant="meta"
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
-                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
+                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5',
                   group.operator === 'OR'
                     ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
                     : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >
                 {group.operator.toLowerCase()}
-              </button>
+              </Txt>
             )}
 
             {isRule(condition) ? (
@@ -150,20 +152,22 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 
   if (!ruleGroup) {
     return (
-      <button
+      <Txt
+        as="button"
+        variant="caption"
         type="button"
         onClick={handleAddFirstRule}
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2 text-caption',
+          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2',
         )}
       >
         <Icon>
           <Plus />
         </Icon>
         Add conditional rule
-      </button>
+      </Txt>
     );
   }
 

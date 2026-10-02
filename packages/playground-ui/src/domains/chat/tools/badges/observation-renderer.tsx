@@ -222,9 +222,11 @@ function ObservationItem({
 
   return (
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
-      <div
+      <Txt
+        as="div"
+        variant="caption"
         className={cn(
-          'flex items-start gap-1.5 text-caption',
+          'flex items-start gap-1.5',
           bgColor && 'rounded px-1.5 py-0.5',
           bgColor,
           !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`,
@@ -233,7 +235,7 @@ function ObservationItem({
         {observation.isNested && (
           <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
         )}
-        <span className="flex-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-meta">
+        <span className="flex-1">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
@@ -247,7 +249,7 @@ function ObservationItem({
             {observation.time}
           </Txt>
         )}
-      </div>
+      </Txt>
       {observation.children.length > 0 && (
         <div className="mt-0.5">
           {observation.children.map((child, i) => (
@@ -271,13 +273,13 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
-        <span className={cn('text-column', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
+        <Txt as="span" variant="column" tone="ink" className={cn('', useInheritedTextColor ? 'opacity-80' : '')}>
           {block.date}
-        </span>
+        </Txt>
         {block.relativeTime && (
-          <span className={cn('text-meta', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+          <Txt as="span" variant="meta" tone="muted" className={cn('', useInheritedTextColor ? 'opacity-60' : '')}>
             ({block.relativeTime})
-          </span>
+          </Txt>
         )}
       </div>
       <div className="space-y-0">
@@ -304,17 +306,20 @@ function ThreadSection({
   return (
     <div className="mb-3">
       {showThreadId && thread.threadId !== 'default' && (
-        <div
+        <Txt
+          as="div"
+          variant="meta"
+          tone="muted"
           className={cn(
-            'mb-1 inline-block rounded px-1 py-0.5 text-meta',
-            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50 text-muted-foreground',
+            'mb-1 inline-block rounded px-1 py-0.5',
+            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50',
           )}
         >
           Thread{' '}
           <Txt as="span" variant="meta" font="mono">
             {thread.threadId}
           </Txt>
-        </div>
+        </Txt>
       )}
       {thread.dateBlocks.map((block, i) => (
         <DateBlock key={i} block={block} useInheritedTextColor={useInheritedTextColor} />
@@ -350,11 +355,15 @@ export function ObservationRenderer({
     parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0]?.threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-caption text-muted-foreground italic', className)}>No observations</div>;
+    return (
+      <Txt as="div" variant="caption" tone="muted" className={cn('italic', className)}>
+        No observations
+      </Txt>
+    );
   }
 
   return (
-    <div className={cn('overflow-hidden text-body', className)}>
+    <Txt as="div" variant="body" className={cn('overflow-hidden', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
@@ -371,18 +380,26 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Current Task</div>
-          <div className="text-caption whitespace-pre-wrap text-foreground">{parsed.currentTask}</div>
+          <Txt as="div" variant="meta" tone="muted" className="mb-1 uppercase">
+            Current Task
+          </Txt>
+          <Txt as="div" variant="caption" tone="ink" className="whitespace-pre-wrap">
+            {parsed.currentTask}
+          </Txt>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Suggested Response</div>
-          <div className="text-caption whitespace-pre-wrap text-foreground/80 italic">{parsed.suggestedResponse}</div>
+          <Txt as="div" variant="meta" tone="muted" className="mb-1 uppercase">
+            Suggested Response
+          </Txt>
+          <Txt as="div" variant="caption" className="whitespace-pre-wrap text-foreground/80 italic">
+            {parsed.suggestedResponse}
+          </Txt>
         </div>
       )}
-    </div>
+    </Txt>
   );
 }
 

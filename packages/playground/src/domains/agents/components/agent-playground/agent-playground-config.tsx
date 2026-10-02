@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
@@ -47,7 +48,9 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
-        <code className="text-caption text-foreground">{name}</code>
+        <InlineCode variant="caption" tone="ink">
+          {name}
+        </InlineCode>
         <Txt as="span" variant="caption" tone="muted">
           {typeLabel}
         </Txt>
@@ -179,7 +182,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     const diffLines = computeLineDiff(oldStr, newStr);
     return (
-      <div className="relative overflow-hidden rounded-md border border-border text-body">
+      <Txt as="div" variant="body" className="relative overflow-hidden rounded-md border border-border">
         {block && (
           <div className="absolute top-2 right-2 z-10">
             <BlockCopyButton block={block} />
@@ -201,7 +204,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
             {line.text || '\u00A0'}
           </div>
         ))}
-      </div>
+      </Txt>
     );
   }
 
@@ -217,22 +220,29 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (!prevBlock && currBlock) {
           return (
-            <div key={idx} className="rounded-md border border-success-edge bg-success-subtle p-3 text-body">
+            <Txt
+              as="div"
+              variant="body"
+              key={idx}
+              className="rounded-md border border-success-edge bg-success-subtle p-3"
+            >
               <Txt variant="meta" className="mb-1 text-success-subtle-foreground">
                 + Added block
               </Txt>
               <Txt variant="caption" className="whitespace-pre-wrap text-success-subtle-foreground">
                 {newStr}
               </Txt>
-            </div>
+            </Txt>
           );
         }
 
         if (prevBlock && !currBlock) {
           return (
-            <div
+            <Txt
+              as="div"
+              variant="body"
               key={idx}
-              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3 text-body"
+              className="relative rounded-md border border-destructive-edge bg-destructive-subtle p-3"
             >
               <div className="absolute top-2 right-2">
                 <BlockCopyButton block={prevBlock} />
@@ -243,7 +253,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               <Txt variant="caption" className="whitespace-pre-wrap text-destructive-subtle-foreground">
                 {oldStr}
               </Txt>
-            </div>
+            </Txt>
           );
         }
 
@@ -264,7 +274,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         const diffLines = computeLineDiff(oldStr, newStr);
         return (
-          <div key={idx} className="relative overflow-hidden rounded-md border border-border text-body">
+          <Txt as="div" variant="body" key={idx} className="relative overflow-hidden rounded-md border border-border">
             {prevBlock && (
               <div className="absolute top-2 right-2 z-10">
                 <BlockCopyButton block={prevBlock} />
@@ -286,7 +296,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                 {line.text || '\u00A0'}
               </div>
             ))}
-          </div>
+          </Txt>
         );
       })}
     </div>
@@ -747,8 +757,11 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="start" className="max-w-72">
                       <span>
-                        Use <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax to insert
-                        dynamic values into your instruction blocks.
+                        Use{' '}
+                        <InlineCode variant="column" tone="ink">
+                          {'{{variableName}}'}
+                        </InlineCode>{' '}
+                        syntax to insert dynamic values into your instruction blocks.
                       </span>
                     </TooltipContent>
                   </Tooltip>{' '}

@@ -69,10 +69,13 @@ export function TimelineNameCol({
     >
       {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
 
-      <button
+      <Txt
+        as="button"
+        variant="caption"
+        tone="ink"
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
+          'flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 self-stretch rounded-md px-2 py-1 text-left',
           focusRingInset,
         )}
       >
@@ -103,7 +106,7 @@ export function TimelineNameCol({
             </Txt>
           )}
         </span>
-      </button>
+      </Txt>
 
       {/* Expand toggle sits at the end of the row; the slot is always present so names stay aligned. */}
       <div className="flex w-8 shrink-0 items-center justify-center self-stretch pr-1">

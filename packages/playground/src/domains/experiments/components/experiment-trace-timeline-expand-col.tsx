@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDownIcon, ChevronsDownIcon, ChevronsUpIcon, ChevronUpIcon } from 'lucide-react';
@@ -57,16 +58,19 @@ type ExpandButtonProps = {
 function ExpandButton({ onClick, children, className }: ExpandButtonProps) {
   return (
     <button onClick={onClick} className={cn('h-full', className)}>
-      <div
+      <Txt
+        as="div"
+        variant="caption"
+        tone="ink"
         className={cn(
-          'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2 text-caption text-foreground',
+          'flex items-center gap-[0.1rem] rounded-lg border border-border pr-1 pl-2',
           controlStateColorTransition,
           'hover:text-badge-amber-indicator',
           '[&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0 [&>svg]:opacity-80 [&>svg]:transition-all',
         )}
       >
         {children}
-      </div>
+      </Txt>
     </button>
   );
 }

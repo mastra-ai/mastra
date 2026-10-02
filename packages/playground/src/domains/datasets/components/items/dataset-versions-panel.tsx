@@ -136,7 +136,9 @@ export function DatasetVersionsPanel({
                         />
                       )}
                       <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2">
-                        <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
+                        <Txt as="span" variant="column" tone="ink" className="shrink-0">
+                          v.{item.version}
+                        </Txt>
                         {createdAtDate && (
                           <span className="min-w-0 flex-1 truncate text-muted-foreground">
                             {formatDate(createdAtDate, 'date-time')}

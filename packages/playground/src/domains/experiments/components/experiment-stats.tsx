@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheckIcon, CircleXIcon, ClockIcon } from 'lucide-react';
 
@@ -48,33 +49,39 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <div
-        className={cn(
-          'flex items-center gap-3 text-caption text-muted-foreground',
-          '[&>span]:flex [&>span]:items-center [&>span]:gap-1',
-          '[&_b]:text-column [&_b]:text-muted-foreground',
-        )}
+      <Txt
+        as="div"
+        variant="caption"
+        tone="muted"
+        className={cn('flex items-center gap-3', '[&>span]:flex [&>span]:items-center [&>span]:gap-1')}
       >
         <span>
-          Total: <b>{experiment.totalItems}</b>
+          Total:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.totalItems}
+          </Txt>
         </span>
         <span>
-          Processed: <b>{experiment.succeededCount}</b>
+          Processed:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.succeededCount}
+          </Txt>
         </span>
         <span>
-          Errored: <b>{experiment.failedCount}</b>
+          Errored:{' '}
+          <Txt as="b" variant="column" tone="muted">
+            {experiment.failedCount}
+          </Txt>
         </span>
         {(status === 'pending' || status === 'running') && (
           <span>
-            Pending: <b>{pendingCount}</b>
+            Pending:{' '}
+            <Txt as="b" variant="column" tone="muted">
+              {pendingCount}
+            </Txt>
           </span>
         )}
-      </div>
-
-      {/* <div className="flex items-center gap-1.5 text-ui text-muted-foreground">
-        <span className="text-muted-foreground">{experiment.targetType}:</span>
-        <span className="text-foreground font-mono">{experiment.targetId}</span>
-      </div> */}
+      </Txt>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { SpanRows } from './span-rows';
 import { SpanTimelineRow } from './span-timeline-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeLoading } from './trace-span-tree';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { formatDurationPrecise } from '@/utils/duration';
 
@@ -53,7 +54,7 @@ export function TraceSpanTimeline({
         {/* Header row: empty name cell, then the axis aligned with the bars (same horizontal padding, minus the duration label). */}
         <div />
         <div aria-label="Trace time axis" className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 px-2 pb-1">
-          <div className="flex justify-between text-meta text-muted-foreground tabular-nums">
+          <Txt as="div" variant="meta" tone="muted" className="flex justify-between tabular-nums">
             {TICKS.map((tick, index) => (
               <span
                 key={tick}
@@ -62,7 +63,7 @@ export function TraceSpanTimeline({
                 {formatDurationPrecise(overallLatency * tick)}
               </span>
             ))}
-          </div>
+          </Txt>
           <div className="w-12" />
         </div>
         <SpanRows

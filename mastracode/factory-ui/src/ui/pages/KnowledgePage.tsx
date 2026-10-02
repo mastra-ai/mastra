@@ -56,7 +56,13 @@ function Breadcrumb({
   onTrailClick: (index: number) => void;
 }) {
   return (
-    <nav aria-label="Knowledge scope" className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1 text-xs">
+    <Txt
+      as="nav"
+      variant="caption"
+      tone="muted"
+      aria-label="Knowledge scope"
+      className="mt-1 flex flex-wrap items-center gap-1"
+    >
       <button type="button" className="hover:text-foreground" onClick={onProjectClick}>
         org
       </button>
@@ -91,7 +97,7 @@ function Breadcrumb({
           )}
         </span>
       ))}
-    </nav>
+    </Txt>
   );
 }
 
@@ -156,12 +162,18 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       // calm state with a way back, never an error toast.
       body = (
         <div data-testid="knowledge-thread-gone" className="flex flex-col items-start gap-2 py-8">
-          <Txt as="p" variant="body" className="text-muted-foreground">
+          <Txt tone="muted" as="p" variant="body">
             This session's knowledge is no longer available.
           </Txt>
-          <button type="button" className="text-badge-purple-indicator text-sm hover:underline" onClick={backToProject}>
+          <Txt
+            as="button"
+            variant="body"
+            type="button"
+            className="text-badge-purple-indicator hover:underline"
+            onClick={backToProject}
+          >
             Back to the project view
-          </button>
+          </Txt>
         </div>
       );
     } else {
@@ -173,7 +185,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     body = <SkeletonRows label="Loading knowledge graph" rows={6} />;
   } else if (graphQuery.data.nodes.length === 0) {
     body = (
-      <Txt as="p" variant="body" className="text-muted-foreground">
+      <Txt tone="muted" as="p" variant="body">
         No knowledge captured yet — the graph fills in as factory sessions work.
       </Txt>
     );
@@ -237,10 +249,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
-        <Txt as="h1" variant="heading" className="text-foreground font-semibold">
+        <Txt tone="ink" as="h1" variant="heading">
           Knowledge Graph
         </Txt>
-        <Txt as="p" variant="body" className="text-muted-foreground mt-1">
+        <Txt tone="muted" as="p" variant="body" className="mt-1">
           Explore nodes and the relationships captured by the agent over time.
         </Txt>
         <Breadcrumb

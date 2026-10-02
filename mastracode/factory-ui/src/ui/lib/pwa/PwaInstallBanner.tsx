@@ -34,27 +34,32 @@ export function PwaInstallBanner() {
           <div className="flex items-center gap-3 px-4 py-3">
             <img src="/pwa-192.png" alt="" className="size-10 shrink-0 rounded-lg" />
             <div className="min-w-0 flex-1">
-              <Txt as="p" variant="subheading" className="text-foreground">
+              <Txt tone="ink" as="p" variant="subheading">
                 Install app
               </Txt>
-              <Txt as="p" variant="caption" className="text-muted-foreground truncate">
+              <Txt tone="muted" as="p" variant="caption" className="truncate">
                 Get faster access from your home screen
               </Txt>
             </div>
-            <button
+            <Txt
+              as="button"
+              variant="caption"
+              tone="muted"
               type="button"
               onClick={dismiss}
-              className={`text-muted-foreground hover:text-foreground text-caption shrink-0 rounded-md px-3 py-1.5 ${focusRing}`}
+              className={`hover:text-foreground shrink-0 rounded-md px-3 py-1.5 ${focusRing}`}
             >
               Not now
-            </button>
-            <button
+            </Txt>
+            <Txt
+              as="button"
+              variant="column"
               type="button"
               onClick={onInstall}
-              className={`bg-brand-green text-column shrink-0 rounded-md px-3 py-1.5 text-black ${focusRing}`}
+              className={`bg-brand-green shrink-0 rounded-md px-3 py-1.5 text-black ${focusRing}`}
             >
               Install
-            </button>
+            </Txt>
           </div>
         </div>
       )}

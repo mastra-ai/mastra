@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-r
 import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
 
 export interface TripwireNoticeProps {
   reason: string;
@@ -23,17 +24,19 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
 
         {hasMetadata && tripwire && (
           <div className="flex flex-col gap-3">
-            <button
+            <Txt
+              as="button"
+              variant="caption"
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="flex w-fit items-center gap-1.5 text-caption opacity-70 transition-opacity hover:opacity-100"
+              className="flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
             >
               {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
               <span>Details</span>
-            </button>
+            </Txt>
 
             {isExpanded && (
-              <div className="flex flex-col gap-2 text-caption">
+              <Txt as="div" variant="caption" className="flex flex-col gap-2">
                 {tripwire.retry !== undefined && (
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3.5 shrink-0 opacity-70" />
@@ -62,7 +65,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                     </pre>
                   </div>
                 )}
-              </div>
+              </Txt>
             )}
           </div>
         )}

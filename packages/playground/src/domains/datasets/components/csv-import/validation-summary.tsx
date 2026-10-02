@@ -1,5 +1,7 @@
+'use client';
+
 import { Notice } from '@mastra/playground-ui/components/Notice';
-('use client');
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export interface ValidationError {
   row: number;
@@ -22,13 +24,17 @@ export function ValidationSummary({ errors }: ValidationSummaryProps) {
 
   return (
     <Notice variant="destructive" title={`${errors.length} validation error${errors.length !== 1 ? 's' : ''} found`}>
-      <div className="max-h-[120px] space-y-1 overflow-y-auto text-body">
+      <Txt as="div" variant="body" className="max-h-[120px] space-y-1 overflow-y-auto">
         {errors.map((error: ValidationError, index: number) => (
           <div key={index}>
-            Row {error.row}: <span className="font-medium">[{error.column}]</span> - {error.message}
+            Row {error.row}:{' '}
+            <Txt as="span" variant="subheading">
+              [{error.column}]
+            </Txt>{' '}
+            - {error.message}
           </div>
         ))}
-      </div>
+      </Txt>
     </Notice>
   );
 }

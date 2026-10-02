@@ -58,28 +58,30 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-caption text-muted-foreground')}>
+        <Txt as="div" variant="caption" tone="muted" className={cn('flex justify-end')}>
           <Txt as="span" variant="caption" font="mono">
             {formatDurationPrecise(span.latency)}
           </Txt>
-        </div>
+        </Txt>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-50 w-auto max-w-[25rem] rounded-md border border-border bg-muted p-2 px-4 pr-6 text-center text-caption text-foreground"
+          className="z-50 w-auto max-w-[25rem] rounded-md border border-border bg-muted p-2 px-4 pr-6 text-center text-foreground"
           sideOffset={5}
           side="top"
         >
-          <div
+          <Txt
+            as="div"
+            variant="body"
             className={cn(
-              'mb-4 flex items-center gap-2 text-body',
+              'mb-4 flex items-center gap-2',
               '[&>svg]:h-[1.25em] [&>svg]:w-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
             <TimerIcon /> Span Timing
-          </div>
+          </Txt>
           <KeyValueList
-            className="[&>dd]:min-h-0 [&>dd]:text-body [&>dt]:min-h-0 [&>dt]:text-body"
+            className="[&>dd]:min-h-0 [&>dt]:min-h-0"
             data={[
               {
                 key: 'Latency',

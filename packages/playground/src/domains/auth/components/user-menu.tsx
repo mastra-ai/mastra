@@ -76,13 +76,15 @@ export function UserMenu({ user }: UserMenuProps) {
         {/* Preview as role section — only for admins with available roles */}
         {availableRoles && availableRoles.length > 0 && (
           <div className="border-b border-border p-2">
-            <Txt variant="meta" tone="muted" className="px-2 py-1 tracking-wider uppercase">
+            <Txt variant="meta" tone="muted" className="px-2 py-1 uppercase">
               Preview as role
             </Txt>
             {availableRoles.map(role => {
               const isActive = isImpersonating && impersonatedRole?.id === role.id;
               return (
-                <button
+                <Txt
+                  as="button"
+                  variant="body"
                   key={role.id}
                   type="button"
                   disabled={isSwitching}
@@ -94,14 +96,14 @@ export function UserMenu({ user }: UserMenuProps) {
                     }
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-body ${
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
                   {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   <span className="flex-1 capitalize">{role.name}</span>
                   {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
-                </button>
+                </Txt>
               );
             })}
           </div>
@@ -109,9 +111,9 @@ export function UserMenu({ user }: UserMenuProps) {
 
         <div className="flex flex-col gap-1 p-2">
           {logoutError && (
-            <p role="alert" className="text-ui-sm">
+            <Txt variant="caption" role="alert">
               {logoutError.message}
-            </p>
+            </Txt>
           )}
           <Button
             render={<Link to="/settings" />}

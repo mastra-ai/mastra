@@ -1,4 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
 import { ExistingConnectionsPanel } from './components/existing-connections-panel';
 import { ProviderToolkitSelector } from './components/provider-toolkit-selector';
@@ -61,7 +62,7 @@ export default function IntegrationsPage() {
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Integrations</h1>
-      <div className="max-w-3xl space-y-6 text-body">
+      <Txt as="div" variant="body" className="max-w-3xl space-y-6">
         <p className="text-muted-foreground">
           Minimal page to verify the ToolProvider backend. Pick a provider and toolkit, then connect.
         </p>
@@ -97,7 +98,7 @@ export default function IntegrationsPage() {
           disconnectError={disconnect.error}
           onDisconnect={handleDisconnect}
         />
-      </div>
+      </Txt>
     </PageLayout>
   );
 }

@@ -92,16 +92,19 @@ export function VcsFactoryStep({
             <ProviderHeading>
               {selectedProvider === 'github' ? 'GitHub repositories' : 'GitLab repositories'}
             </ProviderHeading>
-            <button
+            <Txt
+              as="button"
+              variant="meta"
+              tone="muted"
               type="button"
-              className="text-meta text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              className="hover:text-foreground cursor-pointer transition-colors"
               onClick={() => {
                 setQuery('');
                 setSelectedProvider(null);
               }}
             >
               Choose another provider
-            </button>
+            </Txt>
           </div>
           <SearchInput
             label="Search repositories"
@@ -249,7 +252,7 @@ function ProviderConnection({
 
 function ProviderHeading({ children }: { children: string }) {
   return (
-    <Txt as="h2" variant="label" className="text-foreground m-0">
+    <Txt tone="ink" as="h2" variant="label" className="m-0">
       {children}
     </Txt>
   );
@@ -288,7 +291,7 @@ function RepositoryRows({
     : repositories;
   if (visible.length === 0) {
     return (
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+      <Txt tone="muted" as="p" variant="caption" className="m-0">
         No {provider === 'gitlab' ? 'GitLab' : 'GitHub'} repositories found.
       </Txt>
     );

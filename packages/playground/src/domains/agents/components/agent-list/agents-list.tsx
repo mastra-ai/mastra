@@ -40,19 +40,19 @@ export function AgentsList({ agents, isLoading, hasSearch, sort, onSortChange }:
         <DataList.TopCell>Purpose</DataList.TopCell>
         <DataList.TopCell className="text-center">Provider</DataList.TopCell>
         <DataList.TopCell className="text-center">
-          <TextAndIcon className="text-column">
+          <TextAndIcon variant="column">
             <WorkflowIcon aria-hidden="true" />
             <span>Workflows</span>
           </TextAndIcon>
         </DataList.TopCell>
         <DataList.TopCell className="text-center">
-          <TextAndIcon className="text-column">
+          <TextAndIcon variant="column">
             <AgentIcon aria-hidden="true" />
             <span>Agents</span>
           </TextAndIcon>
         </DataList.TopCell>
         <DataList.TopCell className="text-center">
-          <TextAndIcon className="text-column">
+          <TextAndIcon variant="column">
             <ToolsIcon aria-hidden="true" />
             <span>Tools</span>
           </TextAndIcon>

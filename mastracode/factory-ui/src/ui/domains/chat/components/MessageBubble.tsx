@@ -115,8 +115,16 @@ export function MessageBubble({
         {children}
       </Message>
     ),
-    System: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
-    Signal: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
+    System: ({ children }) => (
+      <Txt as="div" variant="caption" tone="muted">
+        {children}
+      </Txt>
+    ),
+    Signal: ({ children }) => (
+      <Txt as="div" variant="caption" tone="muted">
+        {children}
+      </Txt>
+    ),
   };
 
   const renderers = {

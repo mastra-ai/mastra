@@ -4,6 +4,7 @@ import * as React from 'react';
 import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
 import type { FieldOption, RuleFieldSelectProps } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -132,7 +133,11 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   );
 
   if (selectors.length === 0) {
-    return <div className={cn('text-body text-muted-foreground', className)}>No fields available</div>;
+    return (
+      <Txt as="div" variant="body" tone="muted" className={cn('', className)}>
+        No fields available
+      </Txt>
+    );
   }
 
   return (

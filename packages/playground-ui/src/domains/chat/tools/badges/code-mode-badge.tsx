@@ -7,6 +7,7 @@ import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Txt } from '@/ds/components/Txt';
 import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { formatTypeScript } from '@/utils/formatting';
 
@@ -71,14 +72,16 @@ export const CodeModeBadge = ({
         {error && (
           <div>
             <SectionLabel>Error</SectionLabel>
-            <pre
+            <Txt
+              as="pre"
+              variant="caption"
               data-testid="code-mode-error"
-              className="rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap text-destructive-foreground"
+              className="rounded-md bg-muted px-3 py-2 break-words whitespace-pre-wrap text-destructive-foreground"
             >
               {error.name ? `${error.name}: ` : ''}
               {error.message}
               {typeof error.line === 'number' ? ` (line ${error.line})` : ''}
-            </pre>
+            </Txt>
           </div>
         )}
 
@@ -86,12 +89,14 @@ export const CodeModeBadge = ({
           <div>
             <SectionLabel>Result</SectionLabel>
             {typeof resultValue === 'string' ? (
-              <pre
-                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
+              <Txt
+                as="pre"
+                variant="caption"
+                className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 break-words whitespace-pre-wrap"
                 data-testid="code-mode-result"
               >
                 {resultValue}
-              </pre>
+              </Txt>
             ) : (
               <CodeEditor data={resultValue as Record<string, unknown>} data-testid="code-mode-result" />
             )}
@@ -101,12 +106,14 @@ export const CodeModeBadge = ({
         {logs.length > 0 && (
           <div>
             <SectionLabel>Logs</SectionLabel>
-            <pre
+            <Txt
+              as="pre"
+              variant="caption"
               data-testid="code-mode-logs"
-              className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 text-caption break-words whitespace-pre-wrap"
+              className="max-h-60 overflow-auto rounded-md bg-muted px-3 py-2 break-words whitespace-pre-wrap"
             >
               {logs.join('\n')}
-            </pre>
+            </Txt>
           </div>
         )}
 

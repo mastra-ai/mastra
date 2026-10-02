@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 /**
  * The right-side flyout: all the juicy details for a clicked node, organized
  * as collapsible sections — Knowledge node (identity + counts), Knowledge records (the node's
@@ -20,9 +21,13 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
     <CollapsibleTrigger className="group border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
-      <span className="text-foreground text-sm font-semibold">{title}</span>
+      <Txt as="span" variant="subheading" tone="ink">
+        {title}
+      </Txt>
       {count !== undefined ? (
-        <span className="bg-fill text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
+        <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded-full px-1.5 py-0.5">
+          {count}
+        </Txt>
       ) : null}
       <ChevronDown
         size={14}
@@ -34,9 +39,9 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
+    <Txt as="span" variant="meta" className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5">
       {RUNG_LABELS[rung].toLowerCase()}
-    </span>
+    </Txt>
   );
 }
 
@@ -45,17 +50,19 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
     <span>
       {parseRecordSegments(text).map((segment, index) =>
         segment.type === 'wikilink' ? (
-          <button
+          <Txt
+            as="button"
+            variant="label"
             key={index}
             type="button"
-            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1 font-medium"
+            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
             }}
           >
             {segment.value}
-          </button>
+          </Txt>
         ) : (
           <span key={index}>{segment.value}</span>
         ),
@@ -134,20 +141,25 @@ function RecordCard({
           }
         }}
       >
-        <div className="text-foreground text-xs leading-relaxed">
+        <Txt as="div" variant="caption" tone="ink">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
             <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
-        </div>
-        <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
+        </Txt>
+        <Txt as="div" variant="meta" tone="muted" className="mt-1.5 flex items-center gap-2">
           <RungBadge rung={record.rung} />
           {record.relation === 'mentions' ? <span className="text-muted-foreground">mentions</span> : null}
           <span>captured {relativeTime(record.capturedAt)}</span>
-        </div>
+        </Txt>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5 text-[11px]">
+        <Txt
+          as="div"
+          variant="body-sm"
+          data-testid="knowledge-record-detail"
+          className="border-border border-t px-3 py-2.5"
+        >
           <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt>Captured in session</dt>
             <dd>
@@ -182,27 +194,33 @@ function RecordCard({
               data-testid="knowledge-record-reason"
               className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
             >
-              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
+              <Txt
+                as="div"
+                variant="meta"
+                className="text-badge-amber-foreground mb-1 flex items-center gap-1 uppercase"
+              >
                 <Sparkles size={10} /> Reasoning
-              </div>
-              <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>
+              </Txt>
+              <Txt as="p" variant="body-sm" tone="ink" className="italic">
+                {reason}
+              </Txt>
             </div>
           ) : (
-            <p className="text-muted-foreground mt-2 text-[10px] italic">
+            <Txt as="p" variant="meta" tone="muted" className="mt-2 italic">
               No capture reasoning was recorded for this knowledge record.
-            </p>
+            </Txt>
           )}
           {otherMetadata.length > 0 ? (
-            <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
+            <Txt as="dl" variant="meta" tone="muted" className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
                   <dt>{key}</dt>
                   <dd className="break-all">{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
                 </div>
               ))}
-            </dl>
+            </Txt>
           ) : null}
-        </div>
+        </Txt>
       ) : null}
     </div>
   );
@@ -240,7 +258,9 @@ export function KnowledgeFlyout({
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
-        <div className="text-muted-foreground p-4 text-sm">Loading knowledge node…</div>
+        <Txt as="div" variant="body" tone="muted" className="p-4">
+          Loading knowledge node…
+        </Txt>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
@@ -249,11 +269,13 @@ export function KnowledgeFlyout({
         <>
           <header className="flex items-start gap-2 px-4 py-3">
             <div className="min-w-0">
-              <h2 className="text-foreground truncate text-base font-semibold">{nodeQuery.data.node.name}</h2>
+              <Txt as="h2" variant="subheading" tone="ink" className="truncate">
+                {nodeQuery.data.node.name}
+              </Txt>
               <div className="mt-1 flex items-center gap-2">
-                <span className="bg-fill text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
+                <Txt as="span" variant="meta" tone="muted" className="bg-fill rounded px-1.5 py-0.5">
                   {nodeQuery.data.node.kind}
-                </span>
+                </Txt>
                 <RungBadge rung={nodeQuery.data.node.rung} />
               </div>
             </div>
@@ -272,9 +294,9 @@ export function KnowledgeFlyout({
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
-                  <p className="text-foreground px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                  <Txt as="p" variant="caption" tone="ink" className="px-4 pb-3 break-words whitespace-pre-wrap">
                     <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
-                  </p>
+                  </Txt>
                 </CollapsibleContent>
               </Collapsible>
             ) : null}
@@ -282,7 +304,12 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
+                <Txt
+                  as="dl"
+                  variant="caption"
+                  tone="muted"
+                  className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3"
+                >
                   <dt>Kind</dt>
                   <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
                   <dt>Scope</dt>
@@ -297,7 +324,7 @@ export function KnowledgeFlyout({
                   </dd>
                   <dt>Knowledge records</dt>
                   <dd className="text-foreground text-right">{nodeQuery.data.records.length}</dd>
-                </dl>
+                </Txt>
               </CollapsibleContent>
             </Collapsible>
 
@@ -306,7 +333,9 @@ export function KnowledgeFlyout({
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {nodeQuery.data.records.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">No knowledge records about this node yet.</p>
+                    <Txt as="p" variant="caption" tone="muted">
+                      No knowledge records about this node yet.
+                    </Txt>
                   ) : (
                     nodeQuery.data.records.map(record => (
                       <div

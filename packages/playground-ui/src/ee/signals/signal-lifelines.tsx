@@ -32,7 +32,7 @@ export function SignalLifelines({
 
   return (
     <section aria-label={`${label} lifelines`} className="min-w-0">
-      <Txt as="h3" variant="column" font="mono" className="tracking-widest uppercase" style={{ color }}>
+      <Txt as="h3" variant="eyebrow" style={{ color }}>
         <Tooltip>
           <TooltipTrigger
             render={

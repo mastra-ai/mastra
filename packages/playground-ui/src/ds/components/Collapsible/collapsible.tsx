@@ -1,5 +1,7 @@
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible';
 import React from 'react';
+import { textStyle } from '@/ds/primitives/text';
+import type { TextStyleProps } from '@/ds/primitives/text';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -7,12 +9,13 @@ const Collapsible = CollapsiblePrimitive.Root;
 
 type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'className'> & {
   className?: string;
+  textVariant?: TextStyleProps['variant'];
   /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
 const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTriggerProps>(
-  ({ className, asChild, children, ...props }, ref) => {
+  ({ className, asChild, children, textVariant, ...props }, ref) => {
     const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
 
     return (
@@ -26,6 +29,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
           'hover:text-foreground',
           '[&>svg]:transition-transform [&>svg]:duration-normal [&>svg]:ease-out-custom',
           '[&[data-panel-open]>svg]:rotate-90',
+          textStyle({ variant: textVariant }),
           className,
         )}
         {...renderProps}

@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useStoredAgentDependents } from '@/domains/agents/hooks/use-stored-agents';
 
 const MAX_DEPENDENTS_SHOWN = 5;
@@ -48,10 +49,12 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   const overflow = dependents.length - visible.length;
 
   return (
-    <div data-testid="agent-impact-warnings" className="text-caption text-muted-foreground">
+    <Txt as="div" variant="caption" tone="muted" data-testid="agent-impact-warnings">
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
-          <p className="font-medium">{copy.dependents}</p>
+          <Txt as="p" variant="column">
+            {copy.dependents}
+          </Txt>
           <ul className="mt-1 list-disc pl-5">
             {visible.map(dep => (
               <li key={dep.id} data-testid="agent-impact-dependent">
@@ -71,6 +74,6 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
           {copy.hidden(hiddenCount)}
         </p>
       )}
-    </div>
+    </Txt>
   );
 };

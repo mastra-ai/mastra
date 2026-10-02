@@ -38,7 +38,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
     <aside id="trace-signal-settings" aria-label="Trace signal settings" className="min-h-0">
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
-          <DataDetailsPanel.Heading className="items-center font-medium text-foreground">
+          <DataDetailsPanel.Heading variant="subheading" tone="ink" className="items-center">
             <Settings aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
@@ -209,9 +209,9 @@ function TraceSignalSettingsContent() {
 
       {archived.length > 0 ? (
         <details>
-          <summary className="cursor-pointer text-caption text-muted-foreground">
+          <Txt as="summary" variant="caption" tone="muted" className="cursor-pointer">
             Archived definitions ({archived.length})
-          </summary>
+          </Txt>
           <div className="mt-2 divide-y divide-border">
             {archived.map(definition => (
               <div key={definition.id} className="flex min-h-12 items-center justify-between gap-3 py-2">

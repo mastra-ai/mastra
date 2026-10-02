@@ -2,9 +2,11 @@ import { Field as FieldPrimitive } from '@base-ui/react/field';
 import { Fieldset as FieldsetPrimitive } from '@base-ui/react/fieldset';
 import { CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
-
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
 import { Icon } from '@/ds/icons/Icon';
+import { textStyle } from '@/ds/primitives/text';
+import type { TextStyleProps } from '@/ds/primitives/text';
+
 import { cn } from '@/lib/utils';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
@@ -83,9 +85,18 @@ type FieldLabelProps = Omit<FieldPrimitive.Label.Props, 'className' | 'id'> & {
   className?: string;
   required?: boolean;
   size?: 'smaller' | 'default' | 'bigger';
+  textVariant?: TextStyleProps['variant'];
 };
 
-function FieldLabel({ className, required = false, size = 'default', children, onClick, ...props }: FieldLabelProps) {
+function FieldLabel({
+  className,
+  required = false,
+  size = 'default',
+  textVariant,
+  children,
+  onClick,
+  ...props
+}: FieldLabelProps) {
   const field = useFieldAriaIds();
 
   const focusManualControl: FieldLabelProps['onClick'] = event => {
@@ -105,6 +116,7 @@ function FieldLabel({ className, required = false, size = 'default', children, o
         'data-disabled:cursor-not-allowed',
         size === 'smaller' && 'text-column',
         size === 'bigger' && 'text-body',
+        textStyle({ variant: textVariant }),
         className,
       )}
       onClick={focusManualControl}
@@ -118,9 +130,10 @@ function FieldLabel({ className, required = false, size = 'default', children, o
 
 type FieldDescriptionProps = Omit<FieldPrimitive.Description.Props, 'className' | 'id'> & {
   className?: string;
+  textVariant?: TextStyleProps['variant'];
 };
 
-function FieldDescription({ className, ...props }: FieldDescriptionProps) {
+function FieldDescription({ className, textVariant, ...props }: FieldDescriptionProps) {
   const field = useFieldAriaIds();
   const setHasDescription = field?.setHasDescription;
 
@@ -134,7 +147,7 @@ function FieldDescription({ className, ...props }: FieldDescriptionProps) {
     <FieldPrimitive.Description
       id={field?.descriptionId}
       data-slot="field-description"
-      className={cn('-mt-1 text-caption text-muted-foreground', className)}
+      className={cn('-mt-1 text-caption text-muted-foreground', textStyle({ variant: textVariant }), className)}
       {...props}
     />
   );
@@ -208,14 +221,19 @@ function Fieldset({ className, ...props }: FieldsetProps) {
 
 type FieldsetLegendProps = Omit<FieldsetPrimitive.Legend.Props, 'className'> & {
   className?: string;
+  textVariant?: TextStyleProps['variant'];
   required?: boolean;
 };
 
-function FieldsetLegend({ className, required = false, children, ...props }: FieldsetLegendProps) {
+function FieldsetLegend({ className, required = false, textVariant, children, ...props }: FieldsetLegendProps) {
   return (
     <FieldsetPrimitive.Legend
       data-slot="fieldset-legend"
-      className={cn('text-label text-foreground data-disabled:text-muted-foreground', className)}
+      className={cn(
+        'text-label text-foreground data-disabled:text-muted-foreground',
+        textStyle({ variant: textVariant }),
+        className,
+      )}
       {...props}
     >
       {children}

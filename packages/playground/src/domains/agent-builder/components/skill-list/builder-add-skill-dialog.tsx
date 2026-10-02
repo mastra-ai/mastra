@@ -191,9 +191,9 @@ export function BuilderAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
+              <Txt as="div" variant="eyebrow" tone="muted" className="mb-2">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
-              </div>
+              </Txt>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
@@ -237,12 +237,14 @@ export function BuilderAddSkillDialog({
                                   </Txt>
                                 )}
                               </div>
-                              <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
+                              <Txt as="div" variant="caption" tone="muted" className="truncate">
+                                {skill.topSource}
+                              </Txt>
                             </div>
-                            <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
+                            <Txt as="div" variant="caption" tone="muted" className="flex shrink-0 items-center gap-1">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
-                            </div>
+                            </Txt>
                           </div>
                         </button>
                       );
@@ -269,7 +271,7 @@ export function BuilderAddSkillDialog({
                         <Txt as="h3" variant="subheading" tone="ink" className="truncate">
                           {selectedSkill.name}
                         </Txt>
-                        <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
+                        <Txt as="div" variant="caption" tone="muted" className="mt-1 flex items-center gap-3">
                           <span className="flex items-center gap-1">
                             <GithubIcon className="h-3 w-3" />
                             {selectedSkill.topSource}
@@ -278,7 +280,7 @@ export function BuilderAddSkillDialog({
                             <Download className="h-3 w-3" />
                             {selectedSkill.installs.toLocaleString()} installs
                           </span>
-                        </div>
+                        </Txt>
                       </div>
                       {githubUrl && (
                         <a

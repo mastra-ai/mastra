@@ -32,28 +32,32 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-0.5 p-3">
-        <button
+        <Txt
+          as="button"
+          variant="column"
+          tone="ink"
           type="button"
           onClick={() => onSelectToolkit(undefined)}
           className={cn(
-            'rounded-md px-3 py-2 text-left text-caption',
+            'rounded-md px-3 py-2 text-left',
             controlStateColorTransition,
-            selectedToolkit === undefined
-              ? 'bg-fill-hover font-medium text-foreground'
-              : cn(quietTextHover, 'hover:bg-fill-subtle'),
+            selectedToolkit === undefined ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
           All
-        </button>
+        </Txt>
 
-        <button
+        <Txt
+          as="button"
+          variant="column"
+          tone="ink"
           type="button"
           onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
           className={cn(
-            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-caption',
+            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left',
             controlStateColorTransition,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-fill-hover font-medium text-foreground'
+              ? 'bg-fill-hover'
               : cn(quietTextHover, 'hover:bg-fill-subtle'),
           )}
         >
@@ -67,24 +71,25 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
               {selectedCount}
             </Txt>
           )}
-        </button>
+        </Txt>
 
         {toolkits.map(toolkit => (
-          <button
+          <Txt
+            as="button"
+            variant="column"
+            tone="ink"
             key={toolkit.slug}
             type="button"
             onClick={() => onSelectToolkit(toolkit.slug)}
             className={cn(
-              'truncate rounded-md px-3 py-2 text-left text-caption',
+              'truncate rounded-md px-3 py-2 text-left',
               controlStateColorTransition,
-              selectedToolkit === toolkit.slug
-                ? 'bg-fill-hover font-medium text-foreground'
-                : cn(quietTextHover, 'hover:bg-fill-subtle'),
+              selectedToolkit === toolkit.slug ? 'bg-fill-hover' : cn(quietTextHover, 'hover:bg-fill-subtle'),
             )}
             title={toolkit.name}
           >
             {toolkit.name}
-          </button>
+          </Txt>
         ))}
       </div>
     </ScrollArea>

@@ -276,7 +276,7 @@ export const Txtmessage = ({
       <div className="flex justify-end">
         <Txt
           variant="body"
-          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1"
           as="div"
         >
           <MarkdownRenderer className="text-black">{txt}</MarkdownRenderer>
@@ -290,7 +290,7 @@ export const Txtmessage = ({
       <Txt
         variant="body"
         tone="muted"
-        className="max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+        className="max-w-[80%] [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
@@ -340,23 +340,23 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               </Button>
             )}
             <CollapsibleTrigger
-              className={cn(
-                'text-body underline-offset-2 hover:underline',
-                quietTextHover,
-                controlStateColorTransition,
-              )}
+              textVariant="body"
+              className={cn('underline-offset-2 hover:underline', quietTextHover, controlStateColorTransition)}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
             </CollapsibleTrigger>
           </div>
           <CollapsibleContent>
-            <pre
-              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
+            <Txt
+              as="pre"
+              variant="caption"
+              tone="muted"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
-            </pre>
+            </Txt>
           </CollapsibleContent>
         </Collapsible>
       ) : (
@@ -442,7 +442,10 @@ const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string;
       <Icon>{icon}</Icon>
     </div>
     <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="font-medium text-foreground">{value}</strong>
+      {label}{' '}
+      <Txt as="strong" variant="subheading" tone="ink">
+        {value}
+      </Txt>
     </Txt>
   </div>
 );

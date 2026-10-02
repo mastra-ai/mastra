@@ -136,7 +136,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 </div>
               ) : available.length === 0 ? (
                 visibleLinked.length === 0 && (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-2 py-2">
+                  <Txt tone="muted" as="p" variant="caption" className="px-2 py-2">
                     {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
                   </Txt>
                 )
@@ -188,7 +188,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
 function ListHeading({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="meta" className="text-muted-foreground px-2 pt-3 pb-1 first:pt-0">
+    <Txt tone="muted" as="p" variant="meta" className="px-2 pt-3 pb-1 first:pt-0">
       {children}
     </Txt>
   );
@@ -200,14 +200,14 @@ function ListHeading({ children }: { children: ReactNode }) {
  * booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'px-4 py-3 text-caption leading-relaxed text-muted-foreground';
+  const calloutClass = 'px-4 py-3   ';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
     return (
-      <div className={calloutClass}>
+      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
         You need to sign in to use GitHub. Reload the page — if that doesn't work, sign out and back in.
-      </div>
+      </Txt>
     );
   }
 
@@ -215,7 +215,7 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
   if (status.reason === 'missing_config' && status.diagnostics) {
     const missing = status.diagnostics.missingGithubAppEnvVars;
     return (
-      <div className={calloutClass}>
+      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
         <p className="m-0 mb-1">GitHub is disabled on the server.</p>
         {missing.length > 0 && (
           <p className="m-0 mb-1">
@@ -228,39 +228,39 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
           callback URL, then restart <code className="text-muted-foreground">pnpm web:dev</code> from{' '}
           <code className="text-muted-foreground">mastracode/web</code>.
         </p>
-      </div>
+      </Txt>
     );
   }
 
   // Organization required: signed in but no WorkOS org.
   if (status.organizationRequired || status.reason === 'organization_required') {
     return (
-      <div className={calloutClass}>
+      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
         Your account has no WorkOS organization. Connecting repositories requires an org. Sign out and back in to
         auto-create one, or ask your admin to add you to an org.
-      </div>
+      </Txt>
     );
   }
 
   // Not connected: app installed but no installation persisted (callback didn't complete).
   if (!connected && status.reason === 'not_connected') {
     return (
-      <div className={calloutClass}>
+      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
         The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
         redirects to <code className="text-muted-foreground">/auth/github/callback</code> — make sure that URL is
         registered in your GitHub App settings (Callback URL).
-      </div>
+      </Txt>
     );
   }
 
   // Connected but no repos: installation may have no repo access.
   if (connected && empty) {
     return (
-      <div className={calloutClass}>
+      <Txt as="div" variant="caption" tone="muted" className={calloutClass}>
         No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
         repository access at <code className="text-muted-foreground">https://github.com/settings/installations</code>{' '}
         and grant access to at least one repo.
-      </div>
+      </Txt>
     );
   }
 

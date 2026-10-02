@@ -12,7 +12,7 @@ import { resultBlock, stringify, truncate } from './transcript-shared';
 
 const promptCardSuspension =
   'border-border border-l-warning-indicator bg-fill my-2 min-w-0 rounded-lg border border-l-4 px-4 py-3';
-const promptTitle = 'mb-1.5 text-sm font-semibold text-foreground';
+const promptTitle = 'mb-1.5   ';
 const promptActions = 'mt-2 flex gap-2';
 
 function lastSegment(id: string): string {
@@ -46,7 +46,9 @@ export function ApprovalCard({
       onApprove={() => onApprove(prompt.toolCallId, true, prompt.id)}
       onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
     >
-      <pre className={resultBlock}>{truncate(stringify(prompt.args), 400)}</pre>
+      <Txt as="pre" variant="caption" tone="ink" font="mono" className={resultBlock}>
+        {truncate(stringify(prompt.args), 400)}
+      </Txt>
     </ToolApproval>
   );
 }
@@ -115,8 +117,14 @@ export function SuspensionCard({
   if (prompt.toolName === 'request_access') {
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
-        <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
-        {payload.reason && <div className="text-muted-foreground mt-0.5 text-xs">Reason: {payload.reason}</div>}
+        <Txt as="div" variant="subheading" tone="ink" className={promptTitle}>
+          Grant access to {payload.requestedPath ?? 'a path'}?
+        </Txt>
+        {payload.reason && (
+          <Txt as="div" variant="caption" tone="muted" className="mt-0.5">
+            Reason: {payload.reason}
+          </Txt>
+        )}
         <div className={promptActions}>
           <Button
             variant="primary"
@@ -160,7 +168,9 @@ function AskUserCard({
   const question = payload.question ?? 'The agent has a question';
   return (
     <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
-      <div className={promptTitle}>{question}</div>
+      <Txt as="div" variant="subheading" tone="ink" className={promptTitle}>
+        {question}
+      </Txt>
       {options.length > 0 ? (
         <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
           {options.map(opt => (
@@ -207,7 +217,7 @@ export function SubagentCard({ entry }: { entry: SubagentEntry }) {
     <div className="border-border border-l-info-indicator bg-fill my-2 rounded-lg border border-l-4 px-3 py-2">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
-        <Txt variant="meta" className="text-muted-foreground">
+        <Txt tone="muted" variant="meta">
           {lastSegment(entry.modelId)}
         </Txt>
       </div>

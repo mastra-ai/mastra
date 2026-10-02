@@ -235,7 +235,7 @@ export function ModelPicker() {
                 heading={provider}
                 // Providers are a soft grouping inside the models list, not a
                 // top-level section: mute the loud uppercase heading styling.
-                className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
+                headingVariant="caption"
               >
                 {models.map(model => (
                   <CommandItem

@@ -13,7 +13,7 @@ import { boardItemPath } from '../overview';
 import type { MovedItem, StageItem } from '../overview';
 import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
-import { PANEL, PANEL_ROW_LINK, TIMESTAMP } from './panel';
+import { PANEL, PANEL_ROW_LINK } from './panel';
 import { StageBadge } from './StageBadge';
 
 /** Rows before the fold, and the ceiling once it is opened. */
@@ -38,7 +38,7 @@ function ActorIcon({ by }: { by: string | undefined }) {
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
+      <Txt tone="muted" as="p" variant="caption" className="m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -68,17 +68,17 @@ function ItemRow({
     <>
       {leading}
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="column" className="text-foreground truncate">
+        <Txt tone="ink" as="span" variant="column" className="truncate">
           {title}
         </Txt>
         {subtitle ? (
-          <Txt as="span" variant="meta" className="text-muted-foreground truncate">
+          <Txt tone="muted" as="span" variant="meta" className="truncate">
             {subtitle}
           </Txt>
         ) : null}
       </span>
       {badge}
-      <span className={`${TIMESTAMP} relative shrink-0 text-right`}>
+      <Txt as="span" variant="meta" tone="muted" className={`relative shrink-0 text-right`}>
         {unread ? (
           <span
             className="bg-warning-indicator absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
@@ -86,7 +86,7 @@ function ItemRow({
           />
         ) : null}
         {time}
-      </span>
+      </Txt>
     </>
   );
 
@@ -124,20 +124,23 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
 
   return (
     <li>
-      <button
+      <Txt
+        as="button"
+        variant="meta"
+        tone="muted"
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} text-meta text-muted-foreground hover:text-foreground w-full cursor-pointer`}
+        className={`${PANEL_ROW_LINK} hover:text-foreground w-full cursor-pointer`}
       >
         <span className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}
         </span>
         {expanded && total > EXPANDED_ROWS ? (
-          <span className={TIMESTAMP}>
+          <Txt as="span" variant="meta" tone="muted">
             {EXPANDED_ROWS} of {total}
-          </span>
+          </Txt>
         ) : null}
-      </button>
+      </Txt>
     </li>
   );
 }

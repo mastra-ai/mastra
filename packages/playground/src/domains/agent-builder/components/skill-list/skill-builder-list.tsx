@@ -41,7 +41,9 @@ export function SkillBuilderList({ skills, search, onSkillClick, showFavorites =
           <>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="truncate text-body text-foreground">{skill.name}</div>
+                <Txt as="div" variant="body" tone="ink" className="truncate">
+                  {skill.name}
+                </Txt>
                 {skill.visibility === 'private' && (
                   <Tooltip>
                     <TooltipTrigger asChild>

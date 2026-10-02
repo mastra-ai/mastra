@@ -173,20 +173,26 @@ const RefBlockContent = ({
                       )}
                     </div>
                     <div className="p-1">
-                      <button
+                      <Txt
+                        as="button"
+                        variant="meta"
+                        tone="ink"
                         type="button"
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle"
                         onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
                         <Icon className="h-3.5! w-3.5! text-muted-foreground">
                           <ExternalLink />
                         </Icon>
                         Open original
-                      </button>
+                      </Txt>
                       {onDereference && (
-                        <button
+                        <Txt
+                          as="button"
+                          variant="meta"
+                          tone="ink"
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-foreground hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-fill-subtle"
                           onClick={() => {
                             debouncedSave.flush();
                             onDereference(localContent);
@@ -196,19 +202,21 @@ const RefBlockContent = ({
                             <X />
                           </Icon>
                           De-reference block
-                        </button>
+                        </Txt>
                       )}
                       {onDelete && (
-                        <button
+                        <Txt
+                          as="button"
+                          variant="meta"
                           type="button"
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-meta text-destructive-foreground hover:bg-fill-subtle"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive-foreground hover:bg-fill-subtle"
                           onClick={onDelete}
                         >
                           <Icon className="h-3.5! w-3.5!">
                             <X />
                           </Icon>
                           Remove block
-                        </button>
+                        </Txt>
                       )}
                     </div>
                     {usedByAgents.length > 0 && (
@@ -231,14 +239,14 @@ const RefBlockContent = ({
             </div>
 
             {(isDraft || hasUnpublishedEdits) && (
-              <div className="flex items-start gap-1.5 px-1 pb-1 text-meta text-warning-foreground">
+              <Txt as="div" variant="meta" className="flex items-start gap-1.5 px-1 pb-1 text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                 <span>
                   {isDraft
                     ? 'This block is skipped at runtime until it is published.'
                     : 'Runtime uses the last published version until these edits are published.'}
                 </span>
-              </div>
+              </Txt>
             )}
 
             {/* Editable content */}

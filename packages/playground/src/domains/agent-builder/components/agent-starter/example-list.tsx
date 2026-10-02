@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -14,21 +15,23 @@ export const ExampleList = ({ onExampleClick }: ExampleListProps) => {
       {EXAMPLES.map((example, i) => {
         const Icon = example.icon;
         return (
-          <button
+          <Txt
+            as="button"
+            variant="caption"
             key={example.title}
             type="button"
             onClick={() => onExampleClick(example.prompt)}
             data-testid={`agent-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
             style={{ animationDelay: `${280 + i * 40}ms` }}
             className={cn(
-              'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-caption hover:border-border-strong hover:bg-fill-subtle',
+              'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 hover:border-border-strong hover:bg-fill-subtle',
               quietTextHover,
               controlStateColorTransition,
             )}
           >
             <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
             {example.title}
-          </button>
+          </Txt>
         );
       })}
     </div>

@@ -69,13 +69,13 @@ function TimeAxis({ domain }: { domain: TDomain }) {
       <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
         Time
       </Txt>
-      <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
+      <Txt as="div" variant="meta" tone="muted" className="flex justify-between px-1 py-1.5">
         {ticks.map(t => (
           <Txt key={t} as="span" variant="meta" font="mono">
             {formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}
           </Txt>
         ))}
-      </div>
+      </Txt>
     </div>
   );
 }
@@ -99,7 +99,11 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 text-meta tabular-nums`}>
+      <Txt
+        as="div"
+        variant="meta"
+        className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 tabular-nums`}
+      >
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">time</span>
@@ -116,18 +120,18 @@ export function FlameTooltip({
             </span>
           </div>
         ))}
-      </div>
+      </Txt>
     );
   }
 
   return (
-    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 text-meta`}>
+    <Txt as="div" variant="meta" className={`${overlaySurfaceStyle} rounded px-2 py-1`}>
       {time && (
         <Txt as="span" variant="meta" font="mono" tone="ink">
           {time}
         </Txt>
       )}
-    </div>
+    </Txt>
   );
 }
 

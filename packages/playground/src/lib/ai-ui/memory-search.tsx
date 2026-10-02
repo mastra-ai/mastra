@@ -235,14 +235,16 @@ export const MemorySearch = ({
                 >
                   <div className="flex flex-col gap-2">
                     {result.context?.before && result.context.before.length > 0 && (
-                      <div className="space-y-1 text-caption opacity-50">
+                      <Txt as="div" variant="caption" className="space-y-1 opacity-50">
                         {result.context.before.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
-                            <span className="font-medium">{msg.role}:</span>
+                            <Txt as="span" variant="column">
+                              {msg.role}:
+                            </Txt>
                             <span className="text-muted-foreground">{truncateContent(msg.content, 50)}</span>
                           </div>
                         ))}
-                      </div>
+                      </Txt>
                     )}
 
                     <div className="flex items-start justify-between gap-2">
@@ -289,14 +291,16 @@ export const MemorySearch = ({
                     </div>
 
                     {result.context?.after && result.context.after.length > 0 && (
-                      <div className="space-y-1 text-caption opacity-50">
+                      <Txt as="div" variant="caption" className="space-y-1 opacity-50">
                         {result.context.after.map((msg, idx) => (
                           <div key={idx} className="flex items-start gap-2">
-                            <span className="font-medium">{msg.role}:</span>
+                            <Txt as="span" variant="column">
+                              {msg.role}:
+                            </Txt>
                             <span className="text-muted-foreground">{truncateContent(msg.content, 50)}</span>
                           </div>
                         ))}
-                      </div>
+                      </Txt>
                     )}
                   </div>
                 </button>

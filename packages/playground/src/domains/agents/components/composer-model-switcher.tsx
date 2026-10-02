@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Lock, TriangleAlert } from 'lucide-react';
@@ -124,8 +125,10 @@ export const ComposerModelWarning = () => {
   return (
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
-        <div
-          className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground"
+        <Txt
+          as="div"
+          variant="caption"
+          className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
@@ -140,10 +143,10 @@ export const ComposerModelWarning = () => {
               </>
             )}
           </span>
-        </div>
+        </Txt>
       )}
       {showProviderWarning && (
-        <div className="flex max-w-full min-w-0 items-start gap-1 text-caption text-warning-foreground">
+        <Txt as="div" variant="caption" className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground">
           <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
           <span className="min-w-0 break-words">
             Set{' '}
@@ -152,7 +155,7 @@ export const ComposerModelWarning = () => {
             </code>{' '}
             to use this provider
           </span>
-        </div>
+        </Txt>
       )}
     </div>
   );

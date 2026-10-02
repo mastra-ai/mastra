@@ -82,12 +82,7 @@ export const AgentBuilderStarter = () => {
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <Txt
-          as="h1"
-          variant="title"
-          tone="ink"
-          className="starter-heading text-center font-display tracking-tight md:text-display"
-        >
+        <Txt font="display" as="h1" variant="title" tone="ink" className="starter-heading text-center">
           What should we build today?
         </Txt>
 
@@ -97,6 +92,7 @@ export const AgentBuilderStarter = () => {
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
+            textVariant="body"
             ref={textareaRef}
             testId="agent-builder-starter-input"
             size="md"
@@ -106,7 +102,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
+            className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

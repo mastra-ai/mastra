@@ -40,14 +40,14 @@ function Mutations({ mutations }: { mutations: NonNullable<ProcessorPipelineDesc
 
         return (
           <li key={index} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2 text-body text-foreground">
+            <Txt as="div" variant="body" tone="ink" className="flex flex-wrap items-center gap-2">
               <span>{MUTATION_LABELS[mutation.type] ?? mutation.type}</span>
               {detail && (
                 <Txt as="span" variant="meta" tone="faint">
                   {detail}
                 </Txt>
               )}
-            </div>
+            </Txt>
             {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
             {mutation.ids && mutation.ids.length > 0 && (
               <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>

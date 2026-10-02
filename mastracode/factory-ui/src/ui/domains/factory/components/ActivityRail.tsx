@@ -28,7 +28,7 @@ import type { ActivityBlock, ActivityEntry } from '../activity';
 import { activityBlocks, clockTime, dayHeading, groupByDay } from '../activity';
 import { auditActionLabel, auditCategory } from '../auditPresentation';
 import { boardItemPath } from '../overview';
-import { PANEL, PANEL_ROW, PANEL_ROW_LINK, TIMESTAMP } from './panel';
+import { PANEL, PANEL_ROW, PANEL_ROW_LINK } from './panel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE } from './Timeline';
 import type { FactoryMentionMember } from '../services/members';
 import { stageTone } from '../stages';
@@ -167,22 +167,40 @@ function entryTarget(entry: ActivityEntry): { id: string; board: string } | unde
 /** Only a card the board still holds opens. */
 function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factoryProjectId: string | undefined }) {
   const target = entryTarget(entry);
-  const shape = 'text-foreground min-w-0 truncate font-medium';
+  const shape = ' min-w-0 truncate ';
 
-  if (target === undefined) return <span className={shape}>{entry.title}</span>;
+  if (target === undefined)
+    return (
+      <Txt as="span" variant="column" tone="ink" className={shape}>
+        {entry.title}
+      </Txt>
+    );
 
   return (
-    <Link to={boardItemPath(factoryProjectId, target)} className={`${shape} hover:underline`}>
+    <Txt
+      as="span"
+      variant="column"
+      tone="ink"
+      render={<Link to={boardItemPath(factoryProjectId, target)} />}
+      className={`${shape} hover:underline`}
+    >
       {entry.title}
-    </Link>
+    </Txt>
   );
 }
 
 function Time({ at, className }: { at: number; className?: string }) {
   return (
-    <time dateTime={new Date(at).toISOString()} className={`${TIMESTAMP} shrink-0 ${className ?? ''}`}>
+    <Txt
+      as="time"
+      variant="meta"
+      tone="muted"
+      font="mono"
+      dateTime={new Date(at).toISOString()}
+      className={`shrink-0 ${className ?? ''}`}
+    >
       {clockTime(at)}
-    </time>
+    </Txt>
   );
 }
 
@@ -193,7 +211,7 @@ function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; f
         const target = entryTarget(entry);
         const body = (
           <>
-            <Txt as="span" variant="caption" className="text-muted-foreground min-w-0 flex-1 truncate">
+            <Txt tone="muted" as="span" variant="caption" className="min-w-0 flex-1 truncate">
               {entry.title === '' ? <span className="text-placeholder">—</span> : entry.title}
             </Txt>
             <Time at={entry.at} />
@@ -235,12 +253,16 @@ function Block({
     <RailRow mark={<Node entry={first} />} connected={connected}>
       <Txt as="div" variant="caption" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
-        <span className="text-foreground shrink-0 font-medium">{name}</span>
+        <Txt as="span" variant="column" tone="ink" className="shrink-0">
+          {name}
+        </Txt>
         <span className="text-muted-foreground shrink-0">
           {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
         </span>
         {grouped && first.kind === 'move' ? (
-          <span className="text-foreground shrink-0 font-medium">{block.entries.length} cards</span>
+          <Txt as="span" variant="column" tone="ink" className="shrink-0">
+            {block.entries.length} cards
+          </Txt>
         ) : (
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}

@@ -67,7 +67,7 @@ export const FilterableList = ({
         onValueChange={setSearch}
       />
 
-      <div className="flex shrink-0 items-center gap-2 text-meta">
+      <Txt as="div" variant="meta" className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
@@ -89,7 +89,7 @@ export const FilterableList = ({
         >
           Clear all
         </button>
-      </div>
+      </Txt>
 
       <ScrollArea className="min-h-0 flex-1">
         <ScrollAreaViewport className="pr-2">
@@ -113,10 +113,11 @@ export const FilterableList = ({
                   <li key={item.id}>
                     <Field disabled={disabled}>
                       <FieldLabel
+                        textVariant="caption"
                         data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                         data-checked={checked ? 'true' : 'false'}
                         className={cn(
-                          'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+                          'flex shrink items-center gap-2 rounded-md px-2 py-1.5 select-none hover:bg-fill-subtle',
                           disabled && 'opacity-60',
                         )}
                       >

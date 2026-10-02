@@ -366,13 +366,16 @@ function WorkspaceGroup({
         </Txt>
       ) : null}
       {hiddenCount > 0 && (
-        <button
+        <Txt
+          as="button"
+          variant="caption"
+          tone="muted"
           type="button"
-          className="text-muted-foreground hover:text-foreground pl-3 text-left text-xs"
+          className="hover:text-foreground pl-3 text-left"
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}
-        </button>
+        </Txt>
       )}
     </section>
   );

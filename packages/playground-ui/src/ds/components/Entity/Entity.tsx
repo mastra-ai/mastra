@@ -1,6 +1,7 @@
 import { Txt } from '../Txt';
 import { Icon } from '@/ds/icons';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 export interface EntityProps {
@@ -42,9 +43,13 @@ export const EntityIcon = ({ children, className, style }: EntityProps) => {
   );
 };
 
-export const EntityName = ({ children, className }: EntityProps) => {
+export const EntityName = ({
+  children,
+  className,
+  variant = 'heading',
+}: EntityProps & Pick<TextStyleProps, 'variant'>) => {
   return (
-    <Txt as="p" variant="heading" tone="ink" className={className}>
+    <Txt as="p" variant={variant} tone="ink" className={className}>
       {children}
     </Txt>
   );

@@ -34,10 +34,10 @@ export function JSONFormatPanel() {
       <dl className="divide-y divide-border rounded-lg border border-border">
         {FIELDS.map(field => (
           <div key={field.name} className="grid grid-cols-[7rem_1fr] gap-3 px-3 py-2.5">
-            <dt className="text-meta text-foreground">
+            <Txt as="dt" variant="meta" tone="ink">
               <InlineCode>{field.name}</InlineCode>
-            </dt>
-            <dd className="flex flex-col items-start gap-1.5 text-meta text-muted-foreground">
+            </Txt>
+            <Txt as="dd" variant="meta" tone="muted" className="flex flex-col items-start gap-1.5">
               <span>{field.description}</span>
               {field.required ? (
                 <Badge variant="success" size="xs">
@@ -48,7 +48,7 @@ export function JSONFormatPanel() {
                   optional
                 </Badge>
               )}
-            </dd>
+            </Txt>
           </div>
         ))}
       </dl>

@@ -58,47 +58,55 @@ export function TagPicker({
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <Txt
+            as="button"
+            variant="meta"
             type="button"
             className={cn(
               quietTextHover,
               controlStateColorTransition,
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-meta hover:bg-fill-subtle',
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-fill-subtle',
             )}
           >
             <Plus className="h-3 w-3" />
             tag
-          </button>
+          </Txt>
         </PopoverTrigger>
         <PopoverContent className="w-52 p-2" align="start">
           <Input
+            textVariant="caption"
             ref={inputRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="mb-1 h-7 text-caption"
+            className="mb-1 h-7"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
             {filtered.map(tag => (
-              <button
+              <Txt
+                as="button"
+                variant="caption"
+                tone="muted"
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="w-full rounded px-2 py-1 text-left text-caption text-muted-foreground hover:bg-fill-subtle"
+                className="w-full rounded px-2 py-1 text-left hover:bg-fill-subtle"
               >
                 {tag}
-              </button>
+              </Txt>
             ))}
             {canCreate && (
-              <button
+              <Txt
+                as="button"
+                variant="caption"
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="w-full rounded px-2 py-1 text-left text-caption text-info-indicator hover:bg-fill-subtle"
+                className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
               >
                 Create &quot;{search.trim()}&quot;
-              </button>
+              </Txt>
             )}
             {filtered.length === 0 && !canCreate && (
               <Txt variant="meta" tone="muted" className="block px-2 py-1">

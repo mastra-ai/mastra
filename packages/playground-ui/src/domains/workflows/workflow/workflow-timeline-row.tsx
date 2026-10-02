@@ -70,10 +70,13 @@ export function WorkflowTimelineRow({
         (isSelected || isHovered) && 'bg-fill-subtle',
       )}
     >
-      <button
+      <Txt
+        as="button"
+        variant="meta"
+        tone="ink"
         type="button"
         className={cn(
-          'flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm aria-disabled:cursor-default',
+          'flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm aria-disabled:cursor-default',
           focusRing,
         )}
         aria-disabled={row.isNestedEntry}
@@ -102,7 +105,7 @@ export function WorkflowTimelineRow({
             </Txt>
           )}
         </span>
-      </button>
+      </Txt>
       <div
         className="relative h-5 min-w-0 overflow-hidden rounded-sm bg-muted @max-[540px]/workflow-timeline:col-span-full @max-[540px]/workflow-timeline:row-start-2 @max-[540px]/workflow-timeline:ml-[34px]"
         aria-hidden

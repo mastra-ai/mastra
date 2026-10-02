@@ -21,14 +21,16 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
   return (
     <div className="grid gap-1 rounded-lg bg-background px-3 py-2">
       <div className="flex items-center justify-between gap-4">
-        <Link
-          href={paths.scorerLink(scorerId)}
-          aria-label={`Open ${scorerId}`}
-          className="flex min-w-0 items-center gap-1.5 text-subheading text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+        <Txt
+          as="span"
+          variant="subheading"
+          tone="ink"
+          render={<Link href={paths.scorerLink(scorerId)} aria-label={`Open ${scorerId}`} />}
+          className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{scorerId}</span>
-        </Link>
+        </Txt>
         <div className="flex items-center gap-3">
           <Txt as="span" tone="muted" className="tabular-nums">
             {value != null ? value.toFixed(2) : '-'}

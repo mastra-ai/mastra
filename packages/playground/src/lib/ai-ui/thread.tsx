@@ -317,10 +317,13 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
         as="h1"
         variant="display"
         tone="muted"
-        className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
+        className="starter-heading mx-auto max-w-2xl text-center text-balance"
       >
         <span className="starter-shimmer">
-          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
+          What can{' '}
+          <Txt as="span" variant="display" className="starter-shimmer starter-shimmer-ink">
+            {agentName || 'this agent'}
+          </Txt>{' '}
           do for you today?
         </span>
       </Txt>
@@ -414,14 +417,14 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-ui-sm">
+        <Txt variant="caption" role="alert">
           {preparationError || draftStatus?.error}
-        </p>
+        </Txt>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-ui-sm">
+        <Txt variant="caption" role="status">
           Restoring draft…
-        </p>
+        </Txt>
       )}
       <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
         <Composer

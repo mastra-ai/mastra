@@ -96,13 +96,15 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
   }
 
   return (
-    <a
+    <Txt
+      as="a"
+      variant="meta"
       aria-label={`${label}: ${status}`}
       href={docsHref}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-meta',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5',
         'hover:bg-fill-subtle',
         focusRing,
         quietTextHover,
@@ -120,7 +122,9 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
+          <Txt as="span" variant="meta" tone="ink" className="min-w-0 truncate">
+            {label}
+          </Txt>
           <span className="shrink-0 text-muted-foreground tabular-nums">{status}</span>
         </span>
         <span className="mt-0.5 block text-muted-foreground">{description}</span>
@@ -131,7 +135,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
           controlStateColorTransition,
         )}
       />
-    </a>
+    </Txt>
   );
 }
 

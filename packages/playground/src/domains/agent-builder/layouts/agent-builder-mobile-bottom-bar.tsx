@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -70,22 +71,26 @@ export function AgentBuilderMobileBottomBar() {
           const isActive = pathname.startsWith(link.url);
           return (
             <li key={link.name}>
-              <Link
-                href={link.url}
-                aria-current={isActive ? 'page' : undefined}
+              <Txt
+                as="span"
+                variant="caption"
+                tone={isActive ? 'ink' : 'muted'}
+                render={<Link href={link.url} aria-current={isActive ? 'page' : undefined} />}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-1 py-2 text-caption',
+                  'relative flex flex-col items-center justify-center gap-1 py-2',
                   controlStateColorTransition,
                   isActive
-                    ? 'text-foreground before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-muted-foreground hover:text-foreground',
+                    ? 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
+                    : 'hover:text-foreground',
                 )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">
                   {link.icon}
                 </span>
-                <span className="leading-none">{link.name}</span>
-              </Link>
+                <Txt as="span" variant="caption">
+                  {link.name}
+                </Txt>
+              </Txt>
             </li>
           );
         })}

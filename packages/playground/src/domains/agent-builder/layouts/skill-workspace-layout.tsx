@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -55,7 +56,9 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-body text-foreground">{title}</div>
+          <Txt as="div" variant="body" tone="ink" className="min-w-0 truncate">
+            {title}
+          </Txt>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -82,34 +85,40 @@ export const SkillWorkspaceLayout = ({
                 activeTab === 'configure' && 'translate-x-full',
               )}
             />
-            <button
+            <Txt
+              as="button"
+              variant="subheading"
+              tone="ink"
               type="button"
               role="tab"
               aria-selected={activeTab === 'chat'}
               data-testid="skill-edit-tab-chat"
               onClick={() => setActiveTab('chat')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
-                activeTab === 'chat' ? 'text-foreground' : quietTextHover,
+                activeTab === 'chat' ? '' : quietTextHover,
               )}
             >
               Chat
-            </button>
-            <button
+            </Txt>
+            <Txt
+              as="button"
+              variant="subheading"
+              tone="ink"
               type="button"
               role="tab"
               aria-selected={activeTab === 'configure'}
               data-testid="skill-edit-tab-configure"
               onClick={() => setActiveTab('configure')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
-                activeTab === 'configure' ? 'text-foreground' : quietTextHover,
+                activeTab === 'configure' ? '' : quietTextHover,
               )}
             >
               Configuration
-            </button>
+            </Txt>
           </div>
         </div>
       )}

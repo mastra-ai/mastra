@@ -1,6 +1,7 @@
 import type { UISpan } from '../types';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { HoverCardContent } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { formatTimestampPrecise } from '@/utils/date-format';
 import { formatDurationPrecise } from '@/utils/duration';
@@ -13,7 +14,9 @@ type SpanTimingHoverCardProps = {
 export function SpanTimingHoverCard({ span, startShiftMs }: SpanTimingHoverCardProps) {
   return (
     <HoverCardContent className="pr-6">
-      <div className={cn('mt-1 mb-2 flex items-center gap-2 text-caption')}>Span Timing</div>
+      <Txt as="div" variant="caption" className={cn('mt-1 mb-2 flex items-center gap-2')}>
+        Span Timing
+      </Txt>
       <DataKeysAndValues>
         <DataKeysAndValues.Key>Latency</DataKeysAndValues.Key>
         <DataKeysAndValues.Value>{formatDurationPrecise(span.latency) ?? '-'}</DataKeysAndValues.Value>

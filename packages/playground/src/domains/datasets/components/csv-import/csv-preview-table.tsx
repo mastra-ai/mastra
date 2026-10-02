@@ -1,6 +1,7 @@
 'use client';
 
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export interface CSVPreviewTableProps {
   headers: string[];
@@ -46,9 +47,10 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                   if (index === 0) {
                     return (
                       <DataList.RowHeaderCell
+                        textVariant="caption"
                         key={`${index}-${header}`}
 
-                        className="max-w-[14rem] text-caption"
+                        className="max-w-[14rem]"
                       >
                         {value}
                       </DataList.RowHeaderCell>
@@ -56,7 +58,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                   }
 
                   return (
-                    <DataList.Cell key={`${index}-${header}`} className="max-w-[12rem] text-caption">
+                    <DataList.Cell textVariant="caption" key={`${index}-${header}`} className="max-w-[12rem]">
                       <span className="block truncate">{value}</span>
                     </DataList.Cell>
                   );
@@ -68,11 +70,11 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
       ) : null}
 
       {/* Row count indicator */}
-      <div className="text-caption text-muted-foreground">
+      <Txt as="div" variant="caption" tone="muted">
         {displayData.length < totalRows
           ? `Showing ${displayData.length} of ${totalRows} rows`
           : `${totalRows} row${totalRows !== 1 ? 's' : ''}`}
-      </div>
+      </Txt>
     </div>
   );
 }

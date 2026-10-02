@@ -18,11 +18,11 @@ function ConnectionRow({
         <Txt as="div" variant="caption" font="mono">
           {connection.connectionId}
         </Txt>
-        <div className="text-caption text-muted-foreground">
+        <Txt as="div" variant="caption" tone="muted">
           {connection.label ?? '(no label)'} · {connection.status}
           {connection.scope ? ` · ${connection.scope}` : ''}
           {isAdmin && connection.authorId ? ` · author: ${connection.authorId}` : ''}
-        </div>
+        </Txt>
       </div>
       <button
         type="button"

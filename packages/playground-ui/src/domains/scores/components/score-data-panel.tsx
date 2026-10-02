@@ -5,6 +5,7 @@ import { ScoreAsItemDialog } from './score-as-item-dialog';
 import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { formatTimestampPrecise } from '@/utils/date-format';
@@ -20,10 +21,10 @@ function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
-      <span className="flex items-center gap-1.5 tracking-widest text-placeholder uppercase [&>svg]:size-3.5">
+      <Txt as="span" variant="eyebrow" tone="faint" className="flex items-center gap-1.5 [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
-      </span>
+      </Txt>
       <span>
         › Score <b className="text-muted-foreground">#{score.id}</b>
       </span>
@@ -114,20 +115,20 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               </div>
 
               <div className="mb-6 text-muted-foreground">
-                <div
-                  className={cn(
-                    'flex items-baseline gap-2 text-body text-placeholder',
-                    '[&>svg]:size-5 [&>svg]:translate-y-1',
-                  )}
+                <Txt
+                  as="div"
+                  variant="body"
+                  tone="faint"
+                  className={cn('flex items-baseline gap-2', '[&>svg]:size-5 [&>svg]:translate-y-1')}
                 >
                   <GaugeIcon />
-                  <span className="">Score:</span>
+                  <span>Score:</span>
                   <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
-                </div>
-                <div className="mt-2 text-body-sm">
+                </Txt>
+                <Txt as="div" variant="body-sm" className="mt-2">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
-                </div>
+                </Txt>
               </div>
 
               <div className="grid gap-4">

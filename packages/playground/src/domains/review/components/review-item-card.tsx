@@ -220,18 +220,28 @@ export function ReviewItemCard({
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
+            <Txt
+              as="pre"
+              variant="caption"
+              tone="ink"
+              className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
+            >
               {formatUnknown(item.input)}
-            </pre>
+            </Txt>
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
+              <Txt
+                as="pre"
+                variant="caption"
+                tone="ink"
+                className="max-h-40 overflow-auto rounded bg-background p-2 whitespace-pre-wrap"
+              >
                 {formatUnknown(item.output)}
-              </pre>
+              </Txt>
             </div>
           )}
           {Boolean(item.error) && (
@@ -239,9 +249,13 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground">
+              <Txt
+                as="pre"
+                variant="caption"
+                className="max-h-20 overflow-auto rounded bg-background p-2 whitespace-pre-wrap text-destructive-foreground"
+              >
                 {formatUnknown(item.error)}
-              </pre>
+              </Txt>
             </div>
           )}
           {/* Comment */}
@@ -251,6 +265,7 @@ export function ReviewItemCard({
                 Comment
               </Txt>
               <Textarea
+                textVariant="caption"
                 value={localComment}
                 onChange={e => {
                   setLocalComment(e.target.value);
@@ -265,7 +280,6 @@ export function ReviewItemCard({
                 }}
                 placeholder="Add a note about this item..."
                 rows={2}
-                className="text-caption"
               />
               {commentSaved && (
                 <Txt variant="meta" className="mt-0.5 text-success-indicator">

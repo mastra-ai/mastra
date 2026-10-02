@@ -137,9 +137,12 @@ function ArmDetail({ step, entered }: { step: FunnelStage; entered: number }) {
 function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) {
   const shift = (flip: boolean) => (flip ? `calc(-100% - ${CURSOR_GAP}px)` : `${CURSOR_GAP}px`);
   return (
-    <div
+    <Txt
+      as="div"
+      variant="caption"
+      tone="ink"
       role="tooltip"
-      className="bg-card shadow-overlay text-caption text-foreground animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
+      className="bg-card shadow-overlay animate-in fade-in zoom-in-95 pointer-events-none absolute z-100 flex w-max flex-col rounded-lg px-2.5 py-1.5 whitespace-nowrap motion-reduce:animate-none"
       style={{
         left: cursor.x,
         top: cursor.y,
@@ -149,7 +152,7 @@ function Readout({ cursor, children }: { cursor: Cursor; children: ReactNode }) 
       }}
     >
       {children}
-    </div>
+    </Txt>
   );
 }
 
@@ -239,16 +242,14 @@ export function StageFunnel({
             <div key={step.stage} className={`flex min-w-0 flex-col gap-1 ${down ? 'justify-center' : ''}`}>
               <span className="flex min-w-0 items-center gap-1.5">
                 {stage ? <BoardStageIcon stage={stage} /> : null}
-                <Txt as="span" variant="meta" className="text-foreground truncate font-semibold">
+                <Txt tone="ink" as="span" variant="meta" className="truncate">
                   {rungLabel(step.stage)}
                 </Txt>
               </span>
-              <span
-                className={`text-foreground leading-none font-semibold tracking-tight tabular-nums ${down ? 'text-[1.5rem]' : 'text-[clamp(1.25rem,2.5cqw,2rem)]'}`}
-              >
+              <Txt as="span" variant="lead" tone="ink" className={`tabular-nums ${down ? '' : ''}`}>
                 {step.reached}
-              </span>
-              <Txt as="span" variant="meta" className="text-muted-foreground truncate tabular-nums">
+              </Txt>
+              <Txt tone="muted" as="span" variant="meta" className="truncate tabular-nums">
                 {step.medianHoldMs === undefined ? ' ' : `${formatDuration(step.medianHoldMs)} typical`}
               </Txt>
             </div>
@@ -390,13 +391,13 @@ export function StageFunnel({
         </Key>
         <span className="ml-auto flex flex-col items-end gap-0.5">
           {pullRequests > 0 ? (
-            <Txt as="span" variant="meta" className="text-muted-foreground tabular-nums">
+            <Txt tone="muted" as="span" variant="meta" className="tabular-nums">
               {[`${pullRequests} opened a pull request`, merged > 0 ? `${merged} merged` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </Txt>
           ) : null}
-          <Txt as="span" variant="meta" className="text-muted-foreground">
+          <Txt tone="muted" as="span" variant="meta">
             created in this window, by furthest stage reached
           </Txt>
         </span>
