@@ -188,18 +188,20 @@ Files can arrive in any of these forms:
 
 ## Upload location
 
-Files are written to `uploads/<name>-<uuid>.<extension>`, relative to the sandbox working directory. The UUID keeps two uploads with the same name apart.
+Files are written to `uploads/<thread>/<uuid>.<extension>`, relative to the sandbox working directory. Each thread has its own directory, so threads that share a sandbox don't mix their files.
 
-The name is rewritten so the path is safe in a shell command. Accents are removed, and every character outside `A-Z`, `a-z`, `0-9`, `.`, `_`, and `-` becomes `_`. Path separators and `..` are replaced too, so a file always stays inside `uploads/`.
+The path keeps nothing of the original name but its extension. A path that looks like the name invites the model to retype one from the other, and to ask the sandbox for a file that doesn't exist. The name stays available in the note and in the message metadata.
 
 | Name sent | Path written |
 | - | - |
-| `report Q3 (final).pdf` | `uploads/report_Q3_final-<uuid>.pdf` |
-| `résumé.PDF` | `uploads/resume-<uuid>.pdf` |
-| `../../etc/passwd` | `uploads/etc_passwd-<uuid>` |
-| No name, `image/png` | `uploads/file-<uuid>.png` |
+| `report Q3 (final).pdf` | `uploads/<thread>/<uuid>.pdf` |
+| `résumé.PDF` | `uploads/<thread>/<uuid>.pdf` |
+| `../../etc/passwd` | `uploads/<thread>/<uuid>` |
+| No name, `image/png` | `uploads/<thread>/<uuid>.png` |
 
-A file sent without a name is called `file`, and its extension comes from its MIME type when the type is a common one.
+A file sent without a name takes its extension from its MIME type when the type is a common one.
+
+The thread ID is rewritten so the directory is safe in a shell command. Accents are removed, and every character outside `A-Z`, `a-z`, `0-9`, `.`, `_`, and `-` becomes `_`. Path separators and `..` are replaced too, so a file always stays inside `uploads/`.
 
 The processor writes with the sandbox `writeFiles` method when the sandbox has one, in a single call for all the files of a turn. Otherwise it writes with `executeCommand`, sending each file as base64 in chunks. This path needs `sh`, `base64`, `printf`, and `mkdir` in the sandbox.
 
@@ -209,7 +211,7 @@ The file part is replaced, at the same position in the message, by a text part:
 
 ```text
 [File uploaded to the sandbox]
-path: uploads/report-3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f.pdf
+path: uploads/thread-1/3f6c1d2e-8a4b-4c0d-9e21-5b7a6c9d0e1f.pdf
 name: report.pdf
 type: application/pdf
 size: 1258291 bytes
@@ -219,7 +221,7 @@ The processor also records each upload in the message metadata. The metadata is 
 
 ```typescript
 message.content.metadata.fileUploads
-// [{ name: 'report.pdf', path: 'uploads/report-<uuid>.pdf', mimeType: 'application/pdf', size: 1258291 }]
+// [{ name: 'report.pdf', path: 'uploads/thread-1/<uuid>.pdf', mimeType: 'application/pdf', size: 1258291 }]
 ```
 
 `name` is omitted for a file sent without a name.

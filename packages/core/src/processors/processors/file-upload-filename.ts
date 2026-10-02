@@ -1,10 +1,10 @@
 import { extensionOf, normalizeMimeType } from './file-upload-matching';
 
-export const UPLOADS_DIRECTORY = 'uploads';
+const UPLOADS_DIRECTORY = 'uploads';
 
-const FALLBACK_BASE = 'file';
+const FALLBACK_THREAD_DIRECTORY = 'thread';
 const FALLBACK_DISPLAY_NAME = 'unnamed file';
-const MAX_BASE_LENGTH = 100;
+const MAX_DIRECTORY_LENGTH = 100;
 const MAX_EXTENSION_LENGTH = 16;
 const MAX_DISPLAY_LENGTH = 200;
 
@@ -33,10 +33,22 @@ const EXTENSIONS_BY_MIME_TYPE: Record<string, string> = {
   'video/mp4': 'mp4',
 };
 
-/** `uploads/<base>-<uuid>.<ext>`: the uuid keeps two uploads of the same name apart. */
-export function buildUploadPath(fileName: string | undefined, mimeType: string, uuid: string): string {
-  const { base, extension } = sanitizeFileName(fileName, mimeType);
-  return `${UPLOADS_DIRECTORY}/${base}-${uuid}${extension ? `.${extension}` : ''}`;
+export interface UploadPathInput {
+  /** Thread the file was sent in; each thread gets its own directory. */
+  threadId: string;
+  uuid: string;
+  fileName?: string;
+  mimeType: string;
+}
+
+/**
+ * `uploads/<thread>/<uuid>.<ext>`. Nothing of the original name is kept but its
+ * extension: a model shown a path that looks like the name can retype one from
+ * the other, and ask the sandbox for a file that does not exist.
+ */
+export function buildUploadPath({ threadId, uuid, fileName, mimeType }: UploadPathInput): string {
+  const extension = safeExtensionOf(fileName, mimeType);
+  return `${UPLOADS_DIRECTORY}/${toSafeDirectory(threadId)}/${uuid}${extension ? `.${extension}` : ''}`;
 }
 
 /** The name as sent, minus anything that could forge lines or colors where it is displayed. */
@@ -44,14 +56,11 @@ export function toDisplayName(fileName: string | undefined): string {
   return stripUnprintable(fileName ?? '').slice(0, MAX_DISPLAY_LENGTH) || FALLBACK_DISPLAY_NAME;
 }
 
-function sanitizeFileName(fileName: string | undefined, mimeType: string): { base: string; extension: string } {
+// A file sent without a name takes its extension from its MIME type.
+function safeExtensionOf(fileName: string | undefined, mimeType: string): string {
   const readable = stripUnprintable(fileName ?? '');
-  if (!readable) {
-    return { base: FALLBACK_BASE, extension: EXTENSIONS_BY_MIME_TYPE[normalizeMimeType(mimeType)] ?? '' };
-  }
-  const extension = extensionOf(readable);
-  const stem = extension === undefined ? readable : readable.slice(0, readable.lastIndexOf('.'));
-  return { base: toSafeBase(stem), extension: toSafeExtension(extension) };
+  if (!readable) return EXTENSIONS_BY_MIME_TYPE[normalizeMimeType(mimeType)] ?? '';
+  return toSafeExtension(extensionOf(readable));
 }
 
 function stripUnprintable(value: string): string {
@@ -59,17 +68,17 @@ function stripUnprintable(value: string): string {
 }
 
 // Only `[A-Za-z0-9._-]` survives, so the result is safe in a path and in a shell
-// command. Path separators and `..` become `_`, which keeps the file in `uploads/`.
-function toSafeBase(stem: string): string {
-  const safe = stem
+// command. Path separators and `..` become `_`, which keeps the files in `uploads/`.
+function toSafeDirectory(threadId: string): string {
+  const safe = threadId
     .normalize('NFKD')
     .replace(DIACRITICS, '')
     .replace(/[^A-Za-z0-9._-]/g, '_')
     .replace(/\.{2,}/g, '_')
     .replace(/_+/g, '_')
     .replace(/^[._-]+|[._-]+$/g, '')
-    .slice(0, MAX_BASE_LENGTH);
-  return safe || FALLBACK_BASE;
+    .slice(0, MAX_DIRECTORY_LENGTH);
+  return safe || FALLBACK_THREAD_DIRECTORY;
 }
 
 function toSafeExtension(extension: string | undefined): string {

@@ -125,8 +125,7 @@ export function markRejected(candidate: FileCandidate, reason: string): void {
   replaceCandidate(candidate, note);
 }
 
-// The path comes before the name: a model that reads the original name first can
-// retype the path from it, and ask the sandbox for a file that does not exist.
+// The path comes first: it is the line the model has to copy exactly.
 function formatUploadedNote(file: FileUploadRecord): string {
   return [
     '[File uploaded to the sandbox]',

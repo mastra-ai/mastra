@@ -125,7 +125,9 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
     const sandbox = await resolveSandbox(this.workspace, requestContext);
     if (!sandbox.ok) return sandbox;
     if (candidates.length === 0) return ok(undefined);
-    const prepared = await prepareFiles(candidates, this.maxFileSize);
+    const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
+    if (!threadId) return memoryRequired();
+    const prepared = await prepareFiles(candidates, this.maxFileSize, threadId);
     if (!prepared.ok) return prepared;
     const written = await writeFilesToSandbox(sandbox.value, prepared.value, abortSignal);
     if (!written.ok) return written;
@@ -161,6 +163,10 @@ function assertSandboxConfigured(workspace: AnyWorkspace | undefined): void {
 function checkMemory(requestContext: RequestContext): Result<void> {
   const memory = parseMemoryRequestContext(requestContext);
   if (memory?.thread?.id && !memory.memoryConfig?.readOnly) return ok(undefined);
+  return memoryRequired();
+}
+
+function memoryRequired(): Result<never> {
   return failed(
     FILE_UPLOAD_ERROR_CODES.MEMORY_REQUIRED,
     'FileUploadProcessor requires an agent with memory and a thread that is not read-only.',

@@ -37,10 +37,11 @@ interface PlannedFile {
 export async function prepareFiles(
   candidates: FileCandidate[],
   maxFileSize: FileUploadMaxFileSize,
+  threadId: string,
 ): Promise<Result<PreparedFile[]>> {
   const planned = collect(candidates.map(candidate => planFile(candidate, maxFileSize)));
   if (!planned.ok) return planned;
-  return collect(await Promise.all(planned.value.map(loadPlannedFile)));
+  return collect(await Promise.all(planned.value.map(file => loadPlannedFile(file, threadId))));
 }
 
 function planFile(candidate: FileCandidate, maxFileSize: FileUploadMaxFileSize): Result<PlannedFile> {
@@ -68,7 +69,10 @@ function resolveMaxFileSize(candidate: FileCandidate, maxFileSize: FileUploadMax
   }
 }
 
-async function loadPlannedFile({ candidate, source, maxFileSize }: PlannedFile): Promise<Result<PreparedFile>> {
+async function loadPlannedFile(
+  { candidate, source, maxFileSize }: PlannedFile,
+  threadId: string,
+): Promise<Result<PreparedFile>> {
   const content = await loadFileBytes(source, fileDetails(candidate));
   if (!content.ok) return content;
   const size = content.value.byteLength;
@@ -79,7 +83,7 @@ async function loadPlannedFile({ candidate, source, maxFileSize }: PlannedFile):
       { ...fileDetails(candidate), size, maxFileSize },
     );
   }
-  const path = buildUploadPath(candidate.fileName, candidate.mimeType, globalThis.crypto.randomUUID());
+  const path = buildUploadPath({ ...fileDetails(candidate), threadId, uuid: globalThis.crypto.randomUUID() });
   return ok({ candidate, path, content: content.value });
 }
 

@@ -2,7 +2,6 @@ import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { shellQuote } from '../../workspace/sandbox/utils';
 import { describeError, FILE_UPLOAD_ERROR_CODES, failed, ok } from './file-upload-errors';
 import type { Result } from './file-upload-errors';
-import { UPLOADS_DIRECTORY } from './file-upload-filename';
 
 /** Max shell-command payload per chunk; stays under the per-argument limit of `sh -c`. */
 const UPLOAD_CHUNK_SIZE = 96_000;
@@ -26,7 +25,9 @@ export async function writeFilesToSandbox(
   abortSignal?: AbortSignal,
 ): Promise<Result<void>> {
   try {
-    if (sandbox.executeCommand) await runScript(sandbox, `mkdir -p ${shellQuote(UPLOADS_DIRECTORY)}`, abortSignal);
+    if (sandbox.executeCommand) {
+      await runScript(sandbox, `mkdir -p ${directoriesOf(files).map(shellQuote).join(' ')}`, abortSignal);
+    }
     if (sandbox.writeFiles) await sandbox.writeFiles(files.map(toSandboxFile), { abortSignal });
     else await writeWithCommands(sandbox, files, abortSignal);
     return ok(undefined);
@@ -40,6 +41,10 @@ export async function writeFilesToSandbox(
 }
 
 const toSandboxFile = ({ path, content }: SandboxUpload) => ({ path, content });
+
+function directoriesOf(files: SandboxUpload[]): string[] {
+  return [...new Set(files.map(file => file.path.slice(0, file.path.lastIndexOf('/'))))];
+}
 
 // `allSettled`, not `all`: a write still running after the first failure would
 // recreate its files right after they are removed.
