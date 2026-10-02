@@ -244,14 +244,17 @@ export const useChatSendHandler = ({
   );
 
   const send = useCallback(
-    async ({ message, attachments = [] }: ChatSendArgs) => {
+    async ({ message, attachments = [] }: ChatSendArgs): Promise<boolean> => {
       const deps = sendDepsRef.current;
-      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return;
+      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
 
       setStreamErrors([]);
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const requestContextInstance = buildRequestContext(deps);
+      // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
+      // Those must not put the message back in the composer.
+      let delivered = false;
 
       try {
         if (deps.chatWithNetwork) {
@@ -266,6 +269,7 @@ export const useChatSendHandler = ({
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
             onNetworkChunk: async (chunk: any) => {
+              delivered = true;
               if (didUpdateWorkingMemory(chunk)) {
                 void refreshWorkingMemory?.();
               }
@@ -287,9 +291,10 @@ export const useChatSendHandler = ({
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
           });
+          delivered = true;
           await refreshThreadList?.();
           refreshTimelinePanel(deps.threadId);
-          return;
+          return true;
         } else {
           await sendMessage({
             message,
@@ -301,6 +306,7 @@ export const useChatSendHandler = ({
             model: deps.model,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
+              delivered = true;
               if (chunk.type === 'finish') {
                 if (isMaxStepsFinishChunk(chunk)) {
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
@@ -317,21 +323,24 @@ export const useChatSendHandler = ({
             signal: controller.signal,
           });
 
-          return;
+          return true;
         }
 
+        delivered = true;
         setTimeout(() => {
           void refreshThreadList?.();
         }, 500);
         refreshTimelinePanel(deps.threadId);
         completeObservationalMemoryBuffering(deps.threadId);
+        return true;
       } catch (error: any) {
         console.error('Error occurred in ChatProvider', error);
         if (error.name === 'AbortError') {
-          return;
+          return true;
         }
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
+        return delivered;
       } finally {
         abortControllerRef.current = null;
       }
