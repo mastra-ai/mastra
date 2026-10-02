@@ -527,6 +527,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
     });
     // Explicit HTTP errors from auth callbacks keep their status/message; anything else is redacted.
+    // The HTTPException message is sent to the client, so callers must keep it safe (no internal details).
     if (err instanceof HTTPException && err.status >= 400 && err.status <= 599) {
       return { action: 'error', status: err.status, body: { error: err.message }, headers: refreshHeaders };
     }
