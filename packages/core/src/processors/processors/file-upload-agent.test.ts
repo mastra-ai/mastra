@@ -336,8 +336,8 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     expect(note).toBe(
       [
         '[File uploaded to the sandbox]',
-        'name: report.pdf',
         `path: ${uploaded}`,
+        'name: report.pdf',
         'type: application/pdf',
         `size: ${bytes.byteLength} bytes`,
       ].join('\n'),

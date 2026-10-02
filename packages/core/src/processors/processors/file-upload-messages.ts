@@ -125,11 +125,13 @@ export function markRejected(candidate: FileCandidate, reason: string): void {
   replaceCandidate(candidate, note);
 }
 
+// The path comes before the name: a model that reads the original name first can
+// retype the path from it, and ask the sandbox for a file that does not exist.
 function formatUploadedNote(file: FileUploadRecord): string {
   return [
     '[File uploaded to the sandbox]',
-    `name: ${toDisplayName(file.name)}`,
     `path: ${file.path}`,
+    `name: ${toDisplayName(file.name)}`,
     `type: ${file.mimeType}`,
     `size: ${file.size} bytes`,
   ].join('\n');

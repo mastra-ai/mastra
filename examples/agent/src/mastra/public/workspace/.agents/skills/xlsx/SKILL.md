@@ -80,6 +80,7 @@ The output has one `## Sheet: <name>` line per sheet, followed by its rows as CS
 
 ## When the command fails
 
+- `No such file or directory`: the path doesn't match the uploaded file. Copy it again from the `path:` line of the note, character for character. To see what exists, run `ls uploads/` as a sandbox command. The workspace file tools read a different filesystem and never see uploaded files.
 - `python3: command not found`: list the archive with `unzip -l <path>`, then read `xl/sharedStrings.xml` and `xl/worksheets/sheet1.xml` with `unzip -p <path> <entry>`. A cell with `t="s"` holds an index into the shared strings.
 - `declares a DTD`: the workbook is malformed or hostile. Don't parse it another way. Tell the user the file can't be read.
 - `File is not a zip file`: the file isn't an `.xlsx` workbook. The older `.xls` format can't be read this way. Ask the user to save the file as `.xlsx` or CSV.
