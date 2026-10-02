@@ -323,7 +323,7 @@ await output.text
 
 The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, so it isn't a chunk count. Public stream chunks and callbacks don't expose the PubSub index. Only pass an offset when another integration already tracks the transport position.
 
-A non-zero offset skips earlier events. Aggregated values are built only from chunks delivered to that observer, so `output.text` contains only text received from the offset onward. Structured output may be incomplete and fail validation or parsing when earlier deltas are skipped.
+A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.
 
 When the PubSub transport supports numeric offsets, an offset beyond the highest retained index replays nothing and also skips live events with lower indexes. The observer receives events only when the published index reaches the requested offset. If the index counter restarts below that offset, the observer can wait indefinitely. On a transport without numeric offset support, providing an offset starts with new live events and doesn't replay cached events. Replay is limited to events still available in the configured cache. Events can't be replayed when caching is disabled, `shouldCache` excludes the run topic, a cache write fails, or retained events have been cleared.
 

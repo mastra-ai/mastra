@@ -82,9 +82,9 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /**
    * Inclusive, zero-based PubSub event index, or `latest` to live-tail. Numeric indexes count all
    * cached run-topic events, including lifecycle events, not chunks. Omit it to replay all available
-   * cached events; transports without numeric offsets live-tail numeric values instead. A non-zero
-   * number produces partial text and may make structured output fail to parse; beyond retained history,
-   * it also skips lower-index live events on numeric-offset transports. See
+   * cached events; transports without numeric offsets live-tail numeric values instead. Skipping earlier
+   * text deltas produces partial text and may make structured output fail to parse; beyond retained
+   * history, a number also skips lower-index live events on numeric-offset transports. See
    * `/reference/agents/durable-agent#observerunid-options`.
    */
   offset?: number | 'latest';
