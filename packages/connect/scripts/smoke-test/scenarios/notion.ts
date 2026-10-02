@@ -23,31 +23,52 @@ export const notionScenario: Scenario = {
       return steps;
     }
 
-    const search = await call<{ items: Array<{ object?: string; id?: string }> }>('notion_search', {
+    // Notion's search returns { results, next_cursor, has_more } — the
+    // scenario was previously reading `.items` and never finding anything.
+    const search = await call<{ results?: Array<{ object?: string; id?: string }> }>('notion_search', {
       query: '',
       page_size: 10,
     });
-    const parentPage = (search.items ?? []).find(i => i.object === 'page' && typeof i.id === 'string');
-    if (!parentPage?.id) {
-      steps.push(makeStep('find parent page', 'notion_search', 'skip', 'No searchable pages visible to the token.'));
-      return steps;
-    }
-    steps.push(makeStep('find parent page', 'notion_search', 'pass', parentPage.id));
-
+    const parentPage = (search.results ?? []).find(i => i.object === 'page' && typeof i.id === 'string');
     const title = `${runId} smoke page`;
     let pageId: string | undefined;
-    try {
-      const created = await call<{ id: string }>('notion_create_page', {
-        parent: { page_id: parentPage.id },
-        properties: {
-          title: [{ type: 'text', text: { content: title } }],
-        },
-      });
-      pageId = created.id;
-      steps.push(makeStep('create page', 'notion_create_page', 'pass', pageId));
-    } catch (error) {
-      steps.push(makeStep('create page', 'notion_create_page', 'fail', errorMessage(error)));
-      return steps;
+
+    if (parentPage?.id) {
+      steps.push(makeStep('find parent page', 'notion_search', 'pass', parentPage.id));
+      try {
+        const created = await call<{ id: string }>('notion_create_page', {
+          parent: { page_id: parentPage.id },
+          properties: {
+            title: [{ type: 'text', text: { content: title } }],
+          },
+        });
+        pageId = created.id;
+        steps.push(makeStep('create child page', 'notion_create_page', 'pass', pageId));
+      } catch (error) {
+        steps.push(makeStep('create child page', 'notion_create_page', 'fail', errorMessage(error)));
+        return steps;
+      }
+    } else {
+      // Workspace empty / nothing shared with the integration yet. Bootstrap
+      // the scenario by creating a top-level page under the workspace root.
+      // Notion only accepts workspace: true from internal integrations, so
+      // this surfaces a clear error when the token is a public OAuth app.
+      steps.push(
+        makeStep('find parent page', 'notion_search', 'pass', 'empty workspace — bootstrapping a top-level page'),
+      );
+      try {
+        const created = await call<{ id: string }>('notion_create_page', {
+          parent: { workspace: true },
+          properties: {
+            title: [{ type: 'text', text: { content: title } }],
+          },
+        });
+        pageId = created.id;
+        steps.push(makeStep('create root page', 'notion_create_page', 'pass', pageId));
+      } catch (error) {
+        steps.push(makeStep('create root page', 'notion_create_page', 'fail', errorMessage(error)));
+        return steps;
+      }
     }
 
     try {
