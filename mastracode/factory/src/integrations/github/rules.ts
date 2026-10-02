@@ -1146,6 +1146,24 @@ export function reconciledIssueOpenedEvent(
   return { ...event, deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:opened` };
 }
 
+export function polledPullRequestEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: ReconcilePullRequestState & { createdAt: string },
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repository.id}:pull-request:${pullRequestNumber}:${state.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? '__unknown__' },
+      pull_request: pullRequestPayload(pullRequestNumber, state),
+    },
+  };
+}
+
 export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
@@ -1161,21 +1179,26 @@ export function reconciledClosedEvent(
       installation: { id: repository.installationId },
       repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: state.mergedBy ?? 'github' },
-      pull_request: {
-        number: pullRequestNumber,
-        title: state.title,
-        html_url: state.url,
-        ...(state.createdAt ? { created_at: state.createdAt } : {}),
-        state: 'closed',
-        draft: state.draft,
-        merged: state.merged,
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
-        labels: (state.labels ?? []).map(name => ({ name })),
-        head: { ref: state.headBranch },
-        base: { ref: state.baseBranch },
-      },
+      pull_request: pullRequestPayload(pullRequestNumber, { ...state, state: 'closed' }),
     },
+  };
+}
+
+function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
+  return {
+    number: pullRequestNumber,
+    title: state.title,
+    html_url: state.url,
+    ...(state.createdAt ? { created_at: state.createdAt } : {}),
+    ...(state.author ? { user: { login: state.author } } : {}),
+    state: state.state,
+    draft: state.draft,
+    merged: state.merged,
+    assignees: (state.assignees ?? []).map(login => ({ login })),
+    requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
+    labels: (state.labels ?? []).map(name => ({ name })),
+    head: { ref: state.headBranch },
+    base: { ref: state.baseBranch },
   };
 }
 

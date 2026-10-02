@@ -43,6 +43,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
+import { polledPullRequestEvent } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -312,7 +313,7 @@ function polledIssueEvent(
   };
 }
 
-function polledPullRequestEvent(
+function listedPullRequestEvent(
   project: ResolvedProjectRepository,
   pullRequest: {
     number: number;
@@ -321,34 +322,34 @@ function polledPullRequestEvent(
     author: string | null;
     assignees: string[];
     requestedReviewers: string[];
+    labels: string[];
     headBranch: string;
     baseBranch: string;
     createdAt: string;
   },
 ): ParsedGithubWebhook {
-  const repositoryId = Number(project.repository.externalId);
-  return {
-    event: 'pull_request',
-    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
-    payload: {
-      action: 'opened',
-      installation: { id: Number(project.installation.externalId) },
-      repository: { id: repositoryId, full_name: project.repository.slug },
-      sender: { login: pullRequest.author ?? '__unknown__' },
-      pull_request: {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        html_url: pullRequest.url,
-        created_at: pullRequest.createdAt,
-        state: 'open',
-        merged: false,
-        assignees: pullRequest.assignees.map(login => ({ login })),
-        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
-        head: { ref: pullRequest.headBranch },
-        base: { ref: pullRequest.baseBranch },
-      },
+  return polledPullRequestEvent(
+    {
+      id: Number(project.repository.externalId),
+      fullName: project.repository.slug,
+      installationId: Number(project.installation.externalId),
     },
-  };
+    pullRequest.number,
+    {
+      title: pullRequest.title,
+      url: pullRequest.url,
+      state: 'open',
+      draft: false,
+      merged: false,
+      assignees: pullRequest.assignees,
+      requestedReviewers: pullRequest.requestedReviewers,
+      labels: pullRequest.labels,
+      headBranch: pullRequest.headBranch,
+      baseBranch: pullRequest.baseBranch,
+      ...(pullRequest.author ? { author: pullRequest.author } : {}),
+      createdAt: pullRequest.createdAt,
+    },
+  );
 }
 
 async function ingestPolledEvents(
@@ -804,7 +805,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             updatedAt: pr.updatedAt,
           }));
           await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
             options.ingestFactoryEvent,
           );
           return c.json({
