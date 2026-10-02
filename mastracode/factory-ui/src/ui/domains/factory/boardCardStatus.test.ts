@@ -214,6 +214,16 @@ describe('boardCardState', () => {
     });
   });
 
+  it('starts, not retries, a linked-card replay the server reset to retry without a failure', () => {
+    const state = boardCardState({
+      decision: decision({ type: 'upsertLinkedWorkItem', source: 'github-pr', status: 'retry', attempts: 0 }),
+    });
+    expect(state.status).toEqual({ kind: 'busy', label: 'Syncing GitHub pull request…' });
+    expect(cardActions({ state, run: { label: 'Review', start: () => {} } })).toEqual([
+      expect.objectContaining({ label: 'Starting…', disabled: true }),
+    ]);
+  });
+
   it('allows recovery from a final failure while keeping live and parked sessions occupied', () => {
     expect(boardCardState({ decision: decision({ status: 'failed' }) }).activity).toBe('idle');
     expect(boardCardState({ sessionStatus: 'ready' }).activity).toBe('awaiting');

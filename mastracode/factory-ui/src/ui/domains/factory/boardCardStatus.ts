@@ -95,6 +95,19 @@ function runAnnouncedByWick(
 }
 
 /**
+ * `retry` alone does not mean anything went wrong: a linked-card decision that
+ * already succeeded is deliberately reset to `retry` when its card is
+ * rematerialized, so the card gets re-filed. That replay has no attempt behind
+ * it and no error, and calling it a failure makes the board cry wolf. A real
+ * failure has been tried at least once, or left an error to show.
+ */
+export function retriesAfterFailure(
+  decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>,
+): boolean {
+  return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
+}
+
+/**
  * Resolves the card's single status, freshest intent first: the user's own
  * in-flight action outranks what the server is doing on its own, and both
  * outrank a parked run.
@@ -114,13 +127,8 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
       detail: decision.lastError ?? undefined,
     };
   }
-  // `retry` alone does not mean anything went wrong: a linked-card decision that
-  // already succeeded is deliberately reset to `retry` when its card is
-  // rematerialized, so the card gets re-filed. That replay has no attempt behind
-  // it and no error, and calling it a failure makes the board cry wolf. A real
-  // failure has been tried at least once, or left an error to show. The server
-  // retries either on its own, so neither offers a button.
-  if (decision?.status === 'retry' && (decision.attempts > 0 || decision.lastError)) {
+  // The server retries a failure on its own, so it offers no button.
+  if (decision !== undefined && retriesAfterFailure(decision)) {
     return {
       kind: 'error',
       label: `${automationCopy(decision).failed} — retrying…`,

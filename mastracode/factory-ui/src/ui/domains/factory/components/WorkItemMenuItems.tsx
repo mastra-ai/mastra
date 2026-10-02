@@ -90,7 +90,11 @@ export function WorkItemMenuItems({
     <>
       {decision &&
         TRIAGE_DECISIONS.map(choice => (
-          <DropdownMenu.Item key={choice.stage} disabled={busy} onClick={() => onMove(choice.stage)}>
+          <DropdownMenu.Item
+            key={choice.stage}
+            disabled={moveDisabled(choice.stage)}
+            onClick={() => onMove(choice.stage)}
+          >
             <BoardStageIcon stage={choice.stage} />
             <span>{choice.label}</span>
           </DropdownMenu.Item>

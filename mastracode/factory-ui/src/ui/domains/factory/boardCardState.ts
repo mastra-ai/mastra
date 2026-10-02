@@ -1,7 +1,12 @@
-import { boardCardStatus } from './boardCardStatus';
+import { boardCardStatus, retriesAfterFailure } from './boardCardStatus';
 import type { BoardCardStatus, BoardCardStatusInput } from './boardCardStatus';
 
-export type BoardCardActivity = 'idle' | 'moving' | 'starting' | 'retrying' | 'running' | 'awaiting';
+/** A request still handing off to the server, before a session owns the card, and the label its button wears. */
+export const PENDING_ACTION_LABEL = { moving: 'Moving…', starting: 'Starting…', retrying: 'Retrying…' } as const;
+
+type PendingCardActivity = keyof typeof PENDING_ACTION_LABEL;
+
+export type BoardCardActivity = 'idle' | PendingCardActivity | 'running' | 'awaiting';
 
 export interface BoardCardState {
   status: BoardCardStatus;
@@ -32,12 +37,12 @@ function cardActivity(input: BoardCardStateInput): BoardCardActivity {
   if (input.sessionStatus === 'initializing' || input.sessionStatus === 'working') return 'running';
   // A session parked on a tool still owns the branch until a person answers it.
   if (input.sessionStatus === 'ready') return 'awaiting';
-  if (input.decision?.status === 'retry') return 'retrying';
-  if (input.decision?.status === 'pending' || input.decision?.status === 'leased') return 'starting';
+  if (input.decision !== undefined && retriesAfterFailure(input.decision)) return 'retrying';
+  if (input.decision?.status === 'pending' || input.decision?.status === 'leased' || input.decision?.status === 'retry')
+    return 'starting';
   return 'idle';
 }
 
-/** A request still handing off to the server, before a session owns the card. */
-export function isCardActionPending(activity: BoardCardActivity): boolean {
-  return activity === 'moving' || activity === 'starting' || activity === 'retrying';
+export function isCardActionPending(activity: BoardCardActivity): activity is PendingCardActivity {
+  return Object.hasOwn(PENDING_ACTION_LABEL, activity);
 }

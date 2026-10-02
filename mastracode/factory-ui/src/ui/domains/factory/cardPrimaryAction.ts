@@ -1,5 +1,6 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
+import { isCardActionPending, PENDING_ACTION_LABEL } from './boardCardState';
 import type { BoardCardState } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
@@ -206,12 +207,13 @@ export function cardActions({
   // Opening an existing session stays useful throughout kickoff and execution.
   if (activity !== 'idle') {
     if (session !== undefined) return [session];
-    if (activity === 'running' || activity === 'awaiting') return [];
+    if (!isCardActionPending(activity)) return [];
     const pendingAction = retry ?? run;
     if (pendingAction === undefined) return [];
-    const labels = { moving: 'Moving…', starting: 'Starting…', retrying: 'Retrying…' };
     // Drop the old accessible name too: a disabled suggestion is no longer asking to be started.
-    return [{ ...pendingAction, label: labels[activity], ariaLabel: undefined, disabled: true, urgent: false }];
+    return [
+      { ...pendingAction, label: PENDING_ACTION_LABEL[activity], ariaLabel: undefined, disabled: true, urgent: false },
+    ];
   }
   const waiting = status.kind === 'waiting' || status.kind === 'held';
   const nextRun =
