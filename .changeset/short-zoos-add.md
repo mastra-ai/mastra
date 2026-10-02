@@ -1,5 +1,5 @@
 ---
-'@mastra/livekit': major
+'@mastra/livekit': minor
 ---
 
 Added per-turn generation metrics, playback completion hooks, and speech-segment flushing. `onTurnComplete` keeps its generation-only behavior; `onSpeechComplete` reports server playback outcomes without changing memory persistence.
