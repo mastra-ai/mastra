@@ -824,12 +824,14 @@ describe('SignalsPubSub', () => {
 
       it('leaves the callback unsubscribed when it is unsubscribed during a retry attempt', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // Hold the attempt while it creates the shared socket, before core has
+        // registered the callback, so only SignalsPubSub can undo it.
         const attempt = deferred();
-        let calls = 0;
-        mocks.setSubscribeImpl(async socketPath => {
-          if (!socketPath.startsWith(`${root}/_shared/`)) return;
-          calls++;
-          if (calls === 1) throw new Error('Broker election in progress by another process');
+        let sharedMkdirs = 0;
+        mocks.setMkdirImpl(async dir => {
+          if (!dir.endsWith('/_shared')) return;
+          sharedMkdirs++;
+          if (sharedMkdirs === 1) throw new Error('Broker election in progress by another process');
           await attempt.promise;
         });
         const { createSignalsPubSub } = await import('../signals-pubsub.js');
@@ -837,14 +839,35 @@ describe('SignalsPubSub', () => {
         const cb = vi.fn();
 
         await pubsub.subscribe(peerRequestTopic, cb);
-        await vi.waitFor(() => expect(calls).toBe(2), { timeout: 2_000 });
+        await vi.waitFor(() => expect(sharedMkdirs).toBe(2), { timeout: 2_000 });
         await pubsub.unsubscribe(peerRequestTopic, cb);
         attempt.resolve();
 
-        await vi.waitFor(() => expect(findSocket(sharedPeerSocket())?.callbacks.has(cb)).toBe(false));
+        await vi.waitFor(() => expect(findSocket(sharedPeerSocket())?.unsubscriptions).toEqual([peerRequestTopic]));
         await new Promise(resolve => setTimeout(resolve, 300));
         expect(findSocket(sharedPeerSocket())?.callbacks.has(cb)).toBe(false);
-        expect(calls).toBe(2);
+        expect(sharedMkdirs).toBe(2);
+        await pubsub.close();
+      });
+
+      it('keeps a callback out of the shared scope when it is unsubscribed during its project subscribe', async () => {
+        const projectSubscribe = deferred();
+        mocks.setSubscribeImpl(async socketPath => {
+          if (socketPath.startsWith(`${root}/${resourceId}/`)) await projectSubscribe.promise;
+        });
+        const { createSignalsPubSub } = await import('../signals-pubsub.js');
+        const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+        const cb = vi.fn();
+
+        const subscribing = pubsub.subscribe(peerRequestTopic, cb);
+        await vi.waitFor(() =>
+          expect(findSocket(`${root}/${resourceId}/agent_thread-peer-discovery.sock`)).toBeDefined(),
+        );
+        await pubsub.unsubscribe(peerRequestTopic, cb);
+        projectSubscribe.resolve();
+        await subscribing;
+
+        expect(findSocket(sharedPeerSocket())?.callbacks.has(cb) ?? false).toBe(false);
         await pubsub.close();
       });
 

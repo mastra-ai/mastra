@@ -25,7 +25,6 @@ const SHARED_RETRY_MAX_MS = 5_000;
  * One-shot reply topics are minted per request (`<topic>.<uuid>`), used for a
  * single round trip, and never published to again once the request settles.
  */
-
 function isEphemeralTopic(topic: string): boolean {
   return DISCOVERY_REPLY_TOPIC.test(topic) || IDLE_ACCEPTANCE_REPLY_TOPIC.test(topic);
 }
@@ -260,14 +259,26 @@ class SignalsPubSub extends PubSub {
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     const [primary, shared] = this.#routes(topic);
-    await this.#subscribeTo(topic, primary!, cb, options);
-    if (shared === undefined) return;
+    if (shared === undefined) {
+      await this.#subscribeTo(topic, primary!, cb, options);
+      return;
+    }
+    // Wanted before the first await, so an unsubscribe that lands meanwhile
+    // keeps it out of the shared scope.
     let wanted = this.#sharedWanted.get(topic);
     if (!wanted) {
       wanted = new Set();
       this.#sharedWanted.set(topic, wanted);
     }
+    const added = !wanted.has(cb);
     wanted.add(cb);
+    try {
+      await this.#subscribeTo(topic, primary!, cb, options);
+    } catch (error) {
+      if (added) this.#unwantShared(topic, cb);
+      throw error;
+    }
+    if (!this.#sharedWanted.get(topic)?.has(cb)) return;
     // A retry is already bringing this callback up in the shared scope.
     if (this.#sharedRetries.get(topic)?.has(cb)) return;
     await this.#subscribeTo(topic, shared, cb, options).catch(() => {
@@ -277,12 +288,14 @@ class SignalsPubSub extends PubSub {
       // behind) would hide this thread from other projects until restart, so it
       // is retried.
       if (isEphemeralTopic(topic) || !this.#sharedWanted.get(topic)?.has(cb)) return;
-      const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
       let retries = this.#sharedRetries.get(topic);
       if (!retries) {
         retries = new Map();
         this.#sharedRetries.set(topic, retries);
       }
+      // A concurrent subscribe of the same callback already started a retry.
+      if (retries.has(cb)) return;
+      const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
       retries.set(cb, retry);
       this.#scheduleSharedRetry(topic, shared, cb, options, retry);
     });
@@ -291,9 +304,7 @@ class SignalsPubSub extends PubSub {
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     const [primary, shared] = this.#routes(topic);
     this.#cancelSharedRetry(topic, cb);
-    const wanted = this.#sharedWanted.get(topic);
-    wanted?.delete(cb);
-    if (wanted?.size === 0) this.#sharedWanted.delete(topic);
+    this.#unwantShared(topic, cb);
     if (shared !== undefined) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
     await this.#unsubscribeFrom(topic, primary!, cb);
   }
@@ -397,6 +408,12 @@ class SignalsPubSub extends PubSub {
       );
     }, retry.delayMs);
     retry.timer.unref?.();
+  }
+
+  #unwantShared(topic: string, cb: EventCallback): void {
+    const wanted = this.#sharedWanted.get(topic);
+    wanted?.delete(cb);
+    if (wanted?.size === 0) this.#sharedWanted.delete(topic);
   }
 
   #cancelSharedRetry(topic: string, cb: EventCallback): void {

@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -809,14 +809,21 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     writeFileSync(`${staleSocket}.elect`, '');
     const longAgo = new Date(Date.now() - 60_000);
     utimesSync(`${staleSocket}.elect`, longAgo, longAgo);
+    const staleInode = statSync(staleSocket).ino;
 
     const owner = startChild('owner', projectA, 'claim-only', [], shared(root));
     await owner.waitFor('thread-owned');
     const observer = startChild('sender', projectB, 'discovery-probe', [], shared(root));
     const discovery = await observer.waitFor('discovered');
+    // The owner went through the leftover: a live broker replaced the dead
+    // socket and the stale lock is gone.
+    const liveInode = statSync(staleSocket).ino;
+    const lockLeft = existsSync(`${staleSocket}.elect`);
     const codes = await closeAll(owner, observer);
 
     expect(discovery).toMatchObject({ hasPeer: true });
+    expect(liveInode).not.toBe(staleInode);
+    expect(lockLeft).toBe(false);
     // The retry clears the leftover on its own, so neither side warns.
     expect(owner.stderr).toBe('');
     expect(observer.stderr).toBe('');
