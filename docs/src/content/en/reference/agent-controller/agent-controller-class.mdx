@@ -373,6 +373,14 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
     isOptional: true,
   },
   {
+    name: 'createInitialThread',
+    type: 'boolean',
+    description:
+      'Create a thread when no existing thread matches. Set `false` to start the session without a thread; the first message or `session.thread.ensureId()` creates it, so unused sessions leave no empty thread behind.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'id',
     type: 'string',
     description: 'Stable session identifier. Defaults to the controller `id`.',

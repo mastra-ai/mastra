@@ -551,15 +551,16 @@ mastra env db create --kind turso                                    # picks or 
 mastra env db create staging --kind turso                            # scoped to the "staging" environment
 mastra env db create --kind turso --shared                           # shared by all environments
 mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --shared
+mastra env db create production --kind postgres                      # VPC-isolated Postgres, private to the environment
 ```
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon` (public serverless Postgres), or `postgres` (VPC-isolated Postgres that runs on the same private network as the deployed environment).
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-pg`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso`, `my-app-pg` for Neon, or `my-app-postgres` for VPC Postgres).
 
 #### `--region`
 

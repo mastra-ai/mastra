@@ -92,16 +92,29 @@ export const modelListEntrySchema = z.object({
 });
 
 /**
+ * Type for accumulated usage. Keys stay present in memory so the value can be
+ * passed to usage consumers, while JSON serialization may omit unknown values.
+ */
+export type AccumulatedUsage = {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  reasoningTokens?: number;
+};
+
+/**
  * Schema for accumulated usage across iterations
  */
 export const accumulatedUsageSchema = z.object({
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  totalTokens: z.number(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  totalTokens: z.number().optional(),
   cachedInputTokens: z.number().optional(),
   cacheCreationInputTokens: z.number().optional(),
   reasoningTokens: z.number().optional(),
-});
+}) as z.ZodType<AccumulatedUsage>;
 
 /**
  * Schema for output from the durable agentic workflow
@@ -158,6 +171,9 @@ export const baseIterationStateSchema = z.object({
   iterationCount: z.number(),
   accumulatedSteps: z.array(z.any()),
   accumulatedUsage: accumulatedUsageSchema,
+  // Identifies states whose usage accumulator preserves unknown counters. Older
+  // states have no marker and may contain partial totals presented as complete.
+  usageAggregationVersion: z.literal(1).optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
   // Background task tracking
@@ -176,8 +192,3 @@ export const baseIterationStateSchema = z.object({
  * Type for the base iteration state
  */
 export type BaseIterationState = z.infer<typeof baseIterationStateSchema>;
-
-/**
- * Type for accumulated usage
- */
-export type AccumulatedUsage = z.infer<typeof accumulatedUsageSchema>;

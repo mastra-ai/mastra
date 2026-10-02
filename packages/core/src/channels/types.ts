@@ -1024,6 +1024,8 @@ export type ChannelContext = {
   botUserId?: string;
   /** The bot's display name on this platform. */
   botUserName?: string;
+  /** The bot's current profile display name, when the adapter resolves one that differs from `botUserName`. */
+  botDisplayName?: string;
   /** The bot's mention string (e.g. '<@U123>' on Slack/Discord). */
   botMention?: string;
 };

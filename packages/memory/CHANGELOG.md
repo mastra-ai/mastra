@@ -1,5 +1,54 @@
 # @mastra/memory
 
+## 1.36.0-alpha.0
+
+### Minor Changes
+
+- Added per-provider idle activation TTLs to observational memory. Pass an object to `activateAfterIdle` to set a TTL for specific providers and a `default` for the rest. Use this when your requests set a prompt cache TTL that `'auto'` can't detect, such as Anthropic's per-message `cacheControl: { ttl: '1h' }`. ([#25727](https://github.com/mastra-ai/mastra/pull/25727))
+
+  **Before**
+
+  ```ts
+  // 'auto' uses 5 minutes for Anthropic: after 5 idle minutes OM activates and rewrites the prompt, invalidating a 1-hour cache that is still warm
+  observationalMemory: {
+    activateAfterIdle: 'auto',
+  }
+  ```
+
+  **After**
+
+  ```ts
+  observationalMemory: {
+    activateAfterIdle: { default: 'auto', anthropic: '1h' },
+  }
+  ```
+
+  Keys match the model's provider before the first `.` (so `anthropic` matches `anthropic.messages`), case-insensitively. Each value takes the same forms as before: milliseconds, a duration string, `'auto'`, or `false`. Existing single-value settings behave exactly as before.
+
+### Patch Changes
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6)]:
+  - @mastra/core@1.75.0-alpha.0
+
+## 1.35.0
+
+### Minor Changes
+
+- **Page through observation groups.** Recall can now read the original observation groups around a search hit, including groups condensed away by reflection and buffered groups that haven't been activated yet. Existing records work without re-indexing. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  ```ts
+  recall({ mode: 'observations', groupId: 'group-id-from-search', direction: 'after', limit: 5 });
+  ```
+
+  **Easier-to-read search results.** Search results are dated, listed oldest first, and mark where groups may be hidden between hits. Hits already in the agent's context come back as short references, so more new hits fit. When a long group is shortened, its excerpt starts at the line that best matches the query.
+
+  **Better recall guidance.** With retrieval enabled, the agent gets recall guidance from the first turn, including in read-only runs. It explains how to search, page, and confirm details against source messages, treats what the user said as authoritative and what the assistant proposed as a suggestion, and labels reflected groups as lossy summaries.
+
+### Patch Changes
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.74.0
+
 ## 1.34.0
 
 ### Minor Changes

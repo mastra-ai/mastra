@@ -97,37 +97,34 @@ function RootStateProbe() {
   );
 }
 
-const renderView = ({
-  anchorTraceId,
-  traceIds = TRACE_IDS,
-  className,
-}: { anchorTraceId?: string; traceIds?: string[]; className?: string } = {}) =>
+const renderView = ({ traceIds = TRACE_IDS, className }: { traceIds?: string[]; className?: string } = {}) =>
   renderUI(
-    <ThreadTrace traceIds={traceIds} anchorTraceId={anchorTraceId} className={className}>
+    <ThreadTrace traceIds={traceIds} className={className}>
       <ThreadTrace.List data-testid="thread-trace-list">
-        <ThreadTrace.LoadMoreSentinel data-testid="sentinel" />
-        {traceIds.map(traceId => (
+        {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTrace.Messages>
-              <ThreadTrace.MessagesHeader>
-                <ThreadTrace.TabList>
-                  <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
-                  <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
-                </ThreadTrace.TabList>
-              </ThreadTrace.MessagesHeader>
-              <ThreadTrace.TabContent value="messages">
-                <MessagesSlot />
-              </ThreadTrace.TabContent>
-              <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
-            </ThreadTrace.Messages>
-            <ThreadTrace.Details data-testid={`details-${traceId}`}>
-              <ThreadTrace.DetailsHeader>
-                <ThreadTrace.DetailsActions>
-                  <button type="button">Action {traceId}</button>
-                </ThreadTrace.DetailsActions>
-              </ThreadTrace.DetailsHeader>
-              <ThreadTrace.Spans />
-            </ThreadTrace.Details>
+            <ThreadTrace.Divider label={`Turn ${index + 1}`}>
+              <ThreadTrace.TabList>
+                <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
+                <ThreadTrace.Tab value="extra">Extra</ThreadTrace.Tab>
+              </ThreadTrace.TabList>
+            </ThreadTrace.Divider>
+            <ThreadTrace.RowBody>
+              <ThreadTrace.Messages>
+                <ThreadTrace.TabContent value="messages">
+                  <MessagesSlot />
+                </ThreadTrace.TabContent>
+                <ThreadTrace.TabContent value="extra">Extra content {traceId}</ThreadTrace.TabContent>
+              </ThreadTrace.Messages>
+              <ThreadTrace.Details data-testid={`details-${traceId}`}>
+                <ThreadTrace.DetailsHeader>
+                  <ThreadTrace.DetailsActions>
+                    <button type="button">Action {traceId}</button>
+                  </ThreadTrace.DetailsActions>
+                </ThreadTrace.DetailsHeader>
+                <ThreadTrace.Spans />
+              </ThreadTrace.Details>
+            </ThreadTrace.RowBody>
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
@@ -154,20 +151,23 @@ describe('ThreadTrace', () => {
       expect(container.firstElementChild?.className).toContain('custom-root');
       expect(container.firstElementChild?.className).toContain('grid');
       expect(screen.getByTestId('thread-trace-list')).toBeTruthy();
-      expect(screen.getByTestId('sentinel')).toBeTruthy();
     });
+  });
 
-    it('scrolls the anchor row into view once and starts it expanded', async () => {
-      mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
-      renderView({ anchorTraceId: 'trace-b' });
-      await screen.findByText('Chef agent follow-up');
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      renderView();
+      await waitFor(() => expect(within(getRow('trace-b')).getAllByRole('button').length).toBeGreaterThan(0));
 
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
-      expect(scrollIntoView.mock.instances[0]).toBe(getRow('trace-b'));
-      // trace-b is expanded from the start so its timeline is not clamped; trace-a is.
-      await screen.findByRole('button', { name: 'Show more' });
-      expect(within(getRow('trace-a')).getByRole('button', { name: 'Show more' })).toBeTruthy();
-      expect(within(getRow('trace-b')).queryByRole('button', { name: 'Show more' })).toBeNull();
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = TRACE_IDS.flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
     });
   });
 
@@ -203,8 +203,14 @@ describe('ThreadTrace', () => {
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
-      // No close button on the span panel: re-clicking the selected span toggles it off.
+      // Re-clicking the selected span toggles it off...
       fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
+
+      // ...and so does the panel's close button.
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
       expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
@@ -259,16 +265,18 @@ describe('ThreadTrace', () => {
   });
 
   describe('details column', () => {
-    it('draws the borders on the row — a line under each turn, a divider right of the messages column — and renders custom actions', async () => {
+    it('announces each turn in a divider, drops the grid borders, renders the details as a card, and renders custom actions', async () => {
       renderView();
       await screen.findByText('Chef agent run');
 
-      for (const id of ['trace-a', 'trace-b']) {
+      for (const [index, id] of ['trace-a', 'trace-b'].entries()) {
         const details = screen.getByTestId(`details-${id}`);
         const row = getRow(id);
-        expect(row.className).toContain('border-b');
-        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).toContain('border-r');
-        expect(details.className).not.toMatch(/border|rounded/);
+        const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
+        expect(within(divider).getByRole('tab', { name: 'Messages' })).toBeTruthy();
+        expect(row.className).not.toContain('border-b');
+        expect(row.querySelector('[data-slot=thread-trace-messages]')?.className).not.toContain('border-r');
+        expect(details.className).toContain('rounded-xl');
       }
       expect(screen.getByRole('button', { name: 'Action trace-a' })).toBeTruthy();
     });
@@ -279,39 +287,39 @@ describe('ThreadTrace', () => {
       await screen.findByText('Chef agent run');
 
       const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
 
       mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
       fireEvent.click(screen.getByRole('tab', { name: 'Extra' }));
 
       expect(screen.getByRole('tab', { name: 'Extra' }).getAttribute('aria-selected')).toBe('true');
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
       expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
         '300px',
       );
     });
 
-    it('clamps a long timeline to the messages height and expands on Show more', async () => {
+    it('clamps a long timeline to the messages height and expands on Expand', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       renderView({ traceIds: ['trace-a'] });
       await screen.findByText('Chef agent run');
 
       const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.style.maxHeight).toBe('300px');
-      fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
+      fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
 
-      expect(timeline.style.maxHeight).toBe('');
-      expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
+      expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy();
 
-      // Collapsing would hide the selected span, so Show less waits until the panel closes.
+      // Collapsing would hide the selected span, so Collapse waits until the panel closes.
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Show less' });
+      await screen.findByRole('button', { name: 'Collapse' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
-      expect(timeline.style.maxHeight).toBe('300px');
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
     });
   });
 });

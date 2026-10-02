@@ -1,4 +1,5 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans } from '../observability';
 import { safeEnqueue } from '../stream/base';
@@ -574,7 +575,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           toolResults: toolResultParts.map(tr => ({
             id: tr.toolCallId,
             name: tr.toolName,
-            result: unwrapToolResultOutput(tr.output),
+            result: normalizeToolOutput(tr.output).output,
           })),
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
@@ -687,27 +688,5 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     })
       .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
       .commit();
-  }
-}
-
-function unwrapToolResultOutput(output: unknown): unknown {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return output;
-  }
-
-  const record = output as Record<string, unknown>;
-  if (!('value' in record)) {
-    return output;
-  }
-
-  switch (record.type) {
-    case 'text':
-    case 'json':
-    case 'error-text':
-    case 'error-json':
-    case 'content':
-      return record.value;
-    default:
-      return output;
   }
 }

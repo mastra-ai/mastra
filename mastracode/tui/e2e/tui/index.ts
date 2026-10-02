@@ -136,6 +136,7 @@ import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
+import { planApprovalGoalReplacesActiveScenario } from './plan-approval-goal-replaces-active.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
@@ -171,6 +172,8 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
 import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
+import { resumeLockedThreadScenario } from './resume-locked-thread.js';
+import { resumeMissingThreadScenario } from './resume-missing-thread.js';
 import { schedulesCommandScenario } from './schedules-command.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
@@ -364,6 +367,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,
   'persistent-goal-reload': persistentGoalReloadScenario,
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
+  'plan-approval-goal-replaces-active': planApprovalGoalReplacesActiveScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'permission-request-hook': permissionRequestHookScenario,
@@ -439,6 +443,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
   'thread-history': threadHistoryScenario,
+  'resume-locked-thread': resumeLockedThreadScenario,
+  'resume-missing-thread': resumeMissingThreadScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,

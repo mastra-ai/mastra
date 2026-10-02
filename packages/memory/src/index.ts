@@ -2163,6 +2163,7 @@ ${workingMemory}`;
           threadId: string;
           resourceId: string;
           observedAt?: Date;
+          recordId?: string;
         }) => {
           await this.indexObservation(observation);
         }
@@ -2419,6 +2420,7 @@ Notes:
       threadId: string;
       score: number;
       groupId?: string;
+      recordId?: string;
       range?: string;
       text?: string;
       observedAt?: Date;
@@ -2446,6 +2448,7 @@ Notes:
       threadId: string;
       score: number;
       groupId?: string;
+      recordId?: string;
       range?: string;
       text?: string;
       observedAt?: Date;
@@ -2473,6 +2476,7 @@ Notes:
             threadId: r.metadata.thread_id,
             score: r.score,
             groupId,
+            recordId: typeof r.metadata.record_id === 'string' ? r.metadata.record_id : undefined,
             range: typeof r.metadata.range === 'string' ? r.metadata.range : undefined,
             text: typeof r.metadata.text === 'string' ? r.metadata.text : undefined,
             observedAt:
@@ -2511,6 +2515,7 @@ Notes:
     threadId,
     resourceId,
     observedAt,
+    recordId,
   }: {
     text: string;
     groupId: string;
@@ -2518,6 +2523,8 @@ Notes:
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    /** Observational memory record holding the group, so paging can read it directly. */
+    recordId?: string;
   }): Promise<void> {
     if (!this.vector || !this.embedder) return;
 
@@ -2553,6 +2560,7 @@ Notes:
         thread_id: threadId,
         resource_id: resourceId,
         observed_at: observedAt?.toISOString(),
+        ...(recordId ? { record_id: recordId } : {}),
         text: chunk,
       })),
     });
@@ -2827,6 +2835,10 @@ Notes:
       tools.recall = recallTool(mergedConfig, {
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+        getOMEngine: async () => {
+          const om = await this.omEngine;
+          return om?.getStorage().supportsObservationalMemoryHistorySearch ? om : null;
+        },
       });
     }
     if (
