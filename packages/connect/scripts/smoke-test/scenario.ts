@@ -105,3 +105,57 @@ export function requireTools(tools: ResolvedToolset, required: readonly string[]
   }
   return null;
 }
+
+/** Compact builder for ScenarioStep so scenarios stay dense but readable. */
+export function makeStep(
+  name: string,
+  toolId: string | undefined,
+  status: ScenarioStep['status'],
+  detail?: string,
+): ScenarioStep {
+  return toolId === undefined
+    ? detail === undefined
+      ? { name, status }
+      : { name, status, detail }
+    : detail === undefined
+      ? { name, toolId, status }
+      : { name, toolId, status, detail };
+}
+
+/** Pulls the user-facing message off a thrown value in a Node-safe way. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Smoke-test a batch of read-only tools against the live proxy. Each tool is
+ * called with the given input and must simply return without throwing; a
+ * failure becomes one `fail` step and does not short-circuit the batch.
+ */
+export async function runReadBatch(
+  call: <T>(toolId: string, input: unknown) => Promise<T>,
+  reads: ReadonlyArray<readonly [toolId: string, input: unknown]>,
+  availableTools: ResolvedToolset,
+): Promise<ScenarioStep[]> {
+  const steps: ScenarioStep[] = [];
+  for (const [toolId, input] of reads) {
+    if (!availableTools[toolId]) {
+      steps.push(makeStep(stripPrefix(toolId), toolId, 'skip', 'tool not in project toolset'));
+      continue;
+    }
+    try {
+      await call(toolId, input);
+      steps.push(makeStep(stripPrefix(toolId), toolId, 'pass'));
+    } catch (error) {
+      steps.push(makeStep(stripPrefix(toolId), toolId, 'fail', errorMessage(error)));
+    }
+  }
+  return steps;
+}
+
+function stripPrefix(toolId: string): string {
+  // Human-readable step name: drop the provider prefix so the report doesn't
+  // repeat it on every line.
+  const underscore = toolId.indexOf('_');
+  return underscore >= 0 ? toolId.slice(underscore + 1) : toolId;
+}

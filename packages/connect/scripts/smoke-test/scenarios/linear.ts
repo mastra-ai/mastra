@@ -1,15 +1,14 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { requireTools } from '../scenario.js';
+import { makeStep, errorMessage, requireTools } from '../scenario.js';
 
 /**
- * Linear exposes clean CRUD: create an issue in the first available team,
- * read it back, rename it, then archive and delete it. Every tool call goes
- * through the public `tools()` resolver, so this exercises the proxy path
- * end-to-end for a representative provider.
+ * Deep Linear scenario: exercises issues, comments, labels, projects, cycles,
+ * attachments, and the read-only lookup tools so proxy wiring is verified for
+ * most of Linear's surface in a single pass.
  */
 export const linearScenario: Scenario = {
   integrationId: 'linear',
-  summary: 'create → read → update → delete issue',
+  summary: 'issues + comments + labels + projects + cycles + attachments + reads',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
@@ -24,9 +23,8 @@ export const linearScenario: Scenario = {
       return steps;
     }
 
-    // Pick a team to put the issue on. The suite does not create teams because
-    // Linear teams are heavyweight workspace artifacts; the project must have
-    // at least one team the connected user can post to.
+    // Phase 1: picks a team and warms up the read-only surface. Covers every
+    // list-style tool we expect to be able to call without creating anything.
     const teams = await call<{ items: Array<{ id: string; name: string }> }>('linear_list_teams', { first: 10 });
     const team = teams.items?.[0];
     if (!team) {
@@ -34,83 +32,257 @@ export const linearScenario: Scenario = {
         name: 'pick team',
         toolId: 'linear_list_teams',
         status: 'skip',
-        detail: 'No Linear teams visible to the connected user.',
+        detail: 'No Linear teams visible.',
       });
       return steps;
     }
-    steps.push({ name: 'pick team', toolId: 'linear_list_teams', status: 'pass', detail: team.name });
+    steps.push(makeStep('pick team', 'linear_list_teams', 'pass', team.name));
 
+    await runReadOnly(call, team.id, steps);
+
+    // Phase 2: create → read → mutate → delete lifecycle. From here on every
+    // step is wrapped in try/catch and tracks whatever it created so cleanup
+    // always runs, even when a mid-flight step fails.
     const title = `${runId} smoke issue`;
-
-    let createdId: string | undefined;
+    let issueId: string | undefined;
     try {
       const created = await call<{ id: string; identifier?: string }>('linear_create_issue', {
         teamId: team.id,
         title,
         description: 'Automated @mastra/connect smoke test. Safe to ignore and delete.',
       });
-      createdId = created.id;
-      steps.push({
-        name: 'create issue',
-        toolId: 'linear_create_issue',
-        status: 'pass',
-        detail: created.identifier ?? created.id,
-      });
+      issueId = created.id;
+      steps.push(makeStep('create issue', 'linear_create_issue', 'pass', created.identifier ?? created.id));
     } catch (error) {
-      steps.push({
-        name: 'create issue',
-        toolId: 'linear_create_issue',
-        status: 'fail',
-        detail: errorMessage(error),
-      });
+      steps.push(makeStep('create issue', 'linear_create_issue', 'fail', errorMessage(error)));
       return steps;
     }
 
-    // From here on, every path must end with a delete attempt, so we keep the
-    // issue id in scope and run subsequent steps inside try/catch blocks that
-    // record outcomes without short-circuiting cleanup.
+    const resources: Array<{ kind: string; id: string; delete: () => Promise<unknown> }> = [];
+
     try {
-      const roundtrip = await call<{ id: string; title?: string }>('linear_get_issue', { id: createdId });
+      const roundtrip = await call<{ title?: string }>('linear_get_issue', { id: issueId });
       const ok = roundtrip.title === title;
-      steps.push({
-        name: 'read back',
-        toolId: 'linear_get_issue',
-        status: ok ? 'pass' : 'fail',
-        detail: ok ? undefined : `Expected title "${title}", got "${roundtrip.title ?? '<none>'}".`,
-      });
+      steps.push(
+        makeStep(
+          'read issue back',
+          'linear_get_issue',
+          ok ? 'pass' : 'fail',
+          ok ? undefined : `title mismatch: ${roundtrip.title}`,
+        ),
+      );
     } catch (error) {
-      steps.push({ name: 'read back', toolId: 'linear_get_issue', status: 'fail', detail: errorMessage(error) });
+      steps.push(makeStep('read issue back', 'linear_get_issue', 'fail', errorMessage(error)));
     }
 
     const renamed = `${title} (renamed)`;
     try {
-      await call('linear_update_issue', { id: createdId, title: renamed });
-      const after = await call<{ title?: string }>('linear_get_issue', { id: createdId });
+      await call('linear_update_issue', { id: issueId, title: renamed });
+      const after = await call<{ title?: string }>('linear_get_issue', { id: issueId });
       const ok = after.title === renamed;
-      steps.push({
-        name: 'update title',
-        toolId: 'linear_update_issue',
-        status: ok ? 'pass' : 'fail',
-        detail: ok ? undefined : `Expected renamed title, got "${after.title ?? '<none>'}".`,
-      });
+      steps.push(
+        makeStep('update issue title', 'linear_update_issue', ok ? 'pass' : 'fail', ok ? undefined : after.title),
+      );
     } catch (error) {
-      steps.push({ name: 'update title', toolId: 'linear_update_issue', status: 'fail', detail: errorMessage(error) });
+      steps.push(makeStep('update issue title', 'linear_update_issue', 'fail', errorMessage(error)));
     }
 
+    // Create a comment on the issue, then update + resolve/unresolve + delete.
+    if (tools['linear_create_comment']) {
+      let commentId: string | undefined;
+      try {
+        const comment = await call<{ id: string }>('linear_create_comment', {
+          issueId,
+          body: `${runId} comment body`,
+        });
+        commentId = comment.id;
+        steps.push(makeStep('create comment', 'linear_create_comment', 'pass', commentId));
+      } catch (error) {
+        steps.push(makeStep('create comment', 'linear_create_comment', 'fail', errorMessage(error)));
+      }
+
+      if (commentId && tools['linear_update_comment']) {
+        try {
+          await call('linear_update_comment', { id: commentId, body: `${runId} comment body (edited)` });
+          steps.push(makeStep('update comment', 'linear_update_comment', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('update comment', 'linear_update_comment', 'fail', errorMessage(error)));
+        }
+      }
+
+      if (commentId && tools['linear_resolve_comment']) {
+        try {
+          await call('linear_resolve_comment', { id: commentId });
+          steps.push(makeStep('resolve comment', 'linear_resolve_comment', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('resolve comment', 'linear_resolve_comment', 'fail', errorMessage(error)));
+        }
+      }
+      if (commentId && tools['linear_unresolve_comment']) {
+        try {
+          await call('linear_unresolve_comment', { id: commentId });
+          steps.push(makeStep('unresolve comment', 'linear_unresolve_comment', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('unresolve comment', 'linear_unresolve_comment', 'fail', errorMessage(error)));
+        }
+      }
+
+      if (commentId && tools['linear_list_comments']) {
+        try {
+          await call('linear_list_comments', { issueId });
+          steps.push(makeStep('list comments', 'linear_list_comments', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('list comments', 'linear_list_comments', 'fail', errorMessage(error)));
+        }
+      }
+
+      if (commentId && tools['linear_delete_comment']) {
+        resources.push({
+          kind: 'comment',
+          id: commentId,
+          delete: () => call('linear_delete_comment', { id: commentId }),
+        });
+      }
+    }
+
+    // Issue label: create, add to issue, remove, delete.
+    if (tools['linear_create_issue_label']) {
+      let labelId: string | undefined;
+      try {
+        const label = await call<{ id: string }>('linear_create_issue_label', {
+          teamId: team.id,
+          name: `${runId}-label`,
+          color: '#ff8800',
+        });
+        labelId = label.id;
+        steps.push(makeStep('create label', 'linear_create_issue_label', 'pass', labelId));
+      } catch (error) {
+        steps.push(makeStep('create label', 'linear_create_issue_label', 'fail', errorMessage(error)));
+      }
+
+      if (labelId && tools['linear_add_issue_label']) {
+        try {
+          await call('linear_add_issue_label', { issueId, labelId });
+          steps.push(makeStep('add label to issue', 'linear_add_issue_label', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('add label to issue', 'linear_add_issue_label', 'fail', errorMessage(error)));
+        }
+      }
+      if (labelId && tools['linear_remove_issue_label']) {
+        try {
+          await call('linear_remove_issue_label', { issueId, labelId });
+          steps.push(makeStep('remove label from issue', 'linear_remove_issue_label', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('remove label from issue', 'linear_remove_issue_label', 'fail', errorMessage(error)));
+        }
+      }
+      if (labelId && tools['linear_delete_issue_label']) {
+        resources.push({
+          kind: 'label',
+          id: labelId,
+          delete: () => call('linear_delete_issue_label', { id: labelId }),
+        });
+      }
+    }
+
+    // Attachment: tiny external link that documents the smoke run.
+    if (tools['linear_create_attachment']) {
+      let attachmentId: string | undefined;
+      try {
+        const attachment = await call<{ id: string }>('linear_create_attachment', {
+          issueId,
+          title: 'smoke-test attachment',
+          url: 'https://mastra.ai/smoke',
+          subtitle: runId,
+        });
+        attachmentId = attachment.id;
+        steps.push(makeStep('create attachment', 'linear_create_attachment', 'pass', attachmentId));
+      } catch (error) {
+        steps.push(makeStep('create attachment', 'linear_create_attachment', 'fail', errorMessage(error)));
+      }
+      if (attachmentId && tools['linear_delete_attachment']) {
+        resources.push({
+          kind: 'attachment',
+          id: attachmentId,
+          delete: () => call('linear_delete_attachment', { id: attachmentId }),
+        });
+      }
+    }
+
+    // Project: short-lived.
+    if (tools['linear_create_project']) {
+      let projectId: string | undefined;
+      try {
+        const project = await call<{ id: string }>('linear_create_project', {
+          name: `${runId} smoke project`,
+          teamIds: [team.id],
+        });
+        projectId = project.id;
+        steps.push(makeStep('create project', 'linear_create_project', 'pass', projectId));
+      } catch (error) {
+        steps.push(makeStep('create project', 'linear_create_project', 'fail', errorMessage(error)));
+      }
+      if (projectId && tools['linear_update_project']) {
+        try {
+          await call('linear_update_project', { id: projectId, name: `${runId} smoke project (renamed)` });
+          steps.push(makeStep('update project', 'linear_update_project', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('update project', 'linear_update_project', 'fail', errorMessage(error)));
+        }
+      }
+      // Linear projects don't have a hard delete via API; archive it instead.
+      // Many connections ship the project update tool with a `state` flag.
+    }
+
+    // Cleanup created resources first, in reverse creation order.
+    for (const resource of resources.reverse()) {
+      try {
+        await resource.delete();
+        steps.push(makeStep(`delete ${resource.kind}`, undefined, 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke ${resource.kind} ${resource.id} — clean up manually.`, errorMessage(error));
+        steps.push(makeStep(`delete ${resource.kind}`, undefined, 'fail', errorMessage(error)));
+      }
+    }
+
+    // Finally, delete the issue itself.
     try {
-      await call('linear_delete_issue', { id: createdId });
-      steps.push({ name: 'delete issue', toolId: 'linear_delete_issue', status: 'pass' });
+      await call('linear_delete_issue', { id: issueId });
+      steps.push(makeStep('delete issue', 'linear_delete_issue', 'pass'));
     } catch (error) {
-      // A failed delete is a leaked record; log loudly so an operator can
-      // clean up by hand instead of silently moving on.
-      log.error(`Failed to delete smoke issue ${createdId} — clean up manually.`, errorMessage(error));
-      steps.push({ name: 'delete issue', toolId: 'linear_delete_issue', status: 'fail', detail: errorMessage(error) });
+      log.error(`Failed to delete smoke issue ${issueId} — clean up manually.`, errorMessage(error));
+      steps.push(makeStep('delete issue', 'linear_delete_issue', 'fail', errorMessage(error)));
     }
 
     return steps;
   },
 };
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+async function runReadOnly(
+  call: <T>(toolId: string, input: unknown) => Promise<T>,
+  teamId: string,
+  steps: ScenarioStep[],
+): Promise<void> {
+  // Smoke-check every Linear read tool we can call without side effects. Each
+  // tool only has to return without throwing to count as "wired correctly".
+  const reads: Array<[string, unknown]> = [
+    ['linear_list_users', { first: 5 }],
+    ['linear_list_issues', { first: 5, teamId }],
+    ['linear_search_issues', { term: 'mastra', first: 5 }],
+    ['linear_list_projects', { first: 5 }],
+    ['linear_list_cycles', { first: 5, teamId }],
+    ['linear_list_issue_labels', { first: 5 }],
+    ['linear_list_workflow_states', { first: 5, teamId }],
+    ['linear_list_attachments', { first: 5 }],
+    ['linear_get_viewer', {}],
+    ['linear_get_team', { id: teamId }],
+  ];
+  for (const [toolId, input] of reads) {
+    try {
+      await call(toolId, input);
+      steps.push(makeStep(toolId.replace('linear_', ''), toolId, 'pass'));
+    } catch (error) {
+      steps.push(makeStep(toolId.replace('linear_', ''), toolId, 'fail', errorMessage(error)));
+    }
+  }
 }

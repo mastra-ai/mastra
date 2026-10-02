@@ -1,25 +1,19 @@
-import type { ResolvedToolset, Scenario, ScenarioStep } from '../scenario.js';
-import { requireTools, toolsForProvider } from '../scenario.js';
+import type { Scenario, ScenarioStep } from '../scenario.js';
+import { makeStep, errorMessage, requireTools } from '../scenario.js';
 
 /**
- * Google Sheets smoke: create a spreadsheet, append a row, read it back,
- * update it, clear the sheet. Google Sheets has no "delete spreadsheet"
- * endpoint of its own — the Drive API owns file deletion. If the project
- * also has google-drive attached we use its `delete_file` tool for the
- * final cleanup; otherwise we leave the sheet behind and surface a leak.
- *
- * The runner only hands scenarios their own provider's tools. To look at
- * cross-provider surface we take a reference to the full toolset at run
- * start — see the `fullToolset` constant below.
+ * Deep google-sheet scenario: creates a spreadsheet, round-trips values via
+ * append/get/update/upsert/clear, then deletes the file through google-drive
+ * when that provider is attached (sheets has no delete endpoint of its own).
  */
 export const googleSheetScenario: Scenario = {
   integrationId: 'google-sheet',
-  summary: 'create → append → read → update → clear (and delete file via google-drive if available)',
+  summary: 'spreadsheet CRUD + values round-trip (cleanup via google-drive)',
   async run({ tools, allTools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
       'google_sheet_create_spreadsheet',
-      'google_sheet_append_values_to_spreadsheet',
+      'google_sheet_append_values',
       'google_sheet_get_values',
       'google_sheet_update_values',
       'google_sheet_clear_values',
@@ -29,143 +23,125 @@ export const googleSheetScenario: Scenario = {
       return steps;
     }
 
-    const title = `${runId} smoke sheet`;
-    const sheetName = 'Sheet1';
-
     let spreadsheetId: string | undefined;
     try {
-      const created = await call<{ spreadsheetId: string }>('google_sheet_create_spreadsheet', {
-        properties: { title },
-      });
+      const created = await call<{ spreadsheetId: string; sheets?: Array<{ properties?: { title?: string } }> }>(
+        'google_sheet_create_spreadsheet',
+        {
+          title: `${runId} smoke sheet`,
+          sheets: [{ title: 'Smoke' }],
+        },
+      );
       spreadsheetId = created.spreadsheetId;
-      steps.push({
-        name: 'create spreadsheet',
-        toolId: 'google_sheet_create_spreadsheet',
-        status: 'pass',
-        detail: spreadsheetId,
-      });
+      steps.push(makeStep('create spreadsheet', 'google_sheet_create_spreadsheet', 'pass', spreadsheetId));
     } catch (error) {
-      steps.push({
-        name: 'create spreadsheet',
-        toolId: 'google_sheet_create_spreadsheet',
-        status: 'fail',
-        detail: errorMessage(error),
-      });
+      steps.push(makeStep('create spreadsheet', 'google_sheet_create_spreadsheet', 'fail', errorMessage(error)));
       return steps;
     }
 
-    const initialRow = ['smoke', runId, new Date().toISOString()];
+    const range = 'Smoke!A1:C1';
+    const expected = ['smoke', runId, new Date().toISOString()];
     try {
-      await call('google_sheet_append_values_to_spreadsheet', {
+      await call('google_sheet_append_values', {
         spreadsheetId,
-        range: `${sheetName}!A1`,
-        values: [initialRow],
-        valueInputOption: 'RAW',
+        range,
+        values: [expected],
       });
-      steps.push({ name: 'append row', toolId: 'google_sheet_append_values_to_spreadsheet', status: 'pass' });
+      steps.push(makeStep('append row', 'google_sheet_append_values', 'pass'));
     } catch (error) {
-      steps.push({
-        name: 'append row',
-        toolId: 'google_sheet_append_values_to_spreadsheet',
-        status: 'fail',
-        detail: errorMessage(error),
-      });
+      steps.push(makeStep('append row', 'google_sheet_append_values', 'fail', errorMessage(error)));
     }
 
     try {
-      const got = await call<{ values?: unknown[][] }>('google_sheet_get_values', {
+      const got = await call<{ values?: string[][] }>('google_sheet_get_values', {
         spreadsheetId,
-        range: `${sheetName}!A1:C1`,
+        range,
       });
-      const first = got.values?.[0];
-      const ok = Array.isArray(first) && first[0] === initialRow[0] && first[1] === initialRow[1];
-      steps.push({
-        name: 'read back',
-        toolId: 'google_sheet_get_values',
-        status: ok ? 'pass' : 'fail',
-        detail: ok ? undefined : `Row did not match the appended values. Got: ${JSON.stringify(first ?? null)}`,
-      });
+      const row = got.values?.[0] ?? [];
+      const ok = row[0] === expected[0] && row[1] === expected[1];
+      steps.push(
+        makeStep('read values', 'google_sheet_get_values', ok ? 'pass' : 'fail', ok ? undefined : row.join('|')),
+      );
     } catch (error) {
-      steps.push({ name: 'read back', toolId: 'google_sheet_get_values', status: 'fail', detail: errorMessage(error) });
+      steps.push(makeStep('read values', 'google_sheet_get_values', 'fail', errorMessage(error)));
     }
 
-    const renamedCell = `${runId} renamed`;
     try {
       await call('google_sheet_update_values', {
         spreadsheetId,
-        range: `${sheetName}!A1`,
-        values: [[renamedCell]],
-        valueInputOption: 'RAW',
+        range: 'Smoke!A1',
+        values: [[`${runId}-renamed`]],
       });
-      const after = await call<{ values?: unknown[][] }>('google_sheet_get_values', {
+      const got = await call<{ values?: string[][] }>('google_sheet_get_values', {
         spreadsheetId,
-        range: `${sheetName}!A1`,
+        range: 'Smoke!A1',
       });
-      const ok = after.values?.[0]?.[0] === renamedCell;
-      steps.push({
-        name: 'update cell',
-        toolId: 'google_sheet_update_values',
-        status: ok ? 'pass' : 'fail',
-        detail: ok ? undefined : `Expected "${renamedCell}", got "${after.values?.[0]?.[0] ?? '<none>'}".`,
-      });
+      const ok = got.values?.[0]?.[0] === `${runId}-renamed`;
+      steps.push(makeStep('update value', 'google_sheet_update_values', ok ? 'pass' : 'fail'));
     } catch (error) {
-      steps.push({
-        name: 'update cell',
-        toolId: 'google_sheet_update_values',
-        status: 'fail',
-        detail: errorMessage(error),
-      });
+      steps.push(makeStep('update value', 'google_sheet_update_values', 'fail', errorMessage(error)));
+    }
+
+    if (tools['google_sheet_upsert_row']) {
+      try {
+        await call('google_sheet_upsert_row', {
+          spreadsheetId,
+          range: 'Smoke!A:C',
+          keyColumn: 0,
+          keyValue: `${runId}-renamed`,
+          values: [`${runId}-renamed`, 'upserted', 'v2'],
+        });
+        steps.push(makeStep('upsert row', 'google_sheet_upsert_row', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('upsert row', 'google_sheet_upsert_row', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (tools['google_sheet_batch_get_values']) {
+      try {
+        await call('google_sheet_batch_get_values', {
+          spreadsheetId,
+          ranges: ['Smoke!A1:C1'],
+        });
+        steps.push(makeStep('batch get values', 'google_sheet_batch_get_values', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('batch get values', 'google_sheet_batch_get_values', 'fail', errorMessage(error)));
+      }
     }
 
     try {
-      await call('google_sheet_clear_values', {
-        spreadsheetId,
-        range: `${sheetName}!A:Z`,
-      });
-      steps.push({ name: 'clear values', toolId: 'google_sheet_clear_values', status: 'pass' });
+      await call('google_sheet_clear_values', { spreadsheetId, range });
+      steps.push(makeStep('clear values', 'google_sheet_clear_values', 'pass'));
     } catch (error) {
-      steps.push({
-        name: 'clear values',
-        toolId: 'google_sheet_clear_values',
-        status: 'fail',
-        detail: errorMessage(error),
-      });
+      steps.push(makeStep('clear values', 'google_sheet_clear_values', 'fail', errorMessage(error)));
     }
 
-    // Final cleanup: delete the spreadsheet file via Drive if the project has
-    // google-drive attached. If it doesn't, the sheet is left in the user's
-    // Drive and we surface that as a `fail` step so the leak is visible.
-    const driveTools: ResolvedToolset = toolsForProvider(allTools, 'google-drive');
-    if (driveTools['google_drive_delete_file']) {
+    const driveDelete = allTools['google_drive_delete_file'];
+    if (driveDelete && typeof driveDelete.execute === 'function') {
       try {
-        await (driveTools['google_drive_delete_file'].execute as (i: unknown) => Promise<unknown>)({
-          fileId: spreadsheetId,
-        });
-        steps.push({ name: 'delete file (drive)', toolId: 'google_drive_delete_file', status: 'pass' });
+        await (driveDelete.execute as (input: unknown) => Promise<unknown>)({ fileId: spreadsheetId });
+        steps.push(makeStep('delete file (via drive)', 'google_drive_delete_file', 'pass'));
       } catch (error) {
-        log.error(`Failed to delete smoke spreadsheet ${spreadsheetId} — clean up manually.`, errorMessage(error));
-        steps.push({
-          name: 'delete file (drive)',
-          toolId: 'google_drive_delete_file',
-          status: 'fail',
-          detail: errorMessage(error),
-        });
+        log.error(
+          `Failed to delete smoke spreadsheet ${spreadsheetId} via google-drive — clean up manually.`,
+          errorMessage(error),
+        );
+        steps.push(makeStep('delete file (via drive)', 'google_drive_delete_file', 'fail', errorMessage(error)));
       }
     } else {
       log.warn(
-        `Spreadsheet ${spreadsheetId} not deleted: google_drive_delete_file is not available in this toolset. Attach the google-drive integration to enable automatic cleanup.`,
+        `Cannot delete smoke spreadsheet ${spreadsheetId}: google-drive provider not attached. Clean up manually.`,
       );
-      steps.push({
-        name: 'delete file',
-        status: 'fail',
-        detail: `Spreadsheet ${spreadsheetId} left in Drive — attach google-drive to enable cleanup.`,
-      });
+      steps.push(
+        makeStep(
+          'delete file (via drive)',
+          'google_drive_delete_file',
+          'fail',
+          `google-drive provider unavailable; leaked spreadsheet ${spreadsheetId}`,
+        ),
+      );
     }
 
     return steps;
   },
 };
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
