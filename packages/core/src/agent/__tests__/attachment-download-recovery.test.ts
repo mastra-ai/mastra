@@ -443,6 +443,15 @@ describe('attachment download recovery', () => {
       ['image data that is not an image', 'input', 'data:image/png;base64,aGVsbG8=', 'image/png'],
       ['PDF data that is not a PDF', 'input', 'data:application/pdf;base64,aGVsbG8=', 'application/pdf'],
       ['a percent-encoded data URL that is not an image', 'input', 'data:image/png,hello', 'image/png'],
+      ['an extensionless relative path labelled HEIC', 'input', '/api/attachments/123', 'image/heic'],
+      ['a relative path labelled AVIF', 'input', 'uploads/abc', 'image/avif'],
+      [
+        'a stored HEIC data URL wrapping a relative path',
+        'stored',
+        'data:image/heic;base64,/api/attachments/123',
+        'image/heic',
+      ],
+      ['AVIF data that is not an AVIF', 'input', 'data:image/avif;base64,aGVsbG8=', 'image/avif'],
     ] as const)(
       'gives %s the placeholder when the model accepts data URLs',
       async (_label, source, data, mediaType) => {

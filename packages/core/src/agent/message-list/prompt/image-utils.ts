@@ -190,15 +190,41 @@ export function isBase64Like(data: string): boolean {
 }
 
 const STRICT_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
-// HEIC and AVIF are left out: the signature table only matches one exact `ftyp` box size and
-// brand, but real files vary in both (e.g. iPhone HEIC uses a 24-byte box).
-const UNRELIABLE_SIGNATURE_MEDIA_TYPES = new Set<string>(['image/heic', 'image/avif']);
 const SIGNED_IMAGE_MEDIA_TYPES = new Set<string>([
-  ...imageMediaTypeSignatures
-    .map(signature => signature.mediaType)
-    .filter(mediaType => !UNRELIABLE_SIGNATURE_MEDIA_TYPES.has(mediaType)),
+  ...imageMediaTypeSignatures.map(signature => signature.mediaType),
   'image/jpg',
 ]);
+const HEIF_BRANDS = new Set([
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'heim',
+  'heis',
+  'hevm',
+  'hevs',
+  'mif1',
+  'msf1',
+  'avif',
+  'avis',
+]);
+
+/**
+ * HEIC and AVIF files start with an ISO BMFF `ftyp` box whose size and brand list vary (iPhone
+ * HEIC uses a 24-byte box), so the fixed signature table misses most real files. Check the box
+ * structure instead: `ftyp` at byte 4, then a HEIF/AVIF major or compatible brand.
+ */
+function isHeifImage(bytes: Uint8Array): boolean {
+  const ascii = (start: number) => String.fromCharCode(...bytes.subarray(start, start + 4));
+  if (bytes.length < 16 || ascii(4) !== 'ftyp') return false;
+  const boxSize = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
+  if (boxSize < 16 || boxSize % 4 !== 0) return false;
+  if (HEIF_BRANDS.has(ascii(8))) return true;
+  for (let offset = 16; offset + 4 <= Math.min(boxSize, bytes.length); offset += 4) {
+    if (HEIF_BRANDS.has(ascii(offset))) return true;
+  }
+  return false;
+}
 
 /**
  * Checks whether inline base64 content can be decoded and, for image types with a known
@@ -214,8 +240,8 @@ function isValidInlineContent(base64: string, mediaType: string | undefined): bo
   if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
     // Compare decoded bytes: base64 prefixes depend on the bytes that follow the signature
     // (e.g. a WebP's file size), so a real image can fail a text-prefix match.
-    const head = convertBase64ToUint8Array(payload.slice(0, 24));
-    return detectMediaType({ data: head, signatures: imageMediaTypeSignatures }) !== undefined;
+    const head = convertBase64ToUint8Array(payload.slice(0, 64));
+    return detectMediaType({ data: head, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(head);
   }
   if (mediaType === 'application/pdf') return payload.startsWith('JVBER'); // "%PDF"
   return true;
