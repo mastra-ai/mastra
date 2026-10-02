@@ -44,7 +44,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 import { polledPullRequestEvent } from './rules.js';
-import type { ReconcilePullRequestState, ReconcileRepository } from './rules.js';
+import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -346,7 +346,7 @@ function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRep
   };
 }
 
-function listedOpenPullRequestState(pullRequest: ListedPullRequest): ReconcilePullRequestState & { createdAt: string } {
+function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
   return {
     title: pullRequest.title,
     url: pullRequest.url,

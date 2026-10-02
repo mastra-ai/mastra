@@ -938,6 +938,10 @@ export interface ReconcilePullRequestState {
   mergedBy?: string;
 }
 
+export interface PolledPullRequestState extends ReconcilePullRequestState {
+  createdAt: string;
+}
+
 export type GithubPullRequestFetcher = (input: {
   installationId: number;
   repository: string;
@@ -1149,7 +1153,7 @@ export function reconciledIssueOpenedEvent(
 export function polledPullRequestEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
-  state: ReconcilePullRequestState & { createdAt: string },
+  state: PolledPullRequestState,
 ): ParsedGithubWebhook {
   return {
     event: 'pull_request',
