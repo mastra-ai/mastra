@@ -39,9 +39,11 @@ export const googleDocsScenario: Scenario = {
       }
     };
 
+    // insert_text takes a Google Docs `location: { index }` object (unlike
+    // insert_page_break / insert_section_break which take a bare `index`).
     await trySimpleEdit('insert text', 'google_docs_insert_text', {
       documentId,
-      index: 1,
+      location: { index: 1 },
       text: `${runId} smoke body\n`,
     });
     await trySimpleEdit('insert page break', 'google_docs_insert_page_break', { documentId, index: 1 });
@@ -62,12 +64,14 @@ export const googleDocsScenario: Scenario = {
       endIndex: 2,
       bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
     });
+    // update_text_style takes style fields (bold, italic, …) directly at the
+    // top level and builds the API's `fields` mask itself; the scenario does
+    // NOT send a nested `textStyle` or a `fields` string.
     await trySimpleEdit('update text style', 'google_docs_update_text_style', {
       documentId,
       startIndex: 1,
       endIndex: 2,
-      textStyle: { bold: true },
-      fields: 'bold',
+      bold: true,
     });
     await trySimpleEdit('update paragraph style', 'google_docs_update_paragraph_style', {
       documentId,
