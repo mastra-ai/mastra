@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep Microsoft Teams scenario: channel + message + reply lifecycle inside
@@ -99,6 +99,120 @@ export const microsoftTeamsScenario: Scenario = {
         );
       }
     }
+
+    if (tools['microsoft_teams_get_channel']) {
+      try {
+        await call('microsoft_teams_get_channel', { teamId: team.id, channelId });
+        steps.push(makeStep('get channel', 'microsoft_teams_get_channel', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get channel', 'microsoft_teams_get_channel', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (tools['microsoft_teams_update_channel']) {
+      try {
+        await call('microsoft_teams_update_channel', {
+          teamId: team.id,
+          channelId,
+          description: `smoke ${runId} updated`,
+        });
+        steps.push(makeStep('update channel', 'microsoft_teams_update_channel', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update channel', 'microsoft_teams_update_channel', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (messageId && tools['microsoft_teams_get_channel_message']) {
+      try {
+        await call('microsoft_teams_get_channel_message', { teamId: team.id, channelId, messageId });
+        steps.push(makeStep('get channel message', 'microsoft_teams_get_channel_message', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get channel message', 'microsoft_teams_get_channel_message', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (messageId && tools['microsoft_teams_list_channel_replies']) {
+      try {
+        await call('microsoft_teams_list_channel_replies', { teamId: team.id, channelId, messageId });
+        steps.push(makeStep('list channel replies', 'microsoft_teams_list_channel_replies', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep('list channel replies', 'microsoft_teams_list_channel_replies', 'fail', errorMessage(error)),
+        );
+      }
+    }
+
+    if (tools['microsoft_teams_list_channel_tabs']) {
+      try {
+        await call('microsoft_teams_list_channel_tabs', { teamId: team.id, channelId });
+        steps.push(makeStep('list channel tabs', 'microsoft_teams_list_channel_tabs', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list channel tabs', 'microsoft_teams_list_channel_tabs', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Chat/tab/team-member creation requires a target user id. Probe with a
+    // synthetic Graph user id; Microsoft Graph returns 400/404 which still
+    // proves routing.
+    const syntheticUser = '00000000-0000-0000-0000-000000000000';
+    steps.push(
+      await probeTool(call, tools, 'create chat', 'microsoft_teams_create_chat', {
+        chatType: 'oneOnOne',
+        members: [{ user_id: syntheticUser, roles: ['owner'] }],
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'create chat message', 'microsoft_teams_create_chat_message', {
+        chatId: '19:smoke@thread.v2',
+        content: `smoke ${runId}`,
+      }),
+    );
+    steps.push(await probeTool(call, tools, 'get chat', 'microsoft_teams_get_chat', { id: '19:smoke@thread.v2' }));
+    steps.push(
+      await probeTool(call, tools, 'get chat message', 'microsoft_teams_get_chat_message', {
+        chatId: '19:smoke@thread.v2',
+        messageId: '1',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list chat messages', 'microsoft_teams_list_chat_messages', {
+        chatId: '19:smoke@thread.v2',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'list chat members', 'microsoft_teams_list_chat_members', {
+        chat_id: '19:smoke@thread.v2',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'create channel tab', 'microsoft_teams_create_channel_tab', {
+        teamId: team.id,
+        channelId,
+        displayName: `smoke ${runId}`,
+        teamsAppOdataBind: 'https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/com.microsoft.teamspace.tab.web',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'add team member', 'microsoft_teams_add_team_member', {
+        teamId: team.id,
+        userId: syntheticUser,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'remove team member', 'microsoft_teams_remove_team_member', {
+        teamId: team.id,
+        membershipId: '00000000-0000-0000-0000-000000000000',
+      }),
+    );
+    // create_team is an admin-tier operation that provisions an entire team;
+    // probe with a reserved template so the request lands in Graph but is
+    // rejected before any resource is created.
+    steps.push(
+      await probeTool(call, tools, 'create team', 'microsoft_teams_create_team', {
+        display_name: `smoke-${runId}`,
+        template: 'standard',
+      }),
+    );
 
     try {
       await call('microsoft_teams_delete_channel', { teamId: team.id, channelId });

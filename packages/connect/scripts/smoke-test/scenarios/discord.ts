@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep Discord scenario: creates an ephemeral channel in the first available
@@ -58,6 +58,27 @@ export const discordScenario: Scenario = {
       return steps;
     }
 
+    if (tools['discord_get_channel']) {
+      try {
+        await call('discord_get_channel', { channelId });
+        steps.push(makeStep('get channel', 'discord_get_channel', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get channel', 'discord_get_channel', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (tools['discord_update_channel']) {
+      try {
+        await call('discord_update_channel', {
+          channel_id: channelId,
+          name: `smoke-${runId}-edited`.slice(0, 90),
+        });
+        steps.push(makeStep('update channel', 'discord_update_channel', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update channel', 'discord_update_channel', 'fail', errorMessage(error)));
+      }
+    }
+
     let messageId: string | undefined;
     try {
       const message = await call<{ id: string }>('discord_create_message', {
@@ -68,6 +89,15 @@ export const discordScenario: Scenario = {
       steps.push(makeStep('create message', 'discord_create_message', 'pass', messageId));
     } catch (error) {
       steps.push(makeStep('create message', 'discord_create_message', 'fail', errorMessage(error)));
+    }
+
+    if (messageId && tools['discord_get_message']) {
+      try {
+        await call('discord_get_message', { channelId, messageId });
+        steps.push(makeStep('get message', 'discord_get_message', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get message', 'discord_get_message', 'fail', errorMessage(error)));
+      }
     }
 
     if (messageId && tools['discord_update_message']) {
@@ -138,6 +168,14 @@ export const discordScenario: Scenario = {
       }
     }
 
+    if (roleId && tools['discord_get_role']) {
+      try {
+        await call('discord_get_role', { guild_id: guild.id, role_id: roleId });
+        steps.push(makeStep('get role', 'discord_get_role', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get role', 'discord_get_role', 'fail', errorMessage(error)));
+      }
+    }
     if (roleId && tools['discord_update_role']) {
       try {
         await call('discord_update_role', { guildId: guild.id, roleId, name: `${runId}-role-edited` });
@@ -146,6 +184,101 @@ export const discordScenario: Scenario = {
         steps.push(makeStep('update role', 'discord_update_role', 'fail', errorMessage(error)));
       }
     }
+
+    // Webhook lifecycle on our smoke channel.
+    let webhookId: string | undefined;
+    if (tools['discord_create_webhook']) {
+      try {
+        const webhook = await call<{ id: string }>('discord_create_webhook', {
+          channelId,
+          name: `smoke-${runId}`.slice(0, 80),
+        });
+        webhookId = webhook.id;
+        steps.push(makeStep('create webhook', 'discord_create_webhook', 'pass', webhookId));
+      } catch (error) {
+        steps.push(makeStep('create webhook', 'discord_create_webhook', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (webhookId && tools['discord_get_webhook']) {
+      try {
+        await call('discord_get_webhook', { webhookId });
+        steps.push(makeStep('get webhook', 'discord_get_webhook', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get webhook', 'discord_get_webhook', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (webhookId && tools['discord_update_webhook']) {
+      try {
+        await call('discord_update_webhook', { webhook_id: webhookId, name: `smoke-${runId}-edited`.slice(0, 80) });
+        steps.push(makeStep('update webhook', 'discord_update_webhook', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update webhook', 'discord_update_webhook', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (webhookId && tools['discord_delete_webhook']) {
+      try {
+        await call('discord_delete_webhook', { webhookId });
+        steps.push(makeStep('delete webhook', 'discord_delete_webhook', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke webhook ${webhookId} — clean up manually.`, errorMessage(error));
+        steps.push(makeStep('delete webhook', 'discord_delete_webhook', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Guild-member mutations are destructive on real users; probe with a
+    // synthetic snowflake and accept the Discord 404 as proof the tool
+    // routes to /guilds/:id/members/:user_id.
+    const syntheticUserId = `${runId.replace(/[^0-9]/g, '')}00000000000000`.slice(0, 19) || '000000000000000000';
+    steps.push(
+      await probeTool(call, tools, 'get guild member', 'discord_get_guild_member', {
+        guild_id: guild.id,
+        user_id: syntheticUserId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'update guild member', 'discord_update_guild_member', {
+        guild_id: guild.id,
+        user_id: syntheticUserId,
+        nick: `smoke-${runId}`,
+      }),
+    );
+    if (roleId) {
+      steps.push(
+        await probeTool(call, tools, 'add guild member role', 'discord_add_guild_member_role', {
+          guildId: guild.id,
+          userId: syntheticUserId,
+          roleId,
+        }),
+      );
+      steps.push(
+        await probeTool(call, tools, 'remove guild member role', 'discord_remove_guild_member_role', {
+          guild_id: guild.id,
+          user_id: syntheticUserId,
+          role_id: roleId,
+        }),
+      );
+    }
+    steps.push(
+      await probeTool(call, tools, 'delete guild member', 'discord_delete_guild_member', {
+        guild_id: guild.id,
+        user_id: syntheticUserId,
+      }),
+    );
+
+    // Guild mutations are even more destructive (delete_guild removes the
+    // bot from the guild entirely); probe with a synthetic guild id.
+    const syntheticGuildId = `${runId.replace(/[^0-9]/g, '')}11111111111111`.slice(0, 19) || '111111111111111111';
+    steps.push(
+      await probeTool(call, tools, 'update guild', 'discord_update_guild', {
+        guild_id: syntheticGuildId,
+        name: `smoke-${runId}`,
+      }),
+    );
+    steps.push(await probeTool(call, tools, 'delete guild', 'discord_delete_guild', { guild_id: syntheticGuildId }));
+
     if (roleId && tools['discord_delete_role']) {
       try {
         await call('discord_delete_role', { guildId: guild.id, roleId });

@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep OpenAI scenario: lightweight model + chat-completion + embedding +
@@ -95,6 +95,56 @@ export const openaiScenario: Scenario = {
       }
     }
 
+    if (vectorStoreId && tools['openai_get_vector_store']) {
+      try {
+        await call('openai_get_vector_store', { vector_store_id: vectorStoreId });
+        steps.push(makeStep('get vector store', 'openai_get_vector_store', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get vector store', 'openai_get_vector_store', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (vectorStoreId && tools['openai_list_vector_store_files']) {
+      try {
+        await call('openai_list_vector_store_files', { vector_store_id: vectorStoreId, limit: 5 });
+        steps.push(makeStep('list vector store files', 'openai_list_vector_store_files', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list vector store files', 'openai_list_vector_store_files', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (vectorStoreId && tools['openai_search_vector_store']) {
+      try {
+        await call('openai_search_vector_store', { vector_store_id: vectorStoreId, query: 'smoke test' });
+        steps.push(makeStep('search vector store', 'openai_search_vector_store', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search vector store', 'openai_search_vector_store', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Vector-store file CRUD requires a previously uploaded file id. Probe
+    // with a synthetic id and accept the 404 as proof the endpoint wires up.
+    if (vectorStoreId) {
+      steps.push(
+        await probeTool(call, tools, 'add vector store file', 'openai_add_vector_store_file', {
+          vector_store_id: vectorStoreId,
+          file_id: `file-smoke-${runId}`,
+        }),
+      );
+      steps.push(
+        await probeTool(call, tools, 'get vector store file', 'openai_get_vector_store_file', {
+          vector_store_id: vectorStoreId,
+          file_id: `file-smoke-${runId}`,
+        }),
+      );
+      steps.push(
+        await probeTool(call, tools, 'delete vector store file', 'openai_delete_vector_store_file', {
+          vector_store_id: vectorStoreId,
+          file_id: `file-smoke-${runId}`,
+        }),
+      );
+    }
+
     if (vectorStoreId && tools['openai_delete_vector_store']) {
       try {
         await call('openai_delete_vector_store', { vectorStoreId });
@@ -104,6 +154,67 @@ export const openaiScenario: Scenario = {
         steps.push(makeStep('delete vector store', 'openai_delete_vector_store', 'fail', errorMessage(error)));
       }
     }
+
+    // Responses API: create a tiny response, read it, delete it.
+    let responseId: string | undefined;
+    if (tools['openai_create_response']) {
+      try {
+        const response = await call<{ id?: string }>('openai_create_response', {
+          model: modelId,
+          input: 'say ok',
+        });
+        responseId = response.id;
+        steps.push(makeStep('create response', 'openai_create_response', responseId ? 'pass' : 'fail', responseId));
+      } catch (error) {
+        steps.push(makeStep('create response', 'openai_create_response', 'fail', errorMessage(error)));
+      }
+    }
+    if (responseId && tools['openai_get_response']) {
+      try {
+        await call('openai_get_response', { response_id: responseId });
+        steps.push(makeStep('get response', 'openai_get_response', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get response', 'openai_get_response', 'fail', errorMessage(error)));
+      }
+    }
+    if (responseId && tools['openai_delete_response']) {
+      try {
+        await call('openai_delete_response', { response_id: responseId });
+        steps.push(makeStep('delete response', 'openai_delete_response', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke response ${responseId}`, errorMessage(error));
+        steps.push(makeStep('delete response', 'openai_delete_response', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Image generation: smallest, cheapest size so the smoke run doesn't
+    // burn credit. Still bills — kept behind the probeTool guard so a
+    // disabled image endpoint won't fail the run.
+    steps.push(
+      await probeTool(call, tools, 'create image', 'openai_create_image', {
+        prompt: `tiny smoke test tile ${runId}`,
+        model: 'gpt-image-1',
+        size: '1024x1024',
+        n: 1,
+      }),
+    );
+
+    // Batch / file / fine-tune tools require a real uploaded file; probe
+    // with a synthetic id.
+    steps.push(
+      await probeTool(call, tools, 'create batch', 'openai_create_batch', {
+        input_file_id: `file-smoke-${runId}`,
+        endpoint: '/v1/chat/completions',
+        completion_window: '24h',
+      }),
+    );
+    steps.push(await probeTool(call, tools, 'get batch', 'openai_get_batch', { batch_id: `batch_smoke_${runId}` }));
+    steps.push(await probeTool(call, tools, 'get file', 'openai_get_file', { file_id: `file-smoke-${runId}` }));
+    steps.push(
+      await probeTool(call, tools, 'cancel fine-tuning job', 'openai_cancel_fine_tuning_job', {
+        fine_tuning_job_id: `ftjob-smoke-${runId}`,
+      }),
+    );
 
     return steps;
   },

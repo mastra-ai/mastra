@@ -1,14 +1,17 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
- * Deep Fireflies scenario: AskFred thread lifecycle plus the read-only
- * transcript/bites surface. Avoids `delete-transcript` and `upload-audio`
- * since those are destructive or chargeable.
+ * Deep Fireflies scenario: AskFred thread lifecycle plus every read tool
+ * and probes for the destructive / meeting-dependent tools (upload_audio,
+ * add_to_live, create_bite, update_meeting_*, etc.). When a real transcript
+ * or bite is visible from the list calls, destructive tools are invoked
+ * against synthetic ids rather than the real ones so no production data is
+ * mutated.
  */
 export const firefliesScenario: Scenario = {
   integrationId: 'fireflies',
-  summary: 'askfred thread CRUD + transcript/bite reads',
+  summary: 'askfred thread CRUD + full tool surface',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, ['fireflies_create_askfred_thread', 'fireflies_delete_askfred_thread']);
@@ -30,11 +33,84 @@ export const firefliesScenario: Scenario = {
           ['fireflies_list_askfred_threads', { limit: 5 }],
           ['fireflies_list_active_meetings', {}],
           ['fireflies_get_analytics', {}],
+          ['fireflies_list_channels', {}],
         ],
         tools,
       )),
     );
 
+    // Probe transcript / bite / channel reads with a synthetic id so we
+    // don't need a real recording.
+    const syntheticId = `smoke-${runId}`;
+    steps.push(await probeTool(call, tools, 'get transcript', 'fireflies_get_transcript', { id: syntheticId }));
+    steps.push(await probeTool(call, tools, 'get bite', 'fireflies_get_bite', { id: syntheticId }));
+    steps.push(await probeTool(call, tools, 'get channel', 'fireflies_get_channel', { channel_id: syntheticId }));
+    steps.push(await probeTool(call, tools, 'delete transcript', 'fireflies_delete_transcript', { id: syntheticId }));
+    steps.push(
+      await probeTool(call, tools, 'create bite', 'fireflies_create_bite', {
+        transcript_id: syntheticId,
+        start_time: 0,
+        end_time: 5,
+        name: `smoke ${runId}`,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'share meeting', 'fireflies_share_meeting', {
+        meeting_id: syntheticId,
+        emails: [`smoke+${runId}@mastra-smoke.invalid`],
+        expiry_days: 7,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'revoke shared meeting access', 'fireflies_revoke_shared_meeting_access', {
+        meeting_id: syntheticId,
+        email: `smoke+${runId}@mastra-smoke.invalid`,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'update meeting privacy', 'fireflies_update_meeting_privacy', {
+        id: syntheticId,
+        privacy: 'teammates',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'update meeting channel', 'fireflies_update_meeting_channel', {
+        transcript_ids: [syntheticId],
+        channel_id: syntheticId,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'update meeting state', 'fireflies_update_meeting_state', {
+        meeting_id: syntheticId,
+        action: 'pause_recording',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'add to live', 'fireflies_add_to_live', {
+        url: `https://meet.jit.si/mastra-smoke-${runId}`,
+        title: `smoke ${runId}`,
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'create live action item', 'fireflies_create_live_action_item', {
+        meeting_id: syntheticId,
+        prompt: 'Capture open items.',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'create live soundbite', 'fireflies_create_live_soundbite', {
+        meeting_id: syntheticId,
+        prompt: 'Capture a soundbite for smoke test.',
+      }),
+    );
+    steps.push(
+      await probeTool(call, tools, 'upload audio', 'fireflies_upload_audio', {
+        url: 'https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3',
+        title: `smoke ${runId}`,
+      }),
+    );
+
+    // AskFred thread lifecycle.
     let threadId: string | undefined;
     try {
       const thread = await call<{ id: string }>('fireflies_create_askfred_thread', {
