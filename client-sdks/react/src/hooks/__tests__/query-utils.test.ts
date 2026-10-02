@@ -9,7 +9,7 @@ import {
   isObservabilityUnavailableError,
   isUnsupportedObservabilityOperationError,
   shouldRetryQuery,
-} from './query-utils';
+} from '../query-utils';
 
 const NON_OBJECTS = [
   ['null', null],

@@ -1,4 +1,4 @@
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/utils/query-utils';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@mastra/react/hooks';
 
 const FEEDBACK_REFETCH_INTERVAL_MS = 30_000;
 

@@ -1,9 +1,9 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@mastra/react/hooks';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useInView } from '@/hooks/use-in-view';
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/utils/query-utils';
 import { toast } from '@/utils/toast';
 
 const SCORES_PER_PAGE = 25;
