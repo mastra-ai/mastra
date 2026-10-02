@@ -84,7 +84,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * If undefined, replays all available cached events before receiving live events.
    * On transports with numeric offset support, a number replays from that index. On transports
    * without numeric offset support, a number starts with new live events instead.
-   * A numeric offset past retained history waits for later live events.
+   * A number beyond the highest retained index skips replay and live events with lower indexes.
+   * Events arrive only when the published index reaches the requested offset.
    */
   offset?: number | 'latest';
   /**
