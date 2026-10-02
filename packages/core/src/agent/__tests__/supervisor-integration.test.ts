@@ -2664,7 +2664,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       onIterationComplete: () => {
         iterationCount++;
         if (iterationCount === 1) {
-          return { feedback: 'Please improve your response with more details.' };
+          return { continue: true, feedback: 'Please improve your response with more details.' };
         }
         return { continue: false };
       },

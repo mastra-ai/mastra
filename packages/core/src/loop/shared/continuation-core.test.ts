@@ -245,7 +245,7 @@ describe('decideContinuation — feedback force-continue requires a finite maxSt
     expect(decision.isFinal).toBe(false);
   });
 
-  it('default finite: feedback reopens a model-finished run and is injected', async () => {
+  it('default finite: feedback alone does not reopen a model-finished run', async () => {
     const injectFeedback = vi.fn();
     const decision = await decideContinuation(
       makeDeps({
@@ -255,9 +255,9 @@ describe('decideContinuation — feedback force-continue requires a finite maxSt
         onIterationComplete: hook,
       }),
     );
-    expect(injectFeedback).toHaveBeenCalledWith('keep going');
-    expect(decision.forceContinue).toBe(true);
-    expect(decision.isFinal).toBe(false);
+    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(decision.forceContinue).toBe(false);
+    expect(decision.isFinal).toBe(true);
   });
 
   it('default unbounded: feedback does not reopen a model-finished run', async () => {

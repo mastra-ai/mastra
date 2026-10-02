@@ -317,13 +317,6 @@ async function decideContinuationDefault(
             isFinal = false;
             forceContinue = true;
           }
-        } else if (iterationResult.feedback && !hasFinishedSteps && policy.hasFiniteMaxSteps && deps.underMaxSteps) {
-          // A finite maxSteps budget allows feedback alone to request one
-          // more turn after the model stops. Unbounded runs stay final so a
-          // hook that always returns feedback cannot spin forever.
-          await deps.injectFeedback(iterationResult.feedback);
-          isFinal = false;
-          forceContinue = true;
         }
       }
     } catch (error) {
