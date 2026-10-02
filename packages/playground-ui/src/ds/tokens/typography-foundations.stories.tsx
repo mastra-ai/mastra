@@ -71,6 +71,9 @@ const monoSamples: Partial<Record<TextRole, string>> = {
   meta: 'v2.1.0 · 3f9a2c1',
 };
 
+// The numbers are read off the rendered element rather than mirrored from a TypeScript
+// copy of the tokens: the row then reports what the browser actually applied, and cannot
+// drift from theme/typography.css.
 const RoleRow = ({ role, font = 'body' }: { role: TextRole; font?: 'body' | 'mono' }) => {
   const [applied, setApplied] = useState('');
 

@@ -18,6 +18,8 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+
+// The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
   item,
   columnStage,
@@ -38,9 +40,12 @@ export function WorkItemCardRows({
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
+  /** Bottom left, the likeliest first. */
   actions: CardAction[];
   beforeStart?: () => void;
+  /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
   controls: ReactNode;
+  /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
   const labels = metadataLabels(item.metadata);
@@ -131,6 +136,7 @@ export function WorkItemCardRows({
   );
 }
 
+/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
 export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
   const verdict = metadata.reviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;

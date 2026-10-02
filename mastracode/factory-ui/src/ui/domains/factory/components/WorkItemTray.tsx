@@ -10,6 +10,8 @@ import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
 import type { CommentQuoteDraft } from './feed/quoteDraft';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+
+// One stream in time order, runs and moves and comments alike, the composer under it.
 export function WorkItemTray({
   item,
   factoryId,
@@ -23,6 +25,7 @@ export function WorkItemTray({
   item: WorkItem;
   factoryId: string;
   projectRepositoryId: string;
+  /** Mounted only once the panel opens, so closed cards run no feed queries. */
   enabled: boolean;
   currentUser?: FeedUser;
   highlightCommentId?: string;
