@@ -170,6 +170,9 @@ overrides:
   '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
   onnxruntime-node@<1.24.2: 1.24.3
+  webpack-dev-middleware@<7.4.6: 7.4.6
+  basic-ftp@<6.2.1: 6.2.1
+  fastify@<5.12.5: 5.12.5
   '@codemirror/lang-jinja': ^6.0.1
   aggregate-error: npm:@socketregistry/aggregate-error@^1
   array-buffer-byte-length: npm:@socketregistry/array-buffer-byte-length@^1
@@ -10203,7 +10206,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(5ec4784d3fcedd96fe47be10d1dc2cc7)
+        version: 1.9.0(101b025dd06f1a4410516826f0608940)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -23618,8 +23621,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  basic-ftp@5.3.1:
-    resolution: {integrity: sha512-bopVNp6ugyA150DDuZfPFdt1KZ5a94ZDiwX4hMgZDzF+GttD80lEy8kj98kbyhLXnPvhtIo93mdnLIjpCAeeOw==}
+  basic-ftp@6.2.1:
+    resolution: {integrity: sha512-bK67isD+lKq46AU8vNtjvMaT2ZqAOAmNCbxUHlFBRD4k15NWxyEjmaKtZPlgce58So4BNTjITGQOVTjL9y0ECA==}
     engines: {node: '>=10.0.0'}
 
   batch@0.6.1:
@@ -26128,7 +26131,7 @@ packages:
       '@supabase/storage-js': ^2.105.4
       '@vercel/blob': ^2.4.0
       ai: ^6.0.0
-      basic-ftp: ^6.0.1
+      basic-ftp: 6.2.1
       box-typescript-sdk-gen: ^1.19.1
       cloudinary: ^2.10.0
       convex: ^1.16.0
@@ -27110,7 +27113,7 @@ packages:
       '@vercel/node': '>=2.15.9'
       aws-lambda: '>=1.0.7'
       express: '>=4.19.2'
-      fastify: '>=4.21.0'
+      fastify: 5.12.5
       h3: '>=1.8.1'
       hono: 4.13.8
       koa: '>=2.14.2'
@@ -33113,8 +33116,8 @@ packages:
     engines: {node: '>= 10.13.0'}
     hasBin: true
 
-  webpack-dev-middleware@7.4.5:
-    resolution: {integrity: sha512-uxQ6YqGdE4hgDKNf7hUiPXOdtkXvBJXrfEGYSx7P7LC8hnUYGK70X6xQXUvXeNyBDDcsiQXpG2m3G9vxowaEuA==}
+  webpack-dev-middleware@7.4.6:
+    resolution: {integrity: sha512-yBWCMvIfUmuhAE8vdqUKzH0vg9kuWN0KeG4vBnqRplUFHRU7lMQjkiJWxVQzvo2BTewqhPhDlMB41rAt2jVA9A==}
     engines: {node: '>= 18.12.0'}
     peerDependencies:
       webpack: ^5.0.0
@@ -37116,7 +37119,7 @@ snapshots:
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.11)':
     optionalDependencies:
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@couchbase/couchbase-darwin-arm64-napi@4.7.1':
     optional: true
@@ -45889,7 +45892,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@26.1.0(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@supabase/auth-js@2.111.0':
     dependencies:
@@ -48866,7 +48869,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.23: {}
 
-  basic-ftp@5.3.1: {}
+  basic-ftp@6.2.1: {}
 
   batch@0.6.1: {}
 
@@ -51774,7 +51777,7 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(5ec4784d3fcedd96fe47be10d1dc2cc7):
+  files-sdk@1.9.0(101b025dd06f1a4410516826f0608940):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.5
@@ -51791,6 +51794,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@supabase/storage-js': 2.111.0
       ai: 6.0.241(zod@4.6.5)
+      basic-ftp: 6.2.1
       convex: 1.42.3(bufferutil@4.1.0)(react@19.2.7)
       google-auth-library: 10.9.1(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.5)
@@ -52156,7 +52160,7 @@ snapshots:
 
   get-uri@6.0.5(supports-color@10.2.2):
     dependencies:
-      basic-ftp: 5.3.1
+      basic-ftp: 6.2.1
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -60682,7 +60686,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  webpack-dev-middleware@7.4.5(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.16.0(@swc/helpers@0.5.17))(@swc/html@1.16.0)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(uglify-js@3.19.3)):
+  webpack-dev-middleware@7.4.6(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.16.0(@swc/helpers@0.5.17))(@swc/html@1.16.0)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(uglify-js@3.19.3)):
     dependencies:
       colorette: 2.0.20
       memfs: 4.57.2(tslib@2.8.1)
@@ -60723,7 +60727,7 @@ snapshots:
       serve-index: 1.9.2(supports-color@10.2.2)
       sockjs: 0.3.24
       spdy: 4.0.2(supports-color@10.2.2)
-      webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.16.0(@swc/helpers@0.5.17))(@swc/html@1.16.0)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(uglify-js@3.19.3))
+      webpack-dev-middleware: 7.4.6(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.16.0(@swc/helpers@0.5.17))(@swc/html@1.16.0)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(uglify-js@3.19.3))
       ws: 8.21.3(bufferutil@4.1.0)
     optionalDependencies:
       webpack: 5.108.4(@swc/core@1.16.0(@swc/helpers@0.5.17))(@swc/html@1.16.0)(clean-css@5.3.3)(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.32.0)(postcss@8.5.23)(uglify-js@3.19.3)
