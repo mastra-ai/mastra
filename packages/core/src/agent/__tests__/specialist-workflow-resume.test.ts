@@ -89,7 +89,7 @@ function buildIntakeWorkflow() {
 
 function buildSpecialist(
   intakeWorkflow: ReturnType<typeof buildIntakeWorkflow>['intakeWorkflow'],
-  opts: { ownMemory?: boolean } = {},
+  memoryMode: SpecialistMemoryMode,
 ) {
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
@@ -123,12 +123,26 @@ function buildSpecialist(
     instructions: 'Run the intake workflow for the requested item.',
     model,
     workflows: { intakeWorkflow },
-    // The original repro gives the specialist its own memory, which flips
-    // `injectSupervisorMemory` (agent.ts:5529) to false and takes a different
-    // delegation-identity branch than a memory-less specialist.
-    ...(opts.ownMemory ? { memory: new MockMemory() } : {}),
+    ...(memoryMode !== 'none' ? { memory: new MockMemory() } : {}),
+    ...(memoryMode === 'own-memory-with-defaults'
+      ? { defaultOptions: { memory: { thread: 'specialist-thread', resource: 'specialist-resource' } } }
+      : {}),
   });
 }
+
+/**
+ * Each mode routes the delegation through a different memory path:
+ * - `none`: the specialist inherits the supervisor's memory, and the delegated
+ *   run is given supervisor-scoped thread/resource identity (`injectSupervisorMemory`).
+ * - `own-memory`: the specialist keeps its own memory instance (no inheritance,
+ *   as in the reported repro), but still receives supervisor-scoped identity,
+ *   because `injectSupervisorMemory` keys on `defaultOptions.memory`, not on the
+ *   memory instance.
+ * - `own-memory-with-defaults`: the specialist also configures
+ *   `defaultOptions.memory`, so `injectSupervisorMemory` is false and the
+ *   delegated run uses the specialist's own thread/resource identity.
+ */
+type SpecialistMemoryMode = 'none' | 'own-memory' | 'own-memory-with-defaults';
 
 function buildSupervisor(specialist: Agent) {
   let step = 0;
@@ -173,39 +187,39 @@ async function collectChunks(stream: any): Promise<any[]> {
   return chunks;
 }
 
-describe.each([
-  ['specialist without own memory', false],
-  ['specialist with own memory (as in the reported repro)', true],
-])('specialist-owned workflow suspend/resume (#15734) — %s', (_label, ownMemory) => {
-  it('resumes the suspended workflow instead of restarting it from step 1', async () => {
-    const { intakeWorkflow, executions } = buildIntakeWorkflow();
-    const specialist = buildSpecialist(intakeWorkflow, { ownMemory: ownMemory as boolean });
-    const supervisor = buildSupervisor(specialist);
-    const mastra = new Mastra({
-      agents: { supervisor },
-      workflows: { intakeWorkflow },
-      storage: new InMemoryStore(),
-      logger: false,
+describe.each<SpecialistMemoryMode>(['none', 'own-memory', 'own-memory-with-defaults'])(
+  'specialist-owned workflow suspend/resume (#15734) — specialist memory: %s',
+  memoryMode => {
+    it('resumes the suspended workflow instead of restarting it from step 1', async () => {
+      const { intakeWorkflow, executions } = buildIntakeWorkflow();
+      const specialist = buildSpecialist(intakeWorkflow, memoryMode);
+      const supervisor = buildSupervisor(specialist);
+      const mastra = new Mastra({
+        agents: { supervisor },
+        workflows: { intakeWorkflow },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const sup = mastra.getAgent('supervisor');
+
+      const stream = await sup.stream('Handle the widget intake.', {
+        maxSteps: 6,
+        memory: { resource: 'r1', thread: 'thread-1' },
+      });
+      const initialChunks = await collectChunks(stream);
+
+      expect(executions.gather).toBe(1);
+      expect(executions.finalize).toBe(0);
+
+      const resumed = await sup.resumeStream({ approved: true }, { runId: stream.runId });
+      const resumedChunks = await collectChunks(resumed);
+
+      // The pre-suspension step must NOT run a second time.
+      expect(executions.gather).toBe(1);
+      expect(executions.finalize).toBe(1);
+
+      const errors = [...initialChunks, ...resumedChunks].filter(c => c.type === 'error');
+      expect(errors).toEqual([]);
     });
-    const sup = mastra.getAgent('supervisor');
-
-    const stream = await sup.stream('Handle the widget intake.', {
-      maxSteps: 6,
-      memory: { resource: 'r1', thread: 'thread-1' },
-    });
-    const initialChunks = await collectChunks(stream);
-
-    expect(executions.gather).toBe(1);
-    expect(executions.finalize).toBe(0);
-
-    const resumed = await sup.resumeStream({ approved: true }, { runId: stream.runId });
-    const resumedChunks = await collectChunks(resumed);
-
-    // The pre-suspension step must NOT run a second time.
-    expect(executions.gather).toBe(1);
-    expect(executions.finalize).toBe(1);
-
-    const errors = [...initialChunks, ...resumedChunks].filter(c => c.type === 'error');
-    expect(errors).toEqual([]);
-  });
-});
+  },
+);
