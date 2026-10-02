@@ -7,11 +7,15 @@ import {
   normalizePerPage,
   calculatePagination,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  isRunFenceConflictError,
+  resolveRunFence,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
 } from '@mastra/core/storage';
@@ -95,6 +99,7 @@ import type {
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  RunFence,
   TableRetentionPolicy,
   TABLE_NAMES,
 } from '@mastra/core/storage';
@@ -108,7 +113,9 @@ import {
   getSchemaName as dbGetSchemaName,
   getTableName as dbGetTableName,
 } from '../../db';
-import type { DbClient, PgDomainConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
+import { assertRunFence, withRunFence } from '../../db/run-fencing';
+import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
@@ -247,6 +254,10 @@ export class MemoryPG extends MemoryStorage {
         `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
       );
     }
+    await this.#db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -341,6 +352,15 @@ export class MemoryPG extends MemoryStorage {
       statements.push(generateIndexSQL(idx, schemaName));
     }
 
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+        schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
     return statements;
   }
 
@@ -392,6 +412,51 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.#db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+  }
+
+  // Fence reads and writes always go to the primary client: a replica's stale
+  // view of a fence would let a superseded write through.
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  #runFencesTable(): string {
+    return getTableName({ indexName: TABLE_MEMORY_RUN_FENCES, schemaName: getSchemaName(this.#schema) });
+  }
+
+  /** Runs `write` behind the run's fence check when it carries a fence. */
+  #fenced<T>(fence: RunFence | undefined, operation: string, write: (q: Queryable) => Promise<T>): Promise<T> {
+    return withRunFence(this.#db.client, this.#runFencesTable(), resolveRunFence(this, fence), operation, write);
+  }
+
+  async raiseRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      // One statement: inserts the first fence, raises an older one, and
+      // re-affirms an identical one; any other existing fence is left alone
+      // and no row comes back.
+      const current = await this.#db.client.oneOrNone(
+        `INSERT INTO ${this.#runFencesTable()} AS f ("runId", generation, "ownerId")
+         VALUES ($1, $2, $3)
+         ON CONFLICT ("runId") DO UPDATE SET generation = EXCLUDED.generation, "ownerId" = EXCLUDED."ownerId"
+         WHERE f.generation < EXCLUDED.generation
+            OR (f.generation = EXCLUDED.generation AND f."ownerId" = EXCLUDED."ownerId")
+         RETURNING "runId"`,
+        [fence.runId, fence.generation, fence.ownerId],
+      );
+      return current !== null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -497,7 +562,7 @@ export class MemoryPG extends MemoryStorage {
    * a lagging read replica cannot produce false not-found or stale metadata.
    */
   async #getThreadById(
-    client: DbClient,
+    client: Queryable,
     { threadId, resourceId }: { threadId: string; resourceId?: string },
   ): Promise<StorageThreadType | null> {
     try {
@@ -733,14 +798,15 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       const createdAt = toUtcISOString(thread.createdAt);
       const updatedAt = toUtcISOString(thread.updatedAt);
       const metadataJson = thread.metadata ? toPgJson(thread.metadata) : null;
-      await this.#db.client.none(
-        `INSERT INTO ${tableName} (
+      await this.#fenced(fence, 'saveThread', q =>
+        q.none(
+          `INSERT INTO ${tableName} (
           id,
           "resourceId",
           title,
@@ -758,11 +824,13 @@ export class MemoryPG extends MemoryStorage {
           "createdAtZ" = EXCLUDED."createdAtZ",
           "updatedAt" = EXCLUDED."updatedAt",
           "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-        [thread.id, thread.resourceId, thread.title, metadataJson, createdAt, createdAt, updatedAt, updatedAt],
+          [thread.id, thread.resourceId, thread.title, metadataJson, createdAt, createdAt, updatedAt, updatedAt],
+        ),
       );
 
       return { ...thread, metadata: metadataJson ? JSON.parse(metadataJson) : thread.metadata };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'SAVE_THREAD', 'FAILED'),
@@ -781,36 +849,38 @@ export class MemoryPG extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-    const existingThread = await this.#getThreadById(this.#db.client, { threadId: id });
-    if (!existingThread) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        text: `Thread ${id} not found`,
-        details: {
-          threadId: id,
-          title: title ?? null,
-        },
-      });
-    }
-
-    const mergedMetadata = {
-      ...existingThread.metadata,
-      ...metadata,
-    };
-
     try {
-      const now = new Date();
-      const nowStr = toUtcISOString(now);
-      const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `UPDATE ${threadTableName}
+      return await this.#fenced(fence, 'updateThread', async q => {
+        const existingThread = await this.#getThreadById(q, { threadId: id });
+        if (!existingThread) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Thread ${id} not found`,
+            details: {
+              threadId: id,
+              title: title ?? null,
+            },
+          });
+        }
+
+        const mergedMetadata = {
+          ...existingThread.metadata,
+          ...metadata,
+        };
+
+        const nowStr = toUtcISOString(new Date());
+        const thread = await q.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+          `UPDATE ${threadTableName}
                     SET
                         title = COALESCE($1, title),
                         metadata = $2,
@@ -819,18 +889,20 @@ export class MemoryPG extends MemoryStorage {
                     WHERE id = $5
                     RETURNING *
                 `,
-        [title ?? null, mergedMetadata, nowStr, nowStr, id],
-      );
+          [title ?? null, mergedMetadata, nowStr, nowStr, id],
+        );
 
-      return {
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAtZ || thread.createdAt,
-        updatedAt: thread.updatedAtZ || thread.updatedAt,
-      };
+        return {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          createdAt: thread.createdAtZ || thread.createdAt,
+          updatedAt: thread.updatedAtZ || thread.updatedAt,
+        };
+      });
     } catch (error) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
@@ -1608,8 +1680,15 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence: explicitFence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
+    const fence = resolveRunFence(this, explicitFence);
 
     const threadId = messages[0]?.threadId;
     if (!threadId) {
@@ -1655,6 +1734,7 @@ export class MemoryPG extends MemoryStorage {
 
       const messagesToSave = dedupeMessagesForSave(messages);
       await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'saveMessages');
         for (let offset = 0; offset < messagesToSave.length; offset += MAX_MESSAGES_PER_INSERT) {
           const batch = messagesToSave.slice(offset, offset + MAX_MESSAGES_PER_INSERT);
           const values: unknown[] = [];
@@ -1721,7 +1801,7 @@ export class MemoryPG extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(
@@ -1740,6 +1820,7 @@ export class MemoryPG extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence: explicitFence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -1748,10 +1829,12 @@ export class MemoryPG extends MemoryStorage {
         content?: MastraMessageContentV2['content'];
       };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {
       return [];
     }
+    const fence = resolveRunFence(this, explicitFence);
 
     const messageIds = messages.map(m => m.id);
 
@@ -1777,6 +1860,7 @@ export class MemoryPG extends MemoryStorage {
     const threadIdsToUpdate = new Set<string>();
 
     await this.#db.client.tx(async t => {
+      if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateMessages');
       const queries = [];
       const columnMapping: Record<string, string> = {
         threadId: 'thread_id',
@@ -1863,16 +1947,18 @@ export class MemoryPG extends MemoryStorage {
     });
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
+    const fence = resolveRunFence(this, options?.fence);
 
     try {
       const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
       await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'deleteMessages');
         const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
         const messages = await t.manyOrNone(
           `SELECT DISTINCT thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
@@ -1891,6 +1977,7 @@ export class MemoryPG extends MemoryStorage {
         }
       });
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_MESSAGES', 'FAILED'),
@@ -1907,7 +1994,7 @@ export class MemoryPG extends MemoryStorage {
     return this.#getResourceById(this.#db.readClient, resourceId);
   }
 
-  async #getResourceById(client: DbClient, resourceId: string): Promise<StorageResourceType | null> {
+  async #getResourceById(client: Queryable, resourceId: string): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
     const result = await client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
       `SELECT * FROM ${tableName} WHERE id = $1`,
@@ -1928,18 +2015,25 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.#insertResource(this.#db.client, resource);
+  }
+
+  async #insertResource(q: Queryable, resource: StorageResourceType): Promise<StorageResourceType> {
     const createdAt = toUtcISOString(resource.createdAt);
     const updatedAt = toUtcISOString(resource.updatedAt);
     const metadataJson = toPgJson(resource.metadata);
-    await this.#db.insert({
-      tableName: TABLE_RESOURCES,
-      record: {
-        ...resource,
-        metadata: metadataJson,
-        createdAt,
-        updatedAt,
+    await this.#db.insert(
+      {
+        tableName: TABLE_RESOURCES,
+        record: {
+          ...resource,
+          metadata: metadataJson,
+          createdAt,
+          updatedAt,
+        },
       },
-    });
+      q,
+    );
 
     return { ...resource, metadata: metadataJson ? JSON.parse(metadataJson) : resource.metadata };
   }
@@ -1948,12 +2042,25 @@ export class MemoryPG extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
-    const existingResource = await this.#getResourceById(this.#db.client, resourceId);
+    return this.#fenced(fence, 'updateResource', q => this.#updateResource(q, { resourceId, workingMemory, metadata }));
+  }
+
+  async #updateResource(
+    q: Queryable,
+    {
+      resourceId,
+      workingMemory,
+      metadata,
+    }: { resourceId: string; workingMemory?: string; metadata?: Record<string, unknown> },
+  ): Promise<StorageResourceType> {
+    const existingResource = await this.#getResourceById(q, resourceId);
 
     if (!existingResource) {
       const newResource: StorageResourceType = {
@@ -1963,7 +2070,7 @@ export class MemoryPG extends MemoryStorage {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      return this.saveResource({ resource: newResource });
+      return this.#insertResource(q, newResource);
     }
 
     const updatedResource = {
@@ -2004,7 +2111,7 @@ export class MemoryPG extends MemoryStorage {
 
     values.push(resourceId);
 
-    await this.#db.client.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+    await q.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return metadataJson ? { ...updatedResource, metadata: JSON.parse(metadataJson) } : updatedResource;
   }
@@ -2189,9 +2296,16 @@ export class MemoryPG extends MemoryStorage {
    * serializes generation creation across processes instead. It is
    * transaction-scoped so it also works behind transaction-pooling proxies.
    */
-  async #withOMLookupKeyLock<T>(tableName: string, lookupKey: string, fn: (t: TxClient) => Promise<T>): Promise<T> {
+  async #withOMLookupKeyLock<T>(
+    tableName: string,
+    lookupKey: string,
+    fn: (t: TxClient) => Promise<T>,
+    fencedOperation?: string,
+  ): Promise<T> {
+    const fence = fencedOperation ? resolveRunFence(this, undefined) : undefined;
     return this.#db.client.tx(async t => {
       await t.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${tableName}:${lookupKey}`]);
+      if (fence && fencedOperation) await assertRunFence(t, this.#runFencesTable(), fence, fencedOperation);
       return fn(t);
     });
   }
@@ -2538,8 +2652,9 @@ export class MemoryPG extends MemoryStorage {
       const lastObservedAtStr = input.lastObservedAt.toISOString();
       const nowStr = now.toISOString();
       const observedMessageIdsJson = input.observedMessageIds ? toPgJson(input.observedMessageIds) : null;
-      const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET
+      const result = await this.#fenced(undefined, 'updateActiveObservations', q =>
+        q.query(
+          `UPDATE ${tableName} SET
           "activeObservations" = $1,
           "lastObservedAt" = $2,
           "lastObservedAtZ" = $3,
@@ -2550,17 +2665,18 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $7,
           "updatedAtZ" = $8
         WHERE id = $9`,
-        [
-          input.observations,
-          lastObservedAtStr,
-          lastObservedAtStr,
-          Math.round(input.tokenCount),
-          Math.round(input.tokenCount),
-          observedMessageIdsJson,
-          nowStr,
-          nowStr,
-          input.id,
-        ],
+          [
+            input.observations,
+            lastObservedAtStr,
+            lastObservedAtStr,
+            Math.round(input.tokenCount),
+            Math.round(input.tokenCount),
+            observedMessageIdsJson,
+            nowStr,
+            nowStr,
+            input.id,
+          ],
+        ),
       );
 
       if (result.rowCount === 0) {
@@ -2573,7 +2689,7 @@ export class MemoryPG extends MemoryStorage {
         });
       }
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(
@@ -2595,12 +2711,18 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      return await this.#withOMLookupKeyLock(tableName, lookupKey, async t => {
-        const newer = await this.#getNewerOMGeneration(t, tableName, lookupKey, input.currentRecord.generationCount);
-        if (newer) return newer;
-        return this.#insertReflectionGeneration(t, tableName, lookupKey, input);
-      });
+      return await this.#withOMLookupKeyLock(
+        tableName,
+        lookupKey,
+        async t => {
+          const newer = await this.#getNewerOMGeneration(t, tableName, lookupKey, input.currentRecord.generationCount);
+          if (newer) return newer;
+          return this.#insertReflectionGeneration(t, tableName, lookupKey, input);
+        },
+        'createReflectionGeneration',
+      );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
@@ -3008,8 +3130,9 @@ export class MemoryPG extends MemoryStorage {
 
       // Append the chunk only if this cycle has not already been persisted by a previous attempt.
       const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
-      const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET
+      const result = await this.#fenced(undefined, 'updateBufferedObservations', q =>
+        q.query(
+          `UPDATE ${tableName} SET
           "bufferedObservationChunks" = CASE
             WHEN EXISTS (
               SELECT 1
@@ -3022,7 +3145,8 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $4,
           "updatedAtZ" = $5
         WHERE id = $6`,
-        [toPgJson([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
+          [toPgJson([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
+        ),
       );
 
       if (result.rowCount === 0) {
@@ -3035,7 +3159,7 @@ export class MemoryPG extends MemoryStorage {
         });
       }
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(
@@ -3186,8 +3310,9 @@ export class MemoryPG extends MemoryStorage {
       // this UPDATE matches 0 rows and we return early with chunksActivated: 0.
       // Include message boundary delimiter for cache stability.
       const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
-      const updateResult = await this.#db.client.query(
-        `UPDATE ${tableName} SET
+      const updateResult = await this.#fenced(undefined, 'swapBufferedToActive', q =>
+        q.query(
+          `UPDATE ${tableName} SET
           "activeObservations" = CASE
             WHEN "activeObservations" IS NOT NULL AND "activeObservations" != ''
             THEN "activeObservations" || $10 || $1
@@ -3203,18 +3328,19 @@ export class MemoryPG extends MemoryStorage {
         WHERE id = $9
           AND "bufferedObservationChunks" IS NOT NULL
           AND "bufferedObservationChunks"::text != '[]'`,
-        [
-          activatedContent,
-          activatedTokens,
-          activatedMessageTokens,
-          remainingChunks.length > 0 ? toPgJson(remainingChunks) : null,
-          lastObservedAtStr,
-          lastObservedAtStr,
-          nowStr,
-          nowStr,
-          input.id,
-          boundary,
-        ],
+          [
+            activatedContent,
+            activatedTokens,
+            activatedMessageTokens,
+            remainingChunks.length > 0 ? toPgJson(remainingChunks) : null,
+            lastObservedAtStr,
+            lastObservedAtStr,
+            nowStr,
+            nowStr,
+            input.id,
+            boundary,
+          ],
+        ),
       );
 
       if (updateResult.rowCount === 0) {
@@ -3250,7 +3376,7 @@ export class MemoryPG extends MemoryStorage {
         currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(
@@ -3274,8 +3400,9 @@ export class MemoryPG extends MemoryStorage {
       const nowStr = new Date().toISOString();
 
       // Append reflection to existing buffered content
-      const result = await this.#db.client.query(
-        `UPDATE ${tableName} SET
+      const result = await this.#fenced(undefined, 'updateBufferedReflection', q =>
+        q.query(
+          `UPDATE ${tableName} SET
           "bufferedReflection" = CASE 
             WHEN "bufferedReflection" IS NOT NULL AND "bufferedReflection" != '' 
             THEN "bufferedReflection" || E'\\n\\n' || $1
@@ -3287,15 +3414,16 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $5,
           "updatedAtZ" = $6
         WHERE id = $7`,
-        [
-          input.reflection,
-          Math.round(input.tokenCount),
-          Math.round(input.inputTokenCount),
-          input.reflectedObservationLineCount,
-          nowStr,
-          nowStr,
-          input.id,
-        ],
+          [
+            input.reflection,
+            Math.round(input.tokenCount),
+            Math.round(input.inputTokenCount),
+            input.reflectedObservationLineCount,
+            nowStr,
+            nowStr,
+            input.id,
+          ],
+        ),
       );
 
       if (result.rowCount === 0) {
@@ -3308,7 +3436,7 @@ export class MemoryPG extends MemoryStorage {
         });
       }
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(
@@ -3331,61 +3459,64 @@ export class MemoryPG extends MemoryStorage {
       });
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
-      return await this.#withOMLookupKeyLock(tableName, lookupKey, async t => {
-        // Another writer already activated a reflection for this generation.
-        const newer = await this.#getNewerOMGeneration(t, tableName, lookupKey, input.currentRecord.generationCount);
-        if (newer) return newer;
+      return await this.#withOMLookupKeyLock(
+        tableName,
+        lookupKey,
+        async t => {
+          // Another writer already activated a reflection for this generation.
+          const newer = await this.#getNewerOMGeneration(t, tableName, lookupKey, input.currentRecord.generationCount);
+          if (newer) return newer;
 
-        // Get current record to calculate split
-        const record = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [input.currentRecord.id]);
-        if (!record) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
-            text: `Observational memory record not found: ${input.currentRecord.id}`,
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { id: input.currentRecord.id },
+          // Get current record to calculate split
+          const record = await t.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [input.currentRecord.id]);
+          if (!record) {
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
+              text: `Observational memory record not found: ${input.currentRecord.id}`,
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { id: input.currentRecord.id },
+            });
+          }
+
+          const bufferedReflection = record.bufferedReflection || '';
+          const reflectedLineCount = Number(record.reflectedObservationLineCount || 0);
+
+          if (!bufferedReflection) {
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+              text: 'No buffered reflection to swap',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { id: input.currentRecord.id },
+            });
+          }
+
+          // Split current activeObservations by the recorded boundary.
+          // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+          // Lines after reflectedLineCount were added after reflection started → kept as-is.
+          const currentObservations = (record.activeObservations as string) || '';
+          const allLines = currentObservations.split('\n');
+          const unreflectedLines = allLines.slice(reflectedLineCount);
+          const unreflectedContent = unreflectedLines.join('\n').trim();
+
+          // New activeObservations = bufferedReflection + unreflected observations
+          const newObservations = unreflectedContent
+            ? `${bufferedReflection}\n\n${unreflectedContent}`
+            : bufferedReflection;
+
+          // Create new generation with the merged content.
+          // tokenCount is computed by the processor using its token counter on the combined content.
+          const newRecord = await this.#insertReflectionGeneration(t, tableName, lookupKey, {
+            currentRecord: input.currentRecord,
+            reflection: newObservations,
+            tokenCount: input.tokenCount,
           });
-        }
 
-        const bufferedReflection = record.bufferedReflection || '';
-        const reflectedLineCount = Number(record.reflectedObservationLineCount || 0);
-
-        if (!bufferedReflection) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
-            text: 'No buffered reflection to swap',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { id: input.currentRecord.id },
-          });
-        }
-
-        // Split current activeObservations by the recorded boundary.
-        // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
-        // Lines after reflectedLineCount were added after reflection started → kept as-is.
-        const currentObservations = (record.activeObservations as string) || '';
-        const allLines = currentObservations.split('\n');
-        const unreflectedLines = allLines.slice(reflectedLineCount);
-        const unreflectedContent = unreflectedLines.join('\n').trim();
-
-        // New activeObservations = bufferedReflection + unreflected observations
-        const newObservations = unreflectedContent
-          ? `${bufferedReflection}\n\n${unreflectedContent}`
-          : bufferedReflection;
-
-        // Create new generation with the merged content.
-        // tokenCount is computed by the processor using its token counter on the combined content.
-        const newRecord = await this.#insertReflectionGeneration(t, tableName, lookupKey, {
-          currentRecord: input.currentRecord,
-          reflection: newObservations,
-          tokenCount: input.tokenCount,
-        });
-
-        // Clear buffered state on old record
-        const nowStr = new Date().toISOString();
-        await t.query(
-          `UPDATE ${tableName} SET
+          // Clear buffered state on old record
+          const nowStr = new Date().toISOString();
+          await t.query(
+            `UPDATE ${tableName} SET
           "bufferedReflection" = NULL,
           "bufferedReflectionTokens" = NULL,
           "bufferedReflectionInputTokens" = NULL,
@@ -3393,13 +3524,15 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $1,
           "updatedAtZ" = $2
         WHERE id = $3`,
-          [nowStr, nowStr, input.currentRecord.id],
-        );
+            [nowStr, nowStr, input.currentRecord.id],
+          );
 
-        return newRecord;
-      });
+          return newRecord;
+        },
+        'swapBufferedReflectionToActive',
+      );
     } catch (error) {
-      if (error instanceof MastraError) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;
       }
       throw new MastraError(

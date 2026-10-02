@@ -29,14 +29,20 @@ import type {
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
+  RunFence,
   TableRetentionPolicy,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  resolveRunFence,
+  RUN_FENCING_TABLE_SCHEMAS,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -58,6 +64,8 @@ import type {
   SqliteInValue as InValue,
   SqliteTransaction as Transaction,
 } from '../../db/client';
+import { assertRunFence, inWriteTransaction, withRunFence } from '../../db/run-fencing';
+import type { RunFenceCheck, SqliteWriter } from '../../db/run-fencing';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
@@ -141,6 +149,10 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.#db.createTable({
+      tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+      schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
 
     // Static import — `await import('@mastra/core/storage')` deadlocks `mastra
     // build` output: bundlers rewrite the dynamic import to point at the entry
@@ -219,6 +231,53 @@ export class MemoryLibSQL extends MemoryStorage {
     if (OM_TABLE) {
       await this.#db.deleteData({ tableName: OM_TABLE as any });
     }
+    await this.#db.deleteData({ tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES });
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      return await this.#db.executeWriteOperationWithRetry(
+        () =>
+          inWriteTransaction(this.#client, async tx => {
+            const result = await tx.execute({
+              sql: `SELECT generation, ownerId FROM ${TABLE_MEMORY_RUN_FENCES} WHERE runId = ?`,
+              args: [fence.runId],
+            });
+            const row = result.rows[0];
+            const generation = row ? Number(row.generation) : undefined;
+            if (generation === undefined || generation < fence.generation) {
+              await tx.execute({
+                sql: `INSERT INTO ${TABLE_MEMORY_RUN_FENCES} (runId, generation, ownerId) VALUES (?, ?, ?)
+                  ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId`,
+                args: [fence.runId, fence.generation, fence.ownerId],
+              });
+              return true;
+            }
+            return generation === fence.generation && String(row!.ownerId) === fence.ownerId;
+          }),
+        'raiseRunFence',
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  /** The check a write must pass: its own fence, otherwise the one in scope. */
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claimsTable: TABLE_MEMORY_RUN_FENCES, fence: resolved, operation };
   }
 
   /**
@@ -740,7 +799,13 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages };
 
     try {
@@ -797,22 +862,25 @@ export class MemoryLibSQL extends MemoryStorage {
       const messageStatements = batchStatements.slice(0, -1);
       const threadUpdateStatement = batchStatements[batchStatements.length - 1];
 
-      // Process message statements in batches
-      for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
-        const batch = messageStatements.slice(i, i + BATCH_SIZE);
-        if (batch.length > 0) {
-          await this.#client.batch(batch, 'write');
+      await withRunFence(this.#client, this.#runFenceCheck(fence, 'saveMessages'), async writer => {
+        // Process message statements in batches
+        for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
+          const batch = messageStatements.slice(i, i + BATCH_SIZE);
+          if (batch.length > 0) {
+            await writer.batch(batch);
+          }
         }
-      }
 
-      // Execute thread update separately
-      if (threadUpdateStatement) {
-        await this.#client.execute(threadUpdateStatement);
-      }
+        // Execute thread update separately
+        if (threadUpdateStatement) {
+          await writer.execute(threadUpdateStatement);
+        }
+      });
 
       const list = new MessageList().add(messages as any, 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'SAVE_MESSAGES', 'FAILED'),
@@ -826,21 +894,37 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {
       return [];
     }
 
+    // Read, merge and write under one write lock, so the merge can't be
+    // based on rows another write changes in between.
+    return withRunFence(this.#client, this.#runFenceCheck(fence, 'updateMessages'), writer =>
+      this.#updateMessages(writer, messages),
+    );
+  }
+
+  async #updateMessages(
+    writer: SqliteWriter,
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[],
+  ): Promise<MastraDBMessage[]> {
     const messageIds = messages.map(m => m.id);
     const placeholders = messageIds.map(() => '?').join(',');
 
     const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`;
-    const existingResult = await this.#client.execute({ sql: selectSql, args: messageIds });
+    const existingResult = await writer.execute({ sql: selectSql, args: messageIds });
     const existingMessages: MastraDBMessage[] = existingResult.rows.map(row => this.parseRow(row));
 
     if (existingMessages.length === 0) {
@@ -924,13 +1008,13 @@ export class MemoryLibSQL extends MemoryStorage {
       }
     }
 
-    await this.#client.batch(batchStatements, 'write');
+    await writer.batch(batchStatements);
 
-    const updatedResult = await this.#client.execute({ sql: selectSql, args: messageIds });
+    const updatedResult = await writer.execute({ sql: selectSql, args: messageIds });
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (!messageIds || messageIds.length === 0) {
       return;
     }
@@ -940,10 +1024,10 @@ export class MemoryLibSQL extends MemoryStorage {
       const BATCH_SIZE = 100;
       const threadIds = new Set<string>();
 
+      const check = this.#runFenceCheck(options?.fence, 'deleteMessages');
       // Use a transaction to ensure consistency
-      const tx = await this.#client.transaction('write');
-
-      try {
+      await inWriteTransaction(this.#client, async tx => {
+        if (check) await assertRunFence(tx, check);
         for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
           const batch = messageIds.slice(i, i + BATCH_SIZE);
           const placeholders = batch.map(() => '?').join(',');
@@ -975,17 +1059,11 @@ export class MemoryLibSQL extends MemoryStorage {
             });
           }
         }
-
-        // Commit the transaction
-        await tx.commit();
-      } catch (error) {
-        // Rollback on error
-        await tx.rollback();
-        throw error;
-      }
+      });
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_MESSAGES', 'FAILED'),
@@ -1022,12 +1100,17 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
+    return this.#insertResource(resource, undefined);
+  }
+
+  async #insertResource(resource: StorageResourceType, check: RunFenceCheck | undefined): Promise<StorageResourceType> {
     await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
         // metadata is handled by prepareStatement which stringifies jsonb columns
       },
+      check,
     });
 
     return resource;
@@ -1037,11 +1120,14 @@ export class MemoryLibSQL extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    const check = this.#runFenceCheck(fence, 'updateResource');
     const existingResource = await this.getResourceById({ resourceId });
 
     if (!existingResource) {
@@ -1053,7 +1139,7 @@ export class MemoryLibSQL extends MemoryStorage {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      return this.saveResource({ resource: newResource });
+      return this.#insertResource(newResource, check);
     }
 
     const updatedResource = {
@@ -1084,10 +1170,12 @@ export class MemoryLibSQL extends MemoryStorage {
 
     values.push(resourceId);
 
-    await this.#client.execute({
-      sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
-      args: values,
-    });
+    await withRunFence(this.#client, check, writer =>
+      writer.execute({
+        sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
+        args: values,
+      }),
+    );
 
     return updatedResource;
   }
@@ -1357,7 +1445,7 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     try {
       await this.#db.insert({
         tableName: TABLE_THREADS,
@@ -1365,10 +1453,12 @@ export class MemoryLibSQL extends MemoryStorage {
           ...thread,
           // metadata is handled by prepareStatement which stringifies jsonb columns
         },
+        check: this.#runFenceCheck(fence, 'saveThread'),
       });
 
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'SAVE_THREAD', 'FAILED'),
@@ -1388,11 +1478,14 @@ export class MemoryLibSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    const check = this.#runFenceCheck(fence, 'updateThread');
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
@@ -1419,14 +1512,17 @@ export class MemoryLibSQL extends MemoryStorage {
     };
 
     try {
-      await this.#client.execute({
-        // COALESCE so an omitted title leaves the stored one alone.
-        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
-      });
+      await withRunFence(this.#client, check, writer =>
+        writer.execute({
+          // COALESCE so an omitted title leaves the stored one alone.
+          sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+          args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        }),
+      );
 
       return updatedThread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
@@ -1935,9 +2031,12 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
 
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
-      const result = await withClientWriteLock(this.#client, () =>
-        this.#client.execute({
-          sql: `UPDATE "${OM_TABLE}" SET
+      const result = await withRunFence(
+        this.#client,
+        this.#runFenceCheck(undefined, 'updateActiveObservations'),
+        writer =>
+          writer.execute({
+            sql: `UPDATE "${OM_TABLE}" SET
             "activeObservations" = ?,
             "lastObservedAt" = ?,
             "pendingMessageTokens" = 0,
@@ -1946,16 +2045,16 @@ export class MemoryLibSQL extends MemoryStorage {
             "observedMessageIds" = ?,
             "updatedAt" = ?
           WHERE id = ?`,
-          args: [
-            input.observations,
-            input.lastObservedAt.toISOString(),
-            input.tokenCount,
-            input.tokenCount,
-            observedMessageIdsJson,
-            now.toISOString(),
-            input.id,
-          ],
-        }),
+            args: [
+              input.observations,
+              input.lastObservedAt.toISOString(),
+              input.tokenCount,
+              input.tokenCount,
+              observedMessageIdsJson,
+              now.toISOString(),
+              input.id,
+            ],
+          }),
       );
 
       if (result.rowsAffected === 0) {
@@ -1985,9 +2084,11 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
+      const check = this.#runFenceCheck(undefined, 'createReflectionGeneration');
       return await withClientWriteLock(this.#client, async () => {
         const tx = await this.#client.transaction('write');
         try {
+          if (check) await assertRunFence(tx, check);
           const record = await this.#insertReflectionGeneration(tx, input);
           await tx.commit();
           return record;
@@ -2355,9 +2456,11 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
+      const check = this.#runFenceCheck(undefined, 'updateBufferedObservations');
       await withClientWriteLock(this.#client, async () => {
         const tx = await this.#client.transaction('write');
         try {
+          if (check) await assertRunFence(tx, check);
           // First get current record to get existing chunks
           const current = await tx.execute({
             sql: `SELECT "bufferedObservationChunks" FROM "${OM_TABLE}" WHERE id = ?`,
@@ -2458,9 +2561,11 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
+      const check = this.#runFenceCheck(undefined, 'swapBufferedToActive');
       return await withClientWriteLock(this.#client, async () => {
         const tx = await this.#client.transaction('write');
         try {
+          if (check) await assertRunFence(tx, check);
           // Get current record
           const current = await tx.execute({
             sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
@@ -2685,9 +2790,12 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      const result = await withClientWriteLock(this.#client, () =>
-        this.#client.execute({
-          sql: `UPDATE "${OM_TABLE}" SET
+      const result = await withRunFence(
+        this.#client,
+        this.#runFenceCheck(undefined, 'updateBufferedReflection'),
+        writer =>
+          writer.execute({
+            sql: `UPDATE "${OM_TABLE}" SET
             "bufferedReflection" = CASE
               WHEN "bufferedReflection" IS NOT NULL AND "bufferedReflection" != ''
               THEN "bufferedReflection" || char(10) || char(10) || ?
@@ -2698,16 +2806,16 @@ export class MemoryLibSQL extends MemoryStorage {
             "reflectedObservationLineCount" = ?,
             "updatedAt" = ?
           WHERE id = ?`,
-          args: [
-            input.reflection,
-            input.reflection,
-            input.tokenCount,
-            input.inputTokenCount,
-            input.reflectedObservationLineCount,
-            nowStr,
-            input.id,
-          ],
-        }),
+            args: [
+              input.reflection,
+              input.reflection,
+              input.tokenCount,
+              input.inputTokenCount,
+              input.reflectedObservationLineCount,
+              nowStr,
+              input.id,
+            ],
+          }),
       );
 
       if (result.rowsAffected === 0) {
@@ -2737,9 +2845,11 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
+      const check = this.#runFenceCheck(undefined, 'swapBufferedReflectionToActive');
       return await withClientWriteLock(this.#client, async () => {
         const tx = await this.#client.transaction('write');
         try {
+          if (check) await assertRunFence(tx, check);
           // Get current record
           const current = await tx.execute({
             sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,

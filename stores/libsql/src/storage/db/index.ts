@@ -11,6 +11,8 @@ import {
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
+import { withRunFence } from './run-fencing';
+import type { RunFenceCheck } from './run-fencing';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,
@@ -208,15 +210,17 @@ export class LibSQLDB extends MastraBase {
   private async doInsert({
     tableName,
     record,
+    check,
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
+    check?: RunFenceCheck;
   }): Promise<void> {
     // Filter out columns that don't exist in the actual database table
     const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
     if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
-    await withClientWriteLock(this.client, () =>
-      this.client.execute(
+    await withRunFence(this.client, check, writer =>
+      writer.execute(
         prepareStatement({
           tableName,
           record: filteredRecord,
@@ -231,8 +235,9 @@ export class LibSQLDB extends MastraBase {
    * @param args - The insert arguments
    * @param args.tableName - The name of the table to insert into
    * @param args.record - The record to insert (key-value pairs)
+   * @param args.check - The run fence the insert must carry, if any
    */
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any>; check?: RunFenceCheck }): Promise<void> {
     return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 

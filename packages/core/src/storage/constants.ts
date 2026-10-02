@@ -930,3 +930,35 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
 export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
   [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };
+
+export const TABLE_WORKFLOW_RUN_OWNERS = 'mastra_workflow_run_owners';
+export const TABLE_MEMORY_RUN_FENCES = 'mastra_memory_run_fences';
+
+/**
+ * Run ownership records for workflows stores that support run fencing.
+ * `leaseExpiresAt` is epoch milliseconds on the database clock, null once
+ * released. Records outlive their run so generations stay monotonic.
+ */
+export const WORKFLOW_RUN_OWNERS_SCHEMA: Record<string, StorageColumn> = {
+  runId: { type: 'text', nullable: false, primaryKey: true },
+  generation: { type: 'integer', nullable: false },
+  ownerId: { type: 'text', nullable: false },
+  leaseExpiresAt: { type: 'bigint', nullable: true },
+};
+
+/** The claim each run's memory writes must carry, for memory stores that support run fencing. */
+export const MEMORY_RUN_FENCES_SCHEMA: Record<string, StorageColumn> = {
+  runId: { type: 'text', nullable: false, primaryKey: true },
+  generation: { type: 'integer', nullable: false },
+  ownerId: { type: 'text', nullable: false },
+};
+
+/**
+ * Schemas for the run fencing tables.
+ * Exported separately because only adapters that support run fencing create them,
+ * so they are not part of TABLE_NAMES.
+ */
+export const RUN_FENCING_TABLE_SCHEMAS = {
+  [TABLE_WORKFLOW_RUN_OWNERS]: WORKFLOW_RUN_OWNERS_SCHEMA,
+  [TABLE_MEMORY_RUN_FENCES]: MEMORY_RUN_FENCES_SCHEMA,
+};
