@@ -1,18 +1,31 @@
 import { useMastraClient } from '@mastra/react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery } from '../compatibility';
-import type {
-  Skill,
-  ListSkillsResponse,
-  SearchSkillsResponse,
-  ListReferencesResponse,
-  GetReferenceResponse,
-  SearchSkillsParams,
-} from '../types';
+import type { Skill, ListSkillsResponse } from '../types';
 
 // =============================================================================
 // Skills Hooks (via Workspace API)
 // =============================================================================
+
+export const useWorkspaceSkills = (options?: { workspaceId?: string }) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['workspace', 'skills', options?.workspaceId],
+    queryFn: async (): Promise<ListSkillsResponse> => {
+      if (!isWorkspaceV1Supported(client)) {
+        throw new Error('Workspace v1 not supported by core or client');
+      }
+      if (!options?.workspaceId) {
+        throw new Error('workspaceId is required');
+      }
+      const workspace = (client as any).getWorkspace(options.workspaceId);
+      return workspace.listSkills();
+    },
+    enabled: !!options?.workspaceId && isWorkspaceV1Supported(client),
+    retry: shouldRetryWorkspaceQuery,
+  });
+};
 
 // =============================================================================
 // Agent-Specific Skill Hook

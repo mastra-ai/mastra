@@ -17,7 +17,7 @@ export {
 export { useStoredWorkspaces } from './use-stored-workspaces';
 
 // Skills hooks
-export { useWorkspaceSkills, useWorkspaceSkillReferences, useAgentSkill } from './use-workspace-skills';
+export { useWorkspaceSkills, useAgentSkill } from './use-workspace-skills';
 
 // Skills.sh hooks
 export {

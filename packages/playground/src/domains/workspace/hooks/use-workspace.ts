@@ -4,13 +4,9 @@ import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSuppor
 import type {
   WorkspaceInfo,
   WorkspacesListResponse,
-  FileListResponse,
-  FileReadResponse,
   FileStatResponse,
   WriteFileParams,
   WriteFileFromFileParams,
-  SearchWorkspaceParams,
-  SearchResponse,
 } from '../types';
 
 function getParentPath(path: string): string {
