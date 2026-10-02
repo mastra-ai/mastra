@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@/utils/query-utils';
 
-const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 3000;
+const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 15_000;
 
 export function getTraceSpanScoresRefetchInterval(query: { state: { error: unknown } }) {
   if (

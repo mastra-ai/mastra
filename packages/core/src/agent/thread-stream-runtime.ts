@@ -9,6 +9,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
+import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
@@ -176,35 +177,7 @@ function sanitizeBroadcastPart(part: unknown): unknown {
     return part;
   }
 
-  if (typed.type === 'step-start') {
-    if (!('request' in payload) && !('inputMessages' in payload)) return part;
-    const { request: _request, inputMessages: _inputMessages, ...rest } = payload;
-    return { ...typed, payload: rest };
-  }
-
-  if (typed.type === 'step-finish' || typed.type === 'finish') {
-    let changed = false;
-    const next: Record<string, unknown> = { ...payload };
-    const metadata = payload.metadata;
-    if (metadata && typeof metadata === 'object' && 'request' in metadata) {
-      const { request: _request, ...restMetadata } = metadata as Record<string, unknown>;
-      next.metadata = restMetadata;
-      changed = true;
-    }
-    const output = payload.output;
-    if (output && typeof output === 'object' && 'steps' in output) {
-      const { steps: _steps, ...restOutput } = output as Record<string, unknown>;
-      next.output = restOutput;
-      changed = true;
-    }
-    if ('messages' in payload) {
-      delete next.messages;
-      changed = true;
-    }
-    return changed ? { ...typed, payload: next } : part;
-  }
-
-  return part;
+  return stripModelSnapshots(part);
 }
 
 /**
@@ -2412,6 +2385,22 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).threadRunsById.has(runId);
   }
 
+  getResumableThreadRunSuspension(
+    options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
+    pubsub?: PubSub,
+  ): AgentThreadRunSuspension | undefined {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const record = state.threadRunsById.get(options.runId);
+    const isSuspended = this.#isSuspendedRun(state, options.runId);
+    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !isSuspended) {
+      return undefined;
+    }
+
+    const suspensions = state.suspensionMetadataByRunId.get(options.runId);
+    return options.toolCallId ? suspensions?.get(options.toolCallId) : suspensions?.values().next().value;
+  }
+
   getResumableThreadRun(
     options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
     pubsub?: PubSub,
@@ -3289,6 +3278,16 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // Every signal sent to the finished run belongs in one follow-up turn, so
+        // fold the rest of the queue into this run's first model request instead
+        // of starting one run per signal. Read the map, not `queue`: cancellation
+        // during the lease await replaces the array.
+        const batched = state.pendingSignalsByThread.get(key) ?? [];
+        if (batched.length > 0) {
+          state.pendingSignalsByThread.delete(key);
+          state.preRunSignalsByThread.set(key, [...batched, ...(state.preRunSignalsByThread.get(key) ?? [])]);
+        }
+
         state.startingQueuedRunIds.add(nextRunId);
         const output = await previousRun.agent.stream(signal, {
           ...(previousRun.streamOptions as any),
@@ -3302,7 +3301,9 @@ export class AgentThreadStreamRuntime {
           ),
         });
 
-        if (queue.length > 0) {
+        // If the follow-up stops before its first model request, its completion
+        // must drain the batched signals left in the pre-run queue.
+        if (batched.length > 0) {
           const nextRecord = state.threadRunsById.get(output.runId);
           if (nextRecord) {
             this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
@@ -3327,12 +3328,18 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
       }
-      if (signal && !draining?.cancelled) {
-        // Restore through the map, not the local `queue` array: the shift above
-        // deletes the map entry when it empties the queue, so the local array
-        // may be detached from the map by the time we get here.
-        state.pendingSignalsByThread.set(key, [signal, ...(state.pendingSignalsByThread.get(key) ?? [])]);
-      }
+      // Restore through the map, not the local `queue` array: the shift above
+      // deletes the map entry when it empties the queue, so the local array
+      // may be detached from the map by the time we get here. Signals batched
+      // into the failed run's pre-run queue go back behind the drained signal.
+      const batchedLeftover = state.preRunSignalsByThread.get(key) ?? [];
+      state.preRunSignalsByThread.delete(key);
+      const restored = [
+        ...(signal && !draining?.cancelled ? [signal] : []),
+        ...batchedLeftover,
+        ...(state.pendingSignalsByThread.get(key) ?? []),
+      ];
+      if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -4460,7 +4467,10 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
+    // An aborted run stays active until it terminalizes, but its lifecycle already
+    // ended for earlier subscribers. Seeding it here would replay that run.
+    const currentRecord =
+      currentRunId && !state.abortedRunIds.has(currentRunId) ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);

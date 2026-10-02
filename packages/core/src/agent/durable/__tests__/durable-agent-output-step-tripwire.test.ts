@@ -80,10 +80,18 @@ describe('DurableAgent processOutputStep abort', () => {
     const { model, prompts } = createTextModel(['bad response', 'improved response']);
     const retryCounts: number[] = [];
     const inputStepRetryCounts: number[] = [];
+    const llmRequestRetryCounts: number[] = [];
+    const llmResponseRetryCounts: number[] = [];
     const inputProcessor: Processor = {
       id: 'retry-count-observer',
       processInputStep: async ({ retryCount }) => {
         inputStepRetryCounts.push(retryCount);
+      },
+      processLLMRequest: async ({ retryCount }) => {
+        llmRequestRetryCounts.push(retryCount);
+      },
+      processLLMResponse: async ({ retryCount }) => {
+        llmResponseRetryCounts.push(retryCount);
       },
     };
     const processor: Processor = {
@@ -104,6 +112,8 @@ describe('DurableAgent processOutputStep abort', () => {
     expect(prompts).toHaveLength(2);
     expect(retryCounts).toEqual([0, 1]);
     expect(inputStepRetryCounts).toEqual([0, 1]);
+    expect(llmRequestRetryCounts).toEqual([0, 1]);
+    expect(llmResponseRetryCounts).toEqual([0, 1]);
     expect(JSON.stringify(prompts[1]!.at(-1))).toContain('Response quality too low, please improve');
     expect(JSON.stringify(prompts[1])).not.toContain('bad response');
 

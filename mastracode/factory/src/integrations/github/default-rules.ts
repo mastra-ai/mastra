@@ -2,6 +2,7 @@ import { hasRecordedVerdict } from '../../boards/review.js';
 import { normalizedVerdictLine } from '../../review-verdict.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+import { isFactoryApproveVerdict } from './stale-reviews.js';
 
 export type GithubRuleOverrides = Partial<
   Record<FactoryGithubEventName, FactoryRuleHandler<FactoryGithubRuleContext> | null | undefined>
@@ -247,6 +248,31 @@ function addressReviewFeedback(context: FactoryGithubRuleContext) {
 }
 
 /**
+ * A Factory approval does not clear a change request left by a different
+ * Factory identity (an earlier reviewer token, say), so GitHub would keep the
+ * pull request blocked. Ask the dispatcher to dismiss those superseded reviews.
+ */
+function dismissStaleFactoryReviews(context: FactoryGithubRuleContext) {
+  const { pullRequest, review, repository } = context;
+  if (!pullRequest || !review || !review.author || !repository.installationId) return;
+  if (review.state.toLowerCase() !== 'approved' || !isFactoryApproveVerdict(review.body)) return;
+  if (!pullRequest.factoryAuthored || pullRequest.state !== 'open' || pullRequest.merged) return;
+  return {
+    type: 'dismissStaleReviews',
+    idempotencyKey: `${context.ingress.id}:dismiss-stale-reviews`,
+    installationId: repository.installationId,
+    repository: repository.fullName,
+    pullRequestNumber: pullRequest.number,
+    approvingReviewId: String(review.id),
+    approvingAuthor: review.author,
+  } as const;
+}
+
+function pullRequestReviewSubmitted(context: FactoryGithubRuleContext) {
+  return addressReviewFeedback(context) ?? dismissStaleFactoryReviews(context);
+}
+
+/**
  * Detects the `factory-review` handoff verdict in a comment body.
  *
  * GitHub forbids an app from reviewing a pull request it authored, so on
@@ -390,7 +416,7 @@ export const defaultGithubRules = Object.freeze({
   pullRequestUpdated: reReviewUpdatedPullRequest,
   pullRequestCommentCreated: addressPullRequestComment,
   pullRequestReviewRequested: reReviewRequestedPullRequest,
-  pullRequestReviewSubmitted: addressReviewFeedback,
+  pullRequestReviewSubmitted: pullRequestReviewSubmitted,
   pullRequestMerged: pullRequestMerged,
   pullRequestClosed: pullRequestClosed,
 } satisfies GithubEventRules);

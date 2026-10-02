@@ -348,9 +348,9 @@ export function createDurableLLMMappingStep() {
           text: llmOutput.text,
           toolCalls: llmOutput.toolCalls,
           usage: llmOutput.stepResult.totalUsage ?? {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
+            inputTokens: undefined,
+            outputTokens: undefined,
+            totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
         },

@@ -1699,6 +1699,19 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
+    // Runs a handler call that ends by exhausting the durable snapshot wait, without sleeping through it.
+    async function pastSnapshotWait<T>(call: () => Promise<T>): Promise<T> {
+      vi.useFakeTimers();
+      try {
+        const result = call();
+        result.catch(() => {});
+        await vi.advanceTimersByTimeAsync(10_000);
+        return await result;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
     it.each(approvalRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
       await persistSuspendedDurableRun({ resourceId: 'user-b' });
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
@@ -1727,19 +1740,107 @@ describe('Agent Routes Authorization', () => {
       });
 
       await expect(
-        (route.handler as any)({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          runId: 'durable-run-1',
-          toolCallId: 'different-tool-call',
-        }),
+        pastSnapshotWait(() =>
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'different-tool-call',
+          }),
+        ),
       ).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
+
+    it('waits for the suspended snapshot to be persisted before authorizing', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for the snapshot to move to the next suspended tool call', async () => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-2' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-2',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for a snapshot persisted several seconds after the approval event', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'resumeStream').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+
+      await pastSnapshotWait(() => {
+        setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 5_000);
+        return callResume(RESUME_STREAM_ROUTE, { resourceId: 'user-a' });
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('rejects a missing durable run after the wait times out', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall');
+      await expect(
+        pastSnapshotWait(() =>
+          (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+          }),
+        ),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a missing durable run once the request is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const started = Date.now();
+      await expect(
+        (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: controller.signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
     const resumeRoutes = [
       { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
       { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
@@ -1771,7 +1872,7 @@ describe('Agent Routes Authorization', () => {
     it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
       const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
 
-      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+      await expect(pastSnapshotWait(() => callResume(route, { resourceId: 'user-a' }))).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
       );
       expect(execution).not.toHaveBeenCalled();
@@ -2392,6 +2493,60 @@ describe('Agent Routes Authorization', () => {
       expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
     });
 
+    it.each([true, false])(
+      'should strip nested credential headers from tool approval (approved=%s)',
+      async approved => {
+        const sendToolApproval = vi.fn(async params => ({
+          accepted: true,
+          runId: 'run-123',
+          toolCallId: params.toolCallId,
+        }));
+        (mockAgent as any).sendToolApproval = sendToolApproval;
+        const requestContext = new RequestContext();
+        const streamOptions = {
+          maxSteps: 4,
+          modelSettings: {
+            temperature: 0.3,
+            headers: {
+              aUtHoRiZaTiOn: 'Bearer client-token',
+              'Proxy-Authorization': 'Basic proxy-token',
+              'X-API-Key': 'client-key',
+              'Api-Key': 'client-key',
+              'X-Goog-Api-Key': 'client-key',
+              COOKIE: 'session=client-token',
+              'X-Trace-Id': 'trace-123',
+            },
+          },
+        };
+
+        const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          ...sendToolApprovalBodySchema.parse({
+            resourceId: 'resource-123',
+            threadId: 'thread-123',
+            toolCallId: 'tool-call-123',
+            approved,
+            streamOptions,
+          }),
+        });
+
+        expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+        expect(sendToolApproval).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            approved,
+            streamOptions: {
+              maxSteps: 4,
+              modelSettings: { temperature: 0.3, headers: { 'X-Trace-Id': 'trace-123' } },
+              requestContext,
+            },
+          }),
+        );
+      },
+    );
+
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
@@ -2735,6 +2890,19 @@ describe('Agent Routes Authorization', () => {
           attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2753,6 +2921,11 @@ describe('Agent Routes Authorization', () => {
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
       expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
@@ -2792,6 +2965,19 @@ describe('Agent Routes Authorization', () => {
         ifIdle: {
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2804,6 +2990,11 @@ describe('Agent Routes Authorization', () => {
 
       expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');

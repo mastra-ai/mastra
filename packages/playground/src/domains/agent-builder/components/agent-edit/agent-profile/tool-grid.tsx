@@ -1,8 +1,7 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentTool } from '../../../types/agent-tool';
@@ -13,6 +12,7 @@ interface ToolGridProps {
   editable: boolean;
   onlySelected: boolean;
   onOnlySelectedChange: (next: boolean) => void;
+  search: string;
   onSearch: (value: string) => void;
   emptyStateDetails: ReactNode;
   onToggle: (item: AgentTool, next: boolean) => void;
@@ -27,6 +27,7 @@ export const ToolGrid = ({
   editable,
   onlySelected,
   onOnlySelectedChange,
+  search,
   onSearch,
   emptyStateDetails,
   onToggle,
@@ -43,35 +44,31 @@ export const ToolGrid = ({
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
       <div className="flex shrink-0 items-center justify-between gap-4">
-        <InputGroup size="md" className="max-w-[30ch] flex-1" data-testid="tools-card-picker-search">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Search tools"
-            placeholder="Search tools..."
-            onChange={event => onSearch(event.target.value)}
-          />
-        </InputGroup>
+        <SearchInput
+          label="Search tools"
+          size="md"
+          className="max-w-[30ch] flex-1"
+          data-testid="tools-card-picker-search"
+          placeholder="Search tools..."
+          value={search}
+          onValueChange={onSearch}
+        />
 
-        <label
+        <Field
+          orientation="horizontal"
+          disabled={!editable}
           data-testid="tools-only-selected-filter"
-          className={cn(
-            'inline-flex cursor-pointer items-center gap-2 text-meta text-muted-foreground select-none',
-            !editable && 'cursor-not-allowed opacity-60',
-          )}
+          className="inline-flex select-none data-disabled:opacity-60"
         >
           <Checkbox
             checked={onlySelected}
             onCheckedChange={value => onOnlySelectedChange(value === true)}
-            disabled={!editable}
             data-testid="tools-only-selected-filter-checkbox"
             style={filterCheckboxStyle}
             className="h-3 w-3 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
           />
-          <span>Show only selected</span>
-        </label>
+          <FieldLabel className="text-meta text-muted-foreground">Show only selected</FieldLabel>
+        </Field>
       </div>
 
       {tools.length === 0 ? (

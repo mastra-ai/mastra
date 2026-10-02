@@ -39,13 +39,22 @@ import type {
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
-  if (!raw) {
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-  }
-  const inputTokens = (raw.inputTokens as number) ?? (raw.promptTokens as number) ?? 0;
-  const outputTokens = (raw.outputTokens as number) ?? (raw.completionTokens as number) ?? 0;
-  const totalTokens = (raw.totalTokens as number) ?? inputTokens + outputTokens;
-  return { inputTokens, outputTokens, totalTokens };
+  const inputTokens = (raw?.inputTokens as number | undefined) ?? (raw?.promptTokens as number | undefined);
+  const outputTokens = (raw?.outputTokens as number | undefined) ?? (raw?.completionTokens as number | undefined);
+  const totalTokens =
+    (raw?.totalTokens as number | undefined) ??
+    (inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined);
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    reasoningTokens: raw?.reasoningTokens as number | undefined,
+    cachedInputTokens: raw?.cachedInputTokens as number | undefined,
+    cacheCreationInputTokens: raw?.cacheCreationInputTokens as number | undefined,
+    cacheCreationInputTokens5m: raw?.cacheCreationInputTokens5m as number | undefined,
+    cacheCreationInputTokens1h: raw?.cacheCreationInputTokens1h as number | undefined,
+  };
 }
 
 /**
@@ -476,6 +485,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               // Preserve the producer's stack and name so the failure stays attributable and classifiable.
               if (lastErrorStack) error.stack = lastErrorStack;
               if (lastErrorName) error.name = lastErrorName;
+              // Keep provider fields (statusCode, isRetryable, ...) on the surfaced error.
+              if (lastErrorCause && typeof lastErrorCause === 'object') {
+                for (const [key, value] of Object.entries(lastErrorCause)) {
+                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
+                    (error as unknown as Record<string, unknown>)[key] = value;
+                  }
+                }
+              }
               await onError({ error });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
@@ -666,6 +683,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     stream,
     messageList,
     messageId,
+    finishUsageIsTotal: true,
     options: {
       runId,
       onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,

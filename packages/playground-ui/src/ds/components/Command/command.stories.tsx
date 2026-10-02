@@ -1,9 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Calculator, Calendar, CreditCard, GitBranch, Rocket, Settings, Shield, Smile, User } from 'lucide-react';
+import {
+  Bot,
+  Calculator,
+  Calendar,
+  CreditCard,
+  GitBranch,
+  MessageSquare,
+  Rocket,
+  Settings,
+  Shield,
+  Smile,
+  User,
+  Wrench,
+} from 'lucide-react';
 import * as React from 'react';
 
+import { Badge } from '../Badge';
 import { Button } from '../Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../Dialog';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt';
 import {
   Command,
   CommandDialog,
@@ -40,8 +56,8 @@ const InlineResult = ({
   subtitle: string;
   value: string;
 }) => (
-  <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
-    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground">
+  <CommandItem value={value} className="group h-auto items-start gap-3 px-2.5 py-2">
+    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:size-4">
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -309,6 +325,49 @@ export const SearchOnly: Story = {
           </CommandGroup>
         </CommandList>
       </Command>
+    );
+  },
+};
+
+export const InDialogWithDisabledRows: Story = {
+  render: function InDialogWithDisabledRowsStory() {
+    const [picked, setPicked] = React.useState('Nothing yet');
+
+    return (
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add connection</DialogTitle>
+          </DialogHeader>
+          <Command loop label="Integrations">
+            <CommandInput placeholder="Search integrations" />
+            <CommandList className="p-2">
+              <CommandGroup heading="Available">
+                {['Slack', 'GitHub', 'Linear'].map(name => (
+                  <CommandItem key={name} onSelect={() => setPicked(name)}>
+                    <Calendar className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                    <Badge size="sm" variant="purple" icon={<Wrench />}>
+                      Tools
+                    </Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandGroup heading="Coming soon">
+                {['HubSpot', 'Discord'].map(name => (
+                  <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
+                    <MessageSquare className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          <Txt as="p" variant="caption" tone="muted" className="px-4 pb-4">
+            Picked: {picked}
+          </Txt>
+        </DialogContent>
+      </Dialog>
     );
   },
 };

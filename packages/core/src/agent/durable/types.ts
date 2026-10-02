@@ -186,9 +186,23 @@ export interface SerializableModelSettings {
 }
 
 /**
+ * JSON-safe snapshot of a call-time client tool. Client tools never execute on
+ * the server, so only the schema/metadata the model needs is persisted; the
+ * worker rebuilds the client tool from this when it runs in another process.
+ */
+export interface SerializableClientTool {
+  id?: string;
+  description?: string;
+  inputSchema: JSONSchema7;
+  requireApproval?: boolean;
+}
+
+/**
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
+  /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
+  clientTools?: Record<string, SerializableClientTool>;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -400,6 +414,15 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /**
+   * Serialized from the step's *effective* tool set at emission time (processors may add
+   * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
+   * `resolveDurableToolCallConcurrency` can enforce sequential execution for
+   * approval/suspend-capable tools even on a cold resume.
+   */
+  requireApproval?: boolean;
+  /** @see requireApproval */
+  hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
 }

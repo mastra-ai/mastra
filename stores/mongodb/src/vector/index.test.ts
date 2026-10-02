@@ -2586,6 +2586,49 @@ describe('MongoDBVector autoEmbed', () => {
       await expect(v.createIndex({ indexName: 'movies', autoEmbed: { model: 'voyage-4' } })).resolves.toBeUndefined();
     });
 
+    it('reports that it embeds server-side only when configured with autoEmbed defaults', () => {
+      const configured = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4' },
+      });
+      const plain = makeVector();
+
+      expect(configured.isSelfEmbedding).toBe(true);
+      expect(plain.isSelfEmbedding).toBe(false);
+    });
+
+    it('applies the store autoEmbed defaults to a createIndex that names neither config nor dimension', async () => {
+      const v = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4', path: 'fullplot' },
+      });
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies' });
+
+      const fields = createSearchIndex.mock.calls[0][0].definition.fields;
+      expect(fields[0]).toMatchObject({ type: 'autoEmbed', modality: 'text', path: 'fullplot', model: 'voyage-4' });
+    });
+
+    it('lets an explicit dimension opt a single index out of the store defaults', async () => {
+      const v = new MongoDBVector({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+        autoEmbed: { model: 'voyage-4' },
+      });
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'movies', dimension: 1536 });
+
+      const fields = createSearchIndex.mock.calls[0][0].definition.fields;
+      expect(fields[0]).toMatchObject({ type: 'vector', numDimensions: 1536 });
+    });
+
     it('rejects a createIndex whose registry claim is lost to a concurrent call', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
@@ -2802,6 +2845,33 @@ describe('MongoDBVector autoEmbed', () => {
       const vectorSearch = aggregate.mock.calls[1][0][0].$vectorSearch;
       expect(vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
       expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $eq: 'astronaut' } });
+    });
+
+    it.each([
+      ['a $regex operator', { $regex: /astronaut/ }],
+      ['a bare RegExp', /astronaut/],
+      ['a RegExp inside $in', { $in: [/astronaut/] }],
+      ['a RegExp inside $ne', { $ne: /astronaut/ }],
+    ])('pre-filters a documentFilter with %s, which $vectorSearch.filter rejects', async (_, documentFilter) => {
+      const v = makeVector();
+      const aggregate = vi
+        .fn()
+        .mockReturnValueOnce({
+          map: () => ({ toArray: async () => ['doc-1'] }),
+          toArray: async () => [{ _id: 'doc-1' }],
+        })
+        .mockReturnValueOnce({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+      });
+
+      await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: documentFilter as any });
+
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: documentFilter });
+      expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
     });
 
     it('returns the embedded text as document when a custom path is configured', async () => {

@@ -45,7 +45,10 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow label="Thinking level" description="Reasoning budget for your chats — overrides the Factory defaults">
+    <SettingsRow
+      label="Thinking level"
+      description="Reasoning budget for chats opened from this Factory — overrides the Factory run defaults"
+    >
       <ThinkingLevelPicker
         ariaLabel="Thinking level"
         value={settings?.thinkingLevel ?? 'off'}
