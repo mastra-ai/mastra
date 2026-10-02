@@ -20,11 +20,43 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
 /** Creates a model that requests one tool call, then completes after the tool resumes. */
-function createToolCallThenTextModel(tool: { name: string; args: object }) {
+function createToolCallThenTextModel(
+  tool: { name: string; args: object },
+  abortOnResume = false,
+  onResumeCall?: () => void,
+) {
   let callCount = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async ({ abortSignal }) => {
       callCount++;
+      if (callCount > 1 && abortOnResume) {
+        onResumeCall?.();
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'id-1',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  const error = new Error('Aborted');
+                  error.name = 'AbortError';
+                  controller.error(error);
+                },
+                { once: true },
+              );
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      }
       return {
         stream: convertArrayToReadableStream(
           callCount === 1
@@ -159,5 +191,52 @@ describe('DurableAgent approval resume data', () => {
   it('merges the separate approval decision into custom sendToolApproval resume data', async () => {
     const seen = await runApprovalGatedTool(pubsub, { note: 'hello' }, true);
     expect(seen).toEqual([{ approved: true, note: 'hello' }]);
+  });
+
+  it('invokes onAbort when a resumed run is aborted', async () => {
+    let resumeModelStarted!: () => void;
+    const resumeModelStartedPromise = new Promise<void>(resolve => {
+      resumeModelStarted = resolve;
+    });
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'approval-resume-abort-agent',
+      name: 'Approval Resume Abort Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel(
+        { name: 'approvalTool', args: { value: 'test' } },
+        true,
+        resumeModelStarted,
+      ) as LanguageModelV2,
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ logger: false, storage: new MockStore(), agents: { approvalResumeAbortAgent: durableAgent } });
+
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the approval tool', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const resumed = await durableAgent.resume(initial.runId, { approved: true }, { onAbort, onFinish });
+    await resumeModelStartedPromise;
+    resumed.abort();
+    await resumed.output.consumeStream().catch(() => undefined);
+
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    resumed.cleanup();
+    initial.cleanup();
   });
 });

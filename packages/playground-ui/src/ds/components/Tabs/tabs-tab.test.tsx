@@ -29,6 +29,26 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
+  it('when a tab with a tooltip receives keyboard focus, then the tooltip shows and the tab stays selectable', async () => {
+    render(
+      <Tabs defaultTab="first">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second" tooltip="Second tab">
+            <span className="sr-only">Second</span>
+          </Tab>
+        </TabList>
+      </Tabs>,
+    );
+
+    const tab = screen.getByRole('tab', { name: 'Second' });
+    act(() => tab.focus());
+    expect(await screen.findByText('Second tab')).toBeTruthy();
+
+    fireEvent.click(tab);
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('measures contained tabs once without ResizeObserver', () => {
     Reflect.deleteProperty(globalThis, 'ResizeObserver');
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
@@ -69,14 +89,11 @@ describe('Tab', () => {
     expect(screen.queryByText('Needs attention')).toBeNull();
     expect(tab.querySelector('[data-slot="tab-attention"]')).toBeNull();
   });
-  it.each([
-    ['stroke', 200],
-    ['inset', 234],
-  ] as const)('keeps exactly fitting %s tabs out of the overflow menu', (frame, width) => {
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+  it('keeps exactly fitting contained tabs out of the overflow menu', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(234);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
     render(
-      <Tabs defaultTab="first" appearance="contained" frame={frame}>
+      <Tabs defaultTab="first" appearance="contained">
         <TabList>
           <Tab value="first">First</Tab>
           <Tab value="second">Second</Tab>
