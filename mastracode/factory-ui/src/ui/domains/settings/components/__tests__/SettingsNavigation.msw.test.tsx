@@ -33,57 +33,45 @@ describe('SettingsNavigation', () => {
     );
   });
 
-  it('orders personal, agent, source, and Factory management settings by task', () => {
+  it('separates personal destinations from shared Factory settings', () => {
     renderNavigation();
 
-    expect(screen.getByRole('link', { name: 'Manage Factory' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/factory',
-    );
-    expect(screen.getByRole('region', { name: 'Manage Factory' })).toBeInTheDocument();
-
-    expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual([
-      'My account',
-      'Preferences',
-      'Models',
-      'Memory',
+    const personal = screen.getByRole('region', { name: 'Your settings' });
+    const factory = screen.getByRole('region', { name: 'Factory settings' });
+    expect(
+      within(personal)
+        .getAllByRole('link')
+        .map(link => link.textContent),
+    ).toEqual(['My account', 'Preferences', 'Your models', 'Your memory', 'Connections']);
+    expect(
+      within(factory)
+        .getAllByRole('link')
+        .map(link => link.textContent),
+    ).toEqual([
+      'Factory models',
+      'Factory memory',
       'Skills',
       'Behavior',
       'Repositories',
       'Work Intake',
-      'Connections',
       'Manage Factory',
     ]);
-
-    const sources = screen.getByRole('region', { name: 'Sources' });
-    expect(within(sources).getByRole('link', { name: 'Connections' })).toHaveAttribute(
+    expect(within(personal).getByRole('link', { name: 'Your models' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/connections',
+      '/factories/fp-1/settings/personal-models',
     );
-    expect(within(sources).getByRole('link', { name: 'Repositories' })).toHaveAttribute(
+    expect(within(personal).getByRole('link', { name: 'Your memory' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/repositories',
+      '/factories/fp-1/settings/memory',
     );
-    expect(within(sources).getByRole('link', { name: 'Work Intake' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/intake',
-    );
-    expect(
-      within(sources)
-        .getAllByRole('link')
-        .map(link => link.textContent),
-    ).toEqual(['Repositories', 'Work Intake', 'Connections']);
-
-    const agent = screen.getByRole('region', { name: 'Agent' });
-    expect(within(agent).getByRole('link', { name: 'Models' })).toHaveAttribute(
+    expect(within(factory).getByRole('link', { name: 'Factory models' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models',
     );
-    expect(within(agent).getByRole('link', { name: 'Behavior' })).toHaveAttribute(
+    expect(within(factory).getByRole('link', { name: 'Factory memory' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/behavior',
+      '/factories/fp-1/settings/factory-memory',
     );
-    expect(screen.queryByRole('link', { name: 'Custom' })).not.toBeInTheDocument();
   });
 
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {
@@ -94,6 +82,6 @@ describe('SettingsNavigation', () => {
 
     expect(screen.getByRole('link', { name: 'Repositories' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Your settings' })).not.toBeInTheDocument();
   });
 });

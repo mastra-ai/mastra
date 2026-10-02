@@ -100,9 +100,11 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
 export function ProviderAccessSection({
   description,
   fixedScope,
+  showOrgCoverage = fixedScope === undefined,
 }: {
   description?: string;
   fixedScope?: CredentialScope;
+  showOrgCoverage?: boolean;
 }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -127,8 +129,11 @@ export function ProviderAccessSection({
       ? ['personal', 'org']
       : ['personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
-  const scope: CredentialScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
-  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage: fixedScope === undefined };
+  const selectedScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
+  const scope: CredentialScope = authEnabled ? selectedScope : 'user';
+  const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
+  const actionsDisabled = authQuery.isPending || readOnly;
+  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage };
   const scopeArg = authEnabled ? { scope } : {};
 
   const oauthProviders = providers
@@ -207,6 +212,11 @@ export function ProviderAccessSection({
         }
       >
         <div className="flex flex-col gap-3">
+          {readOnly && (
+            <Txt as="p" variant="caption">
+              {ORG_SCOPE_MEMBER_REASON}
+            </Txt>
+          )}
           {error && (
             <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
@@ -242,7 +252,7 @@ export function ProviderAccessSection({
                                   ? `Sign out of ${displayName} for the org`
                                   : `Sign out of ${displayName}`
                               }
-                              disabled={isSigningOut(provider)}
+                              disabled={actionsDisabled || isSigningOut(provider)}
                               onClick={() => signOut(provider)}
                             >
                               {isSigningOut(provider) ? 'Signing out…' : 'Sign out'}
@@ -252,7 +262,7 @@ export function ProviderAccessSection({
                               variant={covered ? 'default' : 'primary'}
                               size="sm"
                               aria-label={`Sign in to ${displayName}`}
-                              disabled={startOAuthMutation.isPending}
+                              disabled={actionsDisabled || startOAuthMutation.isPending}
                               onClick={() => void startOAuth(provider)}
                             >
                               {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
@@ -296,7 +306,7 @@ export function ProviderAccessSection({
                           <Button
                             size="sm"
                             aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
-                            disabled={isRemoving(provider)}
+                            disabled={actionsDisabled || isRemoving(provider)}
                             onClick={() => setKeyDialogProvider(provider)}
                           >
                             {storedKey ? 'Update key' : 'Add API key'}
@@ -305,7 +315,7 @@ export function ProviderAccessSection({
                             <Button
                               size="sm"
                               aria-label={`Remove key for ${displayName}`}
-                              disabled={isRemoving(provider)}
+                              disabled={actionsDisabled || isRemoving(provider)}
                               onClick={() => removeKey(provider)}
                             >
                               {isRemoving(provider) ? 'Removing…' : 'Remove'}
