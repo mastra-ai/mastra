@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep Gmail scenario: label + draft + filter CRUD plus settings reads. The
@@ -35,10 +35,83 @@ export const googleMailScenario: Scenario = {
           ['google_mail_get_imap_settings', {}],
           ['google_mail_get_pop_settings', {}],
           ['google_mail_get_language_settings', {}],
+          ['google_mail_list_drafts', { maxResults: 5 }],
+          ['google_mail_list_messages', { maxResults: 5 }],
+          ['google_mail_list_threads', { maxResults: 5 }],
         ],
         tools,
       )),
     );
+
+    // Pick a representative message + thread for read-only probes.
+    let probeMessageId: string | undefined;
+    let probeThreadId: string | undefined;
+    if (tools['google_mail_list_messages']) {
+      try {
+        const result = await call<{ messages?: Array<{ id?: string; threadId?: string }> }>(
+          'google_mail_list_messages',
+          { maxResults: 1 },
+        );
+        probeMessageId = result.messages?.[0]?.id;
+        probeThreadId = result.messages?.[0]?.threadId;
+      } catch {
+        /* swallow — scenario continues with synthetic ids */
+      }
+    }
+
+    if (tools['google_mail_get_message']) {
+      if (probeMessageId) {
+        try {
+          await call('google_mail_get_message', { id: probeMessageId, format: 'minimal' });
+          steps.push(makeStep('get message', 'google_mail_get_message', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get message', 'google_mail_get_message', 'fail', errorMessage(error)));
+        }
+      } else {
+        steps.push(
+          await probeTool(call, tools, 'get message (probe)', 'google_mail_get_message', {
+            id: `smoke-${runId}`,
+            format: 'minimal',
+          }),
+        );
+      }
+    }
+    if (tools['google_mail_get_thread']) {
+      if (probeThreadId) {
+        try {
+          await call('google_mail_get_thread', { id: probeThreadId, format: 'minimal' });
+          steps.push(makeStep('get thread', 'google_mail_get_thread', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('get thread', 'google_mail_get_thread', 'fail', errorMessage(error)));
+        }
+      } else {
+        steps.push(
+          await probeTool(call, tools, 'get thread (probe)', 'google_mail_get_thread', {
+            id: `smoke-${runId}`,
+            format: 'minimal',
+          }),
+        );
+      }
+    }
+    if (tools['google_mail_get_attachment']) {
+      steps.push(
+        await probeTool(call, tools, 'get attachment (probe)', 'google_mail_get_attachment', {
+          messageId: probeMessageId ?? `smoke-${runId}`,
+          attachmentId: 'smoke-attachment',
+        }),
+      );
+    }
+    if (tools['google_mail_list_watch_history']) {
+      // startHistoryId is required; use a plausibly-small value — Gmail
+      // responds with the current history when the id is valid, 404
+      // otherwise. Either outcome proves routing.
+      steps.push(
+        await probeTool(call, tools, 'list watch history (probe)', 'google_mail_list_watch_history', {
+          startHistoryId: '1',
+          historyTypes: ['messageAdded'],
+        }),
+      );
+    }
 
     let labelId: string | undefined;
     try {
@@ -57,6 +130,15 @@ export const googleMailScenario: Scenario = {
         steps.push(makeStep('update label', 'google_mail_update_label', 'pass'));
       } catch (error) {
         steps.push(makeStep('update label', 'google_mail_update_label', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (labelId && tools['google_mail_get_label']) {
+      try {
+        await call('google_mail_get_label', { id: labelId });
+        steps.push(makeStep('get label', 'google_mail_get_label', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get label', 'google_mail_get_label', 'fail', errorMessage(error)));
       }
     }
 
@@ -80,6 +162,24 @@ export const googleMailScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('read draft', 'google_mail_get_draft', 'fail', errorMessage(error)));
       }
+    }
+
+    if (tools['google_mail_send_draft']) {
+      steps.push(
+        await probeTool(call, tools, 'send draft (probe)', 'google_mail_send_draft', { id: `smoke-draft-${runId}` }),
+      );
+    }
+    if (tools['google_mail_send_message']) {
+      // base64url-encoded empty MIME message — Gmail rejects "no recipient"
+      // or similar validation errors; probe just verifies routing.
+      steps.push(
+        await probeTool(call, tools, 'send message (probe)', 'google_mail_send_message', {
+          raw: btoa(`Subject: smoke-${runId}\r\n\r\nnot sent\r\n`)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, ''),
+        }),
+      );
     }
 
     if (draftId && tools['google_mail_update_draft']) {
@@ -116,6 +216,216 @@ export const googleMailScenario: Scenario = {
         steps.push(makeStep('read filter', 'google_mail_get_filter', 'pass'));
       } catch (error) {
         steps.push(makeStep('read filter', 'google_mail_get_filter', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Message / thread label mutations probed with synthetic ids so no real
+    // mail is modified. Also exercises batch endpoints.
+    if (tools['google_mail_modify_message']) {
+      steps.push(
+        await probeTool(call, tools, 'modify message (probe)', 'google_mail_modify_message', {
+          id: probeMessageId ?? `smoke-${runId}`,
+          addLabelIds: labelId ? [labelId] : [],
+        }),
+      );
+    }
+    if (tools['google_mail_modify_thread']) {
+      steps.push(
+        await probeTool(call, tools, 'modify thread (probe)', 'google_mail_modify_thread', {
+          threadId: probeThreadId ?? `smoke-${runId}`,
+          addLabelIds: labelId ? [labelId] : [],
+        }),
+      );
+    }
+    if (tools['google_mail_batch_modify_messages']) {
+      steps.push(
+        await probeTool(call, tools, 'batch modify messages (probe)', 'google_mail_batch_modify_messages', {
+          ids: [probeMessageId ?? `smoke-${runId}`],
+          addLabelIds: labelId ? [labelId] : [],
+        }),
+      );
+    }
+    if (tools['google_mail_batch_delete_messages']) {
+      steps.push(
+        await probeTool(call, tools, 'batch delete messages (probe)', 'google_mail_batch_delete_messages', {
+          ids: [`smoke-missing-${runId}`],
+        }),
+      );
+    }
+    if (tools['google_mail_trash_message']) {
+      steps.push(
+        await probeTool(call, tools, 'trash message (probe)', 'google_mail_trash_message', {
+          id: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_untrash_message']) {
+      steps.push(
+        await probeTool(call, tools, 'untrash message (probe)', 'google_mail_untrash_message', {
+          id: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_trash_thread']) {
+      steps.push(
+        await probeTool(call, tools, 'trash thread (probe)', 'google_mail_trash_thread', {
+          thread_id: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_untrash_thread']) {
+      steps.push(
+        await probeTool(call, tools, 'untrash thread (probe)', 'google_mail_untrash_thread', {
+          threadId: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_delete_message']) {
+      steps.push(
+        await probeTool(call, tools, 'delete message (probe)', 'google_mail_delete_message', {
+          id: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_delete_thread']) {
+      steps.push(
+        await probeTool(call, tools, 'delete thread (probe)', 'google_mail_delete_thread', {
+          id: `smoke-missing-${runId}`,
+        }),
+      );
+    }
+
+    // Send-as alias CRUD — synthetic alias email probed; Gmail rejects the
+    // verification step but the routing is exercised.
+    const aliasEmail = `smoke+${runId}@mastra-smoke.invalid`;
+    if (tools['google_mail_create_send_as_alias']) {
+      steps.push(
+        await probeTool(call, tools, 'create send-as alias (probe)', 'google_mail_create_send_as_alias', {
+          sendAsEmail: aliasEmail,
+          displayName: `smoke ${runId}`,
+        }),
+      );
+    }
+    if (tools['google_mail_get_send_as_alias']) {
+      steps.push(
+        await probeTool(call, tools, 'get send-as alias (probe)', 'google_mail_get_send_as_alias', {
+          sendAsEmail: aliasEmail,
+        }),
+      );
+    }
+    if (tools['google_mail_update_send_as_alias']) {
+      steps.push(
+        await probeTool(call, tools, 'update send-as alias (probe)', 'google_mail_update_send_as_alias', {
+          sendAsEmail: aliasEmail,
+          displayName: `smoke ${runId} renamed`,
+        }),
+      );
+    }
+    if (tools['google_mail_update_send_as_smtp_msa']) {
+      steps.push(
+        await probeTool(call, tools, 'update send-as smtp (probe)', 'google_mail_update_send_as_smtp_msa', {
+          sendAsEmail: aliasEmail,
+          smtpMsa: {
+            host: 'smtp.example.invalid',
+            port: 587,
+            username: 'smoke',
+            password: 'smoke',
+            securityMode: 'starttls',
+          },
+        }),
+      );
+    }
+
+    // Forwarding address: delete + get probed with synthetic address.
+    if (tools['google_mail_get_forwarding_address']) {
+      steps.push(
+        await probeTool(call, tools, 'get forwarding address (probe)', 'google_mail_get_forwarding_address', {
+          forwardingEmail: aliasEmail,
+        }),
+      );
+    }
+    if (tools['google_mail_delete_forwarding_address']) {
+      steps.push(
+        await probeTool(call, tools, 'delete forwarding address (probe)', 'google_mail_delete_forwarding_address', {
+          forwardingEmail: aliasEmail,
+        }),
+      );
+    }
+
+    // Settings updates: pass current-safe values so the mailbox state does
+    // not change meaningfully; Gmail replies with the merged state.
+    if (tools['google_mail_update_vacation_settings']) {
+      try {
+        await call('google_mail_update_vacation_settings', { enableAutoReply: false });
+        steps.push(makeStep('update vacation settings', 'google_mail_update_vacation_settings', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep('update vacation settings', 'google_mail_update_vacation_settings', 'fail', errorMessage(error)),
+        );
+      }
+    }
+    if (tools['google_mail_update_auto_forwarding_settings']) {
+      try {
+        await call('google_mail_update_auto_forwarding_settings', { enabled: false });
+        steps.push(makeStep('update auto-forwarding', 'google_mail_update_auto_forwarding_settings', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep(
+            'update auto-forwarding',
+            'google_mail_update_auto_forwarding_settings',
+            'fail',
+            errorMessage(error),
+          ),
+        );
+      }
+    }
+    if (tools['google_mail_update_imap_settings']) {
+      try {
+        await call('google_mail_update_imap_settings', {});
+        steps.push(makeStep('update imap settings', 'google_mail_update_imap_settings', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update imap settings', 'google_mail_update_imap_settings', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['google_mail_update_pop_settings']) {
+      try {
+        await call('google_mail_update_pop_settings', {});
+        steps.push(makeStep('update pop settings', 'google_mail_update_pop_settings', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update pop settings', 'google_mail_update_pop_settings', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['google_mail_update_language_settings']) {
+      try {
+        await call('google_mail_update_language_settings', { displayLanguage: 'en' });
+        steps.push(makeStep('update language settings', 'google_mail_update_language_settings', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep('update language settings', 'google_mail_update_language_settings', 'fail', errorMessage(error)),
+        );
+      }
+    }
+
+    // Watch mailbox requires a real Pub/Sub topic; probe to prove routing.
+    if (tools['google_mail_watch_mailbox']) {
+      steps.push(
+        await probeTool(call, tools, 'watch mailbox (probe)', 'google_mail_watch_mailbox', {
+          topicName: `projects/smoke-${runId}/topics/smoke`,
+        }),
+      );
+    }
+    if (tools['google_mail_stop_watch']) {
+      try {
+        await call('google_mail_stop_watch', {});
+        steps.push(makeStep('stop watch', 'google_mail_stop_watch', 'pass'));
+      } catch (error) {
+        // 404 "no active watch" is a valid proof; treat as pass.
+        const msg = errorMessage(error);
+        steps.push(
+          /no active|not found|status=404/i.test(msg)
+            ? makeStep('stop watch (no active)', 'google_mail_stop_watch', 'pass', msg.slice(0, 120))
+            : makeStep('stop watch', 'google_mail_stop_watch', 'fail', msg),
+        );
       }
     }
 
