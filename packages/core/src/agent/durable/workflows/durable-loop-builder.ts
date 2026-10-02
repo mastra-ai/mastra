@@ -15,6 +15,7 @@ import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
+import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -698,7 +699,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             toolResults: (lastStep?.toolResults ?? []).map((tr: any) => ({
               id: tr.toolCallId || tr.id || '',
               name: tr.toolName || tr.name || '',
-              result: tr.result,
+              result: normalizeToolOutput(tr.result).output,
               error: tr.error,
             })),
             isFinal,

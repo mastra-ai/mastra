@@ -950,8 +950,12 @@ export class AIV5Adapter {
 
         const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
           const normalized = normalizeToolOutput(toolResultPart.output);
-          matchingCall.state = 'result';
-          matchingCall.result = normalized.isError ? toolResultPart.output : normalized.output;
+          matchingCall.state = normalized.isError ? 'output-error' : 'result';
+          matchingCall.result = normalized.output;
+          if (normalized.isError) {
+            matchingCall.errorText =
+              typeof normalized.output === 'string' ? normalized.output : JSON.stringify(normalized.output);
+          }
         };
 
         // When the matching tool-call isn't in this same model message (e.g. the

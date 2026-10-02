@@ -79,8 +79,31 @@ describe('AIV5 model tool output containing a value key', () => {
   it.each([
     ['error-text', 'failed'],
     ['error-json', { code: 'E_FAIL' }],
-  ] as const)('preserves a documented %s error wrapper', (type, value) => {
-    const errorOutput = { type, value };
-    expectStoredOutput(fromModelMessage(errorOutput), errorOutput);
+  ] as const)('stores a documented %s wrapper as an errored invocation', (type, value) => {
+    const message = fromModelMessage({ type, value });
+    const errorText = typeof value === 'string' ? value : JSON.stringify(value);
+
+    expect(message.content.toolInvocations?.[0]).toMatchObject({
+      state: 'output-error',
+      result: value,
+      errorText,
+    });
+
+    const part = message.content.parts.find(
+      (candidate): candidate is MastraToolInvocationPart => candidate.type === 'tool-invocation',
+    );
+    expect(part?.toolInvocation).toMatchObject({
+      state: 'output-error',
+      result: value,
+      errorText,
+    });
+
+    expect(AIV5Adapter.toUIMessage(message).parts).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-lookup',
+        state: 'output-error',
+        errorText,
+      }),
+    );
   });
 });
