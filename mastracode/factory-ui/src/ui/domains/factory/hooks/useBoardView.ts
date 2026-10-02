@@ -109,6 +109,8 @@ export function useBoardView({
       if (applied) savedViews.change({ settings: { ...applied.settings, sort: next } });
       else replaceParams(boardSortParams(searchParams, next));
     },
-    setLayout: (next: BoardLayout) => savedViews.change({ settings: { ...settings, layout: next } }),
+    setLayout: (next: BoardLayout) => {
+      if (applied) savedViews.change({ settings: { ...applied.settings, layout: next } });
+    },
   };
 }
