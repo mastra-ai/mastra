@@ -315,6 +315,62 @@ function collectThreadRelationCollections(
   return collections;
 }
 
+// Root columns with planner statistics. Computed fields (status, durationMs, metadata.*) and tags
+// are excluded: their default selectivity estimate is low enough to flip the latest-root anti-join
+// into a nested loop that probes every partition per root, which is far slower than filtering later.
+const ROOT_PUSHDOWN_FIELDS = new Set<string>([
+  'traceId',
+  'threadId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
+  'startedAt',
+  'endedAt',
+  'entityName',
+  'entityType',
+  'environment',
+]);
+
+function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
+  if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
+  return ROOT_PUSHDOWN_FIELDS.has(predicate.field);
+}
+
+/**
+ * Splits `where` into top-level AND conjuncts that can filter `root_scope` directly and the rest,
+ * which is applied in `candidates`. The latest-root check compares against the unfiltered span
+ * table, so filtering a root earlier cannot change which root is current, but it stops long windows
+ * from materializing every root (and running the latest-root check on it) before filtering.
+ */
+function splitRootPredicate(predicate: TrustedTraceQueryPredicate | undefined): {
+  root: TrustedTraceQueryPredicate[];
+  rest: TrustedTraceQueryPredicate[];
+} {
+  if (!predicate) return { root: [], rest: [] };
+  const conjuncts = predicate.type === 'boolean' && predicate.operator === 'and' ? predicate.args : [predicate];
+  const root: TrustedTraceQueryPredicate[] = [];
+  const rest: TrustedTraceQueryPredicate[] = [];
+  for (const conjunct of conjuncts) {
+    (isRootPushdownPredicate(conjunct) ? root : rest).push(conjunct);
+  }
+  return { root, rest };
+}
+
+function compileConjunction(predicates: TrustedTraceQueryPredicate[], values: unknown[]): string {
+  if (predicates.length === 0) return 'TRUE';
+  return predicates
+    .map(predicate => {
+      const compiled = compilePredicate(predicate, values.length + 1);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    })
+    .join(' AND ');
+}
+
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset: number): SqlFragment {
   if (predicate.type === 'relation') {
     const compiled =
@@ -400,6 +456,7 @@ function compilePostgresTraceScope(
   relationCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+  rootPredicates: TrustedTraceQueryPredicate[] = [],
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
@@ -437,6 +494,7 @@ function compilePostgresTraceScope(
     ...deltaConditions,
     ...scopeConditions.map(condition => `r.${condition}`),
   ];
+  if (rootPredicates.length > 0) rootConditions.push(compileConjunction(rootPredicates, values));
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -533,20 +591,17 @@ export function compilePostgresTraceCandidates(
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
 ): { ctes: string[]; values: unknown[] } {
   const relationCollections = collectRelationCollections(selection.where);
+  const { root, rest } = splitRootPredicate(selection.where);
   const { ctes, values } = compilePostgresTraceScope(
     schema,
     selection,
     relationCollections,
     selection.scope,
     deltaWindow,
+    root,
   );
 
-  let predicateSql = 'TRUE';
-  if (selection.where) {
-    const predicate = compilePredicate(selection.where, values.length + 1);
-    predicateSql = predicate.sql;
-    values.push(...predicate.values);
-  }
+  const predicateSql = compileConjunction(rest, values);
   ctes.push(`candidates AS (
     SELECT ${columns}
     FROM root_scope r

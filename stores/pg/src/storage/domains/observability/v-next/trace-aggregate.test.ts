@@ -37,6 +37,37 @@ describe('Postgres trace aggregate compiler', () => {
     expect(compiled.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'prod']);
   });
 
+  it('filters root_scope by plain root columns and leaves computed or related predicates to candidates', () => {
+    const compiled = compilePostgresTraceAggregate(
+      'custom',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: 'agent-a' } },
+            { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+            { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } },
+            { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'lookup' } } } },
+          ],
+        },
+      }),
+    );
+
+    const rootScope = compiled.text.slice(
+      compiled.text.indexOf('root_scope AS'),
+      compiled.text.indexOf('current_spans AS'),
+    );
+    const candidates = compiled.text.slice(compiled.text.indexOf('candidates AS'), compiled.text.indexOf('facts AS'));
+    expect(rootScope).toContain('r."entityName" IS NOT DISTINCT FROM $3');
+    expect(rootScope).not.toContain(`'error'`);
+    expect(rootScope).not.toContain('metadataSearch');
+    expect(candidates).not.toContain('r."entityName"');
+    expect(candidates).toContain(`THEN 'error'`);
+    expect(candidates).toContain('metadataSearch');
+    expect(candidates).toContain('FROM current_spans s');
+    expect(compiled.values.slice(0, 3)).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'agent-a']);
+  });
+
   it('parameterizes metadata keys and having literals', () => {
     const compiled = compilePostgresTraceAggregate(
       'public',
