@@ -663,7 +663,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     initialCleanup();
   });
 
-  it('resumes after cached history and gives the autonomous continuation a fresh run identity', async () => {
+  it('resumes after cached history and streams an autonomous continuation exactly once', async () => {
     const store = new InMemoryStore();
     const approvalTool = createTool({
       id: 'approvalTool',

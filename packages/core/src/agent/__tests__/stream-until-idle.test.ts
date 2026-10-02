@@ -1,9 +1,11 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { buildContinuationOpts } from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { MockStore } from '../../storage';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 /**
@@ -36,6 +38,20 @@ function textResponse(text: string) {
       {
         type: 'finish',
         finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      },
+    ]);
+}
+
+function toolCallResponse(toolName: string) {
+  return () =>
+    convertArrayToReadableStream([
+      { type: 'stream-start', warnings: [] },
+      { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+      { type: 'tool-call', toolCallId: 'approval', toolName, input: '{}' },
+      {
+        type: 'finish',
+        finishReason: 'tool-calls',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
       },
     ]);
@@ -179,6 +195,89 @@ describe('Agent.streamUntilIdle', () => {
     expect(streamSpy).toHaveBeenCalledTimes(2);
     expect(streamSpy.mock.calls[0]?.[1]).toMatchObject({ runId: 'caller-run-id' });
     expect(streamSpy.mock.calls[1]?.[1]).not.toHaveProperty('runId');
+  });
+
+  it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([
+      toolCallResponse('approval'),
+      textResponse('resumed response'),
+      textResponse('continuation response'),
+    ]);
+    const agent = new Agent({
+      id: 'resume-run-id-options',
+      name: 'resume-run-id-options',
+      instructions: 'test',
+      model,
+      memory,
+      tools: {
+        approval: createTool({
+          id: 'approval',
+          description: 'Request approval',
+          inputSchema: z.object({}),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ approved: z.boolean() }),
+          execute: async (_, context) => {
+            if (!context?.agent?.resumeData) return context?.agent?.suspend({ question: 'Continue?' });
+            return context.agent.resumeData;
+          },
+        }),
+      },
+    });
+    mastra.addAgent(agent, 'resume-run-id-options');
+
+    const memoryOptions = { thread: 'resume-run-id-thread', resource: 'user-1' };
+    const initial = await agent.stream('start', {
+      runId: 'resume-caller-run-id',
+      memory: memoryOptions,
+    });
+    const initialChunks = await drain(initial.fullStream as ReadableStream<any>);
+    expect(initial.runId).toBe('resume-caller-run-id');
+    expect(initialChunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+
+    const streamSpy = vi.spyOn(agent, 'stream');
+    const resumed = await agent.resumeStream(
+      { approved: true },
+      {
+        runId: initial.runId,
+        toolCallId: 'approval',
+        memory: memoryOptions,
+        untilIdle: true,
+      },
+    );
+
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: string) =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'resume-task-1',
+        toolName: 'dummy',
+        toolCallId: 'resume-task-1',
+        runId: 'background-run',
+        agentId: 'resume-run-id-options',
+        threadId: 'resume-run-id-thread',
+        resourceId: 'user-1',
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+    const resumedChunks = await drain(resumed.fullStream as ReadableStream<any>);
+
+    expect(resumedChunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+      'resumed response',
+      'continuation response',
+    ]);
+    expect(resumedChunks.some(chunk => chunk.type === 'tool-call')).toBe(false);
+    expect(resumedChunks.filter(chunk => chunk.type === 'finish')).toHaveLength(2);
+    expect(streamSpy).toHaveBeenCalledTimes(1);
+    expect(streamSpy.mock.calls[0]?.[1]).not.toHaveProperty('runId');
   });
 
   it.each([false, true])(
