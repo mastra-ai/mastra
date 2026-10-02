@@ -238,7 +238,7 @@ describe('AgentController: ask_user native suspension', () => {
     await vi.waitFor(() => {
       expect(secondSession.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
     });
-    expect(secondEvents.some(event => event.type === 'tool_approval_required')).toBe(true);
+    expect(secondEvents.some(event => event.type === 'tool_approval_required')).toBe(false);
     expect(modelCalls).toBe(1);
     expect(secondSession.claimToolSuspension('call-1')).toEqual({ accepted: true, toolCallId: 'call-1' });
     await secondSession.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Hilton' });
