@@ -32,6 +32,7 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
+import { formatStandardSchemaIssues } from './format-schema-issues';
 
 import type { SuspendOptions } from '../../workflows';
 import { markBuilderValidatedInput } from '../builder-validation-context';
@@ -1098,7 +1099,7 @@ export class CoreToolBuilder extends MastraBase {
                   if ('issues' in r && r.issues) {
                     return {
                       success: false as const,
-                      error: new Error(r.issues.map((i: any) => i.message).join(', ')),
+                      error: new Error(formatStandardSchemaIssues(r.issues)),
                     };
                   }
                   return { success: true as const, value: (r as { value: unknown }).value };
@@ -1109,7 +1110,7 @@ export class CoreToolBuilder extends MastraBase {
               if ('issues' in result && result.issues) {
                 return {
                   success: false as const,
-                  error: new Error(result.issues.map((i: any) => i.message).join(', ')),
+                  error: new Error(formatStandardSchemaIssues(result.issues)),
                 };
               }
               return { success: true as const, value: (result as { value: unknown }).value };
