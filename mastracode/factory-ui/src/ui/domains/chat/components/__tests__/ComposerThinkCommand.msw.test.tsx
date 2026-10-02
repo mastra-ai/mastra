@@ -27,7 +27,7 @@ function useThinkingHandlers({
         controllerId: 'code',
         resourceId: params.resourceId,
         modeId: 'build',
-        modelId: 'openai/gpt-4o-mini',
+        modelId: 'openai/gpt-5.4-mini',
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
       }),

@@ -238,7 +238,14 @@ export function stubPreparingSession({
           { headers: { 'content-type': 'text/event-stream' } },
         ),
     ),
-    http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+    http.put(`${API}/sessions/:resourceId/state`, async ({ request }) => {
+      const body = await request.json();
+      const state = typeof body === 'object' && body !== null && 'state' in body ? body.state : undefined;
+      if (typeof state === 'object' && state !== null && 'thinkingLevel' in state) {
+        result.operations.push(`thinking:${String(state.thinkingLevel)}`);
+      }
+      return HttpResponse.json({});
+    }),
     http.post(`${API}/sessions/:resourceId/mode`, async ({ request }) => {
       const body = (await request.json()) as { modeId?: string };
       result.operations.push(`mode:${body.modeId}`);

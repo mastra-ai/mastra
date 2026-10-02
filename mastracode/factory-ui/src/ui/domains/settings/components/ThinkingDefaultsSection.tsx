@@ -1,7 +1,7 @@
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { useThinkingConfigQuery, useUpdateThinkingMutation } from '../../../../hooks/use-thinking';
-import { ThinkingLevelPicker } from './SettingsFields';
+import { ThinkingDefaultSlider } from './SettingsFields';
 
 function useThinkingSection() {
   const configQuery = useThinkingConfigQuery();
@@ -33,7 +33,7 @@ export function BaseThinkingSection() {
         </>
       }
     >
-      <ThinkingLevelPicker
+      <ThinkingDefaultSlider
         ariaLabel="Base thinking level"
         value={config?.globalDefault ?? 'off'}
         disabled={disabled}
@@ -55,7 +55,7 @@ export function ModeThinkingDefaultsSection() {
           label={`${mode[0]?.toUpperCase()}${mode.slice(1)} mode`}
           description={mode === writtenMode ? <RowError error={update.error} /> : undefined}
         >
-          <ThinkingLevelPicker
+          <ThinkingDefaultSlider
             ariaLabel={`${mode} mode thinking level`}
             value={config?.modeDefaults[mode]}
             inherited={config?.globalDefault ?? 'off'}

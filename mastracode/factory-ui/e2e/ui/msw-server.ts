@@ -25,6 +25,16 @@ export const server = setupServer(
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
+  // Ambient thinking defaults (read by the composer thinking picker); defaults tests override it.
+  http.get('*/web/config/thinking', () =>
+    HttpResponse.json({
+      levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+      globalDefault: 'off',
+      modeDefaults: {},
+      modes: [],
+      editable: true,
+    }),
+  ),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),

@@ -36,7 +36,7 @@ import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
-import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
+import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
@@ -95,9 +95,7 @@ export function SettingsPanel() {
       )}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && (
-        <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-      )}
+      {section === 'models' && <ModelsSettingsSection models={models} />}
       {section === 'memory' && (
         <MemorySettingsSection
           factoryId={factoryId}
@@ -121,8 +119,6 @@ export function SettingsPanel() {
 
 interface ModelsSettingsSectionProps {
   models: AvailableModelOption[];
-  settings: AgentControllerSessionSettings | null;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
 }
 
 interface MemorySettingsSectionProps {
@@ -183,7 +179,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
   );
 }
 
-function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSettingsSectionProps) {
+function ModelsSettingsSection({ models }: ModelsSettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
   const anyConnected =
@@ -228,15 +224,6 @@ function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSet
         <SettingsContainer>
           <BaseThinkingSection />
           <ModeThinkingDefaultsSection />
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection
-        scope="factory"
-        title="Chat defaults"
-        description="Applied to chats opened from this Factory, and shared with everyone working in it."
-      >
-        <SettingsContainer>
-          <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
         </SettingsContainer>
       </SettingsSubsection>
       <SettingsSubsection

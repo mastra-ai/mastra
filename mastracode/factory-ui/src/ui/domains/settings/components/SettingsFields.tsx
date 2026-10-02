@@ -1,6 +1,7 @@
-import type { AgentControllerSessionSettings } from '@mastra/client-js';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { ThinkingLevelSlider } from '@mastra/playground-ui/components/ThinkingLevel';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Volume2Icon, VolumeXIcon } from 'lucide-react';
@@ -8,71 +9,25 @@ import { useState } from 'react';
 
 import { DONE_SOUND_OPTIONS } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
+import { THINKING_LEVEL_OPTIONS } from '../services/thinkingLevels';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 
 const AUDIBLE_SOUNDS = DONE_SOUND_OPTIONS.filter(option => option.value !== 'none');
 
-const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-  { value: 'max', label: 'Max' },
-];
-
-interface ThinkingLevelPickerProps {
-  value?: ThinkingLevel;
+interface ThinkingDefaultSliderProps {
+  value?: ThinkingLevelSetting;
   ariaLabel: string;
   disabled?: boolean;
-  /** When given, an absent `value` means the row follows this level instead of setting its own. */
-  inherited?: ThinkingLevel;
-  /** Returning the write lets the thumb hold the dropped stop until it lands. */
-  onChange: (value?: ThinkingLevel) => void | Promise<unknown>;
+  /** An absent `value` then means the row follows this level. */
+  inherited?: ThinkingLevelSetting;
+  onChange: (value?: ThinkingLevelSetting) => void | Promise<unknown>;
 }
 
-/**
- * A slider, because a thinking level is a ramp: drag the thumb along the stops,
- * the fill shows how far up the scale it sits, and the level only commits on
- * release so a drag across the whole scale is one save. Colour is the cost
- * signal - muted at Off, plain through High, warning once the bill turns.
- */
-export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onChange }: ThinkingLevelPickerProps) {
-  const [dragged, setDragged] = useState<number>();
-  const [held, setHeld] = useState<{ stop: number }>();
-  const last = THINKING_LEVELS.length - 1;
-
-  const indexOf = (level: ThinkingLevel) => THINKING_LEVELS.findIndex(entry => entry.value === level);
+export function ThinkingDefaultSlider({ value, ariaLabel, disabled, inherited, onChange }: ThinkingDefaultSliderProps) {
   const inheriting = inherited !== undefined && value === undefined;
-  const settled = indexOf(value ?? inherited ?? 'off');
-  const pending = dragged ?? held?.stop;
-  const shown = pending ?? settled;
-  const label = THINKING_LEVELS[shown]?.label ?? '';
-  const tone = shown >= last - 1 ? 'text-warning-foreground' : shown === 0 ? 'text-placeholder' : 'text-foreground';
-  const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
-  const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
-
-  // Holding the drop until the write settles: clearing it first shows the old
-  // stop for a frame, then the new one — two jumps for one change.
-  const commit = async () => {
-    const stop = dragged;
-    setDragged(undefined);
-    if (stop === undefined || stop === settled) return;
-    const level = THINKING_LEVELS[stop];
-    if (!level) return;
-    const release = { stop };
-    setHeld(release);
-    try {
-      await onChange(level.value);
-    } finally {
-      setHeld(current => (current === release ? undefined : current));
-    }
-  };
 
   return (
-    <div className={cn('flex items-center gap-2', tone, disabled && 'pointer-events-none opacity-50')}>
+    <div className="flex items-center gap-2">
       <span className="flex w-32 shrink-0 justify-end">
         {inherited !== undefined &&
           (inheriting ? (
@@ -85,52 +40,14 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
             </Button>
           ))}
       </span>
-
-      <Txt as="span" variant="caption" className="w-20 shrink-0 text-right">
-        {label}
-      </Txt>
-
-      <span className="bg-fill relative flex h-7 w-36 items-center rounded-lg">
-        <span
-          aria-hidden
-          className="bg-fill-strong absolute inset-y-0 left-0 rounded-lg"
-          style={{ width: `calc(${travelled} + 6px)` }}
-        />
-        <span aria-hidden className="pointer-events-none absolute inset-x-[6.5px] flex justify-between">
-          {THINKING_LEVELS.map(level => (
-            <span key={level.value} className="size-[3px] rounded-full bg-current/40" />
-          ))}
-        </span>
-        <span
-          aria-hidden
-          className="absolute h-4 w-[3px] -translate-x-1/2 rounded-full bg-current"
-          style={{ left: travelled }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={last}
-          step={1}
-          value={shown}
-          aria-label={ariaLabel}
-          aria-valuetext={valueText}
-          disabled={disabled}
-          className={cn(
-            'relative h-7 w-full cursor-pointer appearance-none rounded-lg bg-transparent',
-            focusRing,
-            '[&::-webkit-slider-runnable-track]:h-7 [&::-webkit-slider-runnable-track]:bg-transparent',
-            '[&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
-            '[&::-webkit-slider-thumb]:bg-transparent',
-            '[&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:border-0',
-            '[&::-moz-range-thumb]:bg-transparent',
-          )}
-          onChange={event => setDragged(Number(event.target.value))}
-          onPointerUp={() => void commit()}
-          onPointerCancel={() => void commit()}
-          onKeyUp={() => void commit()}
-          onBlur={() => void commit()}
-        />
-      </span>
+      <ThinkingLevelSlider
+        options={THINKING_LEVEL_OPTIONS}
+        value={value ?? inherited ?? 'off'}
+        ariaLabel={ariaLabel}
+        disabled={disabled}
+        valueTextSuffix={inheriting ? ' \u00b7 follows base' : undefined}
+        onChange={onChange}
+      />
     </div>
   );
 }
