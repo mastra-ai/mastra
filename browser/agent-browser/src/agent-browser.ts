@@ -1756,6 +1756,18 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
+   * Drop every manually attached WebMCP tool for the given thread. Called
+   * automatically by {@link prepareStep} in `toolDiscovery: 'manual'` mode
+   * on navigation so stale tools from a prior page don't survive onto a new
+   * one. Public so callers driving the browser outside an agent run can
+   * reset the attached set themselves.
+   */
+  clearAttachedWebMcpTools(threadId?: string): void {
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    this.manualAttached.delete(key);
+  }
+
+  /**
    * Attach WebMCP tools from the current page to the agent's toolset.
    *
    * Lists the tools the current page exposes, filters to `input.names` when

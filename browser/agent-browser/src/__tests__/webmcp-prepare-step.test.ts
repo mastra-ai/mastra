@@ -244,6 +244,22 @@ describe('browser.prepareStep (manual mode)', () => {
     const callArgs = mockPage.evaluate.mock.calls.at(-1);
     expect(callArgs?.[1]).toMatchObject({ name: 'add_to_cart', args: { itemId: 'abc' } });
   });
+
+  it('drops the attached set on navigation so stale tools from the old page do not survive', async () => {
+    // Attach on page A.
+    mockPage.url.mockReturnValue('https://shop.test/a');
+    mockPage.evaluate.mockResolvedValueOnce(SHOP_TOOLS);
+    await browser.attachWebMcpTools();
+    const beforeNav = (await browser.prepareStep({ stepNumber: 1, tools: {} })) as { tools: Record<string, unknown> };
+    expect(Object.keys(beforeNav.tools).sort()).toEqual(['page_add_to_cart', 'page_get_price']);
+
+    // Agent navigates. Next prepareStep observes the URL change and clears
+    // the attached set — no page_* tools surface until the agent re-attaches.
+    mockPage.url.mockReturnValue('https://shop.test/b');
+    const afterNav = await browser.prepareStep({ stepNumber: 2, tools: { browser_goto: {} } });
+    expect(afterNav).toBeUndefined();
+    expect(browser.getAttachedWebMcpTools()).toEqual([]);
+  });
 });
 
 describe('browser.prepareStep thread isolation', () => {

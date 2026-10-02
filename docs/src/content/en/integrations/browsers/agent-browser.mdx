@@ -124,6 +124,8 @@ If you prefer to compose things yourself, `browser.prepareStep` is a stable prop
 
   The attached tools show up on the next step. Manual mode keeps the prompt small on pages with many tools or when the agent only needs a few.
 
+  Attached tools are dropped on navigation. When the page URL changes the attached set is cleared, matching auto mode's behavior of only ever surfacing tools the current page exposes. The agent re-attaches by calling `browser_webmcp_discover` again on the new page.
+
 Each step the tool list is memoized by the current page URL, so repeat steps on the same page produce the same tool list bytes. Prompt caches are prefix-based: changing the tool list invalidates everything from that point on, so navigation (not every step) is what busts the cache.
 
 ### Protocols

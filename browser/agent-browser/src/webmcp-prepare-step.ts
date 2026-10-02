@@ -100,7 +100,14 @@ export function buildWebMcpPrepareStep(browser: AgentBrowser, config: WebMcpPrep
       }
       pageTools = cache.tools;
     } else {
-      // manual mode — only the tools the agent attached via the discover tool
+      // manual mode — only the tools the agent attached via the discover tool.
+      // On navigation, drop the attached set for this thread so stale tools
+      // from the previous page don't survive onto a new one (symmetric with
+      // auto mode, where the fresh page.list() replaces the toolset). The
+      // agent re-attaches by calling `browser_webmcp_discover` on the new page.
+      if (cache.url != null && cache.url !== url) {
+        browser.clearAttachedWebMcpTools(threadId);
+      }
       const attached = browser.getAttachedWebMcpTools(threadId);
       const attachedKey = `${url}\u0000${attached.map(t => t.id).join('\u0000')}`;
       if (cache.tools == null || cache.url !== url || cache.attachedKey !== attachedKey) {

@@ -28,7 +28,7 @@ Both supported protocols are auto-detected per page:
 Two discovery modes on `webmcp.toolDiscovery`:
 
 - `'auto'` (default): every tool the current page exposes is merged into the toolset each step. The agent can call `page_<tool>` immediately after `browser_goto` resolves.
-- `'manual'`: adds a `browser_webmcp_discover` tool. The agent calls it (optionally with `names: [...]` to limit the attach set) and the attached tools appear on the next step. Useful when the page offers many tools but the agent only needs a few.
+- `'manual'`: adds a `browser_webmcp_discover` tool. The agent calls it (optionally with `names: [...]` to limit the attach set) and the attached tools appear on the next step. The attached set is dropped on navigation, matching auto mode's "only the current page's tools" behavior — the agent re-attaches on the new page. Useful when the page offers many tools but the agent only needs a few.
 
 The tool list is memoized by `(threadId, current page URL)`, so repeat steps on the same page emit the same tool-list bytes and concurrent runs on different threads don't share each other's tool lists. Prompt caches are prefix-based: a changing tool list invalidates everything from that point, so navigation is what busts the cache, not every step.
 
