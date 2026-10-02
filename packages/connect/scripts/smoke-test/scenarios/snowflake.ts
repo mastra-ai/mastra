@@ -74,6 +74,44 @@ export const snowflakeScenario: Scenario = {
       }
     }
 
+    // Exercise cancel_statement. Submit a slow statement with timeout: 0
+    // so Snowflake returns the handle immediately while the query is still
+    // running in the background, then cancel it. SYSTEM$WAIT is a built-in
+    // procedure that sleeps for N seconds — perfect "cancel me" workload.
+    if (tools['snowflake_cancel_statement']) {
+      let cancelHandle: string | undefined;
+      try {
+        const slow = await call<{ statementHandle?: string; statement_handle?: string }>(
+          'snowflake_execute_statement',
+          { statement: 'CALL SYSTEM$WAIT(30)', timeout: 0 },
+        );
+        cancelHandle = slow.statementHandle ?? slow.statement_handle;
+      } catch (error) {
+        // If the async submission itself fails, fall back to cancelling the
+        // synchronous handle we already have. Snowflake will return a benign
+        // "statement already finished" response but the call still exercises
+        // the endpoint wiring.
+        cancelHandle = statementHandle;
+        steps.push(
+          makeStep(
+            'async submit for cancel',
+            'snowflake_execute_statement',
+            'fail',
+            `${errorMessage(error)} — falling back to completed-handle cancel`,
+          ),
+        );
+      }
+
+      if (cancelHandle) {
+        try {
+          await call('snowflake_cancel_statement', { statement_handle: cancelHandle });
+          steps.push(makeStep('cancel statement', 'snowflake_cancel_statement', 'pass'));
+        } catch (error) {
+          steps.push(makeStep('cancel statement', 'snowflake_cancel_statement', 'fail', errorMessage(error)));
+        }
+      }
+    }
+
     return steps;
   },
 };
