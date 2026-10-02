@@ -197,11 +197,14 @@ export const googleMailScenario: Scenario = {
     }
 
     let filterId: string | undefined;
-    if (tools['google_mail_create_filter']) {
+    if (tools['google_mail_create_filter'] && labelId) {
+      // Gmail rejects adding the INBOX system label via filters — only user
+      // labels can be ADDED (system labels like INBOX can only be REMOVED,
+      // which is the "skip inbox" action). Use the smoke-created label id.
       try {
         const filter = await call<{ id: string }>('google_mail_create_filter', {
           criteria: { from: `smoke+${runId}@mastra-smoke.invalid` },
-          action: { addLabelIds: ['INBOX'] },
+          action: { addLabelIds: [labelId] },
         });
         filterId = filter.id;
         steps.push(makeStep('create filter', 'google_mail_create_filter', 'pass', filterId));
