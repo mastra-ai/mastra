@@ -6,6 +6,7 @@ import { createClient } from '@libsql/client';
 import type { MemoryStorage, RunFence, WorkflowsStorage } from '@mastra/core/storage';
 import { isRunFenceConflictError } from '@mastra/core/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { resetConnectionsAfterBusy } from '../../shared/reset-after-busy-client';
 import { LibSQLStore } from '../index';
 import type { SqliteClient, SqliteTransaction } from './client';
 import { isLockError } from './utils';
@@ -14,25 +15,15 @@ import { isLockError } from './utils';
  * A client that counts statements refused because the database is locked,
  * and can stop the next fenced write right after its fence check.
  *
- * After a refusal it moves to fresh connections: libsql leaves the refused
- * statement open on its pooled connection until it is garbage collected, and
- * until then no transaction on that connection can commit ("SQL statements in
- * progress").
+ * It wraps its connections the way a store-owned local client is wrapped, so a
+ * refused statement doesn't leave its pooled connection unable to commit.
  */
 function instrumentedClient(url: string, busyTimeoutMs: number) {
-  const opened: SqliteClient[] = [];
-  const open = () => {
-    const opening = createClient({ url, timeout: busyTimeoutMs }) as unknown as SqliteClient;
-    opened.push(opening);
-    return opening;
-  };
-  let inner = open();
+  const inner = resetConnectionsAfterBusy(createClient({ url, timeout: busyTimeoutMs })) as unknown as SqliteClient;
   let pause: { reached: () => void; released: Promise<void> } | undefined;
   let lockedOut = 0;
   const refused = (error: unknown) => {
-    if (!isLockError(error)) return;
-    lockedOut++;
-    inner = open();
+    if (isLockError(error)) lockedOut++;
   };
 
   const client: SqliteClient = {
@@ -70,7 +61,7 @@ function instrumentedClient(url: string, busyTimeoutMs: number) {
         },
       };
     },
-    close: () => opened.forEach(c => c.close()),
+    close: () => inner.close(),
     get closed() {
       return inner.closed;
     },
