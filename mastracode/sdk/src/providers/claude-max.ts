@@ -12,7 +12,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { getAnthropicThinkingCapability, resolveThinkingLevelForModel } from '../thinking.js';
+import { getAnthropicThinkingCapability, resolveAnthropicThinkingLevel } from '../thinking.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
 import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import type { ThinkingLevel } from './openai-codex.js';
@@ -177,7 +177,7 @@ export function createAnthropicThinkingMiddleware(
   thinkingLevel?: ThinkingLevel,
 ): LanguageModelMiddleware | undefined {
   if (!thinkingLevel) return undefined;
-  const level = resolveThinkingLevelForModel(modelId, thinkingLevel);
+  const level = resolveAnthropicThinkingLevel(modelId, thinkingLevel);
   if (level === 'off') return undefined;
   const capability = getAnthropicThinkingCapability(modelId);
 

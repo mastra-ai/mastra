@@ -9,7 +9,7 @@
  */
 
 import type { LanguageModelMiddleware } from 'ai';
-import { getGoogleThinkingFamily, resolveThinkingLevelForModel } from '../thinking.js';
+import { getGoogleThinkingFamily, resolveGoogleThinkingLevel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 
 type GoogleThinkingConfig = { thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' } | { thinkingBudget: number };
@@ -33,7 +33,7 @@ export function resolveGoogleThinkingConfig(
 ): GoogleThinkingConfig | undefined {
   const family = getGoogleThinkingFamily(modelId);
   if (!level || family === 'none') return undefined;
-  const effective = resolveThinkingLevelForModel(modelId, level);
+  const effective = resolveGoogleThinkingLevel(modelId, level);
   if (!isGoogleThinkingLevel(effective)) return undefined;
   if (family === 'budget') return { thinkingBudget: GEMINI_25_BUDGETS[effective] };
   if (family === 'minimal-high') return { thinkingLevel: effective === 'low' ? 'minimal' : 'high' };

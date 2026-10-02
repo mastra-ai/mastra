@@ -1,3 +1,5 @@
+import { normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
+
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export type ThinkingLevelSource = 'mode-default' | 'global';
@@ -22,16 +24,14 @@ export type ThinkCommandAction =
   | { kind: 'invalid'; value: string; levels: readonly ThinkingLevelSetting[] };
 
 const GPT_VERSION_RE = /^gpt-(\d+)(?:\.(\d+))?/;
-const OPENAI_MODEL_RE = /^(?:gpt-|o\d|codex-)/;
+const OPENAI_NO_REASONING_RE = /^chatgpt-/;
 const OPENAI_LOW_HIGH_REASONING_RE = /^(?:o\d|codex-|gpt-oss)/;
 
-const CLAUDE_MODEL_RE = /^claude-/;
 const ANTHROPIC_XHIGH_EFFORT_RE = /claude-(?:opus-4-[78]|opus-5|sonnet-5|fable-5)/;
 const ANTHROPIC_ADAPTIVE_THINKING_RE = /claude-(?:sonnet-4-6|opus-4-[678]|opus-5|sonnet-5|fable-5)/;
 const ANTHROPIC_BUDGET_THINKING_RE = /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/;
 const ANTHROPIC_NO_THINKING_RE = /claude-(?:instant|v?2(?:[-.:]|$)|3(?:[-.]|$)|3-5)/;
 
-const GEMINI_MODEL_RE = /^gemini-/;
 const GEMINI_THINKING_LEVEL_RE = /^gemini-\d/;
 
 export type AnthropicThinkingCapability = 'adaptive' | 'budget' | 'none';
@@ -40,10 +40,6 @@ export type GoogleThinkingFamily = 'budget' | 'low-high' | 'minimal-high' | 'lev
 
 export function isThinkingLevelSetting(value: unknown): value is ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.some(level => level === value);
-}
-
-function bareModelId(modelId: string): string {
-  return modelId.slice(modelId.lastIndexOf('/') + 1);
 }
 
 export function getAnthropicThinkingCapability(modelId: string): AnthropicThinkingCapability {
@@ -55,7 +51,7 @@ export function getAnthropicThinkingCapability(modelId: string): AnthropicThinki
 }
 
 export function getGoogleThinkingFamily(modelId: string): GoogleThinkingFamily {
-  const id = bareModelId(modelId).toLowerCase();
+  const id = modelId.toLowerCase();
   if (id.startsWith('gemini-2.5')) return 'budget';
   // Only Gemini 3 Pro lacks `medium`; Gemini 3.1 Pro accepts it.
   if (id.startsWith('gemini-3-pro')) return 'low-high';
@@ -64,7 +60,7 @@ export function getGoogleThinkingFamily(modelId: string): GoogleThinkingFamily {
   return 'none';
 }
 
-function resolveAnthropicThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
+export function resolveAnthropicThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
   const capability = getAnthropicThinkingCapability(modelId);
   if (capability === 'none') return 'off';
   // Budget-era models spend the same token budget on xhigh and max.
@@ -72,7 +68,7 @@ function resolveAnthropicThinkingLevel(modelId: string, level: ThinkingLevelSett
   return level === 'xhigh' && !ANTHROPIC_XHIGH_EFFORT_RE.test(modelId) ? 'high' : level;
 }
 
-function resolveGoogleThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
+export function resolveGoogleThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
   const family = getGoogleThinkingFamily(modelId);
   if (family === 'none' || level === 'off') return 'off';
   const capped = level === 'xhigh' || level === 'max' ? 'high' : level;
@@ -84,10 +80,11 @@ function capAtHigh(level: ThinkingLevelSetting): ThinkingLevelSetting {
   return level === 'xhigh' || level === 'max' ? 'high' : level;
 }
 
-function resolveOpenAIThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
-  if (level === 'off') return 'off';
+export function resolveOpenAIThinkingLevel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
+  if (level === 'off' || OPENAI_NO_REASONING_RE.test(modelId)) return 'off';
+  if (OPENAI_LOW_HIGH_REASONING_RE.test(modelId)) return capAtHigh(level);
   const version = GPT_VERSION_RE.exec(modelId);
-  if (!version) return OPENAI_LOW_HIGH_REASONING_RE.test(modelId) ? capAtHigh(level) : 'off';
+  if (!version) return level === 'max' ? 'xhigh' : level;
   const major = Number(version[1]);
   const minor = Number(version[2] ?? 0);
   if (major < 5 || modelId.includes('-chat')) return 'off';
@@ -97,20 +94,26 @@ function resolveOpenAIThinkingLevel(modelId: string, level: ThinkingLevelSetting
 }
 
 /**
- * The level a request for `modelId` actually runs with: provider middleware maps
- * requested levels the model cannot honour onto the nearest one it can.
- * Models from unrecognised providers receive the requested level unchanged.
+ * The level a request for `provider/model` actually runs with, mirroring how the
+ * gateway routes by provider id. Providers without thinking support in the gateway
+ * receive the requested level unchanged.
  */
 export function resolveThinkingLevelForModel(modelId: string, level: ThinkingLevelSetting): ThinkingLevelSetting {
-  const bare = bareModelId(modelId);
-  if (CLAUDE_MODEL_RE.test(bare)) return resolveAnthropicThinkingLevel(bare, level);
-  if (GEMINI_MODEL_RE.test(bare)) return resolveGoogleThinkingLevel(bare, level);
-  if (OPENAI_MODEL_RE.test(bare)) return resolveOpenAIThinkingLevel(bare, level);
+  const routedModelId = stripMastraGatewayPrefix(modelId);
+  const separatorIndex = routedModelId.indexOf('/');
+  if (separatorIndex === -1) return level;
+  const providerId = routedModelId.slice(0, separatorIndex);
+  const providerModelId = routedModelId.slice(separatorIndex + 1);
+  if (providerId === 'anthropic')
+    return resolveAnthropicThinkingLevel(normalizeAnthropicModelId(providerModelId), level);
+  if (providerId === 'google') return resolveGoogleThinkingLevel(providerModelId, level);
+  if (providerId === 'openai') return resolveOpenAIThinkingLevel(providerModelId, level);
   return level;
 }
 
 export function supportsMaxReasoningEffort(modelId: string): boolean {
-  const match = GPT_VERSION_RE.exec(bareModelId(modelId));
+  const bareModelId = modelId.startsWith('openai/') ? modelId.slice('openai/'.length) : modelId;
+  const match = GPT_VERSION_RE.exec(bareModelId);
   if (!match) return false;
   const major = Number(match[1]);
   const minor = Number(match[2] ?? 0);

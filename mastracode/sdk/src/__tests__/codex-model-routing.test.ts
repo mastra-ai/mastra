@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { remapOpenAIModelForCodexOAuth } from '../agents/model.js';
 import { resolveCodexThinkingLevel, supportsMaxReasoningEffort } from '../providers/openai-codex.js';
-import { resolveThinkingLevelForModel } from '../thinking.js';
+import { resolveOpenAIThinkingLevel } from '../thinking.js';
 
 describe('remapOpenAIModelForCodexOAuth', () => {
   it('maps only explicit GPT-5 models to codex variants for OAuth', () => {
@@ -39,7 +39,7 @@ describe('resolveCodexThinkingLevel', () => {
   });
 
   it('leaves off alone outside Codex, where it omits the reasoning effort', () => {
-    expect(resolveThinkingLevelForModel('gpt-5.3-codex', 'off')).toBe('off');
+    expect(resolveOpenAIThinkingLevel('gpt-5.3-codex', 'off')).toBe('off');
   });
 
   it('runs models without reasoning at off whatever level was picked', () => {
