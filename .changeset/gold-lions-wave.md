@@ -12,12 +12,12 @@ observationalMemory: {
 }
 ```
 
-A multiplier `blockAfter` now scales a per-thread `messageTokens` override instead of the instance threshold. With `blockAfter: 1.2`, this thread blocks at 3,600 tokens:
+A multiplier `blockAfter` now scales a per-thread `messageTokens` override instead of the instance threshold. With `blockAfter: 1.2`, this thread blocks at 12,000 tokens:
 
 ```ts
 await memory.updateObservationalMemoryConfig({
   threadId,
-  config: { observation: { messageTokens: 3_000 } },
+  config: { observation: { messageTokens: 10_000 } },
 });
 ```
 

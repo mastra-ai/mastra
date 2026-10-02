@@ -83,36 +83,39 @@ export class ObservationStep {
     // ── Step 0: Activate buffered chunks ──────────────────────
     // activate() waits for an in-flight observation buffer op. In the threshold→blockAfter
     // band that wait must not block the turn, so leave activation to a later step.
+    // Reflection below still runs: it never waits on the observation op.
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     const deferStep0Activation =
       this.stepNumber === 0 &&
       isObservationBufferInFlight() &&
       (await om.getStatus({ threadId, resourceId, record: this.turn.record, messages: step0Messages }))
         .inAsyncObservationBand;
-    if (this.stepNumber === 0 && !deferStep0Activation) {
-      const activation = await om.activate({
-        threadId,
-        resourceId,
-        checkThreshold: true,
-        messages: step0Messages,
-        record: this.turn.record,
-        currentModel: this.turn.actorModelContext,
-        writer: this.turn.writer,
-        messageList,
-      });
-
-      this.turn.setRecord(activation.record);
-      if (activation.activated) {
-        activated = true;
-        if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(activation.activatedMessageIds);
-        }
-        await om.resetBufferingState({
+    if (this.stepNumber === 0) {
+      if (!deferStep0Activation) {
+        const activation = await om.activate({
           threadId,
           resourceId,
-          recordId: activation.record.id,
+          checkThreshold: true,
+          messages: step0Messages,
+          record: this.turn.record,
+          currentModel: this.turn.actorModelContext,
+          writer: this.turn.writer,
+          messageList,
         });
-        await this.turn.refreshRecord();
+
+        this.turn.setRecord(activation.record);
+        if (activation.activated) {
+          activated = true;
+          if (activation.activatedMessageIds?.length) {
+            messageList.removeByIds(activation.activatedMessageIds);
+          }
+          await om.resetBufferingState({
+            threadId,
+            resourceId,
+            recordId: activation.record.id,
+          });
+          await this.turn.refreshRecord();
+        }
       }
 
       // Check if reflection is needed (whether or not activation happened).
