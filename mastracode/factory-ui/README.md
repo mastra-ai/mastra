@@ -20,14 +20,6 @@ Cards on the **Work** and **Review** boards show the last person recorded in the
 
 Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
-## Board views
-
-The **Teammate** filter accepts several people at once, so one person's Factory account and GitHub login can be picked together. The sort icon before the view tabs opens the filed-card ordering menu; its tooltip names the current order and the menu checks the selected option. Changing the sort while a saved view is applied opens that view for editing.
-
-Saved views keep a board's filters, sort, and layout under a name. They are private: each is stored only in your browser, per factory and board, which the view editor states. The selected view is kept in the URL, so a refresh reopens it; on another browser the link falls back to **All cards**.
-
-The filter row under the tabs always shows the filters in use. Select the layers icon after the view tabs to open a new view: it starts with the current view's sort and layout and no filters. On **All cards**, once a filter is set, **Save as view** opens a new view with those filters instead. Changing a filter, the sort, or the layout on a saved view only applies until you decide: the row turns grey with the **List** and **Board** icons, the cross icon to cancel, and the check icon (**Save view**) to update the view, while its tab shows a dot for unsaved changes. **All cards** always shows stage columns; a **List** view shows one section per stage with a row per card. Click a row to open its details, right-click it for the card menu, or drag it onto another stage's section to move it. Hover another view's tab to preview its filters; click the active tab, or right-click any tab, to edit, rename, duplicate, or delete the view.
-
 ## Needs attention
 
 **Needs attention** is a project-member action center. The footer previews unresolved terminal automation failures and shows proposed runs as one approval-queue total rather than one notification per proposal. Failures are reconciled against canonical Factory state before they become queryable: an accepted transition is `succeeded`, obsolete work is `superseded`, and only unresolved `failed` decisions remain.
