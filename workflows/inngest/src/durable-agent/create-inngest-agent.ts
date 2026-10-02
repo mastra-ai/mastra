@@ -1268,7 +1268,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and must not be published to the run's shared stream topic, which would close
       // the original run's stream too.
       let notResumable = false;
-      const didThreadRunComplete = agentThreadStreamRuntime.captureThreadRunCompletion(runId, agent.getPubSub());
+      const didThreadRunPublishTerminal = agentThreadStreamRuntime.captureThreadRunTerminalPublish(
+        runId,
+        agent.getPubSub(),
+      );
 
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
@@ -1414,8 +1417,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         resumeStreamOptions,
         agent.getPubSub(),
       );
-      const completedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunComplete?.();
-      if (!continued && !completedDuringDispatch) {
+      const terminalPublishedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunPublishTerminal?.();
+      if (!continued && !terminalPublishedDuringDispatch) {
         await agentThreadStreamRuntime.registerRun(
           proxyRef as unknown as Agent<any, any, any, any>,
           output,

@@ -860,11 +860,7 @@ describe('InngestAgent parity surface', () => {
       const runId = `resume-thread-dispatch-race-${closeOnSuspend}-run`;
       const threadId = 'thread-1';
       const resourceId = 'user-1';
-      let resolveResumeAck!: () => void;
       let resolveEventsPublished!: () => void;
-      const resumeAck = new Promise<void>(resolve => {
-        resolveResumeAck = resolve;
-      });
       const eventsPublished = new Promise<void>(resolve => {
         resolveEventsPublished = resolve;
       });
@@ -878,7 +874,7 @@ describe('InngestAgent parity surface', () => {
           data: { output: { text: 'Done.', steps: [] }, stepResult: { reason: 'stop' } },
         });
         resolveEventsPublished();
-        await resumeAck;
+        await new Promise(resolve => setTimeout(resolve, 0));
       });
 
       const initial = createDurableAgentStream({
@@ -889,6 +885,17 @@ describe('InngestAgent parity surface', () => {
         closeOnSuspend,
       });
       await initial.ready;
+      let releaseCompletion!: () => void;
+      const completionGate = new Promise<void>(resolve => {
+        releaseCompletion = resolve;
+      });
+      const waitUntilFinished = initial.output._waitUntilFinished.bind(initial.output);
+      const completionSpy = closeOnSuspend
+        ? undefined
+        : vi.spyOn(initial.output, '_waitUntilFinished').mockImplementation(async () => {
+            await waitUntilFinished();
+            await completionGate;
+          });
       await agentThreadStreamRuntime.registerRun(
         durableAgent,
         initial.output,
@@ -925,13 +932,9 @@ describe('InngestAgent parity surface', () => {
 
         const resumePromise = durableAgent.resume(runId, { approved: true }, { closeOnSuspend, threadId, resourceId });
         await eventsPublished;
-        if (!closeOnSuspend) {
-          await vi.waitFor(() =>
-            expect(agentThreadStreamRuntime.hasThreadRun(runId, durableAgent.agent.getPubSub())).toBe(false),
-          );
-        }
-        resolveResumeAck();
         resumed = await resumePromise;
+        releaseCompletion();
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         expect(publishSpy.mock.calls.filter(([, event]) => event.type === 'run-registered')).toHaveLength(
           closeOnSuspend ? 2 : 1,
@@ -940,12 +943,13 @@ describe('InngestAgent parity surface', () => {
         expect(parts.filter(part => part.type === 'text-delta').map(part => part.payload.text)).toEqual(['Done.']);
         expect(parts.filter(part => part.type === 'finish')).toHaveLength(1);
       } finally {
-        resolveResumeAck();
+        releaseCompletion();
         subscription.unsubscribe();
         await reading;
         initial.cleanup();
         resumed?.cleanup();
         globalRunRegistry.delete(runId);
+        completionSpy?.mockRestore();
         sendSpy.mockRestore();
       }
     },
