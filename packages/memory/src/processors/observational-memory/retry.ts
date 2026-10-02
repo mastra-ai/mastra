@@ -43,13 +43,14 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   'finished with finishreason "other"',
 ];
 
-const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
+const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown', 'retry']);
 
 /**
  * OM calls are single-step (`maxSteps: 1`). A step that ends with `other` or
  * `unknown` means the stream closed before the model finished, so its text is
- * partial. Throw a retryable error so `withRetry` re-runs the whole call
- * instead of saving the partial reply.
+ * partial. `retry` means an error processor asked for another step that
+ * `maxSteps: 1` never runs, leaving an empty or partial reply. Throw a
+ * retryable error so `withRetry` re-runs the whole call instead of saving it.
  *
  * @internal
  */

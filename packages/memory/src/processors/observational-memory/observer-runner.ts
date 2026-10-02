@@ -178,6 +178,9 @@ export class ObserverRunner {
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
       maxRetries: 0,
+      // withRetry owns retries and restarts each attempt from a clean prompt.
+      // Processor retries would continue from the failed attempt instead.
+      errorProcessorDefaults: false,
       instructions: buildObserverSystemPrompt(
         isMultiThread,
         this.observationConfig.instruction,
