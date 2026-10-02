@@ -7,7 +7,7 @@ packages:
 
 # FileUploadProcessor
 
-The `FileUploadProcessor` uploads files attached to user messages to a [workspace sandbox](/reference/workspace/sandbox) and replaces each file with a text reference to its path. The model receives the path and never the file content, so the agent works on the file with its sandbox tools.
+The `FileUploadProcessor` uploads files attached to user messages to a [workspace sandbox](/reference/workspace/sandbox) and replaces each file with a text reference to its path. The model receives the path and never the file content. The agent works on the file with its sandbox tools.
 
 A file that matches the configured filters never reaches the model. When the processor can't upload it, the processor stops the turn instead of letting the file through.
 
