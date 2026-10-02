@@ -12,3 +12,8 @@ test('the span contract shares scalar predicates and keeps authorization outside
     { state: 'available'; amount: number; currency: string } | { state: 'missing' } | { state: 'unavailable' }
   >();
 });
+
+test('internal span planning helpers are not part of the storage API', () => {
+  expectTypeOf<typeof import('../../index')>().not.toHaveProperty('planSpanQuerySelectionPredicate');
+  expectTypeOf<typeof import('../../index')>().not.toHaveProperty('digestBinding');
+});
