@@ -518,7 +518,7 @@ console.log(instructionsByServer.db)
 
 ### `getServerInfo()`
 
-Returns the identity each configured MCP server announced when it connected (the `serverInfo` from the MCP handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. Servers that haven't connected yet return `undefined`. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
+Returns the identity each configured MCP server announced when it connected (its `serverInfo`, from the `server/discover` result or, for servers on an older revision, the `initialize` handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. Servers that haven't connected yet return `undefined`. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
 
 ```typescript oxfmt:false
 getServerInfo(): Record<string, MCPServerImplementation | undefined>
