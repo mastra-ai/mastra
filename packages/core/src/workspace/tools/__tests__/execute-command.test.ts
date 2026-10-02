@@ -501,6 +501,112 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('aborted commands', () => {
+    const abortNote =
+      'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
+
+    function createAbortedContext(executeCommand: Parameters<typeof createMockContext>[0]['executeCommand']) {
+      const controller = new AbortController();
+      const { context } = createMockContext({
+        executeCommand: async (cmd, args, opts) => {
+          controller.abort();
+          return executeCommand(cmd, args, opts);
+        },
+      });
+      context.abortSignal = controller.signal;
+      return context;
+    }
+
+    it('explains that a command killed by the abort signal was aborted', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 128,
+        stdout: 'started\n',
+        stderr: '',
+        executionTimeMs: 300,
+        killed: true,
+      }));
+
+      const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`started\n\n${abortNote}\nExit code: 128`);
+    });
+
+    it('explains the abort when the provider does not report killed', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: -1,
+        stdout: '',
+        stderr: '',
+        executionTimeMs: 300,
+      }));
+
+      const result = await execute({ command: 'sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`${abortNote}\nExit code: -1`);
+    });
+
+    it('does not label a command that exited on its own before the abort', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 128,
+        stdout: '',
+        stderr: 'fatal: not a git repository',
+        executionTimeMs: 5,
+        killed: false,
+      }));
+
+      const result = await execute({ command: 'git status', timeout: null, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nfatal: not a git repository\n\nExit code: 128');
+    });
+
+    it('does not label a timed-out command as aborted', async () => {
+      const context = createAbortedContext(async () => ({
+        success: false,
+        exitCode: 124,
+        stdout: '',
+        stderr: 'Process timed out after 1000ms',
+        executionTimeMs: 1000,
+        killed: true,
+        timedOut: true,
+      }));
+
+      const result = await execute({ command: 'sleep 10', timeout: 1, cwd: null }, context);
+
+      expect(result).toBe('stderr:\nProcess timed out after 1000ms\n\nExit code: 124');
+    });
+
+    it('does not label a killed command when the run was not aborted', async () => {
+      const { context } = createMockContext({
+        executeCommand: async () => ({
+          success: false,
+          exitCode: 128,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 5,
+          killed: true,
+        }),
+      });
+      context.abortSignal = new AbortController().signal;
+
+      const result = await execute({ command: 'sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe('Exit code: 128');
+    });
+
+    it('explains the abort when the sandbox throws after the abort', async () => {
+      const context = createAbortedContext(async (_cmd, _args, opts) => {
+        opts?.onStdout?.('started\n');
+        throw new Error('process terminated');
+      });
+
+      const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
+
+      expect(result).toBe(`started\n\n${abortNote}\nError: process terminated`);
+    });
+  });
+
   describe('tail pipe extraction', () => {
     it('strips | tail -N from command and applies tail to result', async () => {
       let receivedCommand = '';

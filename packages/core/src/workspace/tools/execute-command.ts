@@ -87,6 +87,9 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
   return { command };
 }
 
+const ABORTED_COMMAND_NOTE =
+  'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
+
 /** Format command streams consistently with get_process_output. */
 function formatCommandOutput(stdout: string, stderr: string): string[] {
   const parts: string[] = [];
@@ -318,7 +321,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
         await truncateOutput(result.stderr, tail, tokenLimit, tokenFrom),
       );
-      return appendTerminalLine(parts, `Exit code: ${result.exitCode}`);
+      // The exit code of an aborted command is a provider-specific kill code (LocalSandbox
+      // reports 128, which also means "fatal" for git), so the abort signal is the only
+      // reliable way to tell the model why it stopped. `killed: false` means the command
+      // exited on its own just before the abort.
+      const aborted = context?.abortSignal?.aborted && result.killed !== false && !result.timedOut;
+      const exitLine = `Exit code: ${result.exitCode}`;
+      return appendTerminalLine(parts, aborted ? `${ABORTED_COMMAND_NOTE}\n${exitLine}` : exitLine);
     }
 
     return (
@@ -343,7 +352,11 @@ async function executeCommand(input: Record<string, any>, context: any) {
       await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
-    return appendTerminalLine(parts, `Error: ${errorMessage}`);
+    const errorLine = `Error: ${errorMessage}`;
+    return appendTerminalLine(
+      parts,
+      context?.abortSignal?.aborted ? `${ABORTED_COMMAND_NOTE}\n${errorLine}` : errorLine,
+    );
   }
 }
 
