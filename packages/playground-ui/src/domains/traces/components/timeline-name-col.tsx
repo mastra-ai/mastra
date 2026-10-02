@@ -72,7 +72,7 @@ export function TimelineNameCol({
       <button
         type="button"
         className={cn(
-          'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
+          'flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 self-stretch rounded-md px-2 py-1 text-left text-caption text-foreground',
           focusRingInset,
         )}
       >
@@ -80,15 +80,15 @@ export function TimelineNameCol({
           <span
             aria-hidden
             title={spanUI.label}
-            className="inline-block size-2 shrink-0 rounded-full"
+            className="mt-[5px] inline-block size-2 shrink-0 rounded-full"
             style={{ backgroundColor: spanUI.color }}
           />
         )}
         {/* Searchable: the span name is what the timeline search matches on. When the match
             is in the span's payload instead, the whole name is painted in the indirect color
             so the row explains its own presence. */}
-        {/* Duration stacks under the name on narrow layouts and moves inline at the end of the row from lg. */}
-        <span className="flex min-w-0 flex-1 flex-col lg:flex-row lg:items-center lg:justify-between lg:gap-2">
+        {/* Duration always stacks under the name. */}
+        <span className="flex min-w-0 flex-1 flex-col">
           <span
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
@@ -98,7 +98,7 @@ export function TimelineNameCol({
             {span.name}
           </span>
           {meta && (
-            <Txt as="span" variant="meta" tone="muted" className="shrink-0 lg:tabular-nums">
+            <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
               {meta}
             </Txt>
           )}
