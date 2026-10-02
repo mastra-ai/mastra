@@ -809,7 +809,12 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     writeFileSync(`${staleSocket}.elect`, '');
     const longAgo = new Date(Date.now() - 60_000);
     utimesSync(`${staleSocket}.elect`, longAgo, longAgo);
-    const staleInode = statSync(staleSocket).ino;
+    // Inode numbers can be reused once the file is unlinked, so compare ctime too.
+    const fileIdentity = () => {
+      const stat = statSync(staleSocket);
+      return `${stat.ino}:${stat.ctimeMs}`;
+    };
+    const staleIdentity = fileIdentity();
 
     const owner = startChild('owner', projectA, 'claim-only', [], shared(root));
     await owner.waitFor('thread-owned');
@@ -817,12 +822,12 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     const discovery = await observer.waitFor('discovered');
     // The owner went through the leftover: a live broker replaced the dead
     // socket and the stale lock is gone.
-    const liveInode = statSync(staleSocket).ino;
+    const liveIdentity = fileIdentity();
     const lockLeft = existsSync(`${staleSocket}.elect`);
     const codes = await closeAll(owner, observer);
 
     expect(discovery).toMatchObject({ hasPeer: true });
-    expect(liveInode).not.toBe(staleInode);
+    expect(liveIdentity).not.toBe(staleIdentity);
     expect(lockLeft).toBe(false);
     // The retry clears the leftover on its own, so neither side warns.
     expect(owner.stderr).toBe('');
