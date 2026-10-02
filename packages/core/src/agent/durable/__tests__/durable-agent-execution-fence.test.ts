@@ -541,6 +541,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const original = gatedModel('stale answer from the original execution');
         const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const publish = vi.spyOn(pubsub, 'publish');
         const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
         const { runId } = started;
         // The original caller keeps reading: it follows the run across the takeover.
@@ -605,6 +606,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
             .every(e => e.generation === originalGeneration),
         ).toBe(true);
         expect(events.slice(0, claimedAt).every(event => event.generation === originalGeneration)).toBe(true);
+
+        // On the thread stream, the recovery registration supersedes the original execution's stream.
+        const registrations = publish.mock.calls
+          .map(([, event]) => (event as { data?: any }).data)
+          .filter(data => data?.type === 'run-registered' && data.runId === runId)
+          .map(({ generation, supersedes }) => ({ generation, supersedes }));
+        expect(registrations).toEqual([
+          { generation: originalGeneration, supersedes: undefined },
+          { generation: recoveredGeneration, supersedes: true },
+        ]);
 
         await startedStream.stop();
         started.cleanup();

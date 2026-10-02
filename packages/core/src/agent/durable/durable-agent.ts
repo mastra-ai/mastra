@@ -970,6 +970,7 @@ export class DurableAgent<
           strict: true,
           continuation: 'across-suspension',
           validate: () => executionFence.throwIfLost(),
+          generation: executionFence.generation,
         },
       );
       executionFence.throwIfLost();
@@ -2449,7 +2450,10 @@ export class DurableAgent<
       output,
       options as AgentExecutionOptions<TOutput>,
       this.getPubSub(),
-      closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+      {
+        continuation: closeOnSuspend ? undefined : 'across-suspension',
+        generation: executionFence.generation,
+      },
     );
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
@@ -2927,6 +2931,7 @@ export class DurableAgent<
       output,
       resumeStreamOptions,
       this.getPubSub(),
+      executionFence.generation,
     );
     if (!continued) {
       await agentThreadStreamRuntime.registerRun(
@@ -2934,7 +2939,10 @@ export class DurableAgent<
         output,
         resumeStreamOptions,
         this.getPubSub(),
-        closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+        {
+          continuation: closeOnSuspend ? undefined : 'across-suspension',
+          generation: executionFence.generation,
+        },
       );
     }
 
