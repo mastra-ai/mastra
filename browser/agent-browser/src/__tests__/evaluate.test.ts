@@ -19,7 +19,7 @@ const { mockPage, mockManager } = vi.hoisted(() => {
   return { mockPage, mockManager };
 });
 
-vi.mock('agent-browser', () => ({
+vi.mock('../browser-manager', () => ({
   BrowserManager: class {
     launch = mockManager.launch;
     close = mockManager.close;

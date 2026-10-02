@@ -10,6 +10,10 @@ export type { CreateAgentBrowserThreadManager } from './thread-manager';
 export { AgentBrowserThreadManager } from './thread-manager';
 export type { AgentBrowserThreadManagerConfig, AgentBrowserSession } from './thread-manager';
 
+// CLI-backed browser session (for custom providers)
+export { BrowserManager, resolveAgentBrowserCli } from './browser-manager';
+export type { BrowserLaunchOptions, EnhancedSnapshot, SnapshotRef, SnapshotOptions } from './browser-manager';
+
 // Utility exports
 export { getBrowserPid } from './utils';
 
