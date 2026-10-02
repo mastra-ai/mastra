@@ -347,12 +347,28 @@ export const hubspotScenario: Scenario = {
         steps.push(makeStep('update marketing email', 'hubspot_update_marketing_email', 'fail', errorMessage(error)));
       }
     }
+    let clonedMarketingEmailId: string | undefined;
     if (marketingEmailId && tools['hubspot_clone_marketing_email']) {
       try {
-        await call('hubspot_clone_marketing_email', { emailId: marketingEmailId, cloneName: `${runId} clone` });
-        steps.push(makeStep('clone marketing email', 'hubspot_clone_marketing_email', 'pass'));
+        const clone = await call<{ id?: string }>('hubspot_clone_marketing_email', {
+          emailId: marketingEmailId,
+          cloneName: `${runId} clone`,
+        });
+        clonedMarketingEmailId = clone?.id;
+        steps.push(makeStep('clone marketing email', 'hubspot_clone_marketing_email', 'pass', clonedMarketingEmailId));
       } catch (error) {
         steps.push(makeStep('clone marketing email', 'hubspot_clone_marketing_email', 'fail', errorMessage(error)));
+      }
+    }
+    if (clonedMarketingEmailId && tools['hubspot_delete_marketing_email']) {
+      try {
+        await call('hubspot_delete_marketing_email', { emailId: clonedMarketingEmailId });
+        steps.push(makeStep('delete cloned marketing email', 'hubspot_delete_marketing_email', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete cloned smoke marketing email ${clonedMarketingEmailId}`, errorMessage(error));
+        steps.push(
+          makeStep('delete cloned marketing email', 'hubspot_delete_marketing_email', 'fail', errorMessage(error)),
+        );
       }
     }
     if (marketingEmailId && tools['hubspot_delete_marketing_email']) {
