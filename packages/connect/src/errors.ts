@@ -49,12 +49,31 @@ function truncate(text: string): string {
   return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
 }
 
+/**
+ * Pulls the first human-readable message from an array of error entries. Many
+ * providers (Clerk, Linear's GraphQL envelope, Nango v2) return
+ * `{ errors: [{ message, long_message, code }] }`; surfacing the first message
+ * is the most useful detail without echoing the whole payload.
+ */
+function extractFirstArrayMessage(errors: unknown[]): string | undefined {
+  for (const entry of errors) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as { message?: unknown; long_message?: unknown };
+    const message = typeof record.long_message === 'string' ? record.long_message : record.message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return undefined;
+}
+
 interface ProblemJson {
   title?: string;
   status?: number;
   detail?: string;
   code?: string;
   error?: string | { message?: unknown };
+  // Many providers (Clerk, Nango v2, Linear's GraphQL envelope) surface
+  // errors as an array of objects with a `message` / `long_message` field.
+  errors?: unknown;
 }
 
 /**
@@ -87,6 +106,10 @@ export async function extractProblemDetail(
             return { detail: truncate(message), code, isProblemJson };
           }
         }
+      }
+      if (Array.isArray(data.errors)) {
+        const message = extractFirstArrayMessage(data.errors);
+        if (message) return { detail: truncate(message), code, isProblemJson };
       }
       return { code, isProblemJson };
     }
