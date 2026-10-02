@@ -144,7 +144,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
               return;
             }
-            if (r.part != null) safeEnqueue(controller, r.part as ChunkType<OUTPUT>);
+            if (r.part == null) continue;
+            const part = r.part as ChunkType<OUTPUT>;
+            if (part.type.startsWith('data-')) {
+              await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
+            } else {
+              safeEnqueue(controller, part);
+            }
           }
         };
 

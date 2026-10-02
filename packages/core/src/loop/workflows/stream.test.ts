@@ -111,12 +111,13 @@ describe('workflowLoopStream', () => {
       },
     };
 
+    const messageList = new MessageList({ threadId: 'test-thread' });
     const stream = workflowLoopStream({
       messageId: 'msg-3',
       runId: 'run-1',
       startTimestamp: Date.now(),
       agentId: 'test-agent',
-      messageList: new MessageList({ threadId: 'test-thread' }),
+      messageList,
       models: [{ model: {} as any, toolChoice: undefined }],
       outputProcessors: [processor],
       _internal: {},
@@ -130,6 +131,9 @@ describe('workflowLoopStream', () => {
     const types = chunks.map(chunk => chunk.type);
     expect(types).toContain('data-stashed');
     expect(types.indexOf('data-stashed')).toBe(types.indexOf('data-moderation') + 1);
+
+    const persistedTypes = messageList.get.response.db().flatMap(message => message.content.parts.map(p => p.type));
+    expect(persistedTypes).toContain('data-stashed');
   });
 
   it('should forward resourceId from _internal to createRun()', async () => {
