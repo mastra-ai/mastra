@@ -578,14 +578,20 @@ describe('ThreadViewByTrace', () => {
       const [showMore] = await screen.findAllByRole('button', { name: 'Expand' });
       if (!showMore) throw new Error('expected an Expand button');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
 
       fireEvent.click(showMore);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
       const showLess = screen.getByRole('button', { name: 'Collapse' });
 
       fireEvent.click(showLess);
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
     it('does not offer Expand when the timeline already fits', async () => {
@@ -598,7 +604,9 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull();
       // The clamp stays on so the cell never grows past the messages column while the
       // timeline remeasures after a tab switch; a shorter timeline is unaffected by it.
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('300px');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('300px');
     });
 
     it('expands the row when one of its spans is selected and keeps it expanded afterwards', async () => {
@@ -610,14 +618,18 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(await screen.findByText('Chef agent run'));
       await screen.findByRole('heading', { name: /^Span/ });
 
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
       // Collapsing would hide the selection, so the control is withheld while a span is open.
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
-      expect(timelineOf('trace-a')?.style.maxHeight).toBe('');
+      expect(
+        timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
+      ).toBe('');
       expect(screen.getByRole('button', { name: 'Collapse' })).not.toBeNull();
     });
   });

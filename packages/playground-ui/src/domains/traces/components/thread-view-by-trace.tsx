@@ -152,9 +152,7 @@ function ThreadTraceRowContent({
             <Button render={<Link href={traceHref} />} variant="ghost" size="sm" icon={<ExternalLinkIcon />}>
               Go to trace
             </Button>
-            <Txt as="span" variant="meta" tone="muted" aria-hidden>
-              ·
-            </Txt>
+            <span aria-hidden className="h-4 w-px bg-border" />
           </>
         )}
         <ThreadTrace.TabList>

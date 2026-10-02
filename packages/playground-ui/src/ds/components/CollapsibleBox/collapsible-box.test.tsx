@@ -34,7 +34,7 @@ describe('CollapsibleBox', () => {
       mockScrollHeight(100);
       render(<Harness />);
       expect(box()?.hasAttribute('data-clipped')).toBe(false);
-      expect(box()?.style.maxHeight).toBe('220px');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       expect(screen.queryByRole('button')).toBeNull();
     });
   });
@@ -44,14 +44,18 @@ describe('CollapsibleBox', () => {
       mockScrollHeight(1000);
       render(<Harness />);
       expect(box()?.getAttribute('data-clipped')).toBe('');
-      expect(box()?.style.maxHeight).toBe('220px');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
+
+      // The fade must mask the clipped box itself, or it lands below the visible area.
+      const masked = box()?.querySelector<HTMLElement>('.mask-b-from-60\\%.mask-b-to-100\\%');
+      expect(masked?.style.maxHeight).toBe('220px');
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
       expect(box()?.hasAttribute('data-clipped')).toBe(false);
-      expect(box()?.style.maxHeight).toBe('');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
 
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-      expect(box()?.style.maxHeight).toBe('220px');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
     });
   });
 
@@ -71,7 +75,7 @@ describe('CollapsibleBox', () => {
       mockScrollHeight(1000);
       render(<Bare />);
       fireEvent.click(fade() as HTMLElement);
-      expect(box()?.style.maxHeight).toBe('');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       expect(fade()).toBeNull();
     });
 
@@ -79,7 +83,7 @@ describe('CollapsibleBox', () => {
       mockScrollHeight(1000);
       render(<Bare expandLabel="Expand" />);
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-      expect(box()?.style.maxHeight).toBe('');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       expect(screen.queryByRole('button')).toBeNull();
     });
 
@@ -95,7 +99,7 @@ describe('CollapsibleBox', () => {
     it('clips at that height', () => {
       mockScrollHeight(300);
       render(<Harness collapsedHeight={400} />);
-      expect(box()?.style.maxHeight).toBe('400px');
+      expect(box()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('400px');
       expect(box()?.hasAttribute('data-clipped')).toBe(false);
     });
   });

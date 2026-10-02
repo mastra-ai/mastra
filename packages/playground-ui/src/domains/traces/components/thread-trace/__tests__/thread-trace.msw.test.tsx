@@ -264,13 +264,13 @@ describe('ThreadTrace', () => {
       await screen.findByText('Chef agent run');
 
       const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
 
       mockHeights({ 'trace-row-messages': 80, 'trace-row-timeline': 900 });
       fireEvent.click(screen.getByRole('tab', { name: 'Extra' }));
 
       expect(screen.getByRole('tab', { name: 'Extra' }).getAttribute('aria-selected')).toBe('true');
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
       expect(getRow('trace-a').querySelector<HTMLElement>('[data-slot=thread-trace-messages]')?.style.minHeight).toBe(
         '300px',
       );
@@ -282,10 +282,10 @@ describe('ThreadTrace', () => {
       await screen.findByText('Chef agent run');
 
       const timeline = await screen.findByTestId('trace-row-timeline');
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
 
-      expect(timeline.style.maxHeight).toBe('');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy();
 
       // Collapsing would hide the selected span, so Collapse waits until the panel closes.
@@ -296,7 +296,7 @@ describe('ThreadTrace', () => {
       await screen.findByRole('button', { name: 'Collapse' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-      expect(timeline.style.maxHeight).toBe('300px');
+      expect(timeline.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('300px');
     });
   });
 });

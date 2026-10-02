@@ -39,13 +39,17 @@ export function CollapsibleBox({ state, expandLabel, children, className, style,
     <div
       data-slot="collapsible-box"
       {...(showClipHint ? { 'data-clipped': '' } : {})}
-      className={cn('relative min-w-0', !isExpanded && 'overflow-hidden', className)}
-      style={isExpanded ? style : { ...style, maxHeight: collapsedHeight }}
+      className={cn('relative min-w-0', className)}
+      style={style}
       {...props}
     >
-      {/* The hint masks the content itself, so it reads correctly on any background. */}
-      <div ref={contentRef} className={cn(showClipHint && 'mask-b-from-60% mask-b-to-100%')}>
-        {children}
+      {/* The mask sits on the clipped box so the fade covers its visible bottom, on any background. */}
+      <div
+        data-slot="collapsible-box-clip"
+        className={cn(!isExpanded && 'overflow-hidden', showClipHint && 'mask-b-from-60% mask-b-to-100%')}
+        style={isExpanded ? undefined : { maxHeight: collapsedHeight }}
+      >
+        <div ref={contentRef}>{children}</div>
       </div>
       {showClipHint && (
         <div
