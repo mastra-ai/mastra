@@ -6,4 +6,17 @@ Fixed workflow lifecycle hooks being silently ignored for Temporal-backed workfl
 
 The hooks run in the process that started the run, not on the Temporal worker. With `startAsync()`, `onFinish` and `onError` run in the background when the Temporal run completes, so they don't fire if that process exits first.
 
-`run.start()` now also returns the workflow output in `result` and the step results in `steps`, instead of nesting the whole Temporal execution result inside `result` with empty `steps`. Request context values set in `onStart` are now sent to the Temporal workflow.
+`run.start()` now also returns the workflow output in `result` and the step results in `steps`, instead of nesting the whole Temporal execution result inside `result` with empty `steps`. If you read the output from `result.result.result`, read it from `result.result` instead:
+
+```ts
+const result = await run.start({ inputData });
+
+// Before
+const output = result.result.result;
+
+// After
+const output = result.result;
+const stepResults = result.steps;
+```
+
+Request context values set in `onStart` are now sent to the Temporal workflow.
