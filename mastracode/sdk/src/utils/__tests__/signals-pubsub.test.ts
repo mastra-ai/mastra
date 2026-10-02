@@ -248,6 +248,18 @@ describe('SignalsPubSub', () => {
     expect(findSocket(`/tmp/mc/${threadResource}/.leases.sock`)?.closed).toBe(true);
   });
 
+  it('rejects lease calls after close instead of reopening a lease socket', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const pubsub = createSignalsPubSub('mastra-bbb');
+    const leases = pubsub.getLeaseProvider();
+    await pubsub.close();
+
+    await expect(leases.renewLease('sentinel-aaa\0thread-1', 'run-1', 1000)).rejects.toThrow('SignalsPubSub is closed');
+    await expect(leases.getLeaseOwner('schedule:abc')).rejects.toThrow('SignalsPubSub is closed');
+
+    expect(mocks.instances.map(instance => instance.socketPath)).toEqual(['/tmp/mc/mastra-bbb/.leases.sock']);
+  });
+
   it("holds a resource's notification dispatch lease in that resource's directory", async () => {
     const { createSignalsPubSub, notificationDispatchLeaseKey } = await import('../signals-pubsub.js');
     const pubsub = createSignalsPubSub('mastra-bbb');

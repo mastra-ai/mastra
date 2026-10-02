@@ -196,13 +196,18 @@ class SignalsPubSub extends PubSub {
     this.#sharedPeerDiscovery = Boolean(options.sharedAgentDiscovery) && this.#canShareDiscovery();
     // Created eagerly, as before, so this resource's lease socket exists from the start.
     this.#leasesFor(resourceId);
-    const route = (key: string) => this.#leasesFor(resourceOfLeaseKey(key) ?? this.#resourceId);
+    const route = (key: string) => {
+      // Lease sockets are created per resource on demand; once closed, never
+      // reopen one (a lease renewal timer may outlive close()).
+      if (this.#closed) throw new Error('SignalsPubSub is closed');
+      return this.#leasesFor(resourceOfLeaseKey(key) ?? this.#resourceId);
+    };
     this.#leaseProvider = {
-      acquireLease: (key, owner, ttlMs) => route(key).acquireLease(key, owner, ttlMs),
-      getLeaseOwner: key => route(key).getLeaseOwner(key),
-      releaseLease: (key, owner) => route(key).releaseLease(key, owner),
-      renewLease: (key, owner, ttlMs) => route(key).renewLease(key, owner, ttlMs),
-      transferLease: (key, fromOwner, toOwner, ttlMs) => route(key).transferLease(key, fromOwner, toOwner, ttlMs),
+      acquireLease: async (key, owner, ttlMs) => route(key).acquireLease(key, owner, ttlMs),
+      getLeaseOwner: async key => route(key).getLeaseOwner(key),
+      releaseLease: async (key, owner) => route(key).releaseLease(key, owner),
+      renewLease: async (key, owner, ttlMs) => route(key).renewLease(key, owner, ttlMs),
+      transferLease: async (key, fromOwner, toOwner, ttlMs) => route(key).transferLease(key, fromOwner, toOwner, ttlMs),
     };
   }
 
