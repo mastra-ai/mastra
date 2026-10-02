@@ -133,7 +133,16 @@ export function createStep<
   TResumeSchema extends PublicSchema | undefined = undefined,
   TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    undefined,
+    InngestEngineType
+  >,
 ): Step<
   TStepId,
   TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
@@ -225,7 +234,16 @@ export function createStep<
   TResumeSchema extends PublicSchema | undefined = undefined,
   TSuspendSchema extends PublicSchema | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    undefined,
+    InngestEngineType
+  >,
 ): Step<
   TStepId,
   TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
@@ -283,7 +301,16 @@ function createStepFromParams<
   TResumeSchema extends PublicSchema<any> | undefined = undefined,
   TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
-  params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
+  params: StepParams<
+    TStepId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TResumeSchema,
+    TSuspendSchema,
+    undefined,
+    InngestEngineType
+  >,
 ): Step<
   TStepId,
   TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,

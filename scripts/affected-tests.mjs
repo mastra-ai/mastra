@@ -272,7 +272,7 @@ const testAbsolutePaths = testFiles.map(f => resolve(ROOT, f));
 const res = await madge(testAbsolutePaths, {
   baseDir: ROOT,
   webpackConfig: webpackConfigPath,
-  fileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  fileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mts', 'cts'],
 });
 
 const graph = await res.obj();
