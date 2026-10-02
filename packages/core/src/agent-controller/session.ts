@@ -132,6 +132,8 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * in-memory only).
  */
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
+/** Persisted keys a thread without its own value must not inherit from the previous thread. */
+const THREAD_SCOPED_STATE_KEYS: readonly string[] = ['thinkingLevel'];
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
@@ -677,6 +679,10 @@ export class SessionThread {
       metadata.currentModelId = modelId;
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
+    const inheritedState = session.state.get() as Record<string, unknown>;
+    for (const key of PERSISTED_STATE_KEYS) {
+      if (inheritedState[key] !== undefined) metadata[key] = inheritedState[key];
+    }
 
     // Stamp the session's scope so thread selection can filter listings back to
     // it (e.g. a `projectPath` per git worktree).
@@ -1041,9 +1047,12 @@ export class SessionThread {
       // Applied one key at a time so an invalid persisted value fails schema
       // validation without discarding the mode/model/OM restoration above or
       // the other, still-valid preference.
+      const currentState = session.state.get() as Record<string, unknown>;
       for (const key of PERSISTED_STATE_KEYS) {
         const value = meta?.[key];
-        if (value === undefined) continue;
+        if (value === undefined && (!THREAD_SCOPED_STATE_KEYS.includes(key) || currentState[key] === undefined)) {
+          continue;
+        }
         try {
           await session.state.set({ [key]: value } as Record<string, unknown>);
         } catch {
