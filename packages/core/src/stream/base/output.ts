@@ -544,6 +544,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
@@ -577,6 +578,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               for (const r of reprocessed) {
                 if (r.blocked) {
@@ -1523,7 +1525,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
     if (!this.#consumptionStarted) {
-      void this.consumeStream();
+      this.consumeStream().catch(error => {
+        this.logger?.error('Error consuming stream', error);
+      });
     }
     return promise.promise;
   }
@@ -2001,6 +2005,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
   /** @internal  */
   _getBaseStream() {
+    // The caller now owns the base stream's reader; delayed-promise getters must
+    // not try to drain it a second time (that would throw "ReadableStream is locked").
+    this.#consumptionStarted = true;
     return this.#baseStream;
   }
 
@@ -2209,7 +2216,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       pull(_controller) {
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
-          void self.consumeStream();
+          self.consumeStream().catch(error => {
+            self.logger?.error('Error consuming stream', error);
+          });
         }
       },
 

@@ -1,9 +1,9 @@
 ---
-title: "Reference: MastraEditor class | Editor"
-description: "The MastraEditor class sets up the editor system. Pass it to the Mastra constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers."
+title: 'Reference: MastraEditor class | Editor'
+description: 'The MastraEditor class sets up the editor system. Pass it to the Mastra constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.'
 packages:
-  - "@mastra/core"
-  - "@mastra/editor"
+  - '@mastra/core'
+  - '@mastra/editor'
 ---
 
 # MastraEditor class
@@ -437,6 +437,34 @@ await editor.agent.create({
   },
 })
 ```
+
+### Stored agent memory
+
+The `memory` field of a stored agent accepts one of these shapes:
+
+- `{ type: 'id', memoryId: string }`: Uses a memory instance registered on the Mastra instance. The editor looks up `memoryId` as a registry key first, then as the memory instance's `id`. The agent uses that exact instance, including its storage, processors, and working memory settings.
+- `{ type: 'inline', config: SerializedMemoryConfig }`: Builds a new memory instance from a serializable config.
+- `SerializedMemoryConfig`: The untagged inline config. Existing stored agents use this shape and keep working.
+
+Reference a registered memory instance so many stored agents share one configuration:
+
+```typescript title="src/scripts/seed-agent.ts"
+import { mastra } from '../mastra'
+
+const editor = mastra.getEditor()!
+
+await editor.agent.create({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'You are a friendly support agent for Acme.',
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+  memory: { type: 'id', memoryId: 'supportMemory' },
+})
+```
+
+The reference is resolved when the editor loads the agent. If no registered memory matches `memoryId`, the agent loads without memory and the editor logs a warning that names the missing key. The stored reference isn't changed. In conditional memory, a variant whose reference isn't registered is skipped. If you register memory with `mastra.addMemory()` after an agent has loaded, call `editor.agent.clearCache(id)` so the next load picks it up. Renaming or removing a key in the Mastra `memory` config detaches memory from every stored agent that references it, so keep keys stable across deployments.
+
+`editor.agent.clone()` stores a reference when the source agent uses a registered memory instance, and an inline config otherwise.
 
 ## Methods
 

@@ -136,6 +136,9 @@ export interface MastraTUIOptions {
   /** Initial message to send on startup */
   initialMessage?: string;
 
+  /** Thread ID requested by `mastracode resume`. */
+  resumeThreadId?: string;
+
   /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By

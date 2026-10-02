@@ -16,14 +16,17 @@ import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import type { Event } from '../../../events/types';
+import { PubSub } from '../../../events/pubsub';
+import type { Event, EventCallback, SubscribeOptions } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 // ============================================================================
 // Helper Functions
@@ -80,6 +83,40 @@ function createTextModel(text: string) {
       warnings: [],
     }),
   });
+}
+
+class RetainingPubSub extends PubSub {
+  readonly history = new Map<string, Event[]>();
+  readonly subscribers = new Map<string, Set<EventCallback>>();
+
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    const retained = { ...event, id: crypto.randomUUID(), createdAt: new Date() };
+    const history = this.history.get(topic) ?? [];
+    history.push(retained);
+    this.history.set(topic, history);
+
+    for (const subscriber of this.subscribers.get(topic) ?? []) {
+      await subscriber(retained, async () => {});
+    }
+  }
+
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (options?.startFrom !== 'latest') {
+      for (const event of this.history.get(topic) ?? []) {
+        await cb(event, async () => {});
+      }
+    }
+
+    const subscribers = this.subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.subscribers.set(topic, subscribers);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {}
 }
 
 async function seedSuspendedRun(
@@ -658,6 +695,89 @@ describe('Resume with CachingPubSub Event Replay', () => {
 
     // Disconnect (cleanup)
     initialCleanup();
+  });
+
+  it('should deliver resumed output without replaying retained events when cached history is unavailable', async () => {
+    const storage = new InMemoryStore();
+    const memoryStorage = new InMemoryStore();
+    const transport = new RetainingPubSub();
+    const memory = { thread: 'cache-miss-thread', resource: 'cache-miss-resource' };
+
+    const buildAgent = (seenText: string[]) => {
+      const tool = createTool({
+        id: 'approvalTool',
+        description: 'Wait for approval',
+        inputSchema: z.object({ action: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (input, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend?.({ reason: `Approve ${input.action}?` });
+          }
+          return { completed: true };
+        },
+      });
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) =>
+          JSON.stringify(prompt).includes('"type":"tool-result"')
+            ? createTextModel('Resumed').doStream({ prompt } as any)
+            : createSuspendingToolModel('approvalTool', { action: 'delete' }).doStream({ prompt } as any),
+      });
+      const agent = new Agent({
+        id: 'cache-miss-resume-agent',
+        name: 'Cache Miss Resume Agent',
+        instructions: 'Use the tool, then answer.',
+        model: model as LanguageModelV2,
+        memory: new MockMemory({ storage: memoryStorage }),
+        tools: { approvalTool: tool },
+        outputProcessors: [
+          {
+            id: 'record-resumed-text',
+            processOutputStream: async ({ part }: any) => {
+              if (part.type === 'text-delta') seenText.push(part.payload?.text ?? part.delta ?? '');
+              return part;
+            },
+          },
+        ],
+      });
+      const pubsub = new CachingPubSub(transport, new InMemoryServerCache());
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      new Mastra({ agents: { cacheMissResumeAgent: durableAgent }, storage, logger: false });
+      return durableAgent;
+    };
+
+    const firstProcessText: string[] = [];
+    const firstProcess = buildAgent(firstProcessText);
+    const started = await firstProcess.stream('Delete the file', { memory, closeOnSuspend: true });
+    for await (const _chunk of started.fullStream) void _chunk;
+
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: started.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+    });
+
+    await transport.publish(AGENT_STREAM_TOPIC(started.runId), {
+      type: AgentStreamEventTypes.CHUNK,
+      runId: started.runId,
+      data: { type: 'text-delta', payload: { id: 'stale', text: 'STALE' } },
+    });
+
+    globalRunRegistry.clear();
+    const resumedText: string[] = [];
+    const secondProcess = buildAgent(resumedText);
+    const resumed = await secondProcess.resumeStream(
+      { approved: true },
+      { runId: started.runId, toolCallId: 'call-1', memory },
+    );
+    for await (const _chunk of resumed.fullStream) void _chunk;
+
+    expect(resumedText).toContain('Resumed');
+    expect(resumedText).not.toContain('STALE');
   });
 
   it('should deduplicate events during resume replay', async () => {

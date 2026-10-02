@@ -149,6 +149,24 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 </Txt>;
 ```
 
+#### Card titles
+
+Card titles use 13px text with a 150% line height. Choose the complete role rather than overriding a label’s weight or tracking.
+
+| Variant             | Weight | Tracking  | Use                         |
+| ------------------- | ------ | --------- | --------------------------- |
+| `card-title`        | 550    | Normal    | Expanded card titles        |
+| `card-title-tight`  | 550    | -0.025rem | Compact work-item titles    |
+| `card-title-strong` | 600    | Normal    | Emphasized candidate titles |
+
+```tsx
+<Txt variant="card-title-tight" tone="ink">
+  Review the deployment configuration
+</Txt>
+```
+
+These roles preserve the existing Factory card typography. Control labels remain `label` at 500 weight.
+
 #### Monospace
 
 Monospace is a typeface, not another role. `font="mono"` swaps the family to `--font-mono` and keeps the role's size, line height, and weight, so a mono value lines up with the proportional text around it.

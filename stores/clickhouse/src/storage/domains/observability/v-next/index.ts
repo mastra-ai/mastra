@@ -93,8 +93,10 @@ import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
+  TraceAggregateResponse,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -175,6 +177,7 @@ import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -953,6 +956,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-aggregate',
       ] as const;
     }
 
@@ -973,6 +977,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      'trace-aggregate',
     ] as const;
   }
 
@@ -1133,6 +1138,27 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

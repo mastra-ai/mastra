@@ -76,6 +76,8 @@ const TRACKED_COMMANDS = new Set([
   'memory-gateway',
   'custom-providers',
   'threads',
+  'resume',
+  'clone',
   'new',
 ]);
 
@@ -167,6 +169,7 @@ export async function dispatchSlashCommand(
       await handleCloneCommand(ctx);
       return true;
     case 'threads':
+    case 'resume':
       await handleThreadsCommand(ctx);
       return true;
     case 'thread':
@@ -249,6 +252,7 @@ export async function dispatchSlashCommand(
       await handleDiffCommand(ctx, args[0]);
       return true;
     case 'name':
+    case 'rename':
       await handleNameCommand(ctx, args);
       return true;
     case 'resource':
