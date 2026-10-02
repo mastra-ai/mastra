@@ -217,6 +217,7 @@ type AgentThreadRunSuspension = {
 type AgentThreadRunContinuation<OUTPUT = unknown> = {
   sourceOutput: MastraModelOutput<OUTPUT>;
   canContinue: () => boolean;
+  didPublishTerminal: () => boolean;
 };
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
@@ -1958,6 +1959,7 @@ export class AgentThreadStreamRuntime {
     let done = false;
     let cancelled = false;
     let failed = false;
+    let publishedTerminal = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
     // Resolves once the broadcast pump has drained the source stream AND every
@@ -2022,6 +2024,15 @@ export class AgentThreadStreamRuntime {
           ? { pinned: true }
           : {}),
       });
+      const typedPart = part as { type?: string; finishReason?: string; payload?: { finishReason?: string } };
+      const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+      if (
+        typedPart.type === 'error' ||
+        typedPart.type === 'abort' ||
+        (typedPart.type === 'finish' && finishReason !== 'tool-calls')
+      ) {
+        publishedTerminal = true;
+      }
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
@@ -2229,6 +2240,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast: start,
       cancelBroadcast: cancel,
       canContinueBroadcast: () => started && !done && !cancelled && !failed,
+      didPublishTerminal: () => publishedTerminal,
       broadcastFinished,
     };
   }
@@ -2383,6 +2395,11 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** Capture whether the currently registered continuation publishes its terminal stream part. */
+  captureThreadRunTerminalPublish(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.didPublishTerminal;
   }
 
   getResumableThreadRunSuspension(
@@ -2843,6 +2860,7 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       startBroadcast,
       canContinueBroadcast,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
@@ -2868,7 +2886,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -2957,6 +2975,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       cancelBroadcast,
       canContinueBroadcast,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const record: AgentThreadRunRecord<OUTPUT> = {
@@ -2975,7 +2994,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 

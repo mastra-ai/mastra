@@ -1101,6 +1101,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         output,
         (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
         agent.getPubSub(),
+        streamOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
       );
 
       // 4. Return stream result - attach extra properties to output for compatibility
@@ -1267,6 +1268,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and must not be published to the run's shared stream topic, which would close
       // the original run's stream too.
       let notResumable = false;
+      const didThreadRunPublishTerminal = agentThreadStreamRuntime.captureThreadRunTerminalPublish(
+        runId,
+        agent.getPubSub(),
+      );
 
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
@@ -1385,6 +1390,42 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeResumeRegistry();
         throw error;
+      }
+
+      const resumeMemory = (
+        resumeOptions as InngestAgentResumeOptions<TOutput> & {
+          memory?: AgentExecutionOptions<TOutput>['memory'];
+        }
+      )?.memory;
+      const thread = resumeOptions?.threadId ?? resumeMemory?.thread;
+      const resumeStreamOptions = {
+        ...(resumeOptions ?? {}),
+        runId,
+        ...(thread
+          ? {
+              memory: {
+                ...(resumeMemory ?? {}),
+                thread,
+                resource: resumeMemory?.resource ?? resumeOptions?.resourceId,
+              },
+            }
+          : {}),
+      } as AgentExecutionOptions<TOutput>;
+      const continued = agentThreadStreamRuntime.continueRun(
+        proxyRef as unknown as Agent<any, any, any, any>,
+        output,
+        resumeStreamOptions,
+        agent.getPubSub(),
+      );
+      const terminalPublishedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunPublishTerminal?.();
+      if (!continued && !terminalPublishedDuringDispatch) {
+        await agentThreadStreamRuntime.registerRun(
+          proxyRef as unknown as Agent<any, any, any, any>,
+          output,
+          resumeStreamOptions,
+          agent.getPubSub(),
+          resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+        );
       }
 
       const abort = async (reason?: unknown) => {
