@@ -100,6 +100,21 @@ function getPathKey(segment: PropertyKey | { key: PropertyKey }): string {
 }
 
 /**
+ * Builds a path-aware Error from Standard Schema issues.
+ * The `errors` array lets consumers (e.g. the @mastra/mcp 1.x tools/call handler) report one line per field.
+ */
+export function createStandardSchemaIssuesError(issues: ReadonlyArray<StandardSchemaIssue>): Error & {
+  errors: { path: string[]; message: string }[];
+} {
+  const errors = issues.map(issue => ({
+    path: (issue.path ?? []).map(segment => getPathKey(segment)),
+    message: issue.message,
+  }));
+  const message = errors.map(e => `- ${e.path.join('.') || 'root'}: ${e.message}`).join('\n');
+  return Object.assign(new Error(message), { errors });
+}
+
+/**
  * Creates an empty FormattedValidationErrors object.
  */
 function createEmptyErrors(): { errors: string[]; fields: Record<string, unknown> } {
