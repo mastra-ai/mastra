@@ -254,6 +254,13 @@ describe('attachment download recovery', () => {
     };
   }
 
+  async function contentBytes(data: unknown): Promise<Buffer> {
+    if (data instanceof Uint8Array) return Buffer.from(data);
+    const value = data instanceof URL ? data.href : String(data);
+    if (value.startsWith('data:')) return Buffer.from(await (await fetch(value)).arrayBuffer());
+    return Buffer.from(value, 'base64');
+  }
+
   describe.each([false, true])('durable: %s', durable => {
     it.each([false, true])(
       'skips an unavailable attachment that nothing recovers, with an error processor present: %s',
@@ -464,6 +471,8 @@ describe('attachment download recovery', () => {
       ],
       ['SVG data that is not markup', 'input', 'data:image/svg+xml;base64,aGVsbG8=', 'image/svg+xml'],
       ['WAV data that is not audio', 'input', 'data:audio/wav;base64,aGVsbG8=', 'audio/wav'],
+      ['a percent-encoded data URL that is not markup', 'input', 'data:image/svg+xml,hello', 'image/svg+xml'],
+      ['a data URL with an invalid percent escape', 'input', 'data:image/svg+xml,%3Csvg%zz', 'image/svg+xml'],
     ] as const)(
       'gives %s the placeholder when the model accepts data URLs',
       async (_label, source, data, mediaType) => {
@@ -528,6 +537,8 @@ describe('attachment download recovery', () => {
       ['MP3 frame', '//uQZAAAAAA=', 'audio/mpeg'],
       ['WAV', 'UklGRiQAAABXQVZFZm10IA==', 'audio/wav'],
       ['M4A', 'AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==', 'audio/mp4'],
+      ['percent-encoded PNG', 'data:image/png,%89PNG%0D%0A%1A%0A', 'image/png'],
+      ['percent-encoded SVG', 'data:image/svg+xml,%3Csvg%3E%3C/svg%3E', 'image/svg+xml'],
     ] as const)('still sends real %s content to a model that accepts data URLs', async (_label, data, mediaType) => {
       const dataUrlModel = makeModel('data-urls');
       const { run } = setup({ durable, models: [dataUrlModel.model] });
@@ -537,6 +548,7 @@ describe('attachment download recovery', () => {
       const { files, placeholders } = promptAttachments(dataUrlModel.prompts[0]!);
       expect(placeholders).toEqual([]);
       expect(files).toHaveLength(1);
+      expect((await contentBytes(files[0]!.data)).equals(await contentBytes(data))).toBe(true);
     });
 
     it('keeps a stored message downloadable when another message recorded the same URL', async () => {
