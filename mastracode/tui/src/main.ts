@@ -151,7 +151,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   // createMastraCode() brought up shared resources and minted the single
   // session that all work runs through. The AgentController owns no session of its own.
   const session = result.session;
-  getResumeThreadId = () => session.thread.getId();
+  getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {

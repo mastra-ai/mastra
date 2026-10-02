@@ -42,14 +42,18 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('reports an unknown requested thread and leaves a new thread pending', async () => {
+  it('reports an unknown requested thread and unbinds the auto-selected thread', async () => {
+    const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
+    const clearAndReleaseLock = vi.fn().mockResolvedValue(undefined);
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
       session: {
         thread: {
-          getId: vi.fn(() => null),
-          list: vi.fn().mockResolvedValue([]),
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest]),
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock,
         },
       },
     } as any;
@@ -58,12 +62,16 @@ describe('resumeThreadOnStartup', () => {
       kind: 'missing',
       threadId: 'missing-thread',
     });
+    expect(state.session.thread.cleanupSubscription).toHaveBeenCalled();
+    expect(clearAndReleaseLock).toHaveBeenCalled();
     expect(state.pendingNewThread).toBe(true);
   });
 
-  it('reports a locked requested thread instead of throwing', async () => {
+  it('reports a locked requested thread and unbinds the auto-selected thread', async () => {
+    const latest = createThread('thread-latest', 'Latest', '2026-08-28T11:00:00Z');
     const requested = createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z');
     const switchThread = vi.fn().mockRejectedValue(new ThreadLockError('thread-requested', 4321));
+    const clearAndReleaseLock = vi.fn().mockResolvedValue(undefined);
     const state = {
       projectInfo: { rootPath: '/tmp/project' },
       pendingNewThread: false,
@@ -71,9 +79,11 @@ describe('resumeThreadOnStartup', () => {
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: {
-          getId: vi.fn(() => null),
-          list: vi.fn().mockResolvedValue([requested]),
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn().mockResolvedValue([latest, requested]),
           switch: switchThread,
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock,
         },
       },
     } as any;
@@ -85,6 +95,38 @@ describe('resumeThreadOnStartup', () => {
       ownerPid: 4321,
     });
     expect(state.controller.setResourceId).not.toHaveBeenCalled();
+    expect(clearAndReleaseLock).toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
+  });
+
+  it('restores the original resource when a cross-resource requested thread is locked', async () => {
+    const requested = {
+      ...createThread('thread-requested', 'Requested', '2026-08-28T10:00:00Z'),
+      resourceId: 'resource-2',
+    };
+    let resourceId = 'resource-1';
+    const setResourceId = vi.fn(async (_session: unknown, input: { resourceId: string }) => {
+      resourceId = input.resourceId;
+    });
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      controller: { setResourceId },
+      session: {
+        identity: { getResourceId: vi.fn(() => resourceId) },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([requested]),
+          switch: vi.fn().mockRejectedValue(new ThreadLockError('thread-requested', 4321)),
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    } as any;
+
+    await expect(resumeThreadOnStartup(state, 'thread-requested')).resolves.toMatchObject({ kind: 'locked' });
+    expect(setResourceId.mock.calls.map(([, input]) => input.resourceId)).toEqual(['resource-2', 'resource-1']);
+    expect(resourceId).toBe('resource-1');
     expect(state.pendingNewThread).toBe(true);
   });
 

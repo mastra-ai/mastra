@@ -24,10 +24,11 @@ export async function resumeThreadOnStartup(
   if (requestedThreadId) {
     const thread = allThreads.find(candidate => candidate.id === requestedThreadId);
     if (!thread) {
-      state.pendingNewThread = true;
+      await startPendingNewThread(state);
       return { kind: 'missing', threadId: requestedThreadId };
     }
-    if (thread.resourceId !== state.session.identity.getResourceId()) {
+    const originalResourceId = state.session.identity.getResourceId();
+    if (thread.resourceId !== originalResourceId) {
       await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
     }
     if (requestedThreadId !== activeThreadId) {
@@ -35,7 +36,11 @@ export async function resumeThreadOnStartup(
         await state.session.thread.switch({ threadId: requestedThreadId });
       } catch (error) {
         if (!(error instanceof ThreadLockError)) throw error;
-        state.pendingNewThread = true;
+        // The new thread belongs to this project, not the locked thread's resource.
+        if (state.session.identity.getResourceId() !== originalResourceId) {
+          await state.controller.setResourceId(state.session, { resourceId: originalResourceId });
+        }
+        await startPendingNewThread(state);
         return { kind: 'locked', threadId: thread.id, title: thread.title || thread.id, ownerPid: error.ownerPid };
       }
     }
@@ -62,6 +67,17 @@ export async function resumeThreadOnStartup(
     }
   }
 
+  state.pendingNewThread = true;
+}
+
+/**
+ * Leave the session waiting for a new thread. Session creation may already have
+ * bound the latest project thread; unbind it (and release its lock) so the UI
+ * and exit hint don't show a thread the user didn't ask for.
+ */
+async function startPendingNewThread(state: TUIState): Promise<void> {
+  state.session.thread.cleanupSubscription();
+  await state.session.thread.clearAndReleaseLock();
   state.pendingNewThread = true;
 }
 
