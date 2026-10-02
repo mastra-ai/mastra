@@ -1,12 +1,17 @@
 import { createSpanQueryTests } from '@internal/storage-test-utils';
+import type { ObservabilityStorage } from '@mastra/core/storage';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { DuckDBConnection, DuckDBQueryTimeoutError } from '../../db';
-import { ObservabilityStorageDuckDB } from './index';
+import { DuckDBStore } from '../../../index';
+import { DuckDBQueryTimeoutError } from '../../db';
 
-const db = new DuckDBConnection({ path: ':memory:' });
-const storage = new ObservabilityStorageDuckDB({ db });
-beforeAll(() => storage.init());
-afterAll(() => db.close());
+const store = new DuckDBStore({ path: ':memory:' });
+const db = store.db;
+let storage: ObservabilityStorage;
+beforeAll(async () => {
+  storage = (await store.getStore('observability'))!;
+  await storage.init();
+});
+afterAll(() => store.close());
 createSpanQueryTests(() => storage, { eventSourced: true });
 
 it('interrupts only the timed-out query connection', async () => {

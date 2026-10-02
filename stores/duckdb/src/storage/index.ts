@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -23,6 +24,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'metric-discovery',
   'trace-query',
   'trace-aggregate',
+  ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -42,6 +44,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'delta-polling',
   'trace-query',
   'trace-aggregate',
+  ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -255,6 +258,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.aggregateTraces(...args);
+  }
+
+  async querySpans(
+    ...args: Parameters<ObservabilityStoreImpl['querySpans']>
+  ): ReturnType<ObservabilityStoreImpl['querySpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.querySpans(...args);
   }
 
   async getTraceQueryObservedFields(
