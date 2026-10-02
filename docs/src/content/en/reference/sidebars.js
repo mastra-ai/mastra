@@ -591,6 +591,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/cyber-refusal-handler', label: 'CyberRefusalHandler' },
+        { type: 'doc', id: 'processors/file-upload-processor', label: 'FileUploadProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },

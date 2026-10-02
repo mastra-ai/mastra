@@ -20,7 +20,7 @@ export interface ComposerAttachment {
 
 interface ComposerAttachmentsContextValue {
   attachments: ComposerAttachment[];
-  addFiles: (files: File[] | FileList) => Promise<string[]>;
+  addFiles: (files: File[] | FileList) => Promise<void>;
   addUrl: (url: string) => Promise<void>;
   remove: (id: string) => void;
   clear: () => void;
@@ -151,10 +151,7 @@ export const ComposerAttachmentsProvider = ({
             return attachment;
           }),
         );
-        const accepted = list.filter(attachment => attachment.kind !== 'file');
-        if (accepted.length > 0 && generation.current === currentGeneration)
-          setAttachments(prev => [...prev, ...accepted]);
-        return list.filter(attachment => attachment.kind === 'file').map(attachment => attachment.name);
+        if (list.length > 0 && generation.current === currentGeneration) setAttachments(prev => [...prev, ...list]);
       } finally {
         if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
       }

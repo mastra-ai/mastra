@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
-import { ModerationProcessor } from '@mastra/core/processors';
+import { FileUploadProcessor, ModerationProcessor } from '@mastra/core/processors';
 import { submitPlanTool } from '@mastra/core/tools';
 import { cookingTool } from '../tools';
 import { TaskSignalProvider } from '@mastra/core/signals';
@@ -26,12 +26,24 @@ import {
 
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { createDurableAgent } from '@mastra/core/agent/durable';
+import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
+  // Uploaded files and commands live in the cloud sandbox; skills and plans stay on the local filesystem.
+  sandbox: new E2BSandbox({
+    id: 'chef-model-v2-agent-example',
+    apiKey: process.env.E2B_API_KEY,
+  }),
   skills: ['.agents/skills'],
+});
+
+// Files the model reads itself keep going to the model; everything else is uploaded to the sandbox.
+const fileUploadProcessor = new FileUploadProcessor({
+  workspace,
+  excludeMimeTypes: ['image/*', 'application/pdf', 'audio/*', 'video/*', 'text/*'],
 });
 
 const memory = new Memory({
@@ -113,6 +125,12 @@ export const chefModelV2Agent = new Agent({
 
       For complex multi-step requests, use the task list tools to plan and track your progress.
       When asked to submit a plan, write its Markdown under .mastracode/plans/ in the workspace, then call submit_plan with that path.
+
+      ## Uploaded files
+
+      A file the user attaches can be uploaded to the cloud sandbox. You then receive its path under uploads/ instead of its content.
+      That file only exists in the sandbox: read it by running commands there, not with the workspace file tools.
+      For an Excel workbook, load the xlsx skill first.
       `,
     role: 'system',
   },
@@ -133,7 +151,7 @@ export const chefModelV2Agent = new Agent({
   },
   memory,
   signals: [new TaskSignalProvider()],
-  inputProcessors: [moderationProcessor],
+  inputProcessors: [fileUploadProcessor, moderationProcessor],
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
