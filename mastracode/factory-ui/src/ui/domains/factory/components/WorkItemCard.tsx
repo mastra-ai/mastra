@@ -7,10 +7,11 @@ import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
 import { boardCardStatus } from '../boardCardStatus';
+import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { itemBoard, itemStageLabel } from '../boardStages';
+import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
   cardActions,
@@ -65,33 +66,24 @@ export function WorkItemCard({
   layout,
 }: {
   item: WorkItem;
-  // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
-  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
   deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
-  /** Cards linked to this one, resolved once for the whole board. */
   relatedItems: WorkItem[];
-  /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
-  /** Status text while a session start is resolving, before its mutation starts. */
   preparing?: string;
-  /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
-  /** Run a rule wants to start on this card, waiting for someone to release it. */
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
   retryingDecisionId?: string;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onRetryDecision: (decisionId: string) => void;
-  /** Live status of the card's bound sessions, resolved once for the whole board. */
   sessionStatus?: SessionRowStatus;
-  /** Fallback when the card offers no lane: open a session on it (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
@@ -108,42 +100,21 @@ export function WorkItemCard({
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
-  // The lane's own move first: clicking the button of the column a card sits in re-runs that lane.
-  // Then the first lane whose seat is still free, so a card never leads with a run it has already had.
-  const primaryMove =
-    moves.find(move => move.stage === columnStage) ?? moves.find(move => !(move.role in sessions)) ?? moves[0];
+  const primaryMove = primaryCardMove(moves, columnStage, sessions);
   const threadSession = itemThreadSession(sessions);
-  const nextPhaseId = definition?.phases.find(phase => phase.id === columnStage)?.transitions?.[0]?.to;
-  const nextPhaseDef = definition?.phases.find(phase => phase.id === nextPhaseId);
-  const nextPhase = nextPhaseDef === undefined ? undefined : { id: nextPhaseDef.id, label: nextPhaseDef.title };
+  const nextPhase = nextBoardPhase(definition, columnStage);
   const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =
     threadSession === undefined
       ? undefined
       : `/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`;
-  const proposedRunLabel =
-    proposal === undefined
-      ? undefined
-      : custom
-        ? // A proposal for a role this board never declares is a leftover from another board.
-          definition?.phases.find(phase => phase.role === proposal.role)?.title
-        : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
+  const proposedRun = proposedCardRun(proposal, custom, definition, moves, primaryMove);
+  const proposedRunLabel = proposedRun?.label;
 
   const activity = workItemActivity(item, activityPage);
   const status = boardCardStatus({
-    proposal:
-      proposal === undefined || proposedRunLabel === undefined
-        ? undefined
-        : { label: proposedRunLabel, decisionId: proposal.id },
-    moving:
-      evaluatingStage === undefined
-        ? undefined
-        : {
-            stage: evaluatingStage,
-            label:
-              definition?.phases.find(phase => phase.id === evaluatingStage)?.title ??
-              itemStageLabel(item, evaluatingStage),
-          },
+    proposal: proposedRun,
+    moving: movingCardStatus(evaluatingStage, definition, item),
     preparing: busyLabel,
     decision,
     transitionReason,
@@ -176,9 +147,6 @@ export function WorkItemCard({
     onMove,
     onRemove,
   };
-
-  // Acting collapses the panel first, so the result lands on the card it came from.
-  // Dismissing a suggested run is the one entry that leaves it open.
   const panelMenu: WorkItemMenuProps = {
     ...menu,
     onApproveProposal: decisionId => {
@@ -217,9 +185,6 @@ export function WorkItemCard({
       <RelatedWorkItemLink key={related.id} item={related} href={relationshipPath(related, factoryId)} kind="board" />
     );
   };
-
-  // A held card's decision, like a parked suggestion, is the person's to
-  // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     running: wickStatus !== undefined,
     waiting: status.kind === 'waiting' || status.kind === 'held',
@@ -283,7 +248,6 @@ export function WorkItemCard({
         }}
         className={cn(
           'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
-          // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
           busyLabel !== undefined && 'opacity-70',

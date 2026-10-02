@@ -52,19 +52,13 @@ export function SearchInput({
           {...inputProps}
           type="search"
         />
-        {onClose ? (
+        {(onClose || value) && (
           <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Close search" onClick={close}>
+            <InputGroupButton aria-label={onClose ? 'Close search' : 'Clear search'} onClick={onClose ? close : clear}>
               <XIcon />
             </InputGroupButton>
           </InputGroupAddon>
-        ) : value ? (
-          <InputGroupAddon align="inline-end">
-            <InputGroupButton aria-label="Clear search" onClick={clear}>
-              <XIcon />
-            </InputGroupButton>
-          </InputGroupAddon>
-        ) : null}
+        )}
       </InputGroup>
     </Field>
   );

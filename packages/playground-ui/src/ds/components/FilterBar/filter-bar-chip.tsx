@@ -627,6 +627,12 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   );
 }
 
+function freeTextPlaceholder(step: ValueInputProps['step'], noun: string) {
+  if (!step.hasSuggestions) return `Type a ${noun}…`;
+  if (step.allowFreeText) return `Search or type a ${noun}…`;
+  return `Search ${noun}s…`;
+}
+
 /** Free-text (optionally suggestion-backed) value input; text and number share it. */
 function FreeTextValueInput({
   step,
@@ -639,13 +645,7 @@ function FreeTextValueInput({
       <SegmentSearchInput<FilterBarOption>
         icon={step.hasSuggestions ? SearchIcon : PencilIcon}
         inputMode={inputMode}
-        placeholder={
-          step.hasSuggestions
-            ? step.allowFreeText
-              ? `Search or type a ${noun}…`
-              : `Search ${noun}s…`
-            : `Type a ${noun}…`
-        }
+        placeholder={freeTextPlaceholder(step, noun)}
         onKeyDown={(event, highlighted) => {
           const highlightedOption = step.hasSuggestions ? highlighted : null;
           const handled = step.handleKeyDown(event, highlightedOption);

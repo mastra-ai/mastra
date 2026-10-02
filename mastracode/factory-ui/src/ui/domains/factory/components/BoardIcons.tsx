@@ -22,7 +22,6 @@ import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
-import './board-stage-icons.css';
 
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
@@ -61,11 +60,11 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
 
 const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
-  orange: { icon: 'factory-stage-orange', tint: 'bg-badge-orange-indicator/5' },
-  cyan: { icon: 'factory-stage-cyan', tint: 'bg-badge-cyan-indicator/5' },
+  orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-indicator/5' },
+  cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-indicator/5' },
   info: { icon: 'text-info-indicator', tint: 'bg-info-indicator/5' },
-  purple: { icon: 'factory-stage-purple', tint: 'bg-badge-purple-indicator/5' },
-  success: { icon: 'factory-stage-success', tint: 'bg-success-indicator/5' },
+  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-indicator/5' },
+  success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-indicator/5' },
   destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-indicator/5' },
 };
 

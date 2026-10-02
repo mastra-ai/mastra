@@ -78,9 +78,8 @@ export function boardFiltersActive(state: BoardFilterState, kind: BoardKind): bo
 
 const asStrings = (value: unknown): string[] => {
   if (typeof value === 'string') return value ? [value] : [];
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string' && entry !== '')
-    : [];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry !== '');
 };
 
 /** One chip per active narrowing, keyed by field id so the URL order is the chip order. */

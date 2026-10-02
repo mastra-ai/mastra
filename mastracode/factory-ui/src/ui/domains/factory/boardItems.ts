@@ -24,9 +24,8 @@ export function hasLabel(labels: readonly string[], label: string): boolean {
 }
 
 export function metadataLabels(metadata: Record<string, unknown>): string[] {
-  return Array.isArray(metadata.labels)
-    ? metadata.labels.filter((label): label is string => typeof label === 'string')
-    : [];
+  if (!Array.isArray(metadata.labels)) return [];
+  return metadata.labels.filter((label): label is string => typeof label === 'string');
 }
 
 export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
