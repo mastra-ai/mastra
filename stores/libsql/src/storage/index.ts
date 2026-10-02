@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
@@ -228,7 +229,11 @@ export class LibSQLStore extends MastraCompositeStore {
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
-      this.client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
+      this.client = isSingleConnectionDatabase(config)
+        ? gateSingleConnectionClient(client)
+        : this.isLocalDb
+          ? resetConnectionsAfterBusy(client, { afterReset: () => void this.applyLocalPragmas() })
+          : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
