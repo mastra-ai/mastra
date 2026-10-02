@@ -22,15 +22,16 @@ export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
 
 /**
  * A chat page frame with exactly one scroll container. Bars sit above it, the
- * composer docks below it, every region shares one column.
+ * composer docks inside it, every region shares one column.
  *
  * Tuned through custom properties, all defaulted here: `--chat-column` (column
  * width), `--chat-surface` (the colour the composer veil ramps to — the shell
  * paints no fill of its own and inherits whatever surface hosts it, so this has
  * to name that same surface), `--chat-fade` (the band the veil ramps in
- * across, above the composer), `--chat-veil` (strongest it ever gets — the
- * transcript keeps showing through), `--chat-gutter` (room below the composer),
- * `--chat-inset-end` (room an overlay panel claims on the end edge).
+ * across, above the composer), `--chat-veil` (strongest it gets, opaque by
+ * default so nothing reads under the composer), `--chat-gutter` (room below the
+ * composer), `--chat-edge` (room on both sides, so the scrollbar never overlaps
+ * the composer), `--chat-inset-end` (room an overlay panel claims on the end edge).
  */
 export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps) {
   return (
@@ -39,7 +40,7 @@ export function ChatShellRoot({ className, scroller, ...props }: ChatShellProps)
         data-slot="chat-shell"
         className={cn(
           '@container relative isolate flex min-h-0 min-w-0 flex-col',
-          '[--chat-column:48rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
+          '[--chat-column:48rem] [--chat-edge:0.5rem] [--chat-fade:2rem] [--chat-gutter:0.75rem] [--chat-inset-end:0px]',
           '[--chat-surface:var(--color-background)] [--chat-veil:100%]',
           className,
         )}
@@ -67,34 +68,31 @@ export function ChatShellStage({ className, ...props }: ComponentPropsWithoutRef
  * same room would drag the scrollbar inward, off the true edge. No overscroll
  * bounce on either axis: the dock is sticky inside this box, so the rubber band
  * would carry the composer off its edge along with the transcript.
+ *
+ * The same edge room on both sides keeps the scrollbar clear of the composer and
+ * the column centred, with a matching gutter for classic scrollbars.
  */
 export function ChatShellViewport({ className, children, ...props }: MessageScrollerViewportProps) {
   return (
     <MessageScrollerViewport
       className={cn(
-        'h-auto min-h-0 flex-1 overscroll-none pe-(--chat-inset-end)',
+        'h-auto min-h-0 flex-1 overscroll-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
+        '[scrollbar-gutter:stable_both-edges]',
         'transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none',
         className,
       )}
       {...props}
     >
       {/* Sticky against the scroller itself is clamped to its box, not the
-          scrolled height, and strands the fade mid-transcript. */}
+          scrolled height, and strands the dock mid-transcript. */}
       <div data-slot="chat-shell-track" className="relative flex min-h-full min-w-0 flex-col">
         {children}
-        {/* The air under the last row, and the band the transcript fades out across
-            as it scrolls toward the dock. */}
-        <div
-          aria-hidden
-          data-slot="chat-shell-fade"
-          className="pointer-events-none sticky bottom-0 z-10 h-(--chat-fade) shrink-0 bg-(--chat-surface) [mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil)))]"
-        />
       </div>
     </MessageScrollerViewport>
   );
 }
 
-/** Scrolling content. The air under it belongs to the viewport's fade band. */
+/** Scrolling content. The air above the composer belongs to the dock's fade band. */
 export function ChatShellContent({ className, ...props }: MessageScrollerContentProps) {
   return <MessageScrollerContent className={cn('flex-1', className)} {...props} />;
 }
@@ -147,17 +145,22 @@ export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...pr
 }
 
 /**
- * Composer region, the scroller's sibling under it, so neither the transcript nor
- * the scrollbar runs behind it. It takes the end inset with the scroller, so the
- * two stay on one axis.
+ * Composer region, sticky but left in flow: its own height reserves the room the
+ * transcript scrolls behind, so nothing measures it and a composer growing under
+ * the cursor resizes no box the scroller watches.
+ *
+ * Behind it, one sheet of the page masked in over `--chat-fade` of air, reaching
+ * `--chat-veil` at the dock's top edge. The transcript fades out above the
+ * composer and nothing shows through around or under the card.
  */
 export function ChatShellDock({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (
     <div
       data-slot="chat-shell-dock"
       className={cn(
-        'relative z-10 shrink-0 pe-(--chat-inset-end) pb-(--chat-gutter)',
-        'transition-[padding-inline-end] duration-360 ease-out-custom motion-reduce:transition-none',
+        'sticky bottom-0 z-10 mt-(--chat-fade) shrink-0 pb-(--chat-gutter)',
+        'before:pointer-events-none before:absolute before:inset-x-0 before:-top-(--chat-fade) before:bottom-0 before:-z-10',
+        'before:bg-(--chat-surface) before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
         className,
       )}
       {...props}
@@ -174,7 +177,7 @@ export function ChatShellScrollButton({ className, ...props }: MessageScrollerBu
   return (
     <div
       data-slot="chat-shell-scroll-button"
-      className="pointer-events-none absolute inset-s-0 inset-e-(--chat-inset-end) bottom-[calc(100%+0.5rem)] flex"
+      className="pointer-events-none absolute inset-x-0 bottom-[calc(100%+0.5rem)] flex"
     >
       <ChatShellColumn className="flex-row justify-center">
         <MessageScrollerButton

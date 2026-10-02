@@ -506,12 +506,10 @@ export function MessageScrollerProvider({
 
   React.useEffect(() => {
     if (!viewportElement || typeof ResizeObserver === 'undefined') return undefined;
-    // The box shrinking (a composer growing under it) pushes the end out of view just
-    // as content growing does, and a following reader is carried the same way.
-    const observer = new ResizeObserver(notifyContentResize);
+    const observer = new ResizeObserver(syncAfterScroll);
     observer.observe(viewportElement);
     return () => observer.disconnect();
-  }, [notifyContentResize, viewportElement]);
+  }, [syncAfterScroll, viewportElement]);
 
   React.useLayoutEffect(() => {
     updateScrollable();

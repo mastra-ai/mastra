@@ -213,10 +213,9 @@ export const Thread = ({
         data-testid="thread-wrapper"
       >
         <ChatShell.Stage>
-          {/* The landing centres the composer in the whole stage, with no transcript to scroll. */}
-          <ChatShell.Viewport className={landingShown ? 'hidden' : undefined} style={{ overflowAnchor: 'none' }}>
+          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
             <ThreadRailLayer turns={threadRailTurns} />
-            <ChatShell.Content>
+            <ChatShell.Content className={landingShown ? 'flex-none' : undefined}>
               {isLoadingPrevious && (
                 <ChatShell.Column
                   data-testid="thread-history-older-skeleton"
@@ -275,34 +274,34 @@ export const Thread = ({
                 </ChatShell.Column>
               )}
             </ChatShell.Content>
+            <ChatShell.Dock
+              data-testid={landingShown ? 'thread-landing' : undefined}
+              className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
+            >
+              {landingShown ? null : <ChatShell.ScrollButton />}
+              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+                {landingShown ? (
+                  <ThreadWelcome agentName={agentName} />
+                ) : (
+                  <>
+                    {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                    <TaskPanel />
+                  </>
+                )}
+                <div className={landingShown ? 'starter-prompt' : undefined}>
+                  <AgentComposer
+                    agentId={agentId}
+                    threadId={threadId}
+                    hasModelList={hasModelList}
+                    hideModelSwitcher={hideModelSwitcher}
+                    runOptionsSlot={runOptionsSlot}
+                    refreshThreadList={refreshThreadList}
+                  />
+                </div>
+                {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
+              </ChatShell.Column>
+            </ChatShell.Dock>
           </ChatShell.Viewport>
-          <ChatShell.Dock
-            data-testid={landingShown ? 'thread-landing' : undefined}
-            className={landingShown ? 'flex flex-1 flex-col justify-center py-12' : undefined}
-          >
-            {landingShown ? null : <ChatShell.ScrollButton />}
-            <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
-              {landingShown ? (
-                <ThreadWelcome agentName={agentName} />
-              ) : (
-                <>
-                  {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
-                  <TaskPanel />
-                </>
-              )}
-              <div className={landingShown ? 'starter-prompt' : undefined}>
-                <AgentComposer
-                  agentId={agentId}
-                  threadId={threadId}
-                  hasModelList={hasModelList}
-                  hideModelSwitcher={hideModelSwitcher}
-                  runOptionsSlot={runOptionsSlot}
-                  refreshThreadList={refreshThreadList}
-                />
-              </div>
-              {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
-            </ChatShell.Column>
-          </ChatShell.Dock>
         </ChatShell.Stage>
       </ChatShell>
     </ComposerAttachmentsProvider>

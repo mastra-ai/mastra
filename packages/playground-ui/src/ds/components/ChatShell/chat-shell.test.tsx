@@ -44,11 +44,11 @@ const renderShell = () =>
           <ChatShell.Content data-testid="content">
             <ChatShell.Column data-testid="transcript-column">transcript</ChatShell.Column>
           </ChatShell.Content>
+          <ChatShell.Dock data-testid="dock">
+            <ChatShell.ScrollButton />
+            <ChatShell.Column>composer</ChatShell.Column>
+          </ChatShell.Dock>
         </ChatShell.Viewport>
-        <ChatShell.Dock data-testid="dock">
-          <ChatShell.ScrollButton />
-          <ChatShell.Column>composer</ChatShell.Column>
-        </ChatShell.Dock>
       </ChatShell.Stage>
     </ChatShell>,
   );
@@ -83,7 +83,7 @@ describe('ChatShell', () => {
     expect(screen.getByTestId('shell').className).toContain('[--chat-column:44rem]');
   });
 
-  it('docks the composer under the scroller, measuring nothing', () => {
+  it('keeps the dock in flow and measures nothing', () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
 
     renderShell();
@@ -93,33 +93,33 @@ describe('ChatShell', () => {
     // MessageScrollerContent observes, so autoscroll fires on every keystroke.
     expect(MockResizeObserver.instances.some(observer => observer.observed.has(dock))).toBe(false);
     expect(screen.getByTestId('shell').getAttribute('style')).toBeNull();
-    // A sibling after the scroller, so neither the transcript nor the scrollbar runs behind it.
-    expect(dock.previousElementSibling).toBe(screen.getByTestId('viewport'));
-    expect(dock.className).not.toContain('sticky');
+    expect(dock.className).toContain('sticky');
+    expect(dock.className).not.toContain('-mt-');
   });
 
-  it('pins the fade against a track spanning the scrolled height, not the scroller itself', () => {
+  it('docks against a track spanning the scrolled height, not the scroller itself', () => {
     renderShell();
 
     const track = screen.getByTestId('viewport').querySelector('[data-slot="chat-shell-track"]');
     // A sticky direct child of the scroller is clamped to the scroller's own box.
-    expect(track?.lastElementChild?.getAttribute('data-slot')).toBe('chat-shell-fade');
+    expect(screen.getByTestId('dock').parentElement).toBe(track);
     expect(track?.className).toContain('min-h-full');
     // An overlay pinned to the scroller itself spans one screen, not the transcript.
     expect(track?.className).toContain('relative');
   });
 
-  it('fades the transcript out over its own band of air, never past full strength', () => {
+  it('ramps the veil in over its own band of air, never past full strength', () => {
     renderShell();
 
-    const fade = screen.getByTestId('viewport').querySelector('[data-slot="chat-shell-fade"]');
-    // The band is also the air under the last row, so a still transcript ends clear of it.
-    expect(fade?.className).toContain('sticky');
-    expect(fade?.className).toContain('h-(--chat-fade)');
-    expect(fade?.className).toContain(
-      '[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil)))]',
+    const dock = screen.getByTestId('dock');
+    // Rise and margin match, so the ramp starts exactly where resting content
+    // ends; anything shorter dims the last row on a still transcript.
+    expect(dock.className).toContain('mt-(--chat-fade)');
+    expect(dock.className).toContain('before:-top-(--chat-fade)');
+    expect(dock.className).toContain(
+      'before:[mask-image:linear-gradient(to_bottom,transparent,rgb(0_0_0/var(--chat-veil))_var(--chat-fade))]',
     );
-    expect(screen.getByTestId('dock').className).toContain('pb-(--chat-gutter)');
+    expect(dock.className).toContain('pb-(--chat-gutter)');
     expect(screen.getByTestId('content').className).not.toContain('pb-');
     expect(screen.getByTestId('shell').className).toContain('[--chat-fade:2rem]');
     expect(screen.getByTestId('shell').className).toContain('[--chat-veil:100%]');
@@ -139,12 +139,24 @@ describe('ChatShell', () => {
   it('pads its own scroller by the end inset so the column re-centres', () => {
     renderShell();
 
-    expect(screen.getByTestId('viewport').className).toContain('pe-(--chat-inset-end)');
-    expect(screen.getByTestId('dock').className).toContain('pe-(--chat-inset-end)');
+    expect(screen.getByTestId('viewport').className).toContain('pe-[calc(var(--chat-edge)+var(--chat-inset-end))]');
     expect(screen.getByTestId('shell').className).toContain('[--chat-inset-end:0px]');
     // The panel floats inside the stage, below the bars: insetting a bar only
     // notches the top edge of the page.
     expect(screen.getByTestId('bar').className).not.toContain('pe-(--chat-inset-end)');
+  });
+});
+
+describe('ChatShell scrollbar room', () => {
+  afterEach(cleanup);
+
+  it('keeps the same edge room on both sides, so the scrollbar clears the composer', () => {
+    renderShell();
+
+    const viewport = screen.getByTestId('viewport').className;
+    expect(viewport).toContain('ps-(--chat-edge)');
+    expect(viewport).toContain('[scrollbar-gutter:stable_both-edges]');
+    expect(screen.getByTestId('shell').className).toContain('[--chat-edge:0.5rem]');
   });
 });
 

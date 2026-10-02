@@ -839,25 +839,6 @@ describe('MessageScroller autoScroll', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 600, behavior: 'auto' });
   });
 
-  it('keeps a following reader at the end when the box shrinks under a growing composer', async () => {
-    vi.stubGlobal('ResizeObserver', MockResizeObserver);
-    render(<HistoryHarness autoScroll messageIds={['message-1']} />);
-
-    const viewport = screen.getByTestId('history-viewport');
-    installScrollTo(viewport);
-    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
-
-    const observer = MockResizeObserver.instances.find(instance => instance.observed.has(viewport));
-    if (!observer) throw new Error('No resize observer registered for the viewport');
-    const scrollTo = installScrollTo(viewport);
-    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 340 });
-    await act(async () => {
-      observer.trigger([{ target: viewport }]);
-    });
-
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 660, behavior: 'auto' });
-  });
-
   it('stays attached when a scroll lands behind a reply that is still growing', async () => {
     vi.stubGlobal('ResizeObserver', MockResizeObserver);
     render(<HistoryHarness autoScroll messageIds={['message-1']} />);
