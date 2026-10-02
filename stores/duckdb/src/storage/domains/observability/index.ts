@@ -1,6 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import * as spanQueryCore from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
@@ -104,6 +107,7 @@ import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSi
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as traceAggregateOps from './trace-aggregate';
+import * as spanQueryOps from './span-query';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
@@ -252,6 +256,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        ...(typeof spanQueryCore.planSpanQuery === 'function' ? ['span-query' as const] : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -273,6 +278,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
+      ...(typeof spanQueryCore.planSpanQuery === 'function' ? ['span-query' as const] : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -310,6 +316,11 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
   }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return spanQueryOps.querySpans(this.db, plan);
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
   }

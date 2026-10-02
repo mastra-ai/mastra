@@ -26,6 +26,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   BatchCreateFeedbackArgs,
   BatchCreateLogsArgs,
   BatchCreateMetricsArgs,
@@ -147,6 +149,7 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as spanQueryOps from './span-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
@@ -375,6 +378,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -395,6 +399,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
+      ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -467,6 +472,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
+  }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return this.#run('QUERY_SPANS', () =>
+      spanQueryOps.querySpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
   }
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {

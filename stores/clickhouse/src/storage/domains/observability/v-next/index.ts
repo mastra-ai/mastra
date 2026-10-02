@@ -13,6 +13,8 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   ObservabilityStorageStrategy,
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -178,6 +180,7 @@ import { deltaPollingSupported } from './polling';
 import { backfillCurrentScores } from './score-current';
 import * as scoresOps from './scores';
 import * as traceAggregateOps from './trace-aggregate';
+import * as spanQueryOps from './span-query';
 import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
@@ -950,6 +953,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -971,6 +975,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
+      ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -1122,6 +1127,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error,
       );
     }
+  }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
   }
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {

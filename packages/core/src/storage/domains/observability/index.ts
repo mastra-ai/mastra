@@ -148,3 +148,4 @@ export type {
 } from './trace-query';
 export * from './tracing';
 export * from './types';
+export * from './span-query';
