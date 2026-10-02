@@ -228,6 +228,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     } else {
       this.persistedRecordId = appendResult.recordId;
     }
+    // The chunk is buffered and can be activated from here on, so mark the cycle done now
+    // rather than after the post-persist work below. That keeps the buffering-end marker
+    // ahead of any activation marker for this chunk.
+    await this.emitBufferingEndMarker(processed);
+    await this.opts.onBufferedChunkPersisted?.();
     // Storage redirects an append aimed at a retired generation to the head; report the
     // generation the chunk landed on, which a later reflection may already have superseded.
     if (committedRecord.id !== this.persistedRecordId) {
@@ -290,9 +295,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     return { status: 'committed', processed, record: committedRecord };
   }
 
-  async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
-    if (!processed.observations) return;
+  async emitEndMarkers() {
+    // Emitted from persist() as soon as the chunk is stored.
+  }
 
+  private async emitBufferingEndMarker(processed: ProcessedObservation) {
     const { record, threadId, messages } = this.opts;
     const tokensBuffered = await this.tokenCounter.countMessagesAsync(messages);
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
