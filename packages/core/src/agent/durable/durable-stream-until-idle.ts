@@ -85,6 +85,15 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
         if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
       },
+      onAbortActive: () => {
+        const abort = innerAborts.at(-1);
+        if (!abort) return;
+        try {
+          void Promise.resolve(abort(new Error('Aborted'))).catch(() => {});
+        } catch {
+          // ignore
+        }
+      },
       onForceClose: () => {
         for (const fn of innerCleanups) {
           try {
@@ -158,6 +167,15 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
       onInnerResult: (inner: any) => {
         if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
+      },
+      onAbortActive: () => {
+        const abort = innerAborts.at(-1);
+        if (!abort) return;
+        try {
+          void Promise.resolve(abort(new Error('Aborted'))).catch(() => {});
+        } catch {
+          // ignore
+        }
       },
       onForceClose: () => {
         for (const fn of innerCleanups) {

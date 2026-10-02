@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
@@ -1973,6 +1974,13 @@ export class DurableAgent<
    * intent nothing reads and lets the run stream on.
    */
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+
     // Resolve the run before the base call: aborting releases the thread lease,
     // after which the thread no longer has an active run to look up.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
@@ -1994,6 +2002,12 @@ export class DurableAgent<
    * is still covered by the intent the base implementation records.
    */
   abortRunStream(runId: string): boolean {
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+
     const aborted = super.abortRunStream(runId);
     this.#abortDurableRun(runId);
 

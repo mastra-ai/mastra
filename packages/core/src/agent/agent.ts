@@ -43,6 +43,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -8962,11 +8963,19 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    wrapperClose?.();
+    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
   /**

@@ -23,13 +23,13 @@ import { globalRunRegistry } from '../run-registry';
 // Helpers
 // ============================================================================
 
-function makeScriptedModel(scripts: Array<() => ReadableStream<any>>) {
+function makeScriptedModel(scripts: Array<(abortSignal?: AbortSignal) => ReadableStream<any>>) {
   let calls = 0;
   const model = new MockLanguageModelV2({
-    doStream: async () => ({
+    doStream: async ({ abortSignal }) => ({
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
-      stream: scripts[calls++]!(),
+      stream: scripts[calls++]!(abortSignal),
     }),
   });
   return { model, getCallCount: () => calls };
@@ -49,6 +49,50 @@ function textResponse(text: string) {
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
       },
     ]);
+}
+
+function abortableTextResponse(text: string, tail: string) {
+  let markStarted!: () => void;
+  const started = new Promise<void>(resolve => {
+    markStarted = resolve;
+  });
+  let aborted = false;
+
+  return {
+    started,
+    wasAborted: () => aborted,
+    response: (abortSignal?: AbortSignal) =>
+      new ReadableStream<any>({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) });
+          controller.enqueue({ type: 'text-start', id: 't' });
+          controller.enqueue({ type: 'text-delta', id: 't', delta: text });
+          markStarted();
+
+          abortSignal?.addEventListener(
+            'abort',
+            () => {
+              aborted = true;
+              controller.close();
+            },
+            { once: true },
+          );
+
+          setTimeout(() => {
+            if (abortSignal?.aborted) return;
+            controller.enqueue({ type: 'text-delta', id: 't', delta: tail });
+            controller.enqueue({ type: 'text-end', id: 't' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            });
+            controller.close();
+          }, 500);
+        },
+      }),
+  };
 }
 
 function createToolCallThenTextModel(toolName: string, args: Record<string, unknown>, finalText: string) {
@@ -706,6 +750,65 @@ describe('DurableAgent.streamUntilIdle', () => {
 
     outer.cleanup();
   });
+
+  it.each(['run', 'thread'] as const)(
+    'keeps the caller runId as a %s abort handle during continuations',
+    async abortBy => {
+      const memory = new MockMemory();
+      const continuation = abortableTextResponse('continuation started', 'continuation tail');
+      const { model } = makeScriptedModel([textResponse('initial response'), continuation.response]);
+      const baseAgent = new Agent({
+        id: `durable-abort-${abortBy}`,
+        name: `durable-abort-${abortBy}`,
+        instructions: 'test',
+        model,
+        memory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent });
+      mastra.addAgent(durableAgent as any, `durable-abort-${abortBy}`);
+
+      const runId = `durable-caller-abort-${abortBy}`;
+      const threadId = `durable-abort-thread-${abortBy}`;
+      const resourceId = 'user-1';
+      const result = await durableAgent.stream('hi', {
+        runId,
+        memory: { thread: threadId, resource: resourceId },
+        untilIdle: true,
+      });
+      const drainPromise = drain(result.fullStream as ReadableStream<any>);
+
+      await (mastra.backgroundTaskManager as any).publishLifecycleEvent('task.completed', {
+        id: `durable-abort-task-${abortBy}`,
+        toolName: 'dummy',
+        toolCallId: `durable-abort-task-${abortBy}`,
+        runId: 'background-run',
+        agentId: `durable-abort-${abortBy}`,
+        threadId,
+        resourceId,
+        status: 'completed',
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+      await continuation.started;
+
+      const aborted =
+        abortBy === 'run'
+          ? durableAgent.abortRunStream(runId)
+          : durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: runId });
+      expect(aborted).toBe(true);
+
+      const chunks = await drainPromise;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(continuation.wasAborted()).toBe(true);
+      expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).not.toContain(
+        'continuation tail',
+      );
+    },
+  );
 
   it('serializes continuations (only one inner stream at a time)', async () => {
     const memory = new MockMemory();
