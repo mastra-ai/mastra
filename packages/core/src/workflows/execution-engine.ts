@@ -7,6 +7,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
 import type {
+  NestedWorkflowParent,
   OutputWriter,
   SerializedStepFlowEntry,
   StepResult,
@@ -215,7 +216,7 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
-    parentWorkflow?: import('./types').NestedWorkflowParent;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
