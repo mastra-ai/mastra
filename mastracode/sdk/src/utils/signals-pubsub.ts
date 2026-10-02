@@ -281,24 +281,33 @@ class SignalsPubSub extends PubSub {
     if (!this.#sharedWanted.get(topic)?.has(cb)) return;
     // A retry is already bringing this callback up in the shared scope.
     if (this.#sharedRetries.get(topic)?.has(cb)) return;
-    await this.#subscribeTo(topic, shared, cb, options).catch(() => {
-      // The shared scope is best effort. A one-shot reply topic lives for one
-      // lookup, and the next lookup tries again. A request-topic subscription
-      // that failed once (say, on a broker election lock a crashed process left
-      // behind) would hide this thread from other projects until restart, so it
-      // is retried.
-      if (isEphemeralTopic(topic) || !this.#sharedWanted.get(topic)?.has(cb)) return;
-      let retries = this.#sharedRetries.get(topic);
-      if (!retries) {
-        retries = new Map();
-        this.#sharedRetries.set(topic, retries);
-      }
-      // A concurrent subscribe of the same callback already started a retry.
-      if (retries.has(cb)) return;
-      const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
-      retries.set(cb, retry);
-      this.#scheduleSharedRetry(topic, shared, cb, options, retry);
-    });
+    await this.#subscribeTo(topic, shared, cb, options).then(
+      async () => {
+        // Unsubscribed while this shared subscribe was in flight.
+        if (!this.#sharedWanted.get(topic)?.has(cb)) await this.#unsubscribeFrom(topic, shared, cb).catch(() => {});
+      },
+      () => this.#retrySharedSubscribe(topic, shared, cb, options),
+    );
+  }
+
+  /**
+   * The shared scope is best effort. A one-shot reply topic lives for one
+   * lookup, and the next lookup tries again. A request-topic subscription that
+   * failed once (say, on a broker election lock a crashed process left behind)
+   * would hide this thread from other projects until restart, so it is retried.
+   */
+  #retrySharedSubscribe(topic: string, shared: string, cb: EventCallback, options: SubscribeOptions | undefined): void {
+    if (isEphemeralTopic(topic) || !this.#sharedWanted.get(topic)?.has(cb)) return;
+    let retries = this.#sharedRetries.get(topic);
+    if (!retries) {
+      retries = new Map();
+      this.#sharedRetries.set(topic, retries);
+    }
+    // A concurrent subscribe of the same callback already started a retry.
+    if (retries.has(cb)) return;
+    const retry: SharedRetry = { delayMs: SHARED_RETRY_MIN_MS };
+    retries.set(cb, retry);
+    this.#scheduleSharedRetry(topic, shared, cb, options, retry);
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {

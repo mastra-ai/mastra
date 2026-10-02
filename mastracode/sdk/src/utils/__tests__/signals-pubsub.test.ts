@@ -871,6 +871,25 @@ describe('SignalsPubSub', () => {
         await pubsub.close();
       });
 
+      it('keeps a callback out of the shared scope when it is unsubscribed during its shared subscribe', async () => {
+        const sharedMkdir = deferred();
+        mocks.setMkdirImpl(async dir => {
+          if (dir === `${root}/_shared`) await sharedMkdir.promise;
+        });
+        const { createSignalsPubSub } = await import('../signals-pubsub.js');
+        const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
+        const cb = vi.fn();
+
+        const subscribing = pubsub.subscribe(peerRequestTopic, cb);
+        await vi.waitFor(() => expect(mocks.mkdir).toHaveBeenCalledWith(`${root}/_shared`, expect.anything()));
+        await pubsub.unsubscribe(peerRequestTopic, cb);
+        sharedMkdir.resolve();
+        await subscribing;
+
+        expect(findSocket(sharedPeerSocket())?.callbacks.has(cb) ?? false).toBe(false);
+        await pubsub.close();
+      });
+
       it('keeps a callback subscribed again while a cancelled retry attempt was in flight', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         const attempt = deferred();
