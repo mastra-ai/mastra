@@ -4,9 +4,9 @@ import { act, cleanup, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { server } from '../../../test/msw-server';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../test/render';
 import { useAgentMessages } from '../use-agent-messages';
-import { server } from '@/test/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const MESSAGES_URL = `${TEST_BASE_URL}/api/memory/threads/:threadId/messages`;
 

@@ -1,5 +1,5 @@
-import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useAgentMessages } from '@mastra/react/hooks';
 import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';

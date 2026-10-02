@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useMastraClient } from '@mastra/react';
 import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface UseAgentMessagesProps {
   threadId?: string;

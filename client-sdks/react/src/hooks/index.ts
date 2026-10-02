@@ -10,3 +10,4 @@ export * from './workflows';
 export * from './workspace';
 export * from './memory';
 export * from './mcps';
+export * from './agents';

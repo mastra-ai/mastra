@@ -1,10 +1,11 @@
-import type { ReadableStreamDefaultReader } from 'node:stream/web';
-import type { StreamBackgroundTasksParams } from '@mastra/client-js';
+import type { MastraClient, StreamBackgroundTasksParams } from '@mastra/client-js';
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
+
+type BackgroundTaskStreamReader = ReturnType<Awaited<ReturnType<MastraClient['streamBackgroundTasks']>>['getReader']>;
 
 export interface BackgroundTaskEvent {
   taskId: string;
@@ -92,7 +93,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const readerRef = useRef<ReadableStreamDefaultReader<any> | null>(null);
+  const readerRef = useRef<BackgroundTaskStreamReader | null>(null);
   const connectSeqRef = useRef(0);
 
   const runningTasks = useMemo(() => {
