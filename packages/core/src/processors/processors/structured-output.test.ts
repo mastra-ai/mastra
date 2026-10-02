@@ -423,6 +423,10 @@ describe('StructuredOutputProcessor', () => {
         expect(enqueueSpy).toHaveBeenCalledTimes(1);
         expect(logger.error).not.toHaveBeenCalled();
         expect(logger.warn).not.toHaveBeenCalled();
+        expect(logger.debug).toHaveBeenCalledWith(
+          expect.stringContaining('Output stream closed; stopping structuring'),
+          expect.anything(),
+        );
       });
     });
 

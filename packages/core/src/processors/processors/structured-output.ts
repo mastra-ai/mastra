@@ -176,7 +176,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       try {
         controller.enqueue(chunk);
         return true;
-      } catch {
+      } catch (error) {
+        this.logger?.debug('[StructuredOutputProcessor] Output stream closed; stopping structuring', error);
         return false;
       }
     };
