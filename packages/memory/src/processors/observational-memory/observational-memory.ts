@@ -2367,6 +2367,33 @@ ${formattedMessages}
       }
     }
 
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
+    try {
+      await this.bufferObservationChunk(
+        record,
+        threadId,
+        unobservedMessages,
+        bufferKey,
+        releaseChunkWrite,
+        writer,
+        requestContext,
+        observabilityContext,
+      );
+    } finally {
+      releaseChunkWrite();
+    }
+  }
+
+  private async bufferObservationChunk(
+    record: ObservationalMemoryRecord,
+    threadId: string,
+    unobservedMessages: MastraDBMessage[],
+    bufferKey: string,
+    releaseChunkWrite: () => void,
+    writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
+    observabilityContext?: ObservabilityContext,
+  ): Promise<void> {
     // Re-fetch record to get latest state after waiting
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     if (!freshRecord) {
@@ -2461,7 +2488,7 @@ ${formattedMessages}
       `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${tokensToBuffer}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
     );
 
-    const result = await this.runBufferedObservationCycle(
+    await this.runBufferedObservationCycle(
       { threadId, resourceId: freshRecord.resourceId ?? undefined, trigger: 'async-buffer' },
       () =>
         ObservationStrategy.create(this, {
@@ -2475,15 +2502,14 @@ ${formattedMessages}
           requestContext,
           observabilityContext,
           trigger: 'async-buffer',
+          onBufferedChunkPersisted: async () => {
+            // Update the buffer cursor so the next buffer only sees messages newer than this one.
+            const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+            BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTs.getTime() + 1));
+            releaseChunkWrite();
+          },
         }).run(),
     );
-
-    if (result?.observed) {
-      // Update the buffer cursor so the next buffer only sees messages newer than this one.
-      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
-      const cursor = new Date(maxTs.getTime() + 1);
-      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
-    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3391,6 +3417,7 @@ ${formattedMessages}
     // fresh head below, which a rollover may have given a new id.
     const opRecordId = record.id;
     registerOp(opRecordId, 'bufferingObservation');
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
     inMemoryRecord.isBufferingObservation = true;
     inMemoryRecord.lastBufferedAtTokens = currentTokens;
     runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, true, currentTokens)).catch(err => {
@@ -3486,6 +3513,27 @@ ${formattedMessages}
         void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
 
+      // Record the chunk as soon as it's persisted, before the op's post-persist work
+      // (indexing, thread title). Activation may run from then on, so this
+      // bookkeeping must not land after activation resets it.
+      let chunkRecorded = false;
+      const recordBufferedChunk = async () => {
+        if (chunkRecorded) return;
+        chunkRecorded = true;
+        // Update the boundary tokens in storage + in-memory cache for interval tracking
+        await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, newTokens)).catch(
+          () => {},
+        );
+        flagCleared = true;
+        setBufferingState(false, newTokens);
+        BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
+
+        // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
+        const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
+        BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTimestamp.getTime() + 1));
+        releaseChunkWrite();
+      };
+
       // Call the observer via strategy pattern, firing config-level hooks
       // around the cycle — fire-and-forget callers never see this result.
       const result = await this.runBufferedObservationCycle(
@@ -3506,6 +3554,7 @@ ${formattedMessages}
             currentModel: opts.currentModel,
             observabilityContext,
             trigger: 'async-buffer',
+            onBufferedChunkPersisted: recordBufferedChunk,
           }).run(),
       );
 
@@ -3531,18 +3580,7 @@ ${formattedMessages}
         });
       }
 
-      // Update the boundary tokens in storage + in-memory cache for interval tracking
-      await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false, newTokens)).catch(
-        () => {},
-      );
-      flagCleared = true;
-      setBufferingState(false, newTokens);
-      BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
-
-      // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
-      const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
-      const cursor = new Date(maxTimestamp.getTime() + 1);
-      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+      await recordBufferedChunk();
 
       const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
       return { buffered: true, record: updatedRecord };
@@ -3550,6 +3588,7 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
+      releaseChunkWrite();
       unregisterOp(opRecordId, 'bufferingObservation');
       // A later call may already have registered itself behind this op; keep its entry.
       if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
@@ -3690,24 +3729,17 @@ ${formattedMessages}
       }
     }
 
-    // Wait for any in-progress buffering to complete (check DB flag)
-    if (record.isBufferingObservation) {
-      // If the op is active in this process, wait for it
-      const lockKey = this.buffering.getLockKey(threadId, resourceId);
-      const bufferKey = this.buffering.getObservationBufferKey(lockKey);
-      const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
-      if (asyncOp) {
-        try {
-          await Promise.race([
-            asyncOp,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-          ]);
-        } catch {
-          // Timeout or error — proceed with what we have
-        }
-      }
-      // If not in this process, the flag might be stale or from another replica.
-      // Proceed with activation of whatever chunks exist.
+    // Wait for an in-process buffer op that may still append a chunk: the swap below reads
+    // then writes the buffered chunks, so a concurrent append could be dropped. Work the op
+    // does after persisting its chunk (indexing, thread title) can't conflict.
+    // An op in another process can't be awaited; activate whatever chunks exist.
+    const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(
+      this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId)),
+    );
+    if (pendingChunkWrite) {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]);
+      clearTimeout(timeoutId);
     }
 
     // Re-fetch to get latest chunks after any completed buffering. Activation commits only to

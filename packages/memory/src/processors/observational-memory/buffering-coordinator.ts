@@ -25,6 +25,17 @@ export class BufferingCoordinator {
   static asyncBufferingOps = new Map<string, Promise<void>>();
 
   /**
+   * Observation buffer ops that may still append a buffered chunk.
+   * Key format: "obs:{lockKey}"
+   * Value: Promise that resolves once the op has persisted its chunk (or ended without one)
+   *
+   * Activation's read-then-write chunk swap only conflicts with this phase. An op stays in
+   * asyncBufferingOps through its post-persist work (indexing, thread title), which
+   * activation doesn't need to wait for.
+   */
+  static pendingChunkWrites = new Map<string, Promise<void>>();
+
+  /**
    * Track the last token boundary at which we started buffering.
    * Key format: "obs:{lockKey}" or "refl:{lockKey}"
    */
@@ -74,6 +85,26 @@ export class BufferingCoordinator {
 
   isAsyncBufferingInProgress(bufferKey: string): boolean {
     return BufferingCoordinator.asyncBufferingOps.has(bufferKey);
+  }
+
+  isChunkWriteInProgress(bufferKey: string): boolean {
+    return BufferingCoordinator.pendingChunkWrites.has(bufferKey);
+  }
+
+  /**
+   * Mark an observation buffer op as able to append a chunk. Call the returned release
+   * function once it no longer can; releasing more than once is a no-op.
+   */
+  static trackChunkWrite(bufferKey: string): () => void {
+    let resolve!: () => void;
+    const pending = new Promise<void>(r => (resolve = r));
+    BufferingCoordinator.pendingChunkWrites.set(bufferKey, pending);
+    return () => {
+      if (BufferingCoordinator.pendingChunkWrites.get(bufferKey) === pending) {
+        BufferingCoordinator.pendingChunkWrites.delete(bufferKey);
+      }
+      resolve();
+    };
   }
 
   /**

@@ -38,6 +38,11 @@ export interface ObservationRunOpts {
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
   observabilityContext?: ObservabilityContext;
+  /**
+   * Async buffer only: called right after the buffered chunk is persisted, before
+   * post-persist work (indexing, thread title).
+   */
+  onBufferedChunkPersisted?: () => Promise<void>;
 }
 
 /** Output from calling the observer agent. */
