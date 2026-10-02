@@ -177,15 +177,15 @@ export function createOrUpdateFileTool(proxy: PlatformProxy) {
             }
           }
         } catch (error: unknown) {
-          const isNotFound =
-            error !== null &&
-            typeof error === 'object' &&
-            'response' in error &&
-            error.response !== null &&
-            typeof error.response === 'object' &&
-            'status' in error.response &&
-            error.response.status === 404;
-          if (!isNotFound) {
+          // The upstream Nango template catches axios-shaped errors
+          // (`error.response.status`); @mastra/connect's platformProxy throws
+          // MastraConnectError with a top-level `status`, so check both.
+          const errStatus =
+            error !== null && typeof error === 'object'
+              ? ((error as { status?: unknown }).status ??
+                (error as { response?: { status?: unknown } }).response?.status)
+              : undefined;
+          if (errStatus !== 404) {
             throw error;
           }
           // 404 means file doesn't exist; proceed without SHA to create it
