@@ -48,6 +48,7 @@ export interface HeadlessArgs {
 }
 
 const parseArgsOptions = buildParseArgsOptions();
+const STOP_NOTIFICATION_DISPATCH_TIMEOUT_MS = 2_000;
 
 /**
  * Returns true if `argv` selects headless mode. This must agree with what
@@ -273,8 +274,13 @@ export async function runMCCli(
         // Best-effort — the process is exiting.
       }
       const { controller, mcpManager } = boot;
-      // Release notification dispatch leases before the pubsub that holds them closes.
-      await boot.stopNotificationDispatch?.().catch(() => {});
+      // Release notification dispatch leases before the pubsub that holds them
+      // closes. Headless has no shutdown deadline, so don't let a stalled
+      // in-flight dispatch hold up exit.
+      await Promise.race([
+        boot.stopNotificationDispatch?.().catch(() => {}),
+        new Promise<void>(resolve => setTimeout(resolve, STOP_NOTIFICATION_DISPATCH_TIMEOUT_MS).unref()),
+      ]);
       await Promise.allSettled([
         mcpManager?.disconnect(),
         controller.getMastra()?.stopWorkers(),
