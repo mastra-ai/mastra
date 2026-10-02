@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
-import { useMastraClient } from '@/mastra-client-context';
 
 type UseSpanFeedbackProps = {
   traceId?: string;

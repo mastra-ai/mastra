@@ -4,13 +4,13 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
+import { makeMetricsWrapper, useTestMetricsFilters } from '../../../test/metrics-wrapper';
+import { server } from '../../../test/msw-server';
+import { TEST_BASE_URL } from '../../../test/render';
 import { formatMetricsBucketLabel } from '../metrics-interval';
 import type { MetricsDatePreset as DatePreset } from '../metrics-query-filters';
 import { useLatencyMetrics } from '../use-latency-metrics';
 import { latencyPercentiles } from './fixtures/latency-metrics';
-import { makeMetricsWrapper, useTestMetricsFilters } from '@/test/metrics-wrapper';
-import { server } from '@/test/msw-server';
-import { TEST_BASE_URL } from '@/test/render';
 
 type RequestBody = { name?: string; interval?: string };
 

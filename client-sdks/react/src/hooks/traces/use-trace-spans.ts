@@ -1,7 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import { queryOptions, useQueries, useQuery } from '@tanstack/react-query';
 import type { UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 /**
  * Key, fetcher and stale policy of the `trace-spans` query. Every observer of this key must

@@ -4,10 +4,10 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useTraceQueryAvailable } from '../use-trace-query-available';
 import { legacyTraceCapabilities, traceQueryCapabilities } from './fixtures/observability-capabilities';
-import { MastraReactProvider } from '@/mastra-react-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const CAPABILITIES_URL = `${BASE_URL}/api/observability/capabilities`;

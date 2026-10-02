@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '../../../test/jsdom-polyfills';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -7,6 +7,8 @@ import { http, HttpResponse } from 'msw';
 import type { JsonBodyType } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useTraces } from '../use-traces';
 import {
   fullDeltaBatch,
@@ -17,8 +19,6 @@ import {
   lightDeltaEmptyBatch,
   lightPage0,
 } from './fixtures/traces';
-import { MastraReactProvider } from '@/mastra-react-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const LIGHT_URL = `${BASE_URL}/api/observability/traces/light`;

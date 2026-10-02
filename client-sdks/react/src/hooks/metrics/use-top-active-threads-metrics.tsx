@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useMastraClient } from '../../mastra-client-context';
 import { getOrCreate } from '../shared/map';
 import type { MetricsQueryFilters } from './metrics-query-filters';
-import { useMastraClient } from '@/mastra-client-context';
 
 export interface ActiveThreadRow {
   threadId: string;

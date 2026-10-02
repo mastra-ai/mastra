@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import type { LightSpanRecord } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 const IMMUTABLE_CACHE_TIME = 1000 * 60 * 60 * 24 * 30; // 30 days, massive cache, span data is immutable
 

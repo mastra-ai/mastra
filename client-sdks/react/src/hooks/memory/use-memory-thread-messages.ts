@@ -1,5 +1,5 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const memoryThreadMessagesQueryKey = (threadId: string | undefined, page?: number) =>
   ['memory', 'thread', threadId, 'messages', page ?? 0] as const;

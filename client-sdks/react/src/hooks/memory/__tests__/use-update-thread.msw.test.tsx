@@ -5,10 +5,10 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useThreads, useUpdateThread } from '../use-memory';
 import { makeThread, makeThreadsResponse } from './fixtures/threads';
-import { MastraReactProvider } from '@/mastra-react-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';

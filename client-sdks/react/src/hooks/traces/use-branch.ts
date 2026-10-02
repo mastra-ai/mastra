@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import type { LightSpanRecord } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 export interface UseBranchArgs {
   traceId: string | null | undefined;

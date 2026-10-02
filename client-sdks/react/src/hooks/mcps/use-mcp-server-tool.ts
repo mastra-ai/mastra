@@ -2,7 +2,7 @@ import type { MastraClient } from '@mastra/client-js';
 import type { RequestContext } from '@mastra/core/request-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useMCPServerTool = (
   serverId: string,

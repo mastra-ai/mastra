@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useMCPServerToolsById = (serverId: string | null) => {
   const client = useMastraClient();

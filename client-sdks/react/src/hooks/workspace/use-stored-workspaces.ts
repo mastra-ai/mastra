@@ -1,6 +1,6 @@
 import type { ListStoredWorkspacesParams, ListStoredWorkspacesResponse } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 /**
  * Hook to list stored workspaces from the database.

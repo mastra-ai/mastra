@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import type { MetricsQueryFilters } from './metrics-query-filters';
-import { useMastraClient } from '@/mastra-client-context';
 
 /** Total Tokens — sum of all input + output tokens */
 export function useTotalTokensKpiMetrics(params: MetricsQueryFilters) {

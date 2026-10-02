@@ -7,6 +7,9 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { assert, describe, expect, it, vi } from 'vitest';
 
+import { makeMetricsWrapper, useTestMetricsFilters } from '../../../test/metrics-wrapper';
+import { server } from '../../../test/msw-server';
+import { TEST_BASE_URL } from '../../../test/render';
 import type { MetricsDatePreset as DatePreset } from '../metrics-query-filters';
 import { useTokenUsageTimeSeries } from '../use-token-usage-timeseries';
 import {
@@ -20,9 +23,6 @@ import {
   partlyUnstampedInputTokenSeries,
   unpricedUnitOutputTokenSeries,
 } from './fixtures/token-usage-timeseries';
-import { makeMetricsWrapper, useTestMetricsFilters } from '@/test/metrics-wrapper';
-import { server } from '@/test/msw-server';
-import { TEST_BASE_URL } from '@/test/render';
 
 type RequestBody = {
   name?: string[];

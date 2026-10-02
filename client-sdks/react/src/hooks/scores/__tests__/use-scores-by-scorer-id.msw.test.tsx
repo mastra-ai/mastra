@@ -4,9 +4,9 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
+import { makeWrapper } from '../../../test/render';
 import { useScoresByScorerId } from '../use-scorers';
-import { server } from '@/test/msw-server';
-import { makeWrapper } from '@/test/render';
 
 class MockIntersectionObserver {
   static instances: MockIntersectionObserver[] = [];

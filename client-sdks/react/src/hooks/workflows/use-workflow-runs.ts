@@ -2,8 +2,8 @@ import type { GetWorkflowRunByIdResponse, MastraClient } from '@mastra/client-js
 import type { UseInfiniteQueryResult, UseMutationResult, UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 import { useInView } from '../shared/use-in-view';
-import { useMastraClient } from '@/mastra-client-context';
 
 type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
 

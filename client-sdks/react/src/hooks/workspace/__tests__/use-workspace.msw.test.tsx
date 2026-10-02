@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useWorkspaceDirectory } from '../use-workspace-directory';
 import { useWorkspaceFileContent } from '../use-workspace-file-content';
 import { useWorkspaceSearch } from '../use-workspace-search';
@@ -19,7 +20,6 @@ import {
   skillSearchResponse,
   readResponse,
 } from './fixtures/workspace';
-import { MastraReactProvider } from '@/mastra-react-provider';
 
 const server = setupServer();
 

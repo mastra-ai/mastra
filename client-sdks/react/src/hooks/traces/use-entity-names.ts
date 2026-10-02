@@ -1,8 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
 import { ROOT_ENTITY_TYPES } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 type EntityTypeValue = `${EntityType}`;
 

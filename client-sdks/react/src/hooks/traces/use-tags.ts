@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import { DISCOVERY_STALE_TIME } from './discovery-cache';
-import { useMastraClient } from '@/mastra-client-context';
 
 export const useTags = () => {
   const client = useMastraClient();

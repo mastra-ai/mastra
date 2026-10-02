@@ -1,7 +1,7 @@
 import type { McpToolInfo as SdkMcpToolInfo } from '@mastra/client-js';
 import type { ServerInfo } from '@mastra/core/mcp';
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useMCPServerTools = (selectedServer: ServerInfo) => {
   const client = useMastraClient();

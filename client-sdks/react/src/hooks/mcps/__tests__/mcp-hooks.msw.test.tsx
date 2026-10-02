@@ -2,13 +2,15 @@
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { server } from '../../../test/msw-server';
+import { TEST_BASE_URL, renderHookWithProviders } from '../../../test/render';
 import { useMcpAppTools } from '../use-mcp-app-tools';
+import { useExecuteMCPTool, useMCPServerTool } from '../use-mcp-server-tool';
+import { useMCPServerTools } from '../use-mcp-server-tools';
 import { useMCPServerToolsById } from '../use-mcp-server-tools-by-id';
 import { useMCPServers } from '../use-mcp-servers';
 import { useTryConnectMcp } from '../use-try-connect-mcp';
 import { mcpServersResponse, weatherToolsResponse } from './fixtures/mcp';
-import { server } from '@/test/msw-server';
-import { TEST_BASE_URL, renderHookWithProviders } from '@/test/render';
 
 const SERVERS_URL = `${TEST_BASE_URL}/api/mcp/v0/servers`;
 const TOOLS_URL = `${TEST_BASE_URL}/api/mcp/weather-server/tools`;
@@ -41,6 +43,55 @@ describe('useMCPServerToolsById', () => {
       const { result } = renderHookWithProviders(() => useMCPServerToolsById(null));
 
       expect(result.current.fetchStatus).toBe('idle');
+    });
+  });
+});
+
+describe('useMCPServerTools', () => {
+  describe('when a server is selected', () => {
+    it('returns the tools keyed by name', async () => {
+      server.use(http.get(TOOLS_URL, () => HttpResponse.json(weatherToolsResponse)));
+
+      const { result } = renderHookWithProviders(() =>
+        useMCPServerTools({
+          id: 'weather-server',
+          name: 'Weather Server',
+          version_detail: mcpServersResponse.servers[0].version_detail,
+        }),
+      );
+
+      await waitFor(() => expect(result.current.data?.getForecast?.description).toBe('Get the forecast'));
+    });
+  });
+});
+
+describe('useMCPServerTool', () => {
+  describe('when the tool exists', () => {
+    it('returns the tool details', async () => {
+      server.use(http.get(`${TOOLS_URL}/getForecast`, () => HttpResponse.json(weatherToolsResponse.tools[0])));
+
+      const { result } = renderHookWithProviders(() => useMCPServerTool('weather-server', 'getForecast'));
+
+      await waitFor(() => expect(result.current.data?.name).toBe('getForecast'));
+    });
+  });
+});
+
+describe('useExecuteMCPTool', () => {
+  describe('when the tool runs', () => {
+    it('returns the tool result', async () => {
+      server.use(
+        http.post(`${TOOLS_URL}/getForecast/execute`, () => HttpResponse.json({ result: { forecast: 'sunny' } })),
+      );
+
+      const { result } = renderHookWithProviders(() => useExecuteMCPTool('weather-server', 'getForecast'));
+
+      let response: unknown;
+      await act(async () => {
+        response = await result.current.mutateAsync({ data: { city: 'Paris' } });
+      });
+
+      expect(response).toEqual({ result: { forecast: 'sunny' } });
     });
   });
 });

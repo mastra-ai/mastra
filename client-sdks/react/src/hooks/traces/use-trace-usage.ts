@@ -1,8 +1,8 @@
 import type { GetMetricBreakdownResponse } from '@mastra/core/storage';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import { getOrCreate } from '../shared/map';
 import type { TraceUsageSummary } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 const INPUT_TOKEN_METRIC = 'mastra_model_total_input_tokens';
 const OUTPUT_TOKEN_METRIC = 'mastra_model_total_output_tokens';

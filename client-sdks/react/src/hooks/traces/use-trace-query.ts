@@ -3,8 +3,8 @@ import type { QueryTracesKeysetInput, TraceQueryKeysetTraceResponse } from '@mas
 import type { ListTracesArgs as StorageListTracesArgs } from '@mastra/core/storage';
 import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 import { useInView } from '../shared/use-in-view';
-import { useMastraClient } from '@/mastra-client-context';
 
 export const TRACE_QUERY_PER_PAGE = 25;
 

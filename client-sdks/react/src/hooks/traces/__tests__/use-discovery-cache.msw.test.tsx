@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '../../../test/jsdom-polyfills';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { DISCOVERY_STALE_TIME } from '../discovery-cache';
 import { useEnvironments } from '../use-environments';
 import { useServiceNames } from '../use-service-names';
 import { useTags } from '../use-tags';
-import { MastraReactProvider } from '@/mastra-react-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

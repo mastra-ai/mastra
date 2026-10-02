@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '../../../test/jsdom-polyfills';
 import type { MastraClient } from '@mastra/client-js';
 import { getMetricBreakdownArgsSchema } from '@mastra/core/storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,9 +8,9 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useTraceUsage } from '../use-trace-usage';
 import { emptyTraceUsageBreakdown, mixedCostUnitBreakdown, traceUsageBreakdown } from './fixtures/trace-usage';
-import { MastraReactProvider } from '@/mastra-react-provider';
 
 type BreakdownArgs = Parameters<MastraClient['getMetricBreakdown']>[0];
 

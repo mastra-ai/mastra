@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '../../../test/jsdom-polyfills';
 import { focusManager, onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
+import { server } from '../../../test/msw-server';
 import { useBranch } from '../use-branch';
 import { useTraceOrBranchSpans } from '../use-trace-or-branch-spans';
 import { useTraceSpans, useTraceSpansQueries } from '../use-trace-spans';
 import { emptyTrace, otherTrace, resumedTrace, runningTrace, suspendedTrace } from './fixtures/trace-spans';
-import { MastraReactProvider } from '@/mastra-react-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const traceId = suspendedTrace.traceId;

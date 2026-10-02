@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery } from './compatibility';
 import type { Skill, ListSkillsResponse } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 // =============================================================================
 // Skills Hooks (via Workspace API)

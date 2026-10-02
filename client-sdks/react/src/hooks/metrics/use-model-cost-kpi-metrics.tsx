@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import type { MetricsQueryFilters } from './metrics-query-filters';
-import { useMastraClient } from '@/mastra-client-context';
 
 /** Total Model Cost — sum of estimatedCost across input and output token metrics */
 export function useModelCostKpiMetrics(params: MetricsQueryFilters) {

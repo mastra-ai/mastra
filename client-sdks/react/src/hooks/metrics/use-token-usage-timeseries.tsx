@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 import { chooseMetricsInterval, formatMetricsBucketLabel } from './metrics-interval';
 import type { MetricsInterval } from './metrics-interval';
 import type { MetricsQueryFilters } from './metrics-query-filters';
-import { useMastraClient } from '@/mastra-client-context';
 
 export type TokenUsageTimeSeriesInterval = MetricsInterval;
 

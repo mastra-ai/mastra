@@ -2,7 +2,7 @@ import type { GetObservationalMemoryResponse, GetMemoryStatusResponse, MastraCli
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface MemorySearchParams {
   lastMessages?: number | false;

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 /**
  * Whether the memory thread holds more than one trace, i.e. whether a "full thread" view would

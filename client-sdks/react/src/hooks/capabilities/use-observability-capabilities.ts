@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 const OBSERVABILITY_CAPABILITIES_STALE_TIME = 24 * 60 * 60 * 1000;
 

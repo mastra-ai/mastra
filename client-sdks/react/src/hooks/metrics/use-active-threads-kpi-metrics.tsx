@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useMastraClient } from '../../mastra-client-context';
 import type { MetricsQueryFilters } from './metrics-query-filters';
-import { useMastraClient } from '@/mastra-client-context';
 
 /** Active Threads — number of distinct thread IDs observed in agent runs.
  *  Uses approximate `count_distinct` (HyperLogLog on ClickHouse,

@@ -2,10 +2,10 @@ import type { MastraClient } from '@mastra/client-js';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 import { is403ForbiddenError } from '../query-utils';
 import { useInView } from '../shared/use-in-view';
 import type { TraceListMode } from './types';
-import { useMastraClient } from '@/mastra-client-context';
 
 type ListBranchesArgs = NonNullable<Parameters<MastraClient['listBranches']>[0]>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;

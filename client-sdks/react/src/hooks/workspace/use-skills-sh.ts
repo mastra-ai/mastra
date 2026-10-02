@@ -1,6 +1,6 @@
 import type { SkillsShSkill } from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMastraClient } from '@/mastra-client-context';
+import { useMastraClient } from '../../mastra-client-context';
 
 export type { SkillsShSkill };
 

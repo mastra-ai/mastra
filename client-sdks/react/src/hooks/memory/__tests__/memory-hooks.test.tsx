@@ -11,10 +11,10 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useMemoryStatus } from '../use-memory-status';
 import { useMemoryThreadMessages } from '../use-memory-thread-messages';
 import { useObservationalMemory } from '../use-observational-memory';
-import { MastraReactProvider } from '@/mastra-react-provider';
 
 const BASE_URL = 'http://localhost:4111';
 const ROOT = `${BASE_URL}/api`;

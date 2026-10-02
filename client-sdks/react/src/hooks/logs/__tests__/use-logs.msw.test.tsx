@@ -6,8 +6,8 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { MastraReactProvider } from '../../../mastra-react-provider';
 import { useLogs } from '../use-logs';
-import { MastraReactProvider } from '@/mastra-react-provider';
 
 const BASE_URL = 'http://localhost:4111';
 const LOGS_URL = `${BASE_URL}/api/observability/logs`;

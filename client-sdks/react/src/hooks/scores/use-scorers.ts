@@ -2,9 +2,9 @@ import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
 import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
 import { useInView } from '../shared/use-in-view';
-import { useMastraClient } from '@/mastra-client-context';
 
 const SCORES_PER_PAGE = 25;
 const SCORES_REFETCH_INTERVAL_MS = 15_000;

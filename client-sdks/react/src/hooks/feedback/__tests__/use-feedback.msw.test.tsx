@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '../../../test/jsdom-polyfills';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../test/render';
 import { feedbackRecord, listFeedbackResponse, TRACE_ID } from '../../traces/__tests__/fixtures/trace-feedback';
 import { useTraceFeedback } from '../../traces/use-trace-feedback';
 import { useUpdateFeedbackReviewStatus } from '../use-feedback';
-import { server } from '@/test/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const FEEDBACK_URL = `${TEST_BASE_URL}/api/observability/feedback`;
 

@@ -4,9 +4,9 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
+import { makeWrapper } from '../../../test/render';
 import { getTraceSpanScoresRefetchInterval, useTraceSpanScores } from '../use-trace-span-scores';
-import { server } from '@/test/msw-server';
-import { makeWrapper } from '@/test/render';
 
 const scoresResponse: ListScoresResponse = {
   pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
