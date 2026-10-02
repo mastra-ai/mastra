@@ -209,41 +209,124 @@ const HEIF_BRANDS = new Set([
   'avis',
 ]);
 
+const ascii = (bytes: Uint8Array, start: number, length = 4) =>
+  String.fromCharCode(...bytes.subarray(start, start + length));
+
 /**
  * HEIC and AVIF files start with an ISO BMFF `ftyp` box whose size and brand list vary (iPhone
  * HEIC uses a 24-byte box), so the fixed signature table misses most real files. Check the box
  * structure instead: `ftyp` at byte 4, then a HEIF/AVIF major or compatible brand.
  */
 function isHeifImage(bytes: Uint8Array): boolean {
-  const ascii = (start: number) => String.fromCharCode(...bytes.subarray(start, start + 4));
-  if (bytes.length < 16 || ascii(4) !== 'ftyp') return false;
+  if (bytes.length < 16 || ascii(bytes, 4) !== 'ftyp') return false;
   const boxSize = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
   if (boxSize < 16 || boxSize % 4 !== 0) return false;
-  if (HEIF_BRANDS.has(ascii(8))) return true;
+  if (HEIF_BRANDS.has(ascii(bytes, 8))) return true;
   for (let offset = 16; offset + 4 <= Math.min(boxSize, bytes.length); offset += 4) {
-    if (HEIF_BRANDS.has(ascii(offset))) return true;
+    if (HEIF_BRANDS.has(ascii(bytes, offset))) return true;
   }
   return false;
 }
 
+const VERIFIED_AUDIO_MEDIA_TYPES = new Set([
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/wave',
+  'audio/vnd.wave',
+  'audio/ogg',
+  'audio/opus',
+  'audio/flac',
+  'audio/x-flac',
+  'audio/aac',
+  'audio/x-aac',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/webm',
+  'audio/aiff',
+  'audio/x-aiff',
+  'audio/amr',
+  'audio/3gpp',
+]);
+
 /**
- * Checks whether inline base64 content can be decoded and, for image types with a known
- * file signature (and PDF), whether it starts like one. Mislabelled images are fine: any
- * known image signature passes. Providers reject anything else on every turn.
+ * Recognizes the common audio containers. Like images, any known container passes whatever
+ * audio type it's labelled as.
+ */
+function isAudio(bytes: Uint8Array): boolean {
+  if (ascii(bytes, 0, 3) === 'ID3') return true; // MP3, AAC, or FLAC with ID3 tags
+  if (bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0) return true; // MPEG audio or AAC ADTS frame
+  if (ascii(bytes, 0) === 'RIFF' && ascii(bytes, 8) === 'WAVE') return true;
+  if (['OggS', 'fLaC', 'ADIF', 'FORM'].includes(ascii(bytes, 0)) || ascii(bytes, 0, 5) === '#!AMR') return true;
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return true; // WebM
+  return ascii(bytes, 4) === 'ftyp'; // MP4, M4A, 3GP
+}
+
+function isTextMediaType(mediaType: string): boolean {
+  return (
+    mediaType.startsWith('text/') ||
+    [
+      'application/json',
+      'application/xml',
+      'application/javascript',
+      'application/yaml',
+      'application/x-yaml',
+    ].includes(mediaType) ||
+    mediaType.endsWith('+json') ||
+    mediaType.endsWith('+xml')
+  );
+}
+
+/** Text content must be UTF-8 without control characters other than whitespace. */
+function decodeText(bytes: Uint8Array, truncated: boolean): string | undefined {
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes, { stream: truncated });
+    return /[\x00-\x08\x0B\x0E-\x1F\x7F]/.test(text) ? undefined : text;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Checks whether inline base64 content can be decoded and, where its media type allows,
+ * whether it looks like that kind of file: image and audio signatures, `%PDF` for PDFs, and
+ * UTF-8 text for text types (an SVG must start with `<`). Mislabelled images and audio are
+ * fine: any known signature passes. Providers reject anything else on every turn.
  */
 function isValidInlineContent(base64: string, mediaType: string | undefined): boolean {
   const payload = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
   if (!payload || !STRICT_BASE64_PATTERN.test(payload)) return false;
   const unpaddedLength = payload.replace(/=+$/, '').length;
   if (unpaddedLength % 4 === 1 || (unpaddedLength !== payload.length && payload.length % 4 !== 0)) return false;
+  if (!mediaType) return true;
 
-  if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
-    // Compare decoded bytes: base64 prefixes depend on the bytes that follow the signature
-    // (e.g. a WebP's file size), so a real image can fail a text-prefix match.
-    const head = convertBase64ToUint8Array(payload.slice(0, 64));
-    return detectMediaType({ data: head, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(head);
+  // Decode only the start of the payload. Compare decoded bytes: base64 prefixes depend on the
+  // bytes that follow a signature (e.g. a WebP's file size), so a real file can fail a text match.
+  const head = (chars: number) => convertBase64ToUint8Array(payload.slice(0, chars));
+
+  if (SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    const bytes = head(64);
+    return detectMediaType({ data: bytes, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(bytes);
   }
-  if (mediaType === 'application/pdf') return payload.startsWith('JVBER'); // "%PDF"
+  if (VERIFIED_AUDIO_MEDIA_TYPES.has(mediaType)) return isAudio(head(64));
+  if (mediaType === 'application/pdf') {
+    // The PDF spec allows up to 1 KB of bytes before the `%PDF` header.
+    return ascii(head(1368), 0, 1026).includes('%PDF');
+  }
+  if (isTextMediaType(mediaType)) {
+    const chars = 1368;
+    const text = decodeText(head(chars), payload.length > chars);
+    if (text === undefined) return false;
+    return (
+      mediaType !== 'image/svg+xml' ||
+      text
+        .replace(/^\uFEFF/, '')
+        .trimStart()
+        .startsWith('<')
+    );
+  }
   return true;
 }
 
