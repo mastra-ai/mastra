@@ -1,4 +1,4 @@
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { useWorkflows } from '@mastra/react/hooks';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { TargetRegistries } from '@/domains/experiments/utils/target-name';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';

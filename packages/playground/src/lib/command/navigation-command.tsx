@@ -10,12 +10,12 @@ import {
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { useMaybeSidebarState } from '@mastra/playground-ui/components/MainSidebar';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useWorkflows } from '@mastra/react/hooks';
 import {
   Cpu,
   EyeIcon,

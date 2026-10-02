@@ -1,10 +1,9 @@
 import type { GetWorkflowRunByIdResponse, MastraClient } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import type { UseMutationResult, UseQueryOptions } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useInView } from '@/hooks/use-in-view';
-import { toast } from '@/utils/toast';
+import { useInView } from '../shared/use-in-view';
+import { useMastraClient } from '@/mastra-client-context';
 
 type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
 
@@ -88,10 +87,6 @@ export const useDeleteWorkflowRun = (workflowId: string): UseMutationResult<unkn
     mutationFn: ({ runId }: { runId: string }) => client.getWorkflow(workflowId).deleteRunById(runId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['workflow-runs', workflowId] });
-      toast.success('Workflow run deleted successfully');
-    },
-    onError: () => {
-      toast.error('Failed to delete workflow run');
     },
   });
 };

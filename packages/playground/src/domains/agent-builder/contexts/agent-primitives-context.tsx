@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { useWorkflows } from '@mastra/react/hooks';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { AvailableWorkspace } from '../hooks/use-agent-builder-tool';

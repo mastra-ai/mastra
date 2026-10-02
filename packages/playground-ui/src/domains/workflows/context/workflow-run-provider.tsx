@@ -1,11 +1,10 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { useCreateWorkflowRun, useCancelWorkflowRun } from '@mastra/react';
+import { useWorkflow, workflowRunQueryKey } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useWorkflow } from '../hooks/use-workflow';
-import { workflowRunQueryKey } from '../hooks/use-workflow-runs';
 import {
   convertWorkflowRunStateToStreamResult,
   isIdleRunStatus,

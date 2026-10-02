@@ -1,5 +1,5 @@
+import { useWorkflow } from '@mastra/react/hooks';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Badge } from '@/ds/components/Badge';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';

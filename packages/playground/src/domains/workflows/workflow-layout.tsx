@@ -8,9 +8,9 @@ import { WorkflowLayout as WorkflowLayoutUI } from '@mastra/playground-ui/domain
 import { PlaygroundWorkflowRunProvider } from '@mastra/playground-ui/domains/workflows/context/playground-workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-provider';
-import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
+import { useWorkflow } from '@mastra/react/hooks';
 import { useMatch, useNavigate, useParams } from 'react-router';
 import { WorkflowRunCopyAction, WorkflowRunCrumb } from './workflow-crumbs';
 import { WorkflowHeader } from './workflow-header';

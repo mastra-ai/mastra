@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
 import '@/test/jsdom-polyfills';
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { MastraClient } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 import { getWorkflowRunsNextPageParam, selectUniqueRuns, PER_PAGE } from '../use-workflow-runs';
 
+type WorkflowRuns = Awaited<ReturnType<ReturnType<MastraClient['getWorkflow']>['runs']>>;
+
 function makeRunsPage(runs: Array<{ runId: string; workflowName: string }>): WorkflowRuns {
-  return { runs, total: runs.length } as unknown as WorkflowRuns;
+  return {
+    runs: runs.map(run => ({
+      ...run,
+      snapshot: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })),
+    total: runs.length,
+  };
 }
 
 describe('useWorkflowRuns logic', () => {

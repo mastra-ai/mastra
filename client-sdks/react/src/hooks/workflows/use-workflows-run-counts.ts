@@ -1,7 +1,7 @@
 import type { ListWorkflowRunCountsResponse } from '@mastra/client-js';
 import { MastraClientError } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '@/mastra-client-context';
 
 export const RUN_COUNTS_REFETCH_INTERVAL_MS = 5000;
 
