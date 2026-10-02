@@ -18,7 +18,13 @@ import { ObserverRunner } from '../observer-runner';
 import { ReflectorRunner } from '../reflector-runner';
 import { RETRY_CONFIG } from '../retry';
 
-type Reply = { text: string; finishReason: 'stop' | 'other' | 'unknown' };
+type Reply =
+  | { text: string; finishReason: 'stop' | 'other' | 'unknown' }
+  // A transient provider failure, before any output or after partial text.
+  | { text: string; error: 'before-output' | 'mid-stream' };
+
+const transientProviderError = () =>
+  Object.assign(new Error('Internal server error'), { statusCode: 500, isRetryable: true });
 
 function createScriptedModel(replies: Reply[]) {
   const prompts: string[][] = [];
@@ -34,6 +40,7 @@ function createScriptedModel(replies: Reply[]) {
           .filter((message: any) => message.role === 'assistant')
           .flatMap((message: any) => message.content.map((part: any) => part.text ?? '')),
       );
+      if ('error' in reply && reply.error === 'before-output') throw transientProviderError();
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         stream: new ReadableStream({
@@ -44,11 +51,15 @@ function createScriptedModel(replies: Reply[]) {
               controller.enqueue({ type: 'text-delta', id: '1', delta: reply.text });
               controller.enqueue({ type: 'text-end', id: '1' });
             }
-            controller.enqueue({
-              type: 'finish',
-              finishReason: reply.finishReason,
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            });
+            if ('error' in reply) {
+              controller.enqueue({ type: 'error', error: transientProviderError() });
+            } else {
+              controller.enqueue({
+                type: 'finish',
+                finishReason: reply.finishReason,
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+            }
             controller.close();
           },
         }),
@@ -156,6 +167,38 @@ describe('OM retries replies that end without a stop reason', () => {
     expect(prompts).toHaveLength(2);
     expect(result.observations.trim()).toBe(FULL_OBSERVATION);
   });
+
+  for (const error of ['before-output', 'mid-stream'] as const) {
+    it(`observer retries a transient provider error (${error}) from a clean prompt`, async () => {
+      const { model, prompts } = createScriptedModel([
+        { text: error === 'mid-stream' ? PARTIAL_REPLY : '', error },
+        { text: FULL_REPLY, finishReason: 'stop' },
+      ]);
+      const runner = createObserverRunner(model);
+
+      const result = await runner.call(undefined, [createMessage('Add the pile plan.', 'user')]);
+
+      expect(prompts).toHaveLength(2);
+      expect(prompts[1]).toEqual(prompts[0]);
+      expect(prompts.flat()).not.toContain('assistant');
+      expect(result.observations.trim()).toBe(FULL_OBSERVATION);
+    });
+
+    it(`reflector retries a transient provider error (${error}) from a clean prompt`, async () => {
+      const { model, prompts } = createScriptedModel([
+        { text: error === 'mid-stream' ? PARTIAL_REPLY : '', error },
+        { text: FULL_REPLY, finishReason: 'stop' },
+      ]);
+      const runner = createReflectorRunner(model);
+
+      const result = await runner.call(`${FULL_OBSERVATION}\n* Older detail that can be dropped.`);
+
+      expect(prompts).toHaveLength(2);
+      expect(prompts[1]).toEqual(prompts[0]);
+      expect(prompts.flat()).not.toContain('assistant');
+      expect(result.observations.trim()).toBe(FULL_OBSERVATION);
+    });
+  }
 
   it('multi-thread observer retries a partial reply', async () => {
     const { model, prompts } = createScriptedModel([
