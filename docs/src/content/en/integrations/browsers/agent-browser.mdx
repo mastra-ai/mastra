@@ -129,6 +129,31 @@ new AgentBrowser({
 
 If the active page's origin is not in the list, both `list` and `call` return an error without evaluating anything in the page.
 
+### First-class page tools with `prepareStep`
+
+The `browser_webmcp` meta-tool is a two-step hop (`list` then `call`). To expose page tools directly as first-class agent tools, pass a `prepareStep` to `generate` / `stream`. The agent then sees `page_<tool_name>` tools alongside the usual `browser_*` tools and can call them in one step:
+
+```typescript
+await agent.generate('Add 2 of sku-9 to the cart', {
+  prepareStep: browser.createWebMcpPrepareStep(),
+})
+```
+
+`createWebMcpPrepareStep` returns a `prepareStep` function that:
+
+- Lists the current page's WebMCP tools and wraps each one as a Mastra tool (default id prefix: `page_`). The wrapper calls through `callWebMcpTool` so page execution, origin checks, and TOCTOU protection all stay in place.
+- Memoizes the lookup by current page URL inside each `prepareStep` instance, so repeat steps on the same page produce the same tool list bytes. Prompt caches are prefix-based: changing the tool list invalidates everything from that point on, so navigation (not every step) is what busts the cache.
+- Leaves the agent's base tools untouched. If a page tool collapses to the same id as an existing tool, the base tool wins.
+- Returns `undefined` when no page is open or no tools are exposed, so the agent gets its normal toolset.
+
+Options:
+
+- `prefix` — change the id prefix (default `page_`); pass `''` to drop it entirely.
+- `threadId` — pin to a specific thread; defaults to the browser's current thread.
+- `passthrough` — chain an existing `prepareStep` whose result is merged with the page tools (its `tools` run first, then page tools fill in the gaps).
+
+Pick one of the two patterns. If you keep both the meta-tool and the first-class tools enabled, the agent sees two ways to call the same thing and the prompt grows for no reason — pass `excludeTools: [BROWSER_TOOLS.WEBMCP]` to hide the meta-tool when `prepareStep` is doing the work.
+
 ## Recording
 
 AgentBrowser can opt into Beta browser recording tools:

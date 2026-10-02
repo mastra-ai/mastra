@@ -17,6 +17,16 @@ export { getBrowserPid } from './utils';
 export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
 export type { BrowserToolName } from './tools';
 
+// WebMCP mid-turn tool discovery helpers
+export { createWebMcpPrepareStep, getPageWebMcpTools } from './webmcp-prepare-step';
+export type {
+  WebMcpToolOptions,
+  CreateWebMcpPrepareStepOptions,
+  WebMcpPrepareStepFn,
+  WebMcpPrepareStepArgs,
+  WebMcpPrepareStepResult,
+} from './webmcp-prepare-step';
+
 // Schema exports
 export {
   // Core

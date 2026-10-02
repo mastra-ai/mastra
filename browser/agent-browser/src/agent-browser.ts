@@ -46,6 +46,8 @@ import { createWebmcpTool } from './tools/webmcp';
 import type { BrowserConfig, WebmcpOptions, WebmcpProtocol } from './types';
 import { getBrowserPid } from './utils';
 import { buildWebMcpInitScript } from './webmcp-bridge';
+import { createWebMcpPrepareStep, getPageWebMcpTools } from './webmcp-prepare-step';
+import type { CreateWebMcpPrepareStepOptions, WebMcpPrepareStepFn, WebMcpToolOptions } from './webmcp-prepare-step';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
@@ -1701,6 +1703,39 @@ export class AgentBrowser extends MastraBrowser {
     } catch (error) {
       return this.createErrorFromException(error, 'WebMCP call');
     }
+  }
+
+  /**
+   * Convert the current page's WebMCP tools into first-class Mastra tools.
+   *
+   * Each returned tool wraps `callWebMcpTool` for the given thread, so the
+   * agent can invoke `page_<tool_name>(...)` directly instead of going
+   * through the `browser_webmcp` meta-tool. Returns `{}` if WebMCP is
+   * disabled, no page is open, the origin is blocked by `allowedOrigins`,
+   * or the page exposes no tools. Tool ids are sorted so the output is
+   * deterministic across calls on the same page.
+   *
+   * Prefer {@link createWebMcpPrepareStep} unless you want to manage the
+   * per-step tool merge yourself.
+   */
+  async getPageWebMcpTools(opts: WebMcpToolOptions = {}) {
+    return getPageWebMcpTools(this, opts);
+  }
+
+  /**
+   * Build a `prepareStep` function that adds this browser's current page
+   * WebMCP tools to the step's toolset. Each returned function holds its
+   * own `(threadId, url)` memo so repeat steps on the same page emit the
+   * same tool bytes, minimizing prompt-cache churn.
+   *
+   * ```ts
+   * await agent.generate(input, {
+   *   prepareStep: browser.createWebMcpPrepareStep(),
+   * });
+   * ```
+   */
+  createWebMcpPrepareStep(opts: CreateWebMcpPrepareStepOptions = {}): WebMcpPrepareStepFn {
+    return createWebMcpPrepareStep(this, opts);
   }
 
   // ---------------------------------------------------------------------------

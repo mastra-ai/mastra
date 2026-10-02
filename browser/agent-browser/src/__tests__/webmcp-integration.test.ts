@@ -410,5 +410,134 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
         await browser.close();
       }
     }, 60_000);
+
+    it('an Agent calls first-class page tools via createWebMcpPrepareStep', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+
+      // Note: no browser_webmcp calls. The scripted model goes straight from
+      // browser_goto to the first-class page_* tools injected by prepareStep.
+      const script: Array<{ toolName: string; input: Record<string, unknown> } | { text: string }> = [
+        { toolName: 'browser_goto', input: { url: '__URL__' } },
+        { toolName: 'page_add_to_cart', input: { sku: 'sku-9', qty: 2 } },
+        { toolName: 'page_get_cart', input: {} },
+        { text: 'Added 2x sku-9 to the cart.' },
+      ];
+      let step = 0;
+      // Record what the model saw each step so we can verify the toolset grew
+      // after the goto resolved.
+      const toolNamesByStep: string[][] = [];
+
+      const scriptedModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'mock',
+        modelId: 'scripted-webmcp-prepare-step-test',
+        supportedUrls: {},
+        doGenerate: async (opts: { tools?: Array<{ name: string }> }) => {
+          toolNamesByStep.push((opts.tools ?? []).map(t => t.name).sort());
+          const current = script[Math.min(step, script.length - 1)]!;
+          step++;
+          const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+          if ('toolName' in current) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage,
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `call-${step}`,
+                  toolName: current.toolName,
+                  input: JSON.stringify(current.toolName === 'browser_goto' ? { url } : current.input),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage,
+            content: [{ type: 'text' as const, text: current.text }],
+            warnings: [],
+          };
+        },
+        doStream: async (opts: { tools?: Array<{ name: string }> }) => {
+          toolNamesByStep.push((opts.tools ?? []).map(t => t.name).sort());
+          const current = script[Math.min(step, script.length - 1)]!;
+          step++;
+          const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+          const meta: unknown[] = [
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${step}`,
+              modelId: 'scripted-webmcp-prepare-step-test',
+              timestamp: new Date(0),
+            },
+          ];
+          const chunks: unknown[] =
+            'toolName' in current
+              ? [
+                  ...meta,
+                  {
+                    type: 'tool-call',
+                    toolCallId: `call-${step}`,
+                    toolName: current.toolName,
+                    input: JSON.stringify(current.toolName === 'browser_goto' ? { url } : current.input),
+                    providerExecuted: false,
+                  },
+                  { type: 'finish', finishReason: 'tool-calls', usage },
+                ]
+              : [
+                  ...meta,
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: current.text },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'finish', finishReason: 'stop', usage },
+                ];
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream<unknown>({
+              start(controller) {
+                for (const chunk of chunks) controller.enqueue(chunk);
+                controller.close();
+              },
+            }),
+          };
+        },
+      };
+
+      const agent = new Agent({
+        id: 'webmcp-prepare-step-test-agent',
+        name: 'WebMCP prepareStep test agent',
+        instructions: 'Use the available page_* tools to update the cart.',
+        model: scriptedModel as never,
+        tools: browser.getTools() as never,
+      });
+
+      try {
+        const result = await agent.generate('Add 2 of sku-9 to the cart.', {
+          maxSteps: 8,
+          prepareStep: browser.createWebMcpPrepareStep() as never,
+        });
+        expect(result.text).toBe('Added 2x sku-9 to the cart.');
+
+        const toolNames = result.steps.flatMap(s => (s.toolCalls ?? []).map(c => c.payload.toolName));
+        expect(toolNames).toEqual(['browser_goto', 'page_add_to_cart', 'page_get_cart']);
+
+        // Step 0 (initial): no page tools yet (browser is on about:blank).
+        // Step 1+: page tools present after browser_goto resolved.
+        expect(toolNamesByStep[0]).not.toContain('page_add_to_cart');
+        expect(toolNamesByStep[1]).toContain('page_add_to_cart');
+        expect(toolNamesByStep[1]).toContain('page_get_cart');
+
+        // Real page state was mutated by the first-class tool.
+        const page = await getPage(browser);
+        await expect(page.evaluate('cart')).resolves.toEqual([{ sku: 'sku-9', qty: 2 }]);
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
   });
 });

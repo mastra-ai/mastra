@@ -122,6 +122,42 @@ When `recording` is configured, `AgentBrowser` also adds the Beta `browser_recor
 
 When `webmcp: { enabled: true }` is configured, `AgentBrowser` also adds the Beta `browser_webmcp` tool. See [WebMCP](/integrations/browsers/agent-browser#webmcp).
 
+## Mid-turn tool discovery
+
+`AgentBrowser` exposes two helpers that convert a page's WebMCP tools into first-class Mastra tools so an agent can call them directly instead of going through the `browser_webmcp` meta-tool.
+
+### `createWebMcpPrepareStep(opts?)`
+
+Returns a `prepareStep` function to pass to `agent.generate` / `agent.stream`. Memoizes the page tool list by current URL inside the returned instance so repeat steps on the same page produce the same tool bytes.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread to look up. Defaults to the browser’s current thread.',
+    isOptional: true,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description:
+      'Id prefix applied to each page tool. Defaults to `page_`. Pass `` to disable prefixing (collisions drop the page tool).',
+    isOptional: true,
+  },
+  {
+    name: 'passthrough',
+    type: '(args) => PrepareStepResult | undefined',
+    description: 'Existing `prepareStep` to chain. Its result is merged with the page tools.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `getPageWebMcpTools(opts?)`
+
+Lower-level helper that returns a `Record<string, Tool>` of the current page's WebMCP tools without wiring them into `prepareStep`. Accepts the same `threadId` and `prefix` options.
+
 ### Core tools
 
 | Tool | Description |

@@ -172,6 +172,14 @@ const browser = new AgentBrowser({
 
 When enabled, AgentBrowser adds a `browser_webmcp` tool with two actions. The `list` action returns the tools the current page exposes, and `call` invokes one by name. Omit `allowedOrigins` to let the agent call tools on any page.
 
+To expose page tools directly as first-class agent tools (one tool call, no `list` hop), pass a `prepareStep` to the agent:
+
+```typescript
+await agent.generate(input, {
+  prepareStep: browser.createWebMcpPrepareStep(),
+})
+```
+
 See [WebMCP](/integrations/browsers/agent-browser#webmcp) in the AgentBrowser integration page for details.
 
 ## Record browser sessions
