@@ -318,24 +318,27 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const usesNativeJsonSchema = responseFormat?.type === 'json' && !injectionMode;
-  const isOpenAIStrictMode = usesNativeJsonSchema && model.provider.startsWith('openai');
-
   // Strict json_schema (OpenAI, and OpenAI-compatible providers with native structured output)
   // requires all properties to be required, additionalProperties: false, and no unsupported keywords.
-  if (usesNativeJsonSchema && responseFormat?.schema && usesOpenAIStrictJsonSchema(model, providerOptions)) {
+  const isStrictJsonSchemaMode =
+    responseFormat?.type === 'json' && !injectionMode && usesOpenAIStrictJsonSchema(model, providerOptions);
+
+  if (isStrictJsonSchemaMode && responseFormat?.schema) {
     responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
   }
 
-  const providerOptionsToUse: SharedProviderOptions | undefined = isOpenAIStrictMode
-    ? {
-        ...(providerOptions ?? {}),
-        openai: {
-          strictJsonSchema: true,
-          ...(providerOptions?.openai ?? {}),
-        },
-      }
-    : providerOptions;
+  // Only OpenAI providers read `providerOptions.openai`; OpenAI-compatible providers send strict by default
+  // and read their own provider key.
+  const providerOptionsToUse: SharedProviderOptions | undefined =
+    isStrictJsonSchemaMode && model.provider.startsWith('openai')
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: true,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
 
   const stream = v5.initialize({
     runId,
