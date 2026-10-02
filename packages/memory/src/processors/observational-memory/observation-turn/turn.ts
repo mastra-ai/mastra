@@ -77,6 +77,8 @@ export class ObservationTurn {
 
   /** The active assistant response message ID for this step. Updated by the processor before prepare(). */
   responseMessageId?: string;
+  /** The turn's own input (the user prompt), recorded at step 0 so cleanup on later steps keeps it. */
+  inputMessageIds: string[] = [];
 
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;

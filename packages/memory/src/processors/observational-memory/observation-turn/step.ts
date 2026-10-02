@@ -78,6 +78,7 @@ export class ObservationStep {
     let observerExchange: StepContext['observerExchange'];
 
     // ── Step 0: Activate buffered chunks ──────────────────────
+    if (this.stepNumber === 0) this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
     if (this.stepNumber === 0) {
       const step0Messages = getObservableMessages(messageList);
       const activation = await om.activate({
@@ -315,7 +316,7 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: step0PreserveIds,
+            preserveMessageIds: step0PreserveIds ?? this.turn.inputMessageIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -364,6 +365,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
       );
+      for (const id of this.turn.inputMessageIds) pendingMessageIds.add(id);
 
       filterObservedMessages({
         messageList,
