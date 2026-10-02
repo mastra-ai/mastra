@@ -1,4 +1,5 @@
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -19,6 +20,51 @@ import {
 } from './helpers';
 
 describe('auth helpers', () => {
+  describe('coreAuthMiddleware - public custom routes', () => {
+    const mastra = new Mastra({ logger: false });
+
+    it.each([
+      { path: '/health', method: 'GET', routeKey: 'GET:/health', requiresAuth: undefined, expectedStatus: undefined },
+      { path: '/health', method: 'POST', routeKey: 'ALL:/health', requiresAuth: undefined, expectedStatus: undefined },
+      {
+        path: '/webhooks/123',
+        method: 'POST',
+        routeKey: 'POST:/webhooks/:id',
+        requiresAuth: undefined,
+        expectedStatus: undefined,
+      },
+      { path: '/health', method: 'GET', routeKey: 'GET:/health', requiresAuth: true, expectedStatus: 401 },
+      { path: '/health', method: 'POST', routeKey: 'GET:/health', requiresAuth: undefined, expectedStatus: 401 },
+      { path: '/private', method: 'GET', routeKey: 'GET:/health', requiresAuth: undefined, expectedStatus: 401 },
+    ])(
+      'respects public route metadata for $method $path with requiresAuth $requiresAuth',
+      async ({ path, method, routeKey, requiresAuth, expectedStatus }) => {
+        const authenticateToken = vi.fn().mockResolvedValue(null);
+        const result = await coreAuthMiddleware({
+          path,
+          method,
+          mastra,
+          authConfig: { protected: ['/*'], authenticateToken },
+          customRouteAuthConfig: new Map([[routeKey, false]]),
+          requestContext: new RequestContext(),
+          rawRequest: new Request(`http://localhost${path}`, { method }),
+          getHeader: () => undefined,
+          token: null,
+          buildAuthorizeContext: () => null,
+          requiresAuth,
+        });
+
+        if (expectedStatus === undefined) {
+          expect(result).toEqual({ action: 'next' });
+          expect(authenticateToken).not.toHaveBeenCalled();
+        } else {
+          expect(result).toMatchObject({ action: 'error', status: expectedStatus });
+          expect(authenticateToken).toHaveBeenCalledOnce();
+        }
+      },
+    );
+  });
+
   describe('pathMatchesPattern', () => {
     it('should match exact paths', () => {
       expect(pathMatchesPattern('/api/users', '/api/users')).toBe(true);
