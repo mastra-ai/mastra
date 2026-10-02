@@ -51,7 +51,7 @@ export class TemporalRun<
 
     let handle: WorkflowHandle;
     try {
-      handle = await this.dispatch(args, input, initialState);
+      handle = await this.dispatch(args, input, initialState, requestContext);
     } catch (error) {
       const result = this.failedResult(input, initialState, error);
       await this.invokeLifecycleCallbacks(result, requestContext);
@@ -65,6 +65,7 @@ export class TemporalRun<
     args: TemporalRunStartArgs<TState, TInput, TRequestContext>,
     input: unknown,
     initialState: unknown,
+    requestContext: RequestContext,
   ): Promise<WorkflowHandle> {
     return this.client.workflow.start(toWorkflowType(this.workflowId), {
       taskQueue: this.taskQueue,
@@ -73,7 +74,7 @@ export class TemporalRun<
         {
           inputData: input,
           initialState,
-          requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+          requestContext: Object.fromEntries(requestContext.entries()),
           runId: this.runId,
           resourceId: this.resourceId,
           outputOptions: args.outputOptions,
@@ -92,14 +93,9 @@ export class TemporalRun<
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
     try {
-      const output = await handle.result();
-      result = {
-        status: 'success',
-        input: input as TInput,
-        result: output as TOutput,
-        state: initialState,
-        steps: {},
-      } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      // The generated Temporal workflow returns the execution result ({ status, result, state, steps }).
+      const output = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      result = { ...output, input: input as TInput };
     } catch (error) {
       result = this.failedResult(input, initialState, error);
     }
@@ -203,7 +199,13 @@ export class TemporalRun<
     const requestContext = (args.requestContext ?? new RequestContext()) as RequestContext;
     await this.invokeStartCallback(input, initialState, requestContext);
 
-    const handle = await this.dispatch(args, input, initialState);
+    let handle: WorkflowHandle;
+    try {
+      handle = await this.dispatch(args, input, initialState, requestContext);
+    } catch (error) {
+      await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      throw error;
+    }
 
     const { onFinish, onError } = this.executionEngine.options;
     if (onFinish || onError) {

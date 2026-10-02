@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -85,6 +86,9 @@ describe('TemporalRun', () => {
   });
 
   describe('lifecycle hooks', () => {
+    const steps = { increment: { status: 'success', output: { ok: true } } };
+    const executionResult = (result: unknown) => ({ status: 'success', input: { value: 1 }, result, state: {}, steps });
+
     function createHookedWorkflow(
       options: Record<string, unknown>,
       result: () => Promise<unknown>,
@@ -108,21 +112,21 @@ describe('TemporalRun', () => {
       const onError = vi.fn();
       const start = vi.fn().mockImplementation(async () => {
         order.push('dispatch');
-        return { result: async () => ({ ok: true }) };
+        return { result: async () => executionResult({ ok: true }) };
       });
       const { workflow } = createHookedWorkflow({ onStart, onFinish, onError }, async () => ({}), start);
       const run = await workflow.createRun({ runId: 'run-1', resourceId: 'resource-1' });
 
       const result = await run.start({ inputData: { value: 1 } });
 
-      expect(result.status).toBe('success');
+      expect(result).toEqual({ status: 'success', input: { value: 1 }, result: { ok: true }, state: {}, steps });
       expect(order).toEqual(['onStart', 'dispatch', 'onFinish']);
       expect(onStart).toHaveBeenCalledWith(
         expect.objectContaining({ runId: 'run-1', workflowId: 'hooked-workflow', resourceId: 'resource-1' }),
       );
       expect((onStart.mock.calls[0] as any)[0].getInitData()).toEqual({ value: 1 });
       expect(onFinish).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'success', result: { ok: true }, runId: 'run-1' }),
+        expect.objectContaining({ status: 'success', result: { ok: true }, steps, runId: 'run-1' }),
       );
       expect(onError).not.toHaveBeenCalled();
     });
@@ -152,6 +156,34 @@ describe('TemporalRun', () => {
       const result = await run.start({ inputData: { value: 1 } });
 
       expect(result.status).toBe('failed');
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('sends request context values set by onStart to Temporal', async () => {
+      const onStart = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+        requestContext.set('tenant', 'acme');
+      });
+      const { workflow, start } = createHookedWorkflow({ onStart }, async () => executionResult({}));
+
+      await (await workflow.createRun({ runId: 'run-1' })).start({ inputData: { value: 1 } });
+      await (await workflow.createRun({ runId: 'run-2' })).startAsync({ inputData: { value: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(2);
+      for (const [, options] of start.mock.calls) {
+        expect(options.args[0].requestContext).toEqual({ tenant: 'acme' });
+      }
+    });
+
+    it('runs terminal hooks and rejects when startAsync dispatch fails', async () => {
+      const failure = new Error('Temporal service unavailable');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const start = vi.fn().mockRejectedValue(failure);
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(failure);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
 
@@ -203,7 +235,7 @@ describe('TemporalRun', () => {
       expect(start).toHaveBeenCalledOnce();
       expect(onFinish).not.toHaveBeenCalled();
 
-      resolveResult({ done: true });
+      resolveResult(executionResult({ done: true }));
       await vi.waitFor(() =>
         expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', result: { done: true } })),
       );
