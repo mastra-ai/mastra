@@ -101,4 +101,25 @@ describe('SchemaValidator cache', () => {
     expect(() => validator.validate({ a: 1 }, stringSchema, 'input', 'dataset:x:input')).toThrow(SchemaValidationError);
     expect(() => validator.validate({ a: 1 }, { ...numberSchema }, 'input', 'dataset:x:input')).not.toThrow();
   });
+
+  it('recompiles when the schema object is mutated in place', () => {
+    const validator = createValidator();
+    const schema: any = { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] };
+
+    expect(() => validator.validate({ a: 'x' }, schema, 'input', 'dataset:y:input')).not.toThrow();
+    schema.properties.a.type = 'number';
+    expect(() => validator.validate({ a: 1 }, schema, 'input', 'dataset:y:input')).not.toThrow();
+    expect(() => validator.validate({ a: 'x' }, schema, 'input', 'dataset:y:input')).toThrow(SchemaValidationError);
+  });
+
+  it('clearCache evicts the cached validator for a key', () => {
+    const validator = createValidator();
+    const schema = { type: 'object', properties: { a: { type: 'number' } }, required: ['a'] } as const;
+    const cache = (validator as any).cache as Map<string, unknown>;
+
+    validator.validate({ a: 1 }, schema, 'input', 'dataset:z:input');
+    expect(cache.has('dataset:z:input')).toBe(true);
+    validator.clearCache('dataset:z:input');
+    expect(cache.has('dataset:z:input')).toBe(false);
+  });
 });
