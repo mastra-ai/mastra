@@ -12,6 +12,7 @@ import {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_AUTH_MODE_KEY,
 } from '../constants';
+import { HTTPException } from '../http-exception';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -525,6 +526,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     mastra.getLogger()?.error('Authentication error', {
       error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
     });
+    // Explicit HTTP errors from auth callbacks keep their status/message; anything else is redacted.
+    if (err instanceof HTTPException && err.status >= 400 && err.status <= 599) {
+      return { action: 'error', status: err.status, body: { error: err.message }, headers: refreshHeaders };
+    }
     return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
   }
 
