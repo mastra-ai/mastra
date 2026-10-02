@@ -62,11 +62,13 @@ describe('ClickHouse trace aggregate compiler', () => {
       }),
     );
 
-    expect(compiled.query).toContain('quantile(0.95)(durationMs) AS m3');
+    expect(compiled.query).toContain('cityHash64(r.traceId) AS traceSeed');
+    expect(compiled.query).toContain('quantileDeterministic(0.95)(durationMs, traceSeed) AS m3');
+    expect(compiled.query).not.toMatch(/\bquantile\(/);
     expect(compiled.query).toContain('toFloat64(uniqExact(cd0)) AS m4');
     expect(compiled.query).toContain(`CAST(if(isNotNull(r.error), 'error', 'success') AS Nullable(String)) AS d1`);
     expect(compiled.query).toContain(
-      'ORDER BY quantile(0.95)(durationMs) DESC NULLS LAST, d0 ASC NULLS LAST, d1 ASC NULLS LAST',
+      'ORDER BY quantileDeterministic(0.95)(durationMs, traceSeed) DESC NULLS LAST, d0 ASC NULLS LAST, d1 ASC NULLS LAST',
     );
     expect(compiled.query).toContain('GROUP BY d0, d1');
     expect(compiled.query).not.toContain('GROUPING SETS');

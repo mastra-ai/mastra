@@ -85,6 +85,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   factColumns.push(
     `toFloat64(${durationMsSql('r.startedAt', 'r.endedAt')}) AS durationMs`,
     `isNotNull(r.error) AS isError`,
+    `cityHash64(r.traceId) AS traceSeed`,
   );
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
@@ -108,7 +109,9 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
     if (name === 'duration.min') return 'min(durationMs)';
     if (name === 'duration.max') return 'max(durationMs)';
     const percentile = PERCENTILES[name];
-    if (percentile !== undefined) return `quantile(${percentile})(durationMs)`;
+    // Seeding the reservoir sample by trace makes identical requests return identical
+    // percentiles, rankings, and `truncated`; it stays approximate past 8192 traces (Decision 3).
+    if (percentile !== undefined) return `quantileDeterministic(${percentile})(durationMs, traceSeed)`;
     const measure = plan.measures.find(
       (candidate): candidate is Extract<TrustedTraceAggregateMeasure, { type: 'countDistinct' }> =>
         candidate.type === 'countDistinct' && candidate.name === name,
