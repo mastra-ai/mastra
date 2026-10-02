@@ -3,6 +3,7 @@ import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -104,6 +105,13 @@ export function createStreamStep<OUTPUT = undefined>({
 
       const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
+      const resumeSnapshot =
+        resumeContext &&
+        (await hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
+          logger: capabilities.logger,
+          runId: _runId,
+        }));
+
       const streamResult = capabilities.llm.stream({
         ...loopOptions,
         outputProcessors: processors,
@@ -112,7 +120,7 @@ export function createStreamStep<OUTPUT = undefined>({
         requireToolApproval,
         toolCallConcurrency,
         eagerToolExecution,
-        resumeContext,
+        resumeContext: resumeContext && { ...resumeContext, snapshot: resumeSnapshot },
         _internal: {
           generateId: capabilities.generateMessageId,
           saveQueueManager,
