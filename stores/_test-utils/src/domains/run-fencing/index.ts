@@ -22,6 +22,15 @@ const SHORT_LEASE_MS = 200;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 
+/**
+ * Waits until a looping writer has started another attempt. A fixed sleep is
+ * not enough on stores where a single write can outlast it.
+ */
+const waitForAttemptAfter = async (attempts: () => number, seen: number) => {
+  const deadline = Date.now() + 10_000;
+  while (attempts() <= seen && Date.now() < deadline) await sleep(5);
+};
+
 const snapshotWithValue = (runId: string, value: string) =>
   ({
     runId,
@@ -407,9 +416,9 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           snapshot: snapshotWithValue(runId, 'b'),
           fence: fenceB,
         });
-        // Keep the stale writer going past B's write before stopping it.
+        // Keep the stale writer going until it starts a write after B's.
         const attemptsAtTakeover = staleAttempts;
-        await sleep(20);
+        await waitForAttemptAfter(() => staleAttempts, attemptsAtTakeover);
         stop = true;
         await staleWriter;
 
@@ -642,7 +651,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect(await memory.raiseRunFence(fenceB)).toBe(true);
       await memory.saveMessages({ messages: [withText('b')], fence: fenceB });
       const attemptsAtTakeover = staleAttempts;
-      await sleep(20);
+      await waitForAttemptAfter(() => staleAttempts, attemptsAtTakeover);
       stop = true;
       await staleWriter;
 
