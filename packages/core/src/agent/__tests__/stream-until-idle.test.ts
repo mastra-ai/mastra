@@ -241,46 +241,50 @@ describe('Agent.streamUntilIdle', () => {
     expect(streamSpy.mock.calls[1]?.[1]).not.toHaveProperty('runId');
   });
 
-  it.each(['run', 'thread'] as const)(
-    'aborts the initial segment through the caller runId %s handle',
-    async abortBy => {
-      const memory = new MockMemory();
-      const initial = abortableTextResponse('initial started', 'initial tail');
-      const { model } = makeScriptedModel([initial.response]);
-      const agent = new Agent({
-        id: `initial-abort-${abortBy}`,
-        name: `initial-abort-${abortBy}`,
-        instructions: 'test',
-        model,
-        memory,
-      });
-      mastra.addAgent(agent, `initial-abort-${abortBy}`);
+  it.each([
+    { abortBy: 'run' as const, callerRunId: true },
+    { abortBy: 'thread' as const, callerRunId: true },
+    { abortBy: 'run' as const, callerRunId: false },
+    { abortBy: 'thread' as const, callerRunId: false },
+  ])('aborts the initial segment through the $abortBy handle (caller runId: $callerRunId)', async testCase => {
+    const { abortBy, callerRunId } = testCase;
+    const memory = new MockMemory();
+    const initial = abortableTextResponse('initial started', 'initial tail');
+    const { model } = makeScriptedModel([initial.response]);
+    const id = `initial-abort-${abortBy}-${callerRunId ? 'caller' : 'generated'}`;
+    const agent = new Agent({
+      id,
+      name: id,
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, id);
 
-      const runId = `caller-initial-abort-${abortBy}`;
-      const threadId = `initial-abort-thread-${abortBy}`;
-      const resourceId = 'user-1';
-      const resultPromise = agent.stream('hi', {
-        runId,
-        memory: { thread: threadId, resource: resourceId },
-        untilIdle: true,
-      });
-      await initial.started;
+    const suppliedRunId = callerRunId ? `caller-initial-abort-${abortBy}` : undefined;
+    const threadId = `initial-abort-thread-${abortBy}-${callerRunId ? 'caller' : 'generated'}`;
+    const resourceId = 'user-1';
+    const result = await agent.stream('hi', {
+      ...(suppliedRunId ? { runId: suppliedRunId } : {}),
+      memory: { thread: threadId, resource: resourceId },
+      untilIdle: true,
+    });
+    await initial.started;
 
-      const aborted =
-        abortBy === 'run'
-          ? agent.abortRunStream(runId)
-          : agent.abortThreadStream({ threadId, resourceId, expectedRunId: runId });
-      expect(aborted).toBe(true);
+    const runId = result.runId;
+    const aborted =
+      abortBy === 'run'
+        ? agent.abortRunStream(runId)
+        : agent.abortThreadStream({ threadId, resourceId, expectedRunId: callerRunId ? runId : undefined });
+    expect(aborted).toBe(true);
 
-      const result = await resultPromise;
-      const chunks = await drain(result.fullStream as ReadableStream<any>);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      expect(initial.wasAborted()).toBe(true);
-      expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).not.toContain(
-        'initial tail',
-      );
-    },
-  );
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(initial.wasAborted()).toBe(true);
+    expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).not.toContain(
+      'initial tail',
+    );
+  });
 
   it.each(['run', 'thread'] as const)(
     'keeps the caller runId as a %s abort handle during continuations',
