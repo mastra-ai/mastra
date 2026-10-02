@@ -965,8 +965,11 @@ export class DurableAgent<
           scheduleAutoCleanup();
         },
         onAbort: async data => {
-          await options?.onAbort?.(data);
-          scheduleAutoCleanup();
+          try {
+            await options?.onAbort?.(data);
+          } finally {
+            scheduleAutoCleanup();
+          }
         },
         onSuspended: options?.onSuspended,
         // Keep recovered runs observable if they suspend again so a later
@@ -2737,6 +2740,13 @@ export class DurableAgent<
       onError: async error => {
         await resolvedOptions.onError?.(error);
         scheduleAutoCleanup();
+      },
+      onAbort: async data => {
+        try {
+          await resolvedOptions.onAbort?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
       },
       onSuspended: resolvedOptions.onSuspended,
       closeOnSuspend,
