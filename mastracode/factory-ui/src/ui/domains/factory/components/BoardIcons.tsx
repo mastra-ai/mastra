@@ -22,8 +22,8 @@ import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
+import './board-stage-icons.css';
 
-// GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
   'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
@@ -61,15 +61,14 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
 
 const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
-  orange: { icon: 'text-badge-orange-indicator', tint: 'bg-badge-orange-indicator/5' },
-  cyan: { icon: 'text-badge-cyan-indicator', tint: 'bg-badge-cyan-indicator/5' },
+  orange: { icon: 'factory-stage-orange', tint: 'bg-badge-orange-indicator/5' },
+  cyan: { icon: 'factory-stage-cyan', tint: 'bg-badge-cyan-indicator/5' },
   info: { icon: 'text-info-indicator', tint: 'bg-info-indicator/5' },
-  purple: { icon: 'text-badge-purple-indicator', tint: 'bg-badge-purple-indicator/5' },
-  success: { icon: 'text-success-indicator', tint: 'bg-success-indicator/5' },
+  purple: { icon: 'factory-stage-purple', tint: 'bg-badge-purple-indicator/5' },
+  success: { icon: 'factory-stage-success', tint: 'bg-success-indicator/5' },
   destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-indicator/5' },
 };
 
-// The artwork is a grey file; masking it lets the stage's colour paint through.
 function MaskedArt({ source, className }: { source: string; className: string }) {
   return (
     <span
@@ -145,7 +144,6 @@ export function BoardStageIcon({
 }: {
   stage: string;
   kind?: BoardPhaseKind;
-  /** Beside text that already names the phase; a custom phase's icon otherwise announces its kind. */
   decorative?: boolean;
 }) {
   const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;

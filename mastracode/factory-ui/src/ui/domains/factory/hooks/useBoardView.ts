@@ -21,21 +21,23 @@ import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boa
 import type { BoardKind } from '../boardStages';
 import { restoreBoardView, saveBoardView } from '../services/boardViews';
 
+const BOARD_SEARCH_QUERY = 'search';
+
 export interface BoardView {
-  /** The URL with any remembered board view filled in; read the open card from here. */
   searchParams: URLSearchParams;
   setSearchParams: SetURLSearchParams;
   savedViews: SavedViewsController<BoardViewSettings>;
   filters: BoardFilterState;
+  search: string;
   sort: BoardSort;
   layout: BoardLayout;
   newViewSettings: BoardViewSettings;
   setFilters: (next: BoardFilterState) => void;
+  setSearch: (next: string) => void;
   setSort: (next: BoardSort) => void;
   setLayout: (next: BoardLayout) => void;
 }
 
-/** With a saved view applied, every change edits its draft instead of the URL. */
 export function useBoardView({
   factoryProjectId,
   kind,
@@ -46,9 +48,6 @@ export function useBoardView({
   currentUserId?: string;
 }): BoardView {
   const [urlParams, setSearchParams] = useSearchParams();
-  // Opening a board without filters or sort in the URL (e.g. from the sidebar) brings back the ones
-  // last used here. They apply on this render so the board never flashes unfiltered; the effect
-  // then writes them into the URL.
   const restoredParams = restoreBoardView(factoryProjectId, kind, urlParams);
   const searchParams = restoredParams ?? urlParams;
   const restoredSearch = restoredParams?.toString();
@@ -69,6 +68,7 @@ export function useBoardView({
       const params = new URLSearchParams(searchParams);
       if (viewId) params.set(BOARD_VIEW_QUERY, viewId);
       else params.delete(BOARD_VIEW_QUERY);
+      params.delete(BOARD_SEARCH_QUERY);
       clearOpenCard(params);
       replaceParams(params);
     },
@@ -81,7 +81,6 @@ export function useBoardView({
   };
   const pageFilters = boardFiltersFromParams(searchParams, kind);
   const settings = applied?.settings ?? pageSettings;
-  // A view saved by someone signed in can ask for "moved by me"; without a user that means nothing.
   const sort = settings.sort === 'recent-mine' && !currentUserId ? DEFAULT_BOARD_SORT : settings.sort;
 
   return {
@@ -89,9 +88,17 @@ export function useBoardView({
     setSearchParams,
     savedViews,
     filters: applied ? boardFilterStateFromItems(applied.filters, kind) : pageFilters,
+    search: searchParams.get(BOARD_SEARCH_QUERY) ?? '',
     sort,
     layout: settings.layout,
     newViewSettings: { ...settings, sort },
+    setSearch: next => {
+      const params = new URLSearchParams(searchParams);
+      if (next) params.set(BOARD_SEARCH_QUERY, next);
+      else params.delete(BOARD_SEARCH_QUERY);
+      clearOpenCard(params);
+      setSearchParams(params, { replace: true });
+    },
     setFilters: (next: BoardFilterState) => {
       const params = applied ? new URLSearchParams(searchParams) : boardFilterParams(searchParams, next, kind);
       clearOpenCard(params);

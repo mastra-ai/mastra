@@ -41,7 +41,7 @@ export function SearchInput({
   return (
     <Field className={className}>
       <FieldLabel className="sr-only">{label}</FieldLabel>
-      <InputGroup size={size}>
+      <InputGroup size={size} className="min-w-0">
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>

@@ -1,5 +1,5 @@
 import type { CSSProperties, RefObject } from 'react';
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 interface CardMorphStyle extends CSSProperties {
   '--board-card-w'?: string;
@@ -32,9 +32,9 @@ export function cardMorphStyle(card: HTMLElement | null): CardMorphStyle {
 export function useCardMorph({ openFor }: { openFor?: string } = {}): CardMorph {
   const cardRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const setCardElement = useCallback((element: HTMLElement | null) => {
+  const setCardElement = (element: HTMLElement | null) => {
     cardRef.current = element;
-  }, []);
+  };
   const [choice, setChoice] = useState<{ openFor?: string; open: boolean }>();
   const [closedBefore, setClosedBefore] = useState(false);
 

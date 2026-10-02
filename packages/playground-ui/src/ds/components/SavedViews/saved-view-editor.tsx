@@ -1,4 +1,3 @@
-import { CheckIcon, LockIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SavedViewsController } from './use-saved-views';
 import { Button } from '@/ds/components/Button/Button';
@@ -13,6 +12,7 @@ export type SavedViewEditorProps<TSettings> = {
 
 export function SavedViewEditor<TSettings>({ views, children, className }: SavedViewEditorProps<TSettings>) {
   const { draft } = views;
+  const creating = draft?.viewId === undefined;
   return (
     <div
       role={draft ? 'group' : undefined}
@@ -22,22 +22,25 @@ export function SavedViewEditor<TSettings>({ views, children, className }: Saved
       {children}
       {draft && (
         <>
-          <Txt
-            as="span"
-            variant="caption"
-            tone="muted"
-            className="ml-auto flex shrink-0 items-center gap-1 max-sm:hidden [&_svg]:size-3"
-          >
-            <LockIcon aria-hidden />
-            Only you, in this browser
-          </Txt>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button type="button" variant="ghost" size="icon-sm" tooltip="Cancel" onClick={views.discard}>
-              <XIcon />
-            </Button>
-            <Button type="button" variant="primary" size="icon-sm" tooltip="Save view" onClick={views.save}>
-              <CheckIcon />
-            </Button>
+          {!creating && views.unsaved && (
+            <Txt as="span" variant="caption" tone="muted">
+              Unsaved changes
+            </Txt>
+          )}
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {creating && (
+              <Txt as="span" variant="caption" tone="muted" className="max-sm:hidden">
+                Saved in this browser
+              </Txt>
+            )}
+            <div className="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="sm" onClick={views.discard}>
+                {creating ? 'Cancel' : 'Reset'}
+              </Button>
+              <Button type="button" variant="primary" size="sm" disabled={!views.unsaved} onClick={views.save}>
+                {creating ? 'Save view' : 'Save changes'}
+              </Button>
+            </div>
           </div>
         </>
       )}

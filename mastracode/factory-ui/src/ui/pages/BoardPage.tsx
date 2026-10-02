@@ -50,15 +50,6 @@ import { relatedWorkItemIndex } from '../domains/factory/services/relationships'
 import { workItemHumanActorIds } from '../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 
-/**
- * Factory › Board: an org-wide kanban over the repository's work items. The
- * Intake column merges persisted `intake` cards with live GitHub/Linear
- * candidates (issues and PRs that have no record yet — records are
- * materialized only when someone acts on them). Everything enters through
- * Intake and moves through the system from there. Cards move between columns
- * by drag-and-drop or the card menu; moves only file/move cards, never start
- * agent runs.
- */
 export function WorkBoardPage() {
   return <BoardLayout kind="work" />;
 }
@@ -132,6 +123,8 @@ function BoardContent({
   const currentUserId = auth.data?.user?.userId;
   const view = useBoardView({ factoryProjectId, kind, currentUserId });
   const { searchParams, setSearchParams, filters, sort, layout } = view;
+  const cardMatchesViewSearch = (card: Parameters<typeof cardMatchesSearch>[0]) =>
+    cardMatchesSearch(card, filters.search) && cardMatchesSearch(card, view.search);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
@@ -199,7 +192,7 @@ function BoardContent({
     candidate =>
       candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes) &&
       candidateMatchesLabels(candidate, filters.labels) &&
-      cardMatchesSearch(candidate, filters.search),
+      cardMatchesViewSearch(candidate),
   );
   const setIntakeSource = (source: IntakeSource) => {
     if (targetItemId) {
@@ -228,7 +221,7 @@ function BoardContent({
         return (
           workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate) &&
           workItemMatchesLabels(item, filters.labels, liveCandidate) &&
-          cardMatchesSearch(item, filters.search)
+          cardMatchesViewSearch(item)
         );
       }),
       stage,
@@ -262,7 +255,7 @@ function BoardContent({
   const unfilteredVisibleWorkItems = new Set(stages.flatMap(stage => unfilteredWorkItemsForStage(stage.id)));
   const totalTaskCount = visibleWorkItems.size + filteredCandidates.length;
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + intake.candidates.length;
-  const anyFilterActive = boardFiltersActive(filters, kind);
+  const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
 
   const stageViews = stages.map(stage => {

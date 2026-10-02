@@ -12,8 +12,6 @@ import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 
-export const BOARD_LIST_COLUMNS = 'auto auto minmax(12rem, 1fr) auto auto auto auto';
-
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
 type BoardListRowCells = {
@@ -44,11 +42,9 @@ export function BoardListRow({
   testId: 'work-item-card' | 'candidate-card';
   title: string;
   cardRef: RefCallback<HTMLElement>;
-  /** Receives the details button: the board scrolls to it and focuses it when the card is deeplinked. */
   detailsRef?: (element: HTMLElement | null) => void;
   expanded: boolean;
   onOpen: () => void;
-  /** Absent while the card is mid-move: it cannot be picked up again. */
   dragPayload?: DragPayload;
   busy?: boolean;
   moving?: boolean;
@@ -59,34 +55,50 @@ export function BoardListRow({
 }) {
   const rowCells = (
     <>
-      <DataList.Cell className="empty:before:content-none">{cells.icon}</DataList.Cell>
-      <DataList.Cell className="text-placeholder tabular-nums empty:before:content-none">{cells.key}</DataList.Cell>
-      <DataList.Cell className="text-foreground empty:before:content-none">
+      <DataList.Cell className="empty:before:content-none max-sm:col-start-1 max-sm:row-start-1">
+        {cells.icon}
+      </DataList.Cell>
+      <DataList.Cell className="text-placeholder tabular-nums empty:before:content-none max-sm:hidden">
+        {cells.key}
+      </DataList.Cell>
+      <DataList.Cell className="text-foreground empty:before:content-none max-sm:col-start-2 max-sm:row-start-1">
         <span className="flex min-w-0 items-center gap-3">
           <span className="min-w-0 flex-1 truncate">{cells.title}</span>
-          <span className="max-w-[min(18rem,45%)] min-w-0 shrink-0 empty:hidden [&>*]:max-w-full">{cells.labels}</span>
+          <span className="max-w-[min(18rem,45%)] min-w-0 shrink-0 empty:hidden max-sm:hidden [&>*]:max-w-full">
+            {cells.labels}
+          </span>
         </span>
       </DataList.Cell>
-      {/* Right-packed, so one wide status or action leaves slack after the title, not mid-row. */}
-      <DataList.Cell className="justify-items-end empty:before:content-none">{cells.status}</DataList.Cell>
-      <DataList.Cell onClick={stopRowClick} className="justify-items-end overflow-visible empty:before:content-none">
+      <DataList.Cell className="justify-items-end empty:before:content-none max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-items-start max-sm:empty:hidden">
+        {cells.status}
+      </DataList.Cell>
+      <DataList.Cell
+        onClick={stopRowClick}
+        className="justify-items-end overflow-visible empty:before:content-none max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-items-start max-sm:empty:hidden"
+      >
         {cells.action}
       </DataList.Cell>
-      <DataList.Cell onClick={stopRowClick} className="justify-items-end overflow-visible empty:before:content-none">
+      <DataList.Cell
+        onClick={stopRowClick}
+        className="justify-items-end overflow-visible empty:before:content-none max-sm:col-start-1 max-sm:row-start-2 max-sm:empty:hidden"
+      >
         {cells.activity}
       </DataList.Cell>
-      <DataList.Cell onClick={stopRowClick} className="justify-items-end overflow-visible empty:before:content-none">
+      <DataList.Cell
+        onClick={stopRowClick}
+        className="justify-items-end overflow-visible empty:before:content-none max-sm:col-start-3 max-sm:row-start-1"
+      >
         {createdAt && (
           <Txt
             as="span"
             variant="meta"
             tone="muted"
-            className="pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none pointer-coarse:hidden pointer-fine:group-focus-within:opacity-0 pointer-fine:group-hover:opacity-0"
+            className="pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden pointer-fine:group-focus-within:opacity-0 pointer-fine:group-hover:opacity-0"
           >
             <time dateTime={createdAt}>{relativeTime(createdAt)}</time>
           </Txt>
         )}
-        <span className="col-start-1 row-start-1 flex items-center">
+        <span className="col-start-1 row-start-1 flex items-center max-sm:[&_button]:opacity-100">
           <Button
             ref={detailsRef}
             type="button"
@@ -138,7 +150,7 @@ export function BoardListRow({
       }}
       onSelectRow={onOpen}
       className={cn(
-        'group min-h-10 items-center gap-x-3 px-3 py-1',
+        'group min-h-10 items-center gap-x-3 px-3 py-1 max-sm:gap-y-1 max-sm:py-2',
         moving && 'cursor-wait',
         busy && 'opacity-70',
         highlighted && 'before:bg-warning-subtle',

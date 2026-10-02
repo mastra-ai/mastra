@@ -10,7 +10,7 @@ import { createAppRoutes } from '../router';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 describe('Factory board saved views', () => {
-  it('starts on All cards and offers the layout only inside the view editor', async () => {
+  it('starts on All cards and offers layout controls for a custom view', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
     renderWithProviders(<RouterProvider router={router} />);
@@ -19,12 +19,17 @@ describe('Factory board saved views', () => {
     const views = await screen.findByRole('group', { name: 'Board views' });
     expect(within(views).getByRole('button', { name: 'All cards' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('radio', { name: 'Board' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
+    expect(screen.getByRole('combobox', { name: 'Add filter' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
+    expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'New view' }));
     expect(await screen.findByRole('radio', { name: 'Board' })).toBeChecked();
   });
 
-  it('saves filters, sort and layout as a view that survives a reload and keeps its filters on show', async () => {
+  it('saves filters, sort and layout as a view that survives a reload with its filter editor collapsed', async () => {
     stubWorkBoard();
     const first = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?q=Created&sort=created-newest`],
@@ -43,7 +48,7 @@ describe('Factory board saved views', () => {
     await user.click(screen.getByRole('button', { name: 'Save view' }));
 
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
-    expect(within(screen.getByRole('group', { name: 'View filters' })).getByText('Created')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
     const viewId = new URLSearchParams(first.state.location.search).get('view');
@@ -58,15 +63,15 @@ describe('Factory board saved views', () => {
     await within(triage).findByText('Created later');
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'View filters' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'All cards' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
     expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Board filters' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Board filters' })).not.toBeInTheDocument();
   });
 
-  it('removes a saved view filter only in edit mode, until saved or canceled', async () => {
+  it('shows saved filters only while editing and hides them again on reset', async () => {
     stubWorkBoard();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/work?q=Created`],
@@ -82,21 +87,25 @@ describe('Factory board saved views', () => {
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
 
-    expect(
-      within(screen.getByRole('group', { name: 'View filters' })).queryByRole('button', { name: 'Clear filters' }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Untitled view' }));
+    const selectedView = screen.getByRole('button', { name: 'Untitled view', pressed: true });
+    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
+    await user.click(selectedView);
     await user.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
+    expect(
+      within(screen.getByRole('group', { name: 'View filters' })).getByRole('button', { name: 'Remove Text filter' }),
+    ).toBeInTheDocument();
     await user.click(
       within(screen.getByRole('group', { name: 'View filters' })).getByRole('button', { name: 'Clear filters' }),
     );
     await within(triage).findByText('Moved recently');
     await user.keyboard('{Escape}');
-    expect(screen.getByRole('button', { name: 'Save view' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBe(selectedView);
+    await user.click(screen.getByRole('button', { name: 'Reset' }));
 
     await waitFor(() => expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
     expect(new URLSearchParams(router.state.location.search).get('q')).toBe('Created');
   });
 
@@ -109,6 +118,7 @@ describe('Factory board saved views', () => {
     const user = userEvent.setup();
     await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
 
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     await user.click(screen.getByRole('button', { name: 'Save as view' }));
     expect(within(screen.getByRole('group', { name: 'View filters' })).getByText('Created')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save view' }));
@@ -120,6 +130,72 @@ describe('Factory board saved views', () => {
       'aria-checked',
       'true',
     );
+  });
+
+  it('searches within a saved view without changing its filters or entering the editor', async () => {
+    stubWorkBoard();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work?q=Created`],
+    });
+    const page = renderWithProviders(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    const triage = await screen.findByTestId('board-column-triage');
+    await within(triage).findByText('Created later');
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
+    await user.click(screen.getByRole('button', { name: 'Save as view' }));
+    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    const selectedView = screen.getByRole('button', { name: 'Untitled view', pressed: true });
+    const search = screen.getByRole('searchbox', { name: 'Search cards' });
+
+    await user.type(search, 'later');
+    expect(within(triage).getByText('Created later')).toBeInTheDocument();
+    expect(search).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBe(selectedView);
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, 'Moved');
+    expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
+    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(search).toHaveValue('');
+    expect(within(triage).getByText('Created later')).toBeInTheDocument();
+
+    await user.type(search, 'Moved');
+    page.unmount();
+    const reopened = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work`],
+    });
+    renderWithProviders(<RouterProvider router={reopened} />);
+    await within(await screen.findByTestId('board-column-triage')).findByText('Created later');
+    expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBeInTheDocument();
+  });
+
+  it('clears a temporary search when switching views', async () => {
+    stubWorkBoard();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    const triage = await screen.findByTestId('board-column-triage');
+    await within(triage).findByText('Moved recently');
+    await user.click(screen.getByRole('button', { name: 'New view' }));
+    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'Created');
+    expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'All cards' }));
+    expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
+    expect(within(triage).getByText('Moved recently')).toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'missing');
+    expect(within(triage).queryByText('Created later')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save as view' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Untitled view' }));
+    expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
+    expect(within(triage).getByText('Created later')).toBeInTheDocument();
   });
 });
 

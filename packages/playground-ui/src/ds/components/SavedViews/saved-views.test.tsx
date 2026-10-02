@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { SavedViewEditor } from './saved-view-editor';
@@ -68,6 +68,7 @@ async function createView(name: string) {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 
@@ -110,6 +111,29 @@ describe('SavedViews', () => {
     expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
   });
 
+  it('keeps a draft when browser storage fails and saves it after a retry', async () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage full', 'QuotaExceededError');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Could not save changes');
+    expect(stored()).toEqual([]);
+    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS] });
+    expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
+
+    write.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+
+    expect(stored()).toMatchObject([{ filters: [ERRORS] }]);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
+  });
+
   it('applies edits live and drops them on cancel', async () => {
     render(<Page />);
     await createView('Errors');
@@ -119,7 +143,7 @@ describe('SavedViews', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
     expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [], settings: { layout: 'list' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
     expect(stored()[0]?.filters).toEqual([ERRORS]);
   });
@@ -132,21 +156,29 @@ describe('SavedViews', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
     fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
     expect(stored()[0]?.filters).toEqual([ERRORS]);
-    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
   });
 
-  it('marks an edited view unsaved only once it differs from what is stored', async () => {
+  it('keeps the selected tab mounted while marking changes that can be saved or reset', async () => {
     render(<Page />);
     await createView('Errors');
 
-    fireEvent.contextMenu(tab('Errors'));
+    const selectedTab = tab('Errors');
+    fireEvent.contextMenu(selectedTab);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
     expect(screen.queryByText('Unsaved changes')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
     expect(screen.getByText('Unsaved changes')).toBeTruthy();
+    expect(tab('Errors')).toBe(selectedTab);
+    expect(selectedTab.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(selectedTab);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
+    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [], settings: { layout: 'list' } });
   });
 
   it('drops an edit when the page navigates away from its view', async () => {
@@ -169,8 +201,8 @@ describe('SavedViews', () => {
 
     fireEvent.click(tab('Errors'));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
 
     fireEvent.click(tab('All'));
     fireEvent.mouseEnter(tab('Errors'));

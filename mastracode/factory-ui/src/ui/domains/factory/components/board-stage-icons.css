@@ -1,0 +1,31 @@
+.factory-stage-orange {
+  color: var(--orange-400);
+}
+
+.factory-stage-cyan {
+  color: var(--cyan-400);
+}
+
+.factory-stage-purple {
+  color: var(--purple-400);
+}
+
+.factory-stage-success {
+  color: var(--green-400);
+}
+
+html.light .factory-stage-orange {
+  color: var(--orange-500);
+}
+
+html.light .factory-stage-cyan {
+  color: var(--cyan-500);
+}
+
+html.light .factory-stage-purple {
+  color: var(--purple-500);
+}
+
+html.light .factory-stage-success {
+  color: var(--green-500);
+}

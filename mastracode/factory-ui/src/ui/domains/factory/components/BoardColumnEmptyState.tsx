@@ -105,7 +105,7 @@ export function BoardColumnEmptyState({
       : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   if (layout === 'list') {
     return (
-      <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2">
+      <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2 max-sm:whitespace-normal">
         {copy.title}
         <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
       </Txt>

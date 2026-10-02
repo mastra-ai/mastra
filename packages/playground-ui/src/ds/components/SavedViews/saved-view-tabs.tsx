@@ -1,4 +1,12 @@
-import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  LayersIcon,
+  LayersPlusIcon,
+  PencilIcon,
+  TextCursorInputIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
@@ -10,6 +18,7 @@ import { ContextMenu } from '@/ds/components/ContextMenu';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { FilterBarField, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
@@ -63,16 +72,6 @@ export function SavedViewTabs<TSettings>({
         {defaultLabel}
       </button>
       {views.views.map(view => {
-        if (draft?.viewId === view.id) {
-          return (
-            <EditingViewTab
-              key={view.id}
-              name={draft.name}
-              unsaved={views.unsaved}
-              onRename={name => views.change({ name })}
-            />
-          );
-        }
         if (renamingViewId === view.id) {
           return (
             <RenamingViewTab
@@ -90,6 +89,7 @@ export function SavedViewTabs<TSettings>({
             key={view.id}
             view={view}
             selected={views.activeView?.id === view.id && !creating}
+            unsaved={draft?.viewId === view.id && views.unsaved}
             fields={fields}
             operators={operators}
             settings={describeSettings?.(view.settings)}
@@ -101,6 +101,11 @@ export function SavedViewTabs<TSettings>({
           />
         );
       })}
+      {views.storageError && (
+        <Txt role="alert" variant="caption" className="w-full text-destructive-foreground">
+          {views.storageError}
+        </Txt>
+      )}
       {creating ? (
         <EditingViewTab name={draft.name} unsaved onRename={name => views.change({ name })} />
       ) : (
@@ -185,6 +190,7 @@ function SavedViewTabIcon() {
 function SavedViewTab<TSettings>({
   view,
   selected,
+  unsaved,
   fields,
   operators,
   settings,
@@ -196,6 +202,7 @@ function SavedViewTab<TSettings>({
 }: {
   view: SavedView<TSettings>;
   selected: boolean;
+  unsaved: boolean;
   fields: readonly FilterBarField[];
   operators: readonly FilterBarOperator[];
   settings: ReactNode;
@@ -214,12 +221,8 @@ function SavedViewTab<TSettings>({
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const changeMenuOpen = (open: boolean) => {
-    if (selected || !open) {
-      setMenuOpen(open);
-      return;
-    }
-    setPreviewOpen(false);
-    onSelect();
+    setMenuOpen(selected && open);
+    if (open) setPreviewOpen(false);
   };
 
   return (
@@ -237,6 +240,11 @@ function SavedViewTab<TSettings>({
                         type="button"
                         aria-pressed={selected}
                         aria-haspopup={selected ? 'menu' : undefined}
+                        onClick={() => {
+                          if (selected) return;
+                          setPreviewOpen(false);
+                          onSelect();
+                        }}
                         className={cn(selected ? selectedTabClass : restingTabClass, 'gap-1.5')}
                       />
                     }
@@ -247,6 +255,8 @@ function SavedViewTab<TSettings>({
           >
             <SavedViewTabIcon />
             <span className="max-w-48 truncate">{view.name}</span>
+            {unsaved && <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />}
+            {selected && <ChevronDownIcon aria-hidden className="size-3" />}
           </ContextMenu.Trigger>
           <HoverCardContent side="bottom" align="start" showArrow={false}>
             <SavedViewSummary filters={view.filters} fields={fields} operators={operators} settings={settings} />

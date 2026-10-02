@@ -6,7 +6,7 @@ import { boardFilterParams, boardFiltersFromParams } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardKind } from '../boardStages';
-import { BoardFilters, useBoardFilterFields } from './BoardFilters';
+import { BoardFilters, boardFilterFields } from './BoardFilters';
 
 const NEUTRAL = boardFiltersFromParams(new URLSearchParams(), 'work');
 const ALICE: BoardParticipant[] = [
@@ -23,7 +23,7 @@ function FiltersWithFields({
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
 }) {
-  const fields = useBoardFilterFields({
+  const fields = boardFilterFields({
     kind,
     participants: ALICE,
     availableLabels: ['bug', 'documentation', '@mastra/core'],
@@ -34,7 +34,7 @@ function FiltersWithFields({
 }
 
 function renderFilters(filters: BoardFilterState = NEUTRAL) {
-  const onFiltersChange = vi.fn();
+  const onFiltersChange = vi.fn<(filters: BoardFilterState) => void>();
   const view = render(<FiltersWithFields filters={filters} onFiltersChange={onFiltersChange} />);
   return { onFiltersChange, view };
 }
@@ -122,8 +122,7 @@ describe('BoardFilters', () => {
     key('Enter');
     key('Enter', { metaKey: true });
 
-    const [filters] = onFiltersChange.mock.calls.at(-1) as [BoardFilterState];
-    expect(filters.labels).toEqual(new Set(['bug', 'documentation']));
+    expect(onFiltersChange.mock.lastCall?.[0].labels).toEqual(new Set(['bug', 'documentation']));
   });
 
   it('round-trips committed labels through the URL and controlled value', async () => {

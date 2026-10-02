@@ -47,6 +47,7 @@ const meta: Meta = {
           'Saved views for a `FilterBar` page, stored in localStorage and validated with Zod on every read.',
           '',
           'Clicking the active view tab opens its menu: edit, rename, duplicate or delete. Hovering another tab previews its filters, and right-clicking any tab opens the same menu. The layers button starts an empty view with the current page settings; `SavedViewEditor` holds the draft until it is saved.',
+          'Editing filters keeps the selected tab in place. Unsaved changes have explicit Save changes and Reset actions. Keep temporary content search separate from the saved filters so searching does not edit the view.',
         ].join('\n'),
       },
     },

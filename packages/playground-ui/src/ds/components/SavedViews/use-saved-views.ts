@@ -30,6 +30,7 @@ export type SavedViewsController<TSettings> = {
   activeView: SavedView<TSettings> | undefined;
   draft: SavedViewDraft<TSettings> | undefined;
   unsaved: boolean;
+  storageError: string | undefined;
   applied: SavedViewContent<TSettings> | undefined;
   select: (viewId: string | undefined) => void;
   create: (settings: TSettings, filters?: FilterBarItem[]) => void;
@@ -71,6 +72,7 @@ export function useSavedViews<TSettings>({
     () => null,
   );
   const views = parseSavedViews(raw, settingsSchema);
+  const [storageError, setStorageError] = useState<string>();
   const [pendingDraft, setDraft] = useState<SavedViewDraft<TSettings>>();
   const [draftScope, setDraftScope] = useState({ storageKey, activeViewId });
   const draftView = views.find(view => view.id === pendingDraft?.viewId);
@@ -84,20 +86,27 @@ export function useSavedViews<TSettings>({
   const unsaved = draft !== undefined && (!draftView || !sameViewContent(draft, draftView));
 
   const activeView = views.find(view => view.id === activeViewId);
-  const write = (next: SavedView<TSettings>[]) => writeSavedViewsRaw(storageKey, serializeSavedViews(next));
+  const write = (next: SavedView<TSettings>[]) => {
+    const saved = writeSavedViewsRaw(storageKey, serializeSavedViews(next));
+    setStorageError(saved ? undefined : 'Could not save changes. Check your browser storage settings and try again.');
+    return saved;
+  };
 
   return {
     views,
     activeView,
     draft,
     unsaved,
+    storageError,
     applied: draft ?? activeView,
     select: viewId => {
+      setStorageError(undefined);
       setDraft(undefined);
       onActiveViewChange(viewId);
     },
     create: (settings, filters = []) => setDraft({ name: NEW_SAVED_VIEW_NAME, filters, settings }),
     edit: viewId => {
+      if (draft?.viewId === viewId) return;
       const view = views.find(candidate => candidate.id === viewId);
       if (!view) return;
       const { id, ...content } = view;
@@ -121,15 +130,18 @@ export function useSavedViews<TSettings>({
         id: viewId ?? createSavedViewId(),
         name: validViewName(content.name) ?? views.find(view => view.id === viewId)?.name ?? NEW_SAVED_VIEW_NAME,
       };
-      write(viewId ? views.map(view => (view.id === viewId ? saved : view)) : [...views, saved]);
+      if (!write(viewId ? views.map(view => (view.id === viewId ? saved : view)) : [...views, saved])) return;
       setDraft(undefined);
       if (saved.id !== activeViewId) onActiveViewChange(saved.id);
     },
-    discard: () => setDraft(undefined),
+    discard: () => {
+      setStorageError(undefined);
+      setDraft(undefined);
+    },
     rename: (viewId, name) => {
       const nextName = validViewName(name);
       if (!nextName) return;
-      write(views.map(view => (view.id === viewId ? { ...view, name: nextName } : view)));
+      if (!write(views.map(view => (view.id === viewId ? { ...view, name: nextName } : view)))) return;
       if (draft?.viewId === viewId) setDraft({ ...draft, name: nextName });
     },
     duplicate: viewId => {
@@ -141,12 +153,12 @@ export function useSavedViews<TSettings>({
         id: createSavedViewId(),
         name: validViewName(`${original.name} copy`) ?? original.name,
       };
-      write(views.toSpliced(index + 1, 0, copy));
+      if (!write(views.toSpliced(index + 1, 0, copy))) return;
       setDraft(undefined);
       onActiveViewChange(copy.id);
     },
     remove: viewId => {
-      write(views.filter(view => view.id !== viewId));
+      if (!write(views.filter(view => view.id !== viewId))) return;
       if (draft?.viewId === viewId) setDraft(undefined);
       if (activeViewId === viewId) onActiveViewChange(undefined);
     },

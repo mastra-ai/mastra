@@ -164,6 +164,9 @@ const candidateTitles = () => screen.queryAllByTestId('candidate-card').map(card
 
 const input = () => screen.getByRole('combobox', { name: 'Add filter' });
 async function selectField(name: string) {
+  if (!screen.queryByRole('combobox', { name: 'Add filter' })) {
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
+  }
   input().focus();
   fireEvent.change(input(), { target: { value: name } });
   await screen.findByRole('option', { name: new RegExp(`^${name}$`, 'i') });
@@ -239,6 +242,7 @@ describe('BoardPage filters', () => {
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).not.toContain('Issue 11');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Relevant because filter' }));
     expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance=');
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();

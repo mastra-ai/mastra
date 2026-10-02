@@ -354,6 +354,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.type(filterInput(), 'octo');
     expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
@@ -467,6 +468,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.type(filterInput(), 'Linear Ada');
     await user.click(await screen.findByRole('option', { name: /Linear Ada/i }));
@@ -498,7 +500,6 @@ describe('Board work-item activity', () => {
       new Date(reviewItem.createdAt),
     );
     await expectActivity('Grace Hopper', `Created at: ${createdAt}`, false);
-    // The synthetic created event resolves to the external PR opener.
     const popup = screen.getByLabelText('Work item activity');
     expect(popup).toHaveTextContent('octocat');
     expect(popup).not.toHaveTextContent('Created the item');
@@ -524,6 +525,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
+    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
     await user.click(screen.getByRole('button', { name: /^Done/ }));

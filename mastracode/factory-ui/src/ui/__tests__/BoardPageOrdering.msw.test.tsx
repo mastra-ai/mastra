@@ -79,7 +79,10 @@ describe('Factory board view memory', () => {
   };
 
   const searchBoard = async (text: string) => {
-    const input = await screen.findByRole('combobox', { name: 'Add filter' });
+    if (!screen.queryByRole('combobox', { name: 'Add filter' })) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Filter cards' }));
+    }
+    const input = screen.getByRole('combobox', { name: 'Add filter' });
     input.focus();
     fireEvent.change(input, { target: { value: text } });
     await screen.findByRole('option', { name: new RegExp(`contains "${text}"`) });
@@ -173,7 +176,7 @@ describe('Factory board view memory', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?q=Created'));
 
     await act(() => router.navigate(`/factories/${FACTORY_ID}/review`));
-    await screen.findByRole('combobox', { name: 'Add filter' });
+    await screen.findByRole('button', { name: 'Filter cards' });
     expect(router.state.location.search).toBe('');
 
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work`));

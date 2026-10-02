@@ -2,12 +2,8 @@ type SavedViewsSubscribe = (listener: () => void) => () => void;
 
 const listenersByKey = new Map<string, Set<() => void>>();
 const subscribeByKey = new Map<string, SavedViewsSubscribe>();
-// What could not be written (storage full or blocked), so the session keeps its views.
-const unpersistedByKey = new Map<string, string>();
 
 export function readSavedViewsRaw(key: string): string | null {
-  const unpersisted = unpersistedByKey.get(key);
-  if (unpersisted !== undefined) return unpersisted;
   try {
     return window.localStorage.getItem(key);
   } catch {
@@ -15,14 +11,14 @@ export function readSavedViewsRaw(key: string): string | null {
   }
 }
 
-export function writeSavedViewsRaw(key: string, raw: string): void {
+export function writeSavedViewsRaw(key: string, raw: string): boolean {
   try {
     window.localStorage.setItem(key, raw);
-    unpersistedByKey.delete(key);
   } catch {
-    unpersistedByKey.set(key, raw);
+    return false;
   }
   listenersByKey.get(key)?.forEach(listener => listener());
+  return true;
 }
 
 export function savedViewsSubscriber(key: string): SavedViewsSubscribe {

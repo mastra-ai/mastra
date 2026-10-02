@@ -9,14 +9,19 @@ import type { DragPayload } from '../boardDrag';
 import type { BoardStageId } from '../stages';
 import { BoardDropLine, useBoardDropZone } from './BoardDropZone';
 import { BoardStageIcon, stageTintClass } from './BoardIcons';
-import { BOARD_LIST_COLUMNS } from './BoardListRow';
 
 const LIST_ROW_GAP_PX = 1;
 
 /** Every stage shares one grid, so a column lines up from the first stage to the last. */
 export function BoardList({ children }: { children: ReactNode }) {
   return (
-    <DataList columns={BOARD_LIST_COLUMNS} variant="light" fit="container" aria-label="Board stages" className="p-0">
+    <DataList
+      columns="var(--board-list-columns)"
+      variant="light"
+      fit="container"
+      aria-label="Board stages"
+      className="p-0 [--board-list-columns:auto_auto_minmax(12rem,1fr)_auto_auto_auto_auto] max-sm:[--board-list-columns:auto_minmax(0,1fr)_auto]"
+    >
       {children}
     </DataList>
   );
