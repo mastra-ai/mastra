@@ -145,6 +145,7 @@ function normalizePublicExecutionOptions(
   if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
 
   const { actor: _actor, requestContext, ...normalized } = options;
+  stripClientCredentialHeaders(normalized);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
 }
@@ -2820,9 +2821,6 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
       sanitizeBody(params, ['tools', 'actor']);
       stripClientCredentialHeaders(params);
-      if (params.streamOptions && typeof params.streamOptions === 'object' && !Array.isArray(params.streamOptions)) {
-        stripClientCredentialHeaders(params.streamOptions as Record<string, unknown>);
-      }
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,
