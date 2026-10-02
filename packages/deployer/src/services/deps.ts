@@ -218,6 +218,21 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
 }
 
+/**
+ * Yarn classic writes `# yarn lockfile v1` within the first two lines; Berry lockfiles never contain it.
+ * Only the head of the file is read so large monorepo lockfiles are never loaded into memory.
+ */
+async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
+  const handle = await fsPromises.open(lockfilePath, 'r');
+  try {
+    const buffer = Buffer.alloc(512);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return /^# yarn lockfile v1\r?$/m.test(buffer.toString('utf-8', 0, bytesRead));
+  } finally {
+    await handle.close();
+  }
+}
+
 export class Deps extends MastraBase {
   private packageManager: PackageManager;
   private rootDir: string;
@@ -255,7 +270,17 @@ export class Deps extends MastraBase {
     return `file:./workspace-module/${pkgName}-${version}.tgz`;
   }
 
-  public async pack({ dir, destination, sanitizedName }: { dir: string; destination: string; sanitizedName: string }) {
+  public async pack({
+    dir,
+    destination,
+    sanitizedName,
+    version,
+  }: {
+    dir: string;
+    destination: string;
+    sanitizedName: string;
+    version: string;
+  }) {
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: dir,
@@ -264,9 +289,14 @@ export class Deps extends MastraBase {
     let packCmd = 'pack';
     let destinationFlag = `--pack-destination ${destination}`;
     if (this.packageManager === 'yarn') {
-      // %s includes an '@' at the start of packages names with an '@'
-      // so we need to use our sanitizedName instead.
-      destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+      if (this.lockFile && (await isYarnClassicLockfile(this.lockFile.path))) {
+        // Yarn classic has no --out/%v; --filename takes the full output path.
+        destinationFlag = `--filename ${destination}/${sanitizedName}-${version}.tgz`;
+      } else {
+        // %s includes an '@' at the start of packages names with an '@'
+        // so we need to use our sanitizedName instead.
+        destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+      }
     }
     if (this.packageManager === 'bun') {
       // bun uses `pm pack` instead of `pack`
@@ -552,8 +582,7 @@ export class Deps extends MastraBase {
       }
 
       if (pm === 'yarn') {
-        const lockfileContents = await fsPromises.readFile(destination, 'utf-8');
-        yarnClassic = /^# yarn lockfile v1\r?$/m.test(lockfileContents);
+        yarnClassic = await isYarnClassicLockfile(destination);
       }
     }
 
