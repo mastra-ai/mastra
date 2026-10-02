@@ -242,8 +242,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
     describe('fenced writes', () => {
       const workflowName = 'run-fencing-workflow';
 
+      // updateWorkflowResults and updateWorkflowState only exist on adapters
+      // that support concurrent updates; the others don't implement them.
+
       it('accepts writes from the current claim and rejects writes from a superseded one', async ctx => {
         if (!workflows.supportsRunFencing()) return ctx.skip();
+        const concurrent = workflows.supportsConcurrentUpdates();
         const runId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
 
@@ -253,15 +257,17 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           snapshot: snapshotWithValue(runId, 'a'),
           fence: fenceA,
         });
-        await workflows.updateWorkflowResults({
-          workflowName,
-          runId,
-          stepId: 'step-a',
-          result: { status: 'success', output: 'a', payload: {}, startedAt: 1, endedAt: 2 } as any,
-          requestContext: {},
-          fence: fenceA,
-        });
-        await workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'running' }, fence: fenceA });
+        if (concurrent) {
+          await workflows.updateWorkflowResults({
+            workflowName,
+            runId,
+            stepId: 'step-a',
+            result: { status: 'success', output: 'a', payload: {}, startedAt: 1, endedAt: 2 } as any,
+            requestContext: {},
+            fence: fenceA,
+          });
+          await workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'running' }, fence: fenceA });
+        }
 
         const fenceB = await claimed(runId, 'owner-b', true);
 
@@ -273,19 +279,21 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
             fence: fenceA,
           }),
         );
-        await expectFenceConflict(
-          workflows.updateWorkflowResults({
-            workflowName,
-            runId,
-            stepId: 'step-stale',
-            result: { status: 'success', output: 'stale', payload: {}, startedAt: 1, endedAt: 2 } as any,
-            requestContext: {},
-            fence: fenceA,
-          }),
-        );
-        await expectFenceConflict(
-          workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'failed' }, fence: fenceA }),
-        );
+        if (concurrent) {
+          await expectFenceConflict(
+            workflows.updateWorkflowResults({
+              workflowName,
+              runId,
+              stepId: 'step-stale',
+              result: { status: 'success', output: 'stale', payload: {}, startedAt: 1, endedAt: 2 } as any,
+              requestContext: {},
+              fence: fenceA,
+            }),
+          );
+          await expectFenceConflict(
+            workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'failed' }, fence: fenceA }),
+          );
+        }
         await expectFenceConflict(workflows.deleteWorkflowRunById({ workflowName, runId, fence: fenceA }));
 
         const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
@@ -333,6 +341,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
       it('fences writes made inside a run fence scope with the fence of the run they write', async ctx => {
         if (!workflows.supportsRunFencing()) return ctx.skip();
+        const concurrent = workflows.supportsConcurrentUpdates();
         const runId = `run-${randomUUID()}`;
         const otherRunId = `run-${randomUUID()}`;
         const fenceA = await claimed(runId, 'owner-a');
@@ -345,7 +354,11 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
           await expectFenceConflict(
             workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWithValue(runId, 'stale') }),
           );
-          await expectFenceConflict(workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'failed' } }));
+          if (concurrent) {
+            await expectFenceConflict(
+              workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'failed' } }),
+            );
+          }
           // The scope does not cover other runs, and an explicit fence wins over the scope's.
           await workflows.persistWorkflowSnapshot({
             workflowName,
@@ -362,7 +375,7 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
 
         expect(scopeA.lookups).toContainEqual({ store: workflows, runId });
         expect(scopeA.lookups).toContainEqual({ store: workflows, runId: otherRunId });
-        expect(scopeA.conflicts).toEqual([fenceA, fenceA]);
+        expect(scopeA.conflicts).toEqual(concurrent ? [fenceA, fenceA] : [fenceA]);
         expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))?.value).toEqual({ writer: 'b' });
         expect((await workflows.loadWorkflowSnapshot({ workflowName, runId: otherRunId }))?.value).toEqual({
           writer: 'other',
