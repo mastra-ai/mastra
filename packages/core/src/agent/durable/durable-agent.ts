@@ -3771,8 +3771,10 @@ export class DurableAgent<
        * event on the run topic, including lifecycle events, so it is not a chunk count. Omit it
        * to replay all available cached events before receiving live events. On PubSub transports
        * without numeric offset support, providing an offset starts with new live events instead.
-       * A numeric offset beyond the highest retained index skips replay and live events with lower
-       * indexes. Events arrive only when the published index reaches the requested offset.
+       * On transports with numeric offset support, an offset beyond the highest retained index skips
+       * replay and live events with lower indexes. Events arrive only when the published index reaches
+       * the requested offset. If the index counter restarts below that offset and never reaches it,
+       * observation remains pending indefinitely.
        *
        * Public stream chunks do not expose this index. Use an offset only when another integration
        * tracks the transport position. Starting mid-stream skips earlier deltas, so aggregated text
