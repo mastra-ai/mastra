@@ -1,6 +1,7 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -211,9 +212,9 @@ function CmsPromptBlocksEditForm({
           </div>
         </Notice>
       )}
-      <form className="h-full">
+      <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }

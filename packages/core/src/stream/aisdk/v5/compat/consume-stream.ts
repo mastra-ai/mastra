@@ -14,8 +14,11 @@ export async function consumeStream({
   onError?: (error: unknown) => void;
   logger?: IMastraLogger;
 }): Promise<void> {
-  const reader = stream.getReader();
+  // Acquire the reader inside the try: a stream that is already locked by another
+  // consumer must surface through onError, not as a rejection of this promise.
+  let reader: ReadableStreamDefaultReader | undefined;
   try {
+    reader = stream.getReader();
     while (true) {
       const { done } = await reader.read();
       if (done) break;
@@ -24,6 +27,6 @@ export async function consumeStream({
     logger?.error('consumeStream error', error);
     onError?.(error);
   } finally {
-    reader.releaseLock();
+    reader?.releaseLock();
   }
 }

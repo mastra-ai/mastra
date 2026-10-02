@@ -247,6 +247,19 @@ describe('TelegramProvider.connect', () => {
     expect(record?.data.webhookUrl).toBeUndefined();
   });
 
+  it('polling mode rejects connecting a second agent to the same bot token', async () => {
+    const { provider } = makeProvider({ mode: 'polling' });
+    stubGetMe(BOT_TOKEN);
+    stubMethod(BOT_TOKEN, 'deleteWebhook');
+    stubMethod(BOT_TOKEN, 'setMyCommands');
+    await provider.connect('agent-1', { botToken: BOT_TOKEN });
+
+    await expect(provider.connect('agent-2', { botToken: BOT_TOKEN })).rejects.toThrow(
+      /already connected to agent "agent-1"/i,
+    );
+    expect(await provider.getInstallation('agent-2')).toBeNull();
+  });
+
   it('webhook mode without a baseUrl throws', async () => {
     const provider = new TelegramProvider({ storage: new InMemoryChannelsStorage(), mode: 'webhook' });
     stubGetMe(BOT_TOKEN);

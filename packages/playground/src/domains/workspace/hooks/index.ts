@@ -5,14 +5,11 @@ export { isWorkspaceV1Supported, isWorkspaceNotSupportedError } from '../compati
 export {
   useWorkspaceInfo,
   useWorkspaces,
-  useWorkspaceFiles,
-  useWorkspaceFile,
   useWorkspaceFileStat,
   useWriteWorkspaceFile,
   useWriteWorkspaceFileFromFile,
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
-  useSearchWorkspace,
   useIndexWorkspaceContent,
 } from './use-workspace';
 
@@ -20,24 +17,13 @@ export {
 export { useStoredWorkspaces } from './use-stored-workspaces';
 
 // Skills hooks
-export {
-  useWorkspaceSkills,
-  useWorkspaceSkill,
-  useWorkspaceSkillReferences,
-  useWorkspaceSkillReference,
-  useSearchWorkspaceSkills,
-  useAgentSkill,
-} from './use-workspace-skills';
+export { useWorkspaceSkills, useAgentSkill } from './use-workspace-skills';
 
 // Skills.sh hooks
 export {
-  useSearchSkillsSh,
-  usePopularSkillsSh,
-  useSkillPreview,
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
-  parseSkillSource,
   type InstallSkillParams,
   type UpdateSkillsParams,
   type RemoveSkillParams,

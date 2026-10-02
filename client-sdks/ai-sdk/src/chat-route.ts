@@ -178,6 +178,15 @@ function streamV6ApprovalResumes(args: {
   }) as ReadableStream<any>;
 }
 
+const CREDENTIAL_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'api-key',
+  'x-goog-api-key',
+  'cookie',
+]);
+
 export type ChatStreamHandlerParams<
   UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage,
   OUTPUT = undefined,
@@ -345,6 +354,17 @@ export async function handleChatStream<OUTPUT = undefined>({
   }
 
   const { structuredOutput: restStructuredOutput, ...restOptions } = rest;
+  // Never let a caller's credential headers override the server's provider auth.
+  if (restOptions.modelSettings?.headers) {
+    restOptions.modelSettings = {
+      ...restOptions.modelSettings,
+      headers: Object.fromEntries(
+        Object.entries(restOptions.modelSettings.headers).filter(
+          ([name]) => !CREDENTIAL_HEADER_NAMES.has(name.toLowerCase()),
+        ),
+      ),
+    };
+  }
   const {
     structuredOutput: defaultStructuredOutput,
     experimentalTransform: defaultExperimentalTransform,

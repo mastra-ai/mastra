@@ -6,6 +6,7 @@ import { createBoardRegistry } from '../../../boards/index.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
+import { registerGithubRefreshTarget } from '../../github/token-refresh.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 import { PlatformGithubIntegration } from './integration.js';
 
@@ -902,6 +903,7 @@ describe('PlatformGithubIntegration', () => {
       session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
       getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
     });
+    registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1' });
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
       'github_refresh_token',
       'github_upsert_factory_triage_comment',

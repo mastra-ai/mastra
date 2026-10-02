@@ -442,6 +442,11 @@ export class ConvexDB extends MastraBase {
     from?: string;
     to?: string;
     offset?: number;
+    groupId?: string;
+    recordId?: string;
+    beforeGeneration?: number;
+    afterGeneration?: number;
+    sortDirection?: 'ASC' | 'DESC';
   }): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'omGetHistory',

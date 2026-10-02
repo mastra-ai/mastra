@@ -217,6 +217,7 @@ type AgentThreadRunSuspension = {
 type AgentThreadRunContinuation<OUTPUT = unknown> = {
   sourceOutput: MastraModelOutput<OUTPUT>;
   canContinue: () => boolean;
+  didPublishTerminal: () => boolean;
 };
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
@@ -1958,6 +1959,7 @@ export class AgentThreadStreamRuntime {
     let done = false;
     let cancelled = false;
     let failed = false;
+    let publishedTerminal = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
     // Resolves once the broadcast pump has drained the source stream AND every
@@ -2022,6 +2024,15 @@ export class AgentThreadStreamRuntime {
           ? { pinned: true }
           : {}),
       });
+      const typedPart = part as { type?: string; finishReason?: string; payload?: { finishReason?: string } };
+      const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+      if (
+        typedPart.type === 'error' ||
+        typedPart.type === 'abort' ||
+        (typedPart.type === 'finish' && finishReason !== 'tool-calls')
+      ) {
+        publishedTerminal = true;
+      }
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
@@ -2229,6 +2240,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast: start,
       cancelBroadcast: cancel,
       canContinueBroadcast: () => started && !done && !cancelled && !failed,
+      didPublishTerminal: () => publishedTerminal,
       broadcastFinished,
     };
   }
@@ -2383,6 +2395,27 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** Capture whether the currently registered continuation publishes its terminal stream part. */
+  captureThreadRunTerminalPublish(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.didPublishTerminal;
+  }
+
+  getResumableThreadRunSuspension(
+    options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
+    pubsub?: PubSub,
+  ): AgentThreadRunSuspension | undefined {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const record = state.threadRunsById.get(options.runId);
+    const isSuspended = this.#isSuspendedRun(state, options.runId);
+    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !isSuspended) {
+      return undefined;
+    }
+
+    const suspensions = state.suspensionMetadataByRunId.get(options.runId);
+    return options.toolCallId ? suspensions?.get(options.toolCallId) : suspensions?.values().next().value;
   }
 
   getResumableThreadRun(
@@ -2827,6 +2860,7 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       startBroadcast,
       canContinueBroadcast,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
@@ -2852,7 +2886,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -2941,6 +2975,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       cancelBroadcast,
       canContinueBroadcast,
+      didPublishTerminal,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const record: AgentThreadRunRecord<OUTPUT> = {
@@ -2959,7 +2994,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -3262,6 +3297,16 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // Every signal sent to the finished run belongs in one follow-up turn, so
+        // fold the rest of the queue into this run's first model request instead
+        // of starting one run per signal. Read the map, not `queue`: cancellation
+        // during the lease await replaces the array.
+        const batched = state.pendingSignalsByThread.get(key) ?? [];
+        if (batched.length > 0) {
+          state.pendingSignalsByThread.delete(key);
+          state.preRunSignalsByThread.set(key, [...batched, ...(state.preRunSignalsByThread.get(key) ?? [])]);
+        }
+
         state.startingQueuedRunIds.add(nextRunId);
         const output = await previousRun.agent.stream(signal, {
           ...(previousRun.streamOptions as any),
@@ -3275,7 +3320,9 @@ export class AgentThreadStreamRuntime {
           ),
         });
 
-        if (queue.length > 0) {
+        // If the follow-up stops before its first model request, its completion
+        // must drain the batched signals left in the pre-run queue.
+        if (batched.length > 0) {
           const nextRecord = state.threadRunsById.get(output.runId);
           if (nextRecord) {
             this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
@@ -3300,12 +3347,18 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
       }
-      if (signal && !draining?.cancelled) {
-        // Restore through the map, not the local `queue` array: the shift above
-        // deletes the map entry when it empties the queue, so the local array
-        // may be detached from the map by the time we get here.
-        state.pendingSignalsByThread.set(key, [signal, ...(state.pendingSignalsByThread.get(key) ?? [])]);
-      }
+      // Restore through the map, not the local `queue` array: the shift above
+      // deletes the map entry when it empties the queue, so the local array
+      // may be detached from the map by the time we get here. Signals batched
+      // into the failed run's pre-run queue go back behind the drained signal.
+      const batchedLeftover = state.preRunSignalsByThread.get(key) ?? [];
+      state.preRunSignalsByThread.delete(key);
+      const restored = [
+        ...(signal && !draining?.cancelled ? [signal] : []),
+        ...batchedLeftover,
+        ...(state.pendingSignalsByThread.get(key) ?? []),
+      ];
+      if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -3898,7 +3951,12 @@ export class AgentThreadStreamRuntime {
       orderBy: { field: 'createdAt', direction: 'DESC' },
       hideSignals: options.hideSignals,
     });
-    return { messages: [...result.messages].reverse(), hasMore: result.hasMore };
+    // DESC selects the newest page; implementations differ in the order they
+    // return it (Memory sorts chronologically, storage-backed mocks keep DESC).
+    const messages = [...result.messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    return { messages, hasMore: result.hasMore };
   }
 
   async subscribeToThread<OUTPUT = unknown>(
@@ -4433,7 +4491,10 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
-    const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
+    // An aborted run stays active until it terminalizes, but its lifecycle already
+    // ended for earlier subscribers. Seeding it here would replay that run.
+    const currentRecord =
+      currentRunId && !state.abortedRunIds.has(currentRunId) ? state.threadRunsById.get(currentRunId) : undefined;
     if (currentRecord) {
       localStreamIds.add(currentRecord.streamId);
       enqueueRun(currentRecord);

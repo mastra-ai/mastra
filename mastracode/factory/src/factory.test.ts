@@ -263,7 +263,7 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
-  it('rejects duplicate installed board ids at construction time', () => {
+  it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
         new MastraFactory({
@@ -271,7 +271,19 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("board id 'work' is reserved for a built-in board");
+    ).toThrow("duplicate board id 'work'");
+  });
+
+  it('allows replacing a built-in board when default boards are disabled', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          includeDefaultBoards: false,
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).not.toThrow();
   });
 });
 

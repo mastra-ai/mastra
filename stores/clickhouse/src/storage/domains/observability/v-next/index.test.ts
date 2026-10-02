@@ -12,16 +12,24 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
-import { createObservabilityVNextTests } from '@internal/storage-test-utils';
+import {
+  createObservabilityVNextTests,
+  TRACE_AGGREGATE_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_FIXTURE_DATA,
+  traceAggregateResponseMismatch,
+  writeTraceQueryFixture,
+} from '@internal/storage-test-utils';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import {
+  parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planTraceAggregate,
   planTraceQuery,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_MIGRATIONS,
@@ -799,6 +807,7 @@ LIMIT 1`,
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-aggregate',
       ]);
     });
 
@@ -822,6 +831,7 @@ LIMIT 1`,
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-aggregate',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -4859,6 +4869,29 @@ LIMIT 1`,
         expect(result.value, aggregation).toBeNull();
       }
     });
+
+    it('getScoreAggregate count_distinct counts distinct values instead of summing', async () => {
+      await storage.batchCreateScores({
+        scores: [
+          {
+            scoreId: 'score-test-5',
+            timestamp: new Date('2026-01-01T00:00:15Z'),
+            traceId: 'olap-s-5',
+            spanId: null,
+            scorerId: 'quality',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            scoreSource: 'automated',
+            metadata: null,
+          },
+        ],
+      });
+
+      // quality scores: 0.8, 0.6, 0.9, 0.8 → 3 distinct (sum would be 3.1)
+      const result = await storage.getScoreAggregate({ scorerId: 'quality', aggregation: 'count_distinct' });
+      expect(result.value).toBe(3);
+    });
   });
 
   // ==========================================================================
@@ -4945,6 +4978,16 @@ LIMIT 1`,
       });
       // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
       expect(result.value).toBe(0);
+    });
+
+    it('getFeedbackAggregate count_distinct counts distinct values instead of summing', async () => {
+      // Production thumbs values are 1 and 0: sum is 1, distinct count is 2
+      const result = await storage.getFeedbackAggregate({
+        feedbackType: 'thumbs',
+        filters: { environment: 'production' },
+        aggregation: 'count_distinct',
+      });
+      expect(result.value).toBe(2);
     });
 
     it('getFeedbackPercentiles rejects out-of-range values', async () => {
@@ -6594,3 +6637,171 @@ async function eventuallyNull<T>(
   }
   return false;
 }
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
+  const TIME_RANGE = { from: '2026-08-01T00:00:00Z', to: '2026-08-08T00:00:00Z' };
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    await storage.init();
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  describe('fixtures', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it.each<[string, Record<string, unknown> | undefined, TraceQueryTenantScope | undefined]>([
+      ['the whole window', undefined, undefined],
+      ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
+      ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+      ['a tenant scope', undefined, { organizationId: 'org-b' }],
+    ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] }), {
+          scope,
+        }),
+      );
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 1 } }), {
+          scope,
+        }),
+      );
+      const total = 'pagination' in traces ? traces.pagination?.total : undefined;
+      expect(total).toBeGreaterThan(0);
+      expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
+    });
+  });
+
+  it('collapses retried and replacement roots without background merges', async () => {
+    await storage.dangerouslyClearAll();
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    const root = {
+      traceId: 'aggregate-merge-trace',
+      spanId: 'aggregate-merge-root',
+      parentSpanId: null,
+      name: 'root-span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'mergeAgent',
+      environment: 'test',
+      startedAt: new Date('2026-08-02T00:00:00Z'),
+      endedAt: new Date('2026-08-02T00:00:01Z'),
+    } as const;
+
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // A retried insert (same dedupeKey) and a replacement root for the same trace.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: { ...root, spanId: 'aggregate-merge-replacement' } });
+
+      const physical = await client.query({
+        query: `SELECT count() AS rows FROM ${TABLE_TRACE_ROOTS} WHERE traceId = {traceId:String}`,
+        query_params: { traceId: root.traceId },
+        format: 'JSONEachRow',
+      });
+      expect(await physical.json<{ rows: number }>()).toEqual([{ rows: 3 }]);
+
+      for (const interval of [undefined, '1d'] as const) {
+        const aggregate = await storage.aggregateTraces(
+          planTraceAggregate(
+            parseTraceAggregateRequest({
+              timeRange: TIME_RANGE,
+              groupBy: ['entityName'],
+              interval,
+              measures: ['count', 'countDistinct.traceId'],
+            }),
+          ),
+        );
+        expect(aggregate.rows).toEqual([
+          {
+            dimensions: { entityName: 'mergeAgent' },
+            ...(interval ? { bucket: '2026-08-02T00:00:00.000Z' } : {}),
+            measures: { count: 1, 'countDistinct.traceId': 1 },
+          },
+        ]);
+      }
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, pagination: { page: 0, perPage: 10 } })),
+      );
+      expect('pagination' in traces ? traces.pagination?.total : undefined).toBe(1);
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    }
+  });
+
+  it('matches pushed-down filters against the current root, not a replaced one', async () => {
+    await storage.dangerouslyClearAll();
+    const root = {
+      traceId: 'aggregate-pushdown-trace',
+      parentSpanId: null,
+      name: 'root-span',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      environment: 'test',
+      startedAt: new Date('2026-08-02T00:00:00Z'),
+      endedAt: new Date('2026-08-02T00:00:01Z'),
+    } as const;
+    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-a', entityName: 'agentA' } });
+    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-b', entityName: 'agentB' } });
+
+    const all = await storage.queryTraces(
+      planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, pagination: { page: 0, perPage: 10 } })),
+    );
+    expect('traces' in all ? all.traces.map(trace => trace.entityName) : []).toHaveLength(1);
+    const current = 'traces' in all ? all.traces[0]!.entityName : undefined;
+    const replaced = current === 'agentA' ? 'agentB' : 'agentA';
+
+    for (const [entityName, expected] of [
+      [current, 1],
+      [replaced, 0],
+    ] as const) {
+      const where = {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+          { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
+        ],
+      };
+      const traces = await storage.queryTraces(
+        planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, where, pagination: { page: 0, perPage: 10 } })),
+      );
+      expect('pagination' in traces ? traces.pagination?.total : undefined).toBe(expected);
+      const aggregate = await storage.aggregateTraces(
+        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
+      );
+      expect(aggregate.rows).toEqual(expected === 1 ? [{ measures: { count: 1 } }] : []);
+    }
+  });
+});

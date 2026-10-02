@@ -37,6 +37,7 @@ import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
+  AgentAbortEventData,
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
@@ -574,6 +575,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback when the recovered run errors */
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when the recovered run is aborted */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /**
@@ -961,6 +964,13 @@ export class DurableAgent<
         onError: async error => {
           await options?.onError?.(error);
           scheduleAutoCleanup();
+        },
+        onAbort: async data => {
+          try {
+            await options?.onAbort?.(data);
+          } finally {
+            scheduleAutoCleanup();
+          }
         },
         onSuspended: options?.onSuspended,
         // Keep recovered runs observable if they suspend again so a later
@@ -2745,6 +2755,13 @@ export class DurableAgent<
         await resolvedOptions.onError?.(error);
         scheduleAutoCleanup();
       },
+      onAbort: async data => {
+        try {
+          await resolvedOptions.onAbort?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
       onSuspended: resolvedOptions.onSuspended,
       closeOnSuspend,
       structuredOutput: entry.structuredOutput as any,
@@ -3771,6 +3788,7 @@ export class DurableAgent<
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
@@ -3845,7 +3863,13 @@ export class DurableAgent<
           if (runDead !== false) completeTerminalLifecycle();
         }
       },
-      onAbort: completeTerminalLifecycle,
+      onAbort: async data => {
+        try {
+          await options?.onAbort?.(data);
+        } finally {
+          completeTerminalLifecycle();
+        }
+      },
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
@@ -3961,21 +3985,21 @@ export class DurableAgent<
   }
 
   /**
-   * Read the current number of cached events for this run's stream topic.
-   * Used by `resume()` as the subscription offset so we don't re-deliver
-   * events emitted by the original run (notably the SUSPENDED chunk that
-   * paused it).
+   * Resolve the replay position for this run's stream topic.
+   * Returns the cached event count when history is available, or `latest` when it is unavailable.
+   * Resume and recovery use this position so they don't re-deliver events emitted by the prior segment
+   * (notably the SUSPENDED chunk that paused it) from a persistent transport.
    */
-  async #getPubsubOffset(runId: string): Promise<number> {
+  async #getPubsubOffset(runId: string): Promise<number | 'latest'> {
     const pubsub = this.pubsub as PubSub & {
       getHistory?: (topic: string) => Promise<unknown[]>;
     };
-    if (typeof pubsub.getHistory !== 'function') return 0;
+    if (typeof pubsub.getHistory !== 'function') return 'latest';
     try {
       const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) ? history.length : 0;
+      return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
     } catch {
-      return 0;
+      return 'latest';
     }
   }
 

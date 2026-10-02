@@ -42,6 +42,45 @@ const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
   ...overrides,
 });
 
+describe('current messages in tool execution context', () => {
+  it('exposes remembered and response messages, including after flush, without changing input-only messages', async () => {
+    const messageList = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    messageList.add({ id: 'remembered', role: 'user', content: 'Earlier question' }, 'memory');
+    messageList.add({ id: 'response', role: 'assistant', content: 'Earlier result' }, 'response');
+    messageList.drainUnsavedMessages();
+    let getMessages: NonNullable<MastraToolInvocationOptions['getMessages']> | undefined;
+    const tool = createTool({
+      id: 'inspect-context',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        expect(context?.agent?.messages).toEqual([]);
+        getMessages = context?.agent?.getMessages;
+        expect(getMessages?.().map(message => message.id)).toEqual(['remembered', 'response']);
+        return { ok: true };
+      },
+    });
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'inspect-context', agentId: 'agent', threadId: 'thread' },
+    }).build();
+    const step = createToolCallStep({
+      tools: { 'inspect-context': built },
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+    } as OuterLLMRun);
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'context-call', toolName: 'inspect-context', args: {} },
+      }),
+    );
+    expect(getMessages).toBeTypeOf('function');
+    messageList.removeByIds(['remembered']);
+    expect(getMessages?.().map(message => message.id)).toEqual(['response']);
+  });
+});
+
 describe('createToolCallStep delegated run identity provenance', () => {
   it('does not forward unverified model-authored resume identity without persisted suspension state', async () => {
     const execute = vi.fn(async () => ({ ok: true }));

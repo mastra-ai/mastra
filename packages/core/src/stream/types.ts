@@ -982,11 +982,7 @@ export type WorkflowStreamEvent =
         workflowStatus: WorkflowRunStatus;
         finalWorkflowResult?: unknown;
         output: {
-          usage: {
-            inputTokens: number;
-            outputTokens: number;
-            totalTokens: number;
-          };
+          usage: LanguageModelUsage;
         };
         metadata: Record<string, any>;
       };
@@ -1231,6 +1227,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  /** The run's abort signal, forwarded to output processors. */
+  abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;

@@ -3,10 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
-
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token from the Discord Developer Portal'),
-});
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createChannelInputSchema = z.object({
   guildId: z.string().describe('The ID of the guild to create the channel in. Example: "41771983423143937"'),
@@ -99,14 +96,7 @@ export function createChannelTool(proxy: PlatformProxy) {
     outputSchema: createChannelOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createChannelOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<z.infer<typeof MetadataSchema>>();
-
-      if (!metadata.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please provide a Discord bot token.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       if (!input.guildId) {
         throw new platformProxy.ActionError({
@@ -176,7 +166,7 @@ export function createChannelTool(proxy: PlatformProxy) {
         endpoint: `/api/v10/guilds/${input.guildId}/channels`,
         data: requestBody,
         headers: {
-          Authorization: `Bot ${metadata.botToken}`,
+          Authorization: `Bot ${botToken}`,
         },
         retries: 3,
       });

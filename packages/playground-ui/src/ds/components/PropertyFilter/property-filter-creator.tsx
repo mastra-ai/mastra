@@ -14,6 +14,7 @@ import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
@@ -282,22 +283,23 @@ export function PropertyFilterCreator({
           )}
 
           {selectedField && (
-            <Combobox
-              multiple
-              options={selectedField.options ?? []}
-              value={multiValue}
-              onValueChange={v => {
-                setMultiValue(v);
-                setError(undefined);
-              }}
-              placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-              searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
-              emptyText={selectedField.emptyText ?? 'No option found.'}
-              size="md"
-              name={`property-filter-${selectedField.id}`}
-              aria-label={selectedField.label}
-              error={error}
-            />
+            <Field invalid={Boolean(error)}>
+              <Combobox
+                multiple
+                options={selectedField.options ?? []}
+                value={multiValue}
+                onValueChange={v => {
+                  setMultiValue(v);
+                  setError(undefined);
+                }}
+                placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
+                emptyText={selectedField.emptyText ?? 'No option found.'}
+                size="md"
+                aria-label={selectedField.label}
+              />
+              <FieldError>{error}</FieldError>
+            </Field>
           )}
 
           {selectedField && (

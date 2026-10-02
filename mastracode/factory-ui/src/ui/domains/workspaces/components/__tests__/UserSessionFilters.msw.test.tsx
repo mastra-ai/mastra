@@ -128,7 +128,7 @@ async function renderSection({ waitForIdle = true } = {}) {
 async function openFilters() {
   const trigger = await screen.findByRole('button', { name: 'Filter sessions' });
   await userEvent.setup().click(trigger);
-  return screen.findByRole('textbox', { name: 'Search sessions' });
+  return screen.findByRole('searchbox', { name: 'Search sessions' });
 }
 
 async function selectFilter(label: string, option: string) {
@@ -221,7 +221,7 @@ describe('User session filters', () => {
     await renderSection();
 
     expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Search sessions' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('searchbox', { name: 'Search sessions' })).not.toBeInTheDocument();
 
     const search = await openFilters();
     await selectFilter('Owner', 'All owners');
@@ -265,9 +265,9 @@ describe('User session filters', () => {
     expect(await screen.findByRole('button', { name: 'Prepare release' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Improve compiler output' })).not.toBeInTheDocument();
 
-    const popover = screen.getByRole('textbox', { name: 'Search sessions' }).closest('[data-slot="popover-content"]');
+    const popover = screen.getByRole('searchbox', { name: 'Search sessions' }).closest('[data-slot="popover-content"]');
     if (!(popover instanceof HTMLElement)) throw new Error('Filter popover not found');
-    await userEvent.setup().type(within(popover).getByRole('textbox', { name: 'Search sessions' }), 'does-not-exist');
+    await userEvent.setup().type(within(popover).getByRole('searchbox', { name: 'Search sessions' }), 'does-not-exist');
 
     expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
   });
