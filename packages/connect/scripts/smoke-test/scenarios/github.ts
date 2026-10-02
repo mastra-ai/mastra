@@ -203,7 +203,9 @@ export const githubScenario: Scenario = {
     // file on it, open a PR, review + merge/close, then clean up.
     const smokeBranch = `smoke/${runId}`;
     const smokeFile = `.mastra-smoke/${runId}.md`;
-    const smokeContentB64 = btoa(`mastra smoke test ${runId}\n`);
+    // github_create_or_update_file documents that it base64-encodes content
+    // automatically; passing raw text is correct, pre-encoding double-wraps it.
+    const smokeContent = `mastra smoke test ${runId}\n`;
     let branchCreated = false;
     if (defaultSha && tools['github_create_branch']) {
       try {
@@ -222,7 +224,7 @@ export const githubScenario: Scenario = {
           repo,
           path: smokeFile,
           message: `smoke: add ${smokeFile}`,
-          content: smokeContentB64,
+          content: smokeContent,
           branch: smokeBranch,
         });
         fileSha = result.content?.sha;
@@ -333,12 +335,22 @@ export const githubScenario: Scenario = {
     // 405/422 as proof the endpoint wires correctly.
     if (prNumber && tools['github_merge_pull_request']) {
       steps.push(
-        await probeTool(call, tools, 'merge pull request (probe)', 'github_merge_pull_request', {
-          owner,
-          repo,
-          pull_number: prNumber,
-          merge_method: 'squash',
-        }),
+        await probeTool(
+          call,
+          tools,
+          'merge pull request (probe)',
+          'github_merge_pull_request',
+          {
+            owner,
+            repo,
+            pull_number: prNumber,
+            merge_method: 'squash',
+          },
+          // GitHub returns 405 "Method Not Allowed" when a draft PR can't be
+          // merged — exactly the outcome we want for a smoke test that must
+          // never actually land changes on main.
+          /status=(400|401|403|404|405|409|422)|not found|does not exist|unauthoriz|forbidden|invalid|unknown/i,
+        ),
       );
     }
     // Close PR + delete smoke file + delete branch for cleanup.
