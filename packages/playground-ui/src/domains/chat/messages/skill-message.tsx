@@ -16,7 +16,7 @@ export function SkillMessage({ activation }: { activation: SkillActivation }) {
       aria-label={`Skill: ${name}`}
     >
       <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
-        <MarkdownRenderer className="text-caption">{instructions}</MarkdownRenderer>
+        <MarkdownRenderer variant="caption">{instructions}</MarkdownRenderer>
       </ScrollArea>
     </ActivityItem>
   );

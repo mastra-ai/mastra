@@ -23,10 +23,14 @@ import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="meta" tone="muted" className="tracking-wide uppercase">
+      <Txt variant="meta" tone="muted" className="uppercase">
         {label}
       </Txt>
-      <div className="text-body">{children}</div>
+      <div>
+        <Txt as="span" variant="body" className="block">
+          {children}
+        </Txt>
+      </div>
     </div>
   );
 }

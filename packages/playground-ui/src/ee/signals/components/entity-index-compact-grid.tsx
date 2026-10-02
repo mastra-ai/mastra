@@ -51,17 +51,39 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-meta text-muted-foreground">Traces</dt>
-            <dd className="text-caption text-foreground">{metadata.traceCount}</dd>
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Traces
+              </Txt>
+            </dt>
+            <dd className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.traceCount}
+              </Txt>
+            </dd>
           </div>
           <div>
-            <dt className="text-meta text-muted-foreground">Signals set</dt>
-            <dd className="text-caption text-foreground">{metadata.signalsSet}</dd>
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Signals set
+              </Txt>
+            </dt>
+            <dd className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.signalsSet}
+              </Txt>
+            </dd>
           </div>
           <div>
-            <dt className="text-meta text-muted-foreground">Updated</dt>
-            <dd className="text-caption text-foreground" title={entity.updatedAt}>
-              {metadata.updatedAt}
+            <dt className="text-muted-foreground">
+              <Txt as="span" variant="meta" className="block">
+                Updated
+              </Txt>
+            </dt>
+            <dd title={entity.updatedAt} className="text-foreground">
+              <Txt as="span" variant="caption" className="block">
+                {metadata.updatedAt}
+              </Txt>
             </dd>
           </div>
         </dl>

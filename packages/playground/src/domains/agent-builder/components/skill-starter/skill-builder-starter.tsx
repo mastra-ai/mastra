@@ -115,12 +115,7 @@ export const SkillBuilderStarter = () => {
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-16">
       <div className="relative z-10 flex w-full max-w-3xl flex-col gap-6">
-        <Txt
-          as="h1"
-          variant="title"
-          tone="ink"
-          className="starter-heading text-center font-display tracking-tight md:text-display"
-        >
+        <Txt font="display" as="h1" variant="title" tone="ink" className="starter-heading text-center">
           What skill do you want to build?
         </Txt>
 
@@ -130,6 +125,7 @@ export const SkillBuilderStarter = () => {
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
+              textVariant="body"
               ref={textareaRef}
               testId="skill-builder-starter-input"
               size="md"
@@ -139,7 +135,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="min-h-[112px] resize-none px-5 py-4 text-body outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
+              className="min-h-[112px] resize-none px-5 py-4 outline-none placeholder:text-muted-foreground focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -175,13 +171,15 @@ export const SkillBuilderStarter = () => {
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
                 className={cn(
-                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 text-caption hover:border-border-strong hover:bg-fill-subtle',
+                  'starter-chip group inline-flex items-center gap-2 rounded-full border border-border bg-transparent px-4 py-2 hover:border-border-strong hover:bg-fill-subtle',
                   quietTextHover,
                   controlStateColorTransition,
                 )}
               >
                 <Icon className={cn('h-3.5 w-3.5', quietTextHoverInGroup, controlStateColorTransition)} />
-                {example.title}
+                <Txt as="span" variant="caption" className="block">
+                  {example.title}
+                </Txt>
               </button>
             );
           })}

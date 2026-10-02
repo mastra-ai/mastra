@@ -31,7 +31,9 @@ export function CodeDisplay({
               className={`absolute inset-0 z-10 rounded-md ${focusRingInset}`}
             />
           )}
-          <pre className="pointer-events-none text-meta whitespace-pre-wrap">{content}</pre>
+          <Txt as="pre" variant="meta" className="pointer-events-none whitespace-pre-wrap">
+            {content}
+          </Txt>
           {isDraft && (
             <div className="mt-1.5">
               <Txt

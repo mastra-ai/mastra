@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tag, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -35,6 +36,7 @@ export function BulkTagPicker({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2" align="end">
         <Input
+          textVariant="caption"
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => {
@@ -49,17 +51,16 @@ export function BulkTagPicker({
             }
           }}
           placeholder="Search or create tag..."
-          className="mb-1 h-7 text-caption"
+          className="mb-1 h-7"
           autoFocus
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <div
-              key={tag}
-              className="flex items-center justify-between rounded px-2 py-1 text-caption hover:bg-fill-subtle"
-            >
+            <div key={tag} className="flex items-center justify-between rounded px-2 py-1 hover:bg-fill-subtle">
               <button type="button" onClick={() => onApplyTag(tag)} className="flex-1 text-left text-muted-foreground">
-                {tag}
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
               </button>
               <button
                 type="button"
@@ -77,9 +78,11 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="w-full rounded px-2 py-1 text-left text-caption text-info-indicator hover:bg-fill-subtle"
+              className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
             >
-              Create &amp; apply &quot;{search.trim()}&quot;
+              <Txt as="span" variant="caption" className="block">
+                Create &amp; apply &quot;{search.trim()}&quot;
+              </Txt>
             </button>
           )}
         </div>

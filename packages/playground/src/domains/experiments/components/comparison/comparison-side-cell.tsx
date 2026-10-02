@@ -32,7 +32,7 @@ function sideDuration(side: ComparisonSide): string | null {
 
 const codeBoxClass = cn(
   raisedSurfaceStyle,
-  'max-h-[30vh] overflow-y-auto rounded-xl p-4 text-body break-all whitespace-pre-wrap text-muted-foreground',
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 break-all whitespace-pre-wrap',
 );
 
 /**
@@ -87,7 +87,9 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <pre className={codeBoxClass}>{outputStr}</pre>
+          <Txt as="pre" variant="body" tone="muted" font="mono" className={codeBoxClass}>
+            {outputStr}
+          </Txt>
         </ComparisonSection>
       )}
 
@@ -117,11 +119,17 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4 text-body">
-                <dt className="text-muted-foreground">{key}</dt>
+              <div key={key} className="flex items-start justify-between gap-4">
+                <dt className="text-muted-foreground">
+                  <Txt as="span" variant="body" className="block">
+                    {key}
+                  </Txt>
+                </dt>
                 <dd className="break-all text-foreground">
-                  <Txt as="span" variant="body" font="mono">
-                    {formatValue(value)}
+                  <Txt as="span" variant="body" className="block">
+                    <Txt as="span" variant="body" font="mono">
+                      {formatValue(value)}
+                    </Txt>
                   </Txt>
                 </dd>
               </div>

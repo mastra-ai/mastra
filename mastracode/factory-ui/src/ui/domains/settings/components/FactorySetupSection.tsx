@@ -39,10 +39,12 @@ function CommandInput({
 
   return (
     <Input
+      textVariant="body-sm"
+      font="mono"
       size="sm"
       aria-label={label}
       placeholder={placeholder}
-      className="font-mono"
+
       value={current}
       disabled={disabled}
       onChange={event => setDraft(event.target.value)}
@@ -79,7 +81,7 @@ function RepositoryCommands({ projectRepositoryId, label }: { projectRepositoryI
 
   return (
     <div className="flex flex-col gap-2">
-      <Txt as="p" variant="meta" className="text-muted-foreground font-mono">
+      <Txt font="mono" tone="muted" as="p" variant="meta">
         {label}
       </Txt>
       <SettingsContainer>

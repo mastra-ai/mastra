@@ -1,6 +1,7 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -125,8 +126,10 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="flex h-full items-center justify-center text-caption text-muted-foreground">
-            Select a file to edit its content
+          <div className="flex h-full items-center justify-center text-muted-foreground">
+            <Txt as="span" variant="caption" className="block">
+              Select a file to edit its content
+            </Txt>
           </div>
         )}
       </div>

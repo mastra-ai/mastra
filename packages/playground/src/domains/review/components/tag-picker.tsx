@@ -63,21 +63,24 @@ export function TagPicker({
             className={cn(
               quietTextHover,
               controlStateColorTransition,
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-meta hover:bg-fill-subtle',
+              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-fill-subtle',
             )}
           >
             <Plus className="h-3 w-3" />
-            tag
+            <Txt as="span" variant="meta" className="block">
+              tag
+            </Txt>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-52 p-2" align="start">
           <Input
+            textVariant="caption"
             ref={inputRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="mb-1 h-7 text-caption"
+            className="mb-1 h-7"
             autoFocus
           />
           <div className="max-h-32 space-y-0.5 overflow-y-auto">
@@ -86,18 +89,22 @@ export function TagPicker({
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="w-full rounded px-2 py-1 text-left text-caption text-muted-foreground hover:bg-fill-subtle"
+                className={cn('text-muted-foreground', 'w-full rounded px-2 py-1 text-left hover:bg-fill-subtle')}
               >
-                {tag}
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
               </button>
             ))}
             {canCreate && (
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="w-full rounded px-2 py-1 text-left text-caption text-info-indicator hover:bg-fill-subtle"
+                className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
               >
-                Create &quot;{search.trim()}&quot;
+                <Txt as="span" variant="caption" className="block">
+                  Create &quot;{search.trim()}&quot;
+                </Txt>
               </button>
             )}
             {filtered.length === 0 && !canCreate && (

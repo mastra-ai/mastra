@@ -1,8 +1,10 @@
 import type { ComponentPropsWithoutRef } from 'react';
 import { forwardRef } from 'react';
-
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
+import { textStyle } from '@/ds/primitives/text';
+import type { TextStyleProps } from '@/ds/primitives/text';
+
 import { cn } from '@/lib/utils';
 
 import './composer.css';
@@ -14,6 +16,7 @@ export type ComposerProps = ComponentPropsWithoutRef<'form'>;
 export interface ComposerInputProps extends ComponentPropsWithoutRef<'textarea'> {
   variant?: 'inline' | 'textarea';
   maxHeight?: string;
+  textVariant?: TextStyleProps['variant'];
 }
 
 export const Composer = forwardRef<HTMLFormElement, ComposerProps>(({ children, ...props }, ref) => (
@@ -98,7 +101,7 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 ComposerAttachments.displayName = 'ComposerAttachments';
 
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
-  ({ className, variant = 'inline', maxHeight, ...props }, ref) => (
+  ({ className, variant = 'inline', maxHeight, textVariant, ...props }, ref) => (
     <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
       <textarea
         ref={ref}
@@ -106,6 +109,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
         className={cn(
           'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           variant === 'textarea' ? 'min-h-28' : 'min-h-10',
+          textStyle({ variant: textVariant }),
           className,
         )}
         {...props}

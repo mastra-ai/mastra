@@ -11,6 +11,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -182,8 +183,10 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
     case 'ready':
       message = (
         <>
-          <b className="font-medium text-foreground">{validation.total}</b> item{validation.total !== 1 ? 's' : ''}{' '}
-          ready
+          <Txt as="b" variant="label" tone="ink">
+            {validation.total}
+          </Txt>{' '}
+          item{validation.total !== 1 ? 's' : ''} ready
           {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
         </>
       );
@@ -205,7 +208,10 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
         case 'missing-input':
           message = (
             <>
-              <b className="font-medium text-foreground">{validation.missingInputCount}</b> of {validation.total} item
+              <Txt as="b" variant="label" tone="ink">
+                {validation.missingInputCount}
+              </Txt>{' '}
+              of {validation.total} item
               {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
               <InlineCode>input</InlineCode>
             </>
@@ -216,9 +222,11 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
   }
 
   return (
-    <div role="status" className="mr-auto flex min-w-0 items-center gap-2 text-caption text-muted-foreground">
-      <span className={dotClassName} />
-      <span className="truncate">{message}</span>
+    <div role="status" className="mr-auto flex min-w-0 items-center gap-2 text-muted-foreground">
+      <Txt as="span" variant="caption" className={dotClassName}></Txt>
+      <Txt as="span" variant="caption" className="truncate">
+        {message}
+      </Txt>
     </div>
   );
 }

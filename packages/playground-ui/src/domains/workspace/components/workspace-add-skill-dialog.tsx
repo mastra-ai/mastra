@@ -200,8 +200,10 @@ export function WorkspaceAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
-                {hasSearchResults ? 'Search Results' : 'Popular Skills'}
+              <div className="mb-2 text-muted-foreground">
+                <Txt as="span" variant="eyebrow" className="block">
+                  {hasSearchResults ? 'Search Results' : 'Popular Skills'}
+                </Txt>
               </div>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport
@@ -256,11 +258,17 @@ export function WorkspaceAddSkillDialog({
                                     </Txt>
                                   )}
                                 </div>
-                                <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
+                                <div className="truncate text-muted-foreground">
+                                  <Txt as="span" variant="caption" className="block">
+                                    {skill.topSource}
+                                  </Txt>
+                                </div>
                               </div>
-                              <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
+                              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                                 <Download className="size-3" />
-                                <span>{skill.installs.toLocaleString()}</span>
+                                <Txt as="span" variant="caption">
+                                  {skill.installs.toLocaleString()}
+                                </Txt>
                               </div>
                             </div>
                           </button>
@@ -273,7 +281,11 @@ export function WorkspaceAddSkillDialog({
             </div>
 
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
+              <div className="mb-2 text-muted-foreground">
+                <Txt as="span" variant="eyebrow" className="block">
+                  Preview
+                </Txt>
+              </div>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
@@ -291,14 +303,18 @@ export function WorkspaceAddSkillDialog({
                           <Txt as="h3" variant="subheading" tone="ink" className="truncate">
                             {selectedSkill.name}
                           </Txt>
-                          <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
+                          <div className="mt-1 flex items-center gap-3 text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <GithubIcon className="size-3" />
-                              {selectedSkill.topSource}
+                              <Txt as="span" variant="caption" className="block">
+                                {selectedSkill.topSource}
+                              </Txt>
                             </span>
                             <span className="flex items-center gap-1">
                               <Download className="size-3" />
-                              {selectedSkill.installs.toLocaleString()} installs
+                              <Txt as="span" variant="caption" className="block">
+                                {selectedSkill.installs.toLocaleString()} installs
+                              </Txt>
                             </span>
                           </div>
                         </div>
@@ -335,9 +351,12 @@ export function WorkspaceAddSkillDialog({
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-caption text-info-indicator hover:underline"
+                            className="mt-2 flex items-center gap-1 text-info-indicator hover:underline"
                           >
-                            View on skills.sh <ExternalLink className="size-3" />
+                            <Txt as="span" variant="caption" className="block">
+                              View on skills.sh{' '}
+                            </Txt>
+                            <ExternalLink className="size-3" />
                           </a>
                         )}
                       </div>

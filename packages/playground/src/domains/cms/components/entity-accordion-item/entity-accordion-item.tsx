@@ -59,11 +59,12 @@ export function EntityAccordionItem({
         </div>
 
         <Textarea
+          textVariant="caption"
           id={`description-${id}`}
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
+          className="min-h-[40px] border-dashed bg-card px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />

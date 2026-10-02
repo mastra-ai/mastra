@@ -111,6 +111,7 @@ export function CommentComposer({
           />
         ) : null}
         <ComposerInput
+          textVariant="caption"
           ref={textareaRef}
           value={draft}
           placeholder="Add a comment…"
@@ -120,7 +121,7 @@ export function CommentComposer({
           aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
           autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
-          className={cn('text-caption', variant === 'panel' && 'min-h-9 pt-2')}
+          className={cn('', variant === 'panel' && 'min-h-9 pt-2')}
           onChange={event => {
             setDraft(event.target.value);
             mentions.onDraftChange(event.target.selectionStart);

@@ -221,8 +221,10 @@ function FileCard({
       ))}
 
       {total > PREVIEW_ROW_COUNT && (
-        <div className="border-t border-border px-3 py-1.5 text-meta text-muted-foreground">
-          + {total - PREVIEW_ROW_COUNT} more
+        <div className="border-t border-border px-3 py-1.5 text-muted-foreground">
+          <Txt as="span" variant="meta" className="block">
+            + {total - PREVIEW_ROW_COUNT} more
+          </Txt>
         </div>
       )}
     </div>

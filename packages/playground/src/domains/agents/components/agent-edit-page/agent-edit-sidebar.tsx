@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
@@ -215,7 +216,10 @@ export function AgentEditSidebar({
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
                     agent's instructions with the{' '}
-                    <code className="font-medium text-warning-foreground">{'{{variableName}}'}</code> syntax.
+                    <InlineCode variant="label" className="text-warning-foreground">
+                      {'{{variableName}}'}
+                    </InlineCode>{' '}
+                    syntax.
                   </>
                 }
               />

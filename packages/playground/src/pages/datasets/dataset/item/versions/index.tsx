@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useDataset } from '@mastra/playground-ui/domains/datasets';
@@ -184,14 +185,22 @@ function DatasetItemVersionsComparePage() {
           </CardHeader>
           <CardContent className="grid content-start gap-5 overflow-y-auto">
             {isLoading ? (
-              <div className="text-body text-muted-foreground">Loading...</div>
+              <div className="text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  Loading...
+                </Txt>
+              </div>
             ) : leftItem ? (
               <DatasetItemDetails
                 item={leftItem}
                 diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
             ) : (
-              <div className="text-body text-muted-foreground">Item data not available</div>
+              <div className="text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  Item data not available
+                </Txt>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -214,14 +223,22 @@ function DatasetItemVersionsComparePage() {
                 descriptionSlot="Pick a version above to compare it with the one on the left."
               />
             ) : isRightLoading ? (
-              <div className="text-body text-muted-foreground">Loading...</div>
+              <div className="text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  Loading...
+                </Txt>
+              </div>
             ) : rightItem ? (
               <DatasetItemDetails
                 item={rightItem}
                 diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
               />
             ) : (
-              <div className="text-body text-muted-foreground">Version {rightNumber} not found</div>
+              <div className="text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  Version {rightNumber} not found
+                </Txt>
+              </div>
             )}
           </CardContent>
         </Card>

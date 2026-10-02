@@ -224,16 +224,23 @@ function ObservationItem({
     <div className={cn('py-0.5', observation.isNested && 'ml-4 border-l border-border/50 pl-2')}>
       <div
         className={cn(
-          'flex items-start gap-1.5 text-caption',
+          'flex items-start gap-1.5',
           bgColor && 'rounded px-1.5 py-0.5',
           bgColor,
           !observation.isNested && observation.priority && `border-l-2 ${borderColor} pl-1.5`,
         )}
       >
         {observation.isNested && (
-          <span className={cn('shrink-0', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>→</span>
+          <Txt
+            as="span"
+            variant="caption"
+            tone={useInheritedTextColor ? undefined : 'muted'}
+            className={cn('shrink-0', useInheritedTextColor && 'opacity-60')}
+          >
+            →
+          </Txt>
         )}
-        <span className="flex-1 [&_code]:rounded [&_code]:bg-fill [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-meta">
+        <span className="flex-1">
           <MarkdownRenderer className={priorityColor}>{observation.content}</MarkdownRenderer>
         </span>
         {observation.time && (
@@ -271,13 +278,13 @@ function DateBlock({ block, useInheritedTextColor }: { block: ParsedDateBlock; u
           useInheritedTextColor ? 'bg-transparent' : 'bg-background/95',
         )}
       >
-        <span className={cn('text-column', useInheritedTextColor ? 'opacity-80' : 'text-foreground')}>
+        <Txt as="span" variant="column" tone="ink" className={cn('', useInheritedTextColor ? 'opacity-80' : '')}>
           {block.date}
-        </span>
+        </Txt>
         {block.relativeTime && (
-          <span className={cn('text-meta', useInheritedTextColor ? 'opacity-60' : 'text-muted-foreground')}>
+          <Txt as="span" variant="meta" tone="muted" className={cn('', useInheritedTextColor ? 'opacity-60' : '')}>
             ({block.relativeTime})
-          </span>
+          </Txt>
         )}
       </div>
       <div className="space-y-0">
@@ -306,13 +313,16 @@ function ThreadSection({
       {showThreadId && thread.threadId !== 'default' && (
         <div
           className={cn(
-            'mb-1 inline-block rounded px-1 py-0.5 text-meta',
-            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50 text-muted-foreground',
+            'text-muted-foreground',
+            'mb-1 inline-block rounded px-1 py-0.5',
+            useInheritedTextColor ? 'bg-current/10 opacity-60' : 'bg-muted/50',
           )}
         >
-          Thread{' '}
-          <Txt as="span" variant="meta" font="mono">
-            {thread.threadId}
+          <Txt as="span" variant="meta" className="block">
+            Thread{' '}
+            <Txt as="span" variant="meta" font="mono">
+              {thread.threadId}
+            </Txt>
           </Txt>
         </div>
       )}
@@ -350,11 +360,17 @@ export function ObservationRenderer({
     parsed.threads.length > 1 || (parsed.threads.length === 1 && parsed.threads[0]?.threadId !== 'default');
 
   if (parsed.threads.length === 0 && !parsed.currentTask && !parsed.suggestedResponse) {
-    return <div className={cn('text-caption text-muted-foreground italic', className)}>No observations</div>;
+    return (
+      <div className={cn('text-muted-foreground', 'italic', className)}>
+        <Txt as="span" variant="caption" className="block">
+          No observations
+        </Txt>
+      </div>
+    );
   }
 
   return (
-    <div className={cn('overflow-hidden text-body', className)}>
+    <div className={cn('overflow-hidden', className)}>
       <div
         className={cn('wrap-break-word', maxHeight && 'overflow-y-auto pr-1')}
         style={maxHeight ? { maxHeight } : undefined}
@@ -371,15 +387,31 @@ export function ObservationRenderer({
 
       {showCurrentTask && parsed.currentTask && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Current Task</div>
-          <div className="text-caption whitespace-pre-wrap text-foreground">{parsed.currentTask}</div>
+          <div className="mb-1 text-muted-foreground uppercase">
+            <Txt as="span" variant="meta" className="block">
+              Current Task
+            </Txt>
+          </div>
+          <div className="whitespace-pre-wrap text-foreground">
+            <Txt as="span" variant="caption" className="block">
+              {parsed.currentTask}
+            </Txt>
+          </div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
         <div className="mt-2 border-t border-border pt-2">
-          <div className="mb-1 text-meta tracking-wide text-muted-foreground uppercase">Suggested Response</div>
-          <div className="text-caption whitespace-pre-wrap text-foreground/80 italic">{parsed.suggestedResponse}</div>
+          <div className="mb-1 text-muted-foreground uppercase">
+            <Txt as="span" variant="meta" className="block">
+              Suggested Response
+            </Txt>
+          </div>
+          <div className="whitespace-pre-wrap text-foreground/80 italic">
+            <Txt as="span" variant="caption" className="block">
+              {parsed.suggestedResponse}
+            </Txt>
+          </div>
         </div>
       )}
     </div>

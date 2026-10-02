@@ -1,6 +1,7 @@
 import { formatCompactTokens } from '@/ds/components/TokenBudget/format-tokens';
 import { toneClass } from '@/ds/components/TokenBudget/tones';
 import type { TokenBudgetTone } from '@/ds/components/TokenBudget/tones';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 interface ThreadContextProgressProps {
@@ -27,11 +28,13 @@ function ProgressBar({
 
   return (
     <div className={cn('min-w-0 flex-1', toneClass[tone])}>
-      <div className="mb-1 flex items-center justify-between gap-2 text-meta text-muted-foreground">
-        <span className="tracking-wide text-foreground uppercase">{label}</span>
-        <span className="text-muted-foreground tabular-nums">
+      <div className="mb-1 flex items-center justify-between gap-2 text-muted-foreground">
+        <Txt as="span" variant="meta" tone="ink" className="uppercase">
+          {label}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k
-        </span>
+        </Txt>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
         <div className="h-full rounded-full bg-current/80" style={{ width: `${percent}%` }} />

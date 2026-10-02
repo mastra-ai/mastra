@@ -8,12 +8,13 @@ export type ChatTextareaProps = Omit<TextareaProps, 'size' | 'variant' | 'rows'>
 export const ChatTextarea = forwardRef<HTMLTextAreaElement, ChatTextareaProps>(({ className, ...props }, ref) => {
   return (
     <Textarea
+      textVariant="body"
       ref={ref}
       size="md"
       variant="unstyled"
       rows={1}
       className={cn(
-        'min-h-[44px] resize-none bg-transparent text-body text-foreground placeholder:text-muted-foreground',
+        'min-h-[44px] resize-none bg-transparent text-foreground placeholder:text-muted-foreground',
         'outline-none focus:outline-none focus-visible:outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,

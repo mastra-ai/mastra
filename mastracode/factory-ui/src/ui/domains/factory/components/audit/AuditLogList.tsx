@@ -78,9 +78,12 @@ function AuditEventRow({
       {expanded ? (
         <div className="col-span-full px-3 pb-2">
           <Code
+            variant="meta"
             code={JSON.stringify(visibleMetadata, null, 2)}
             lang="json"
-            className="text-meta text-muted-foreground m-0 px-2 py-1 font-sans break-all whitespace-pre-wrap"
+            font="body"
+            tone="muted"
+            className="m-0 px-2 py-1 break-all whitespace-pre-wrap"
           />
         </div>
       ) : null}

@@ -75,12 +75,20 @@ export function ThemeFilterBanner({
                 ? `Clear ${selection.kind} filter`
                 : `Clear filter ${selectionLabel(signalCatalog, selection)}`
             }
-            className="state-layer flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pr-2 pl-2.5 text-column text-foreground"
             onClick={() => onRemove(selection.signalName)}
             type="button"
+            className="state-layer flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pr-2 pl-2.5 text-foreground"
           >
-            <span aria-hidden="true" className="rounded-0.5 size-2" style={{ backgroundColor: color }} />
-            {selectionLabel(signalCatalog, selection)}
+            <Txt
+              as="span"
+              variant="column"
+              aria-hidden="true"
+              style={{ backgroundColor: color }}
+              className="rounded-0.5 size-2"
+            ></Txt>
+            <Txt as="span" variant="column" className="block">
+              {selectionLabel(signalCatalog, selection)}
+            </Txt>
             <X aria-hidden="true" className="size-3.5" />
           </button>
         );

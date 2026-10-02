@@ -15,13 +15,17 @@ function ConnectionRow({
   return (
     <li className="flex items-center justify-between border-b py-2">
       <div>
-        <Txt as="div" variant="caption" font="mono">
-          {connection.connectionId}
-        </Txt>
-        <div className="text-caption text-muted-foreground">
-          {connection.label ?? '(no label)'} · {connection.status}
-          {connection.scope ? ` · ${connection.scope}` : ''}
-          {isAdmin && connection.authorId ? ` · author: ${connection.authorId}` : ''}
+        <div>
+          <Txt as="span" variant="caption" font="mono" className="block">
+            {connection.connectionId}
+          </Txt>
+        </div>
+        <div className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            {connection.label ?? '(no label)'} · {connection.status}
+            {connection.scope ? ` · ${connection.scope}` : ''}
+            {isAdmin && connection.authorId ? ` · author: ${connection.authorId}` : ''}
+          </Txt>
         </div>
       </div>
       <button

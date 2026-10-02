@@ -604,11 +604,11 @@ export function DatasetReview({
             <Field className="gap-1">
               <FieldLabel>Instructions (optional)</FieldLabel>
               <Textarea
+                textVariant="caption"
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption"
               />
             </Field>
           </DialogBody>

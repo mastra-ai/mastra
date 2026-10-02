@@ -16,7 +16,11 @@ export function ImpersonationBanner() {
     <div className="bg-info1/10 border-info1/20 mx-3 mb-2 flex items-center gap-2 rounded-md border px-3 py-1.5">
       <Eye className="text-info1 h-3.5 w-3.5 shrink-0" />
       <Txt variant="meta" className="text-info1 truncate">
-        Previewing <span className="font-medium capitalize">{impersonatedRole.name}</span> experience
+        Previewing{' '}
+        <Txt as="span" variant="meta" className="capitalize">
+          {impersonatedRole.name}
+        </Txt>{' '}
+        experience
       </Txt>
       <button
         type="button"

@@ -65,7 +65,7 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
 function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" variant="caption">
         {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
@@ -178,7 +178,7 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
       <Tree.Icon>
         <FileDiff className={colorClass} />
       </Tree.Icon>
-      <Tree.Label className={cn('font-mono', colorClass)}>
+      <Tree.Label variant="body-sm" font="mono" className={cn('', colorClass)}>
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
@@ -223,10 +223,10 @@ function DiffViewer({
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          <Txt variant="column" font="mono" className="text-foreground truncate">
+          <Txt tone="ink" variant="column" font="mono" className="truncate">
             {name}
           </Txt>
-          <Txt variant="meta" font="mono" className="text-muted-foreground truncate">
+          <Txt tone="muted" variant="meta" font="mono" className="truncate">
             {directory || 'Repository root'}
           </Txt>
         </div>
@@ -266,7 +266,7 @@ function DiffViewer({
             <CodeDiff patch={patch} />
           </Suspense>
           {truncated ? (
-            <Txt variant="meta" className="text-muted-foreground block p-3">
+            <Txt tone="muted" variant="meta" className="block p-3">
               Diff truncated at 512 KB.
             </Txt>
           ) : null}
@@ -338,11 +338,11 @@ export function WorkspaceChangesPanel({
           <ArrowLeft />
         </Button>
         <FileDiff className="text-muted-foreground" size={14} />
-        <Txt as="h2" variant="column" className="text-foreground">
+        <Txt tone="ink" as="h2" variant="column">
           Changes
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-muted-foreground ml-auto">
+          <Txt tone="muted" variant="meta" className="ml-auto">
             {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}

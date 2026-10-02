@@ -75,18 +75,40 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
   return (
     <dl className="mt-4 grid gap-2 sm:grid-cols-3">
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-caption text-muted-foreground">Traces analyzed</dt>
-        <dd className="mt-1 text-heading text-foreground">{formatNumber(progress.traceCount)}</dd>
-      </div>
-      <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-caption text-muted-foreground">Trace signal types ready</dt>
-        <dd className="mt-1 text-heading text-foreground">
-          {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Traces analyzed
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground">
+          <Txt as="span" variant="heading" className="block">
+            {formatNumber(progress.traceCount)}
+          </Txt>
         </dd>
       </div>
       <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
-        <dt className="text-caption text-muted-foreground">Status</dt>
-        <dd className="mt-1 text-heading text-foreground capitalize">{progress.status}</dd>
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Trace signal types ready
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground">
+          <Txt as="span" variant="heading" className="block">
+            {progress.signalCatalog ? readySignalCount : progress.availableSignals.length} of {enabledSignalCount}
+          </Txt>
+        </dd>
+      </div>
+      <div className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')}>
+        <dt className="text-muted-foreground">
+          <Txt as="span" variant="caption" className="block">
+            Status
+          </Txt>
+        </dt>
+        <dd className="mt-1 text-foreground capitalize">
+          <Txt as="span" variant="heading" className="block">
+            {progress.status}
+          </Txt>
+        </dd>
       </div>
     </dl>
   );
@@ -149,21 +171,21 @@ export function PendingSignalProgress({
         {pendingSignals.map(signal => {
           const value = progress?.signals[signal.name] ?? { generated: 0, embedded: 0 };
           return (
-            <li className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2 font-body')} key={signal.name}>
+            <li className={cn(raisedSurfaceStyle, 'rounded-md px-3 py-2')} key={signal.name}>
               <div className="flex items-center justify-between gap-2">
-                <Txt as="span" variant="subheading" style={signalStyle(signal.name)}>
+                <Txt font="body" as="span" variant="subheading" style={signalStyle(signal.name)}>
                   {signalLabel(catalog, signal.name)}
                 </Txt>
-                <Txt as="span" variant="caption" tone="muted" className="capitalize">
+                <Txt font="body" as="span" variant="caption" tone="muted" className="capitalize">
                   {signal.status}
                 </Txt>
               </div>
               {signalDescription(catalog, signal.name) ? (
-                <Txt variant="caption" tone="muted" className="mt-1">
+                <Txt font="body" variant="caption" tone="muted" className="mt-1">
                   {signalDescription(catalog, signal.name)}
                 </Txt>
               ) : null}
-              <Txt variant="caption" tone="muted" className="mt-1">
+              <Txt font="body" variant="caption" tone="muted" className="mt-1">
                 {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
               </Txt>
             </li>
@@ -197,11 +219,11 @@ export const SignalsEmptyState = ({
     <section className="min-h-full w-full bg-sidebar p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
       <div className="mx-auto w-full max-w-260">
         <header>
-          <Txt variant="caption" tone="muted" font="mono" className="flex items-center gap-2 tracking-wider uppercase">
+          <Txt variant="eyebrow" tone="muted" className="flex items-center gap-2">
             <span aria-hidden="true" className="size-2 rounded-full bg-brand-green-indicator" />
             Trace Intelligence
           </Txt>
-          <Txt as="h1" variant="display" tone="ink" className="mt-2 tracking-tight">
+          <Txt as="h1" variant="display" tone="ink" className="mt-2">
             Understand what drives every agent interaction
           </Txt>
           <Txt tone="muted" className="mt-2 max-w-180">
@@ -221,20 +243,21 @@ export const SignalsEmptyState = ({
             <Txt variant="caption" tone="muted" className="mt-0.5">
               Every agent interaction
             </Txt>
-            <Txt variant="caption" tone="muted" font="mono" className="mt-5 tracking-[0.18em] uppercase">
+            <Txt variant="eyebrow" tone="muted" className="mt-5">
               Input
             </Txt>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
-                  className={cn(
-                    raisedSurfaceStyle,
-                    'flex items-center justify-between rounded px-3 py-1.5 font-mono text-meta',
-                  )}
+                  className={cn(raisedSurfaceStyle, 'flex items-center justify-between rounded px-3 py-1.5')}
                   key={name}
                 >
-                  <span className="text-muted-foreground">{name}</span>
-                  <span className="text-muted-foreground">{duration}</span>
+                  <Txt as="span" variant="meta" font="mono" tone="muted">
+                    {name}
+                  </Txt>
+                  <Txt as="span" variant="meta" font="mono" tone="muted">
+                    {duration}
+                  </Txt>
                 </div>
               ))}
             </div>
@@ -274,7 +297,7 @@ export const SignalsEmptyState = ({
             <Txt variant="caption" tone="muted" className="mt-0.5">
               How recurring patterns connect
             </Txt>
-            <Txt variant="caption" tone="muted" font="mono" className="mt-5 tracking-[0.18em] uppercase">
+            <Txt variant="eyebrow" tone="muted" className="mt-5">
               Output
             </Txt>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -319,7 +342,10 @@ export const SignalsEmptyState = ({
             <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator" />
             <div className="min-w-0 flex-1">
               <Txt variant="caption" tone="muted">
-                <strong className="font-medium text-foreground">{copy.title}</strong> {copy.body}
+                <Txt as="strong" variant="column" tone="ink">
+                  {copy.title}
+                </Txt>{' '}
+                {copy.body}
               </Txt>
               {progress ? <ProgressSummary progress={progress} /> : null}
               <SignalProgressList progress={progress} />

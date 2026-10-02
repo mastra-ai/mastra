@@ -125,9 +125,13 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
                 Result
               </Txt>
               {typeof entry.result === 'string' ? (
-                <pre className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 text-caption whitespace-pre">
+                <Txt
+                  as="pre"
+                  variant="caption"
+                  className="max-h-40 overflow-x-auto overflow-y-auto rounded-md bg-muted p-2 whitespace-pre"
+                >
                   {entry.result}
-                </pre>
+                </Txt>
               ) : (
                 <CodeEditor
                   data={entry.result as Record<string, unknown> | Record<string, unknown>[]}

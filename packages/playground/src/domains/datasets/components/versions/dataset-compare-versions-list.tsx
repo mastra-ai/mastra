@@ -172,11 +172,16 @@ export function DatasetCompareVersionsList({
             <li
               key={id}
               className={cn(
-                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] text-body text-foreground first:border-t-transparent',
+                'text-foreground',
+                'grid grid-cols-[1fr_1fr_1fr_10rem] gap-3 overflow-hidden rounded-lg border border-transparent border-t-border px-3 py-[3px] pb-[2px] first:border-t-transparent',
                 transitions.colors,
               )}
             >
-              <div className="truncate py-[0.6rem] text-body text-placeholder">{id}</div>
+              <div className="truncate py-[0.6rem] text-placeholder">
+                <Txt as="span" variant="body" className="block">
+                  {id}
+                </Txt>
+              </div>
               {status !== 'same' ? (
                 <>
                   {itemA?.datasetVersion ? (

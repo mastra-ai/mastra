@@ -53,7 +53,7 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-meta text-muted-foreground')}>
+        <div className={cn('text-muted-foreground', 'flex justify-end')}>
           <Txt as="span" variant="meta" font="mono">
             {formatDurationPrecise(span.latency)}
           </Txt>

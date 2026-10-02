@@ -135,15 +135,21 @@ export function DatasetVersionsPanel({
                           aria-hidden="true"
                         />
                       )}
-                      <Txt as="span" variant="caption" className="flex min-w-0 flex-1 items-center gap-2">
-                        <span className="shrink-0 font-medium text-foreground">v.{item.version}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <Txt as="span" variant="column" tone="ink" className="shrink-0">
+                          v.{item.version}
+                        </Txt>
                         {createdAtDate && (
-                          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                          <Txt as="span" variant="caption" tone="muted" className="min-w-0 flex-1 truncate">
                             {formatDate(createdAtDate, 'date-time')}
-                          </span>
+                          </Txt>
                         )}
-                        {item.isCurrent && <span className="shrink-0 text-muted-foreground">latest</span>}
-                      </Txt>
+                        {item.isCurrent && (
+                          <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+                            latest
+                          </Txt>
+                        )}
+                      </span>
                     </span>
                   </ThreadListItem>
                 );

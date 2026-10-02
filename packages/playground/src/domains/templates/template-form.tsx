@@ -79,12 +79,17 @@ export function TemplateForm({
               {isLoadingEnvVars ? (
                 <div
                   className={cn(
-                    'col-span-2 flex items-center justify-center gap-4 text-caption text-muted-foreground',
+                    'text-muted-foreground',
+                    'col-span-2 flex items-center justify-center gap-4',
                     '[&_svg]:h-[1.1em] [&_svg]:w-[1.1em] [&_svg]:opacity-50',
                     'animate-in duration-300 fade-in',
                   )}
                 >
-                  <Spinner /> Loading variables...
+                  <Spinner />
+                  <Txt as="span" variant="caption" className="block">
+                    {' '}
+                    Loading variables...
+                  </Txt>
                 </div>
               ) : (
                 Object.entries(variables).map(([key, value]) => (
@@ -109,8 +114,10 @@ export function TemplateForm({
               )}
             </div>
             <div className="relative mt-3.5 border-t border-border pt-12">
-              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background text-caption text-muted-foreground">
-                And
+              <div className="absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-background text-muted-foreground">
+                <Txt as="span" variant="caption" className="block">
+                  And
+                </Txt>
               </div>
 
               <Txt as="h3" tone="muted">
@@ -135,7 +142,7 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'state-layer mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card text-body text-foreground',
+              'state-layer mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card text-foreground',
               '[&_svg]:h-[1.1em] [&_svg]:text-foreground [&>svg]:w-[1.1em]',
             )}
             onClick={handleInstallTemplate}

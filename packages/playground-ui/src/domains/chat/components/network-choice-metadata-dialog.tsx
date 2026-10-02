@@ -42,13 +42,21 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
         <DialogBody>
           <div className="space-y-2">
             <Txt tone="muted">Selection Reason</Txt>
-            <div className="text-body text-foreground">{selectionReason}</div>
+            <div className="text-foreground">
+              <Txt as="span" variant="body" className="block">
+                {selectionReason}
+              </Txt>
+            </div>
           </div>
 
           {inputSlot && (
             <div className="space-y-2">
               <Txt tone="muted">Input</Txt>
-              <div className="text-body text-foreground">{inputSlot}</div>
+              <div className="text-foreground">
+                <Txt as="span" variant="body" className="block">
+                  {inputSlot}
+                </Txt>
+              </div>
             </div>
           )}
         </DialogBody>

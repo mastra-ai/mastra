@@ -104,7 +104,10 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
   return (
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
-        <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
+        <CollapsibleTrigger
+          textVariant="caption"
+          className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-muted-foreground"
+        >
           <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
           <span>Recent runs</span>
           {!isLoading && !error && (
@@ -152,11 +155,17 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <Txt as="span" variant="caption" className="flex w-full min-w-0 items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
+                              <span className="flex w-full min-w-0 items-center gap-2">
+                                <Txt
+                                  as="span"
+                                  variant="column"
+                                  tone="ink"
+                                  className="min-w-0 flex-1 truncate"
+                                  title={run.runId}
+                                >
                                   {run.runId}
-                                </span>
-                              </Txt>
+                                </Txt>
+                              </span>
                               <WorkflowRunMeta
                                 timestamp={getRunTimestamp(snapshot?.timestamp)}
                                 resourceId={getRunResourceId(run)}

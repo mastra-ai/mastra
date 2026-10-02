@@ -1,8 +1,10 @@
 'use client';
+
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -104,10 +106,12 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className={cn('self-start text-caption', quietTextHover, controlStateColorTransition)}
+          className={cn('self-start', quietTextHover, controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
-          + Custom schema
+          <Txt as="span" variant="caption" className="block">
+            + Custom schema
+          </Txt>
         </button>
       ) : (
         <SchemaConfigSection

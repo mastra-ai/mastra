@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -55,7 +56,11 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="min-w-0 truncate text-body text-foreground">{title}</div>
+          <div className="min-w-0 truncate text-foreground">
+            <Txt as="span" variant="body" className="block">
+              {title}
+            </Txt>
+          </div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -89,12 +94,15 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-chat"
               onClick={() => setActiveTab('chat')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                'text-foreground',
+                'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
-                activeTab === 'chat' ? 'text-foreground' : quietTextHover,
+                activeTab === 'chat' ? '' : quietTextHover,
               )}
             >
-              Chat
+              <Txt as="span" variant="subheading" className="block">
+                Chat
+              </Txt>
             </button>
             <button
               type="button"
@@ -103,12 +111,15 @@ export const SkillWorkspaceLayout = ({
               data-testid="skill-edit-tab-configure"
               onClick={() => setActiveTab('configure')}
               className={cn(
-                'relative z-10 flex-1 rounded-full text-subheading outline-none',
+                'text-foreground',
+                'relative z-10 flex-1 rounded-full outline-none',
                 controlStateColorTransition,
-                activeTab === 'configure' ? 'text-foreground' : quietTextHover,
+                activeTab === 'configure' ? '' : quietTextHover,
               )}
             >
-              Configuration
+              <Txt as="span" variant="subheading" className="block">
+                Configuration
+              </Txt>
             </button>
           </div>
         </div>

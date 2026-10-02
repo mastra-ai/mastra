@@ -98,17 +98,18 @@ function PipelineStep({
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center">
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-meta',
-            done
-              ? 'border-success-edge bg-success-subtle text-success-subtle-foreground'
-              : 'border-border text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
           )}
         >
           {index}
-        </span>
+        </Txt>
         {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
@@ -336,7 +337,7 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
+            <CollapsibleTrigger textVariant="caption" className="flex items-center gap-2">
               <ChevronRight className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (

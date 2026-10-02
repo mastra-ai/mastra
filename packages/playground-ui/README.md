@@ -141,6 +141,27 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
 
+Product call sites use `Txt` or the text props of a shared component. Role utilities belong inside the design system. Keep `className` for layout, truncation, and interaction states instead of overriding size, weight, line height, or tracking.
+
+`hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
+
+`Txt` renders text elements: headings, paragraphs, inline text, labels, timestamps, and preformatted text. It cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
+
+```tsx
+<div className="flex items-center gap-2">
+  <Icon />
+  <Txt as="span" variant="caption">Supporting copy</Txt>
+</div>
+<Link to="/runs">
+  <Txt as="span" variant="caption">View runs</Txt>
+</Link>
+<Button onClick={run}>Run</Button>
+<Input font="mono" aria-label="Setup command" />
+<Tree.Label font="mono">src/index.ts</Tree.Label>
+```
+
+Controls with their own visual `variant` use `textVariant` for the text role (`Input`, `Textarea`, `FieldLabel`, `FieldDescription`, `FieldsetLegend`, `CollapsibleTrigger`, `ComposerInput`, and `DataList.Cell`). `MarkdownRenderer`, `Code`, `InlineCode`, `Tree.Label`, `TextAndIcon`, and `EntityName` expose the role as `variant`. Prefer the standard button and tab label role rather than changing its typography at each use.
+
 ```tsx
 import { Txt } from '@mastra/playground-ui/components/Txt';
 

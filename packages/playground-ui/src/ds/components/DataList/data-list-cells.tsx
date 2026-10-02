@@ -3,6 +3,8 @@ import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { textStyle } from '@/ds/primitives/text';
+import type { TextStyleProps } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
 import type { DatePreset } from '@/utils/date-format';
@@ -11,6 +13,7 @@ import { getShortId } from '@/utils/id';
 export type DataListCellProps = {
   children?: ReactNode;
   className?: string;
+  textVariant?: TextStyleProps['variant'];
   /**
    * HTML element rendered for the cell. Defaults to `span`. Use `'label'` when
    * the cell wraps a labelable control (e.g. a Checkbox), so the whole cell
@@ -24,7 +27,7 @@ export type DataListCellProps = {
   sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>;
 
-export function DataListCell({ children, className, as, sticky, ...rest }: DataListCellProps) {
+export function DataListCell({ children, className, as, sticky, textVariant, ...rest }: DataListCellProps) {
   const Component = as || 'span';
   return (
     <Component
@@ -32,6 +35,7 @@ export function DataListCell({ children, className, as, sticky, ...rest }: DataL
         'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
         sticky === 'start' && dataListStickyStartStyles,
         className,
+        textStyle({ variant: textVariant }),
       )}
       {...rest}
     >

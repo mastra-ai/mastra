@@ -16,6 +16,19 @@ const restrictedTypographySelectors = [
   { selector: `TemplateElement[value.raw=/${TYPOGRAPHY_CLASS_PATTERN}/]`, message: TYPOGRAPHY_MESSAGE },
 ];
 
+// Application call sites use role/face props; typography classes stay inside the DS.
+const CALLSITE_TEXT_PATTERN = String.raw`(^|\s|:|!)(text-(hero|lead|display|title|heading|subheading|body|body-sm|label|card-title|card-title-tight|card-title-strong|column|caption|eyebrow|meta|ui-sm)(?=\s|$|!)|font-(mono|body|display|sans|serif|normal|medium|semibold|bold|light|thin|black|extrabold|\[[^\]]+\])(?=\s|$|!)|leading-[^\s]+|tracking-[^\s]+)`;
+const restrictedCallsiteTextSelectors = [
+  {
+    selector: `Literal[value=/${CALLSITE_TEXT_PATTERN}/]`,
+    message: 'Use Txt or the text role/font prop on the shared component.',
+  },
+  {
+    selector: `TemplateElement[value.raw=/${CALLSITE_TEXT_PATTERN}/]`,
+    message: 'Use Txt or the text role/font prop on the shared component.',
+  },
+];
+
 // Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any
 // colour Tailwind can spell, and omitting tone inherits rather than restating ink.
 const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
@@ -75,11 +88,12 @@ export default [
   },
   {
     files: ['src/**/*.ts?(x)'],
-    ignores: ['src/**/*.test.*', 'src/**/*.stories.*', 'src/ee/**', 'src/ds/**'],
+    ignores: ['src/**/*.test.*', 'src/**/*.stories.*', 'src/ds/**'],
     rules: {
       'no-restricted-syntax': [
         'error',
         ...restrictedTypographySelectors,
+        ...restrictedCallsiteTextSelectors,
         ...restrictedTxtToneSelectors,
         ...restrictedMonoSelectors,
       ],

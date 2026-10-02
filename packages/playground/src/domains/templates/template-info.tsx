@@ -25,13 +25,9 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
     <>
       <div className={cn('mt-5 grid items-center')}>
         <div
-          className={cn(
-            'flex items-center gap-3 text-title',
-            '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50',
-            {
-              '[&>svg]:opacity-20': isLoading,
-            },
-          )}
+          className={cn('flex items-center gap-3', '[&>svg]:h-[1.2em] [&>svg]:w-[1.2em] [&>svg]:opacity-50', {
+            '[&>svg]:opacity-20': isLoading,
+          })}
         >
           <PackageIcon />
           <h2
@@ -39,7 +35,9 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               'flex min-w-[50%] rounded-lg bg-muted': isLoading,
             })}
           >
-            {isLoading ? <>&nbsp;</> : title}
+            <Txt as="span" variant="title" className="block">
+              {isLoading ? <>&nbsp;</> : title}
+            </Txt>
           </h2>
         </div>
       </div>
@@ -67,12 +65,19 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
                     A new Git branch will be created
                   </Txt>
                 </div>
-                <div className="space-y-1 text-caption text-muted-foreground">
+                <div className="space-y-1 text-muted-foreground">
                   <div>
-                    <span className="font-medium">Branch name:</span> <InlineCode>{branchName}</InlineCode>
+                    <Txt as="span" variant="caption" className="block">
+                      <Txt as="span" variant="column">
+                        Branch name:
+                      </Txt>{' '}
+                      <InlineCode>{branchName}</InlineCode>
+                    </Txt>
                   </div>
                   <div>
-                    This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
+                    <Txt as="span" variant="caption" className="block">
+                      This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
+                    </Txt>
                   </div>
                 </div>
               </div>
@@ -84,10 +89,12 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={cn(quietTextHover, 'mt-auto flex items-center gap-2 text-body')}
+              className={cn(quietTextHover, 'mt-auto flex items-center gap-2')}
             >
               <GithubIcon />
-              {githubUrl?.split('/')?.pop()}
+              <Txt as="span" variant="body" className="block">
+                {githubUrl?.split('/')?.pop()}
+              </Txt>
             </a>
           )}
         </div>

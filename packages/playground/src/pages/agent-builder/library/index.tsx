@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -140,22 +141,28 @@ export default function AgentBuilderLibraryPage() {
                     <button
                       onClick={() => setTab('agents')}
                       className={cn(
-                        'px-3 py-1.5 text-column',
+                        'text-foreground',
+                        'px-3 py-1.5',
                         controlStateColorTransition,
-                        tab === 'agents' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                        tab === 'agents' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
-                      Agents
+                      <Txt as="span" variant="column" className="block">
+                        Agents
+                      </Txt>
                     </button>
                     <button
                       onClick={() => setTab('skills')}
                       className={cn(
-                        'px-3 py-1.5 text-column',
+                        'text-foreground',
+                        'px-3 py-1.5',
                         controlStateColorTransition,
-                        tab === 'skills' ? 'bg-muted text-foreground' : cn('bg-background', quietTextHover),
+                        tab === 'skills' ? 'bg-muted' : cn('bg-background', quietTextHover),
                       )}
                     >
-                      Skills
+                      <Txt as="span" variant="column" className="block">
+                        Skills
+                      </Txt>
                     </button>
                   </div>
                 )}

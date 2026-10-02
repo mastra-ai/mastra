@@ -610,13 +610,16 @@ function IntakeSourceSwitch({
           aria-pressed={active === source.id}
           onClick={() => onSelect(source.id)}
           className={cn(
-            'rounded-full border px-2.5 py-0.5 text-meta transition',
+            'text-foreground',
+            'rounded-full border px-2.5 py-0.5 transition',
             active === source.id
-              ? 'border-badge-green-indicator bg-fill text-foreground'
-              : 'border-border bg-transparent text-muted-foreground hover:text-foreground',
+              ? 'border-badge-green-indicator bg-fill'
+              : 'border-border bg-transparent hover:text-foreground',
           )}
         >
-          {source.label}
+          <Txt as="span" variant="meta" className="block">
+            {source.label}
+          </Txt>
         </button>
       ))}
     </div>

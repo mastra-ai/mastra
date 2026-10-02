@@ -41,11 +41,15 @@ export function WorkflowGraphBoundary({
               </Txt>
               <Button onClick={reset}>Try again</Button>
               <details>
-                <summary className="cursor-pointer text-caption">View workflow definition</summary>
+                <summary className="cursor-pointer">
+                  <Txt as="span" variant="caption" className="block">
+                    View workflow definition
+                  </Txt>
+                </summary>
                 <CopyButton content={definition} tooltip="Copy workflow definition" />
-                <pre className="mt-2 max-h-64 overflow-auto text-meta break-words whitespace-pre-wrap">
+                <Txt as="pre" variant="meta" className="mt-2 max-h-64 overflow-auto break-words whitespace-pre-wrap">
                   {definition}
-                </pre>
+                </Txt>
               </details>
             </div>
           </div>

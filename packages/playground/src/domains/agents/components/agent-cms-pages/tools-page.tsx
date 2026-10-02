@@ -154,7 +154,9 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-background">
         <EntityContent>
-          <EntityName className="! text-subheading!">{tool.label}</EntityName>
+          <EntityName variant="subheading" className="!">
+            {tool.label}
+          </EntityName>
           <EntityDescription>
             <input
               type="text"
