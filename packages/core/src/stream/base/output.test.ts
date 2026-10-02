@@ -1556,6 +1556,53 @@ describe('MastraModelOutput', () => {
     });
   });
 
+  describe('locked base stream (#25532)', () => {
+    const createOutput = (runId: string) =>
+      new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createTextDeltaChunk(runId, 'hello'),
+          createStepFinishChunk(runId),
+          createFinishChunk(runId),
+        ]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+    it('routes a locked-stream failure to onError instead of rejecting', async () => {
+      const output = createOutput('locked-run');
+      const reader = output._getBaseStream().getReader();
+
+      const onError = vi.fn();
+      await expect(output.consumeStream({ onError })).resolves.toBeUndefined();
+      expect(onError).toHaveBeenCalledExactlyOnceWith(expect.any(TypeError));
+
+      reader.releaseLock();
+    });
+
+    it('does not take a second reader when getters are awaited after _getBaseStream()', async () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const output = createOutput('base-stream-run');
+        let textPromise: Promise<string> | undefined;
+        for await (const _chunk of output._getBaseStream()) {
+          // The agentic loop owns the base stream reader; getters awaited
+          // mid-iteration (e.g. `await self.request` on finish) must not
+          // try to drain it again.
+          textPromise ??= output.text;
+        }
+        await expect(textPromise).resolves.toBe('hello');
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+  });
+
   describe('consumeStream completion sharing', () => {
     it('resolves every caller only after the stream actually finishes', async () => {
       const runId = 'test-run';
