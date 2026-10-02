@@ -156,7 +156,7 @@ function createSession(
         settings[key] = value;
       }),
       rename: vi.fn(async () => {}),
-      getId: vi.fn(() => threadId),
+      requireId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
     stream: { isActive: vi.fn(() => options?.streamActive ?? false) },

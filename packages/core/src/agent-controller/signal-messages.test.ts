@@ -697,7 +697,7 @@ describe('AgentController signal messages', () => {
       scope: 'collaborator',
     });
     expect(second).not.toBe(first);
-    const threadId = await first.thread.ensureId();
+    const threadId = first.thread.getId()!;
     second.thread.set({ threadId });
     await second.thread.ensureCurrentSubscription();
     const abort = vi.spyOn(first, 'abort');

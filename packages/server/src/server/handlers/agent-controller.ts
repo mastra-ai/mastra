@@ -1627,7 +1627,8 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      const threadId = await session.thread.ensureId({ requestContext });
+      const threadId = session.thread.getId();
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
       const record = await agent.setObjective(objective, {
         threadId,
@@ -1669,8 +1670,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const threadId = session.thread.getId();
-      // An unbound session has no goal to update.
-      if (!threadId) return { goal: undefined };
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
       const record = await agent.updateObjectiveOptions({
         threadId,
@@ -1702,8 +1702,7 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const threadId = session.thread.getId();
-      // An unbound session has no goal to clear.
-      if (!threadId) return { ok: true };
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
       await agent.clearObjective({ threadId });
       return { ok: true };

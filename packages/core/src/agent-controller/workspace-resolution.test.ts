@@ -460,9 +460,9 @@ describe('AgentController createSession — no workspace', () => {
 
     expect(session.getWorkspace()).toBeUndefined();
     expect(controller.hasWorkspace()).toBe(false);
-    // The rest of the session is fully wired: it still has an identity and can create a thread.
+    // The rest of the session is fully wired: it still has an identity and a thread.
     expect(session.identity.getResourceId()).toBe('resource-1');
-    await expect(session.thread.ensureId()).resolves.toBeTruthy();
+    expect(session.thread.requireId()).toBeDefined();
   });
 
   it('emits no workspace lifecycle events for a workspace-less session', async () => {

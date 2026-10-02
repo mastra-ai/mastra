@@ -43,7 +43,7 @@ describe('AgentController thread selection — session scope', () => {
     const first = createController(storage, { workspace });
     await first.init();
     const firstSession = await first.createSession({ id: 'session-1', ownerId: 'owner', resourceId: 'session-1' });
-    const threadId = await firstSession.thread.ensureId();
+    const threadId = firstSession.thread.requireId();
 
     const restarted = createController(storage, { workspace });
     await restarted.init();
@@ -61,13 +61,12 @@ describe('AgentController thread selection — session scope', () => {
     const unscoped = createController(storage, { initialState: {} });
     await unscoped.init();
     const untagged = await unscoped.createSession({ id: 'a', ownerId: 'owner', resourceId: 'shared' });
-    await untagged.thread.ensureId();
 
     const worktree = createController(storage, { initialState: { projectPath: '/wt/current' } });
     await worktree.init();
     const scoped = await worktree.createSession({ id: 'b', ownerId: 'owner', resourceId: 'shared' });
 
-    expect(scoped.thread.getId()).toBeNull();
+    expect(scoped.thread.requireId()).not.toBe(untagged.thread.requireId());
   });
 
   it('keeps worktrees on their own thread when the caller tags the scope', async () => {
@@ -82,7 +81,6 @@ describe('AgentController thread selection — session scope', () => {
       scope: '/wt/a',
       tags: { projectPath: '/wt/a' },
     });
-    await a.thread.ensureId();
     const b = await controller.createSession({
       id: 'b',
       ownerId: 'owner',
@@ -91,7 +89,7 @@ describe('AgentController thread selection — session scope', () => {
       tags: { projectPath: '/wt/b' },
     });
 
-    expect(b.thread.getId()).toBeNull();
+    expect(b.thread.requireId()).not.toBe(a.thread.requireId());
   });
 
   it('does not let an inferred scope claim a thread another scope tagged', async () => {
@@ -106,12 +104,11 @@ describe('AgentController thread selection — session scope', () => {
       scope: '/wt/a',
       tags: { projectPath: '/wt/a' },
     });
-    await tagged.thread.ensureId();
 
     const inferred = createController(storage, { initialState: { projectPath: '/wt/b' } });
     await inferred.init();
     const other = await inferred.createSession({ id: 'b', ownerId: 'owner', resourceId: 'shared' });
 
-    expect(other.thread.getId()).toBeNull();
+    expect(other.thread.requireId()).not.toBe(tagged.thread.requireId());
   });
 });

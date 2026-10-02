@@ -56,18 +56,6 @@ describe('agent-controller routes', () => {
     ({ mastra } = makeMastra());
   });
 
-  // Sessions start without a thread; bind one the way a first send would.
-  async function ensureSessionThread(
-    resourceId: string,
-    options: { scope?: string; tags?: Record<string, string> } = {},
-  ) {
-    const controller = mastra.getAgentController('code')!;
-    await controller.init();
-    const id = options.scope ? `${resourceId}::${options.scope}` : resourceId;
-    const session = await controller.createSession({ resourceId, id, ownerId: controller.id, ...options });
-    return session.thread.ensureId();
-  }
-
   describe('LIST_AGENT_CONTROLLERS_ROUTE', () => {
     it('lists registered agent controllers by id', async () => {
       const res = await LIST_AGENT_CONTROLLERS_ROUTE.handler({ mastra } as any);
@@ -82,7 +70,7 @@ describe('agent-controller routes', () => {
   });
 
   describe('CREATE_AGENT_CONTROLLER_SESSION_ROUTE', () => {
-    it('creates a session without a thread until one is needed', async () => {
+    it('creates a session and returns its resourceId and threadId', async () => {
       const res = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -91,7 +79,7 @@ describe('agent-controller routes', () => {
 
       expect(res.controllerId).toBe('code');
       expect(res.resourceId).toBe('user-1');
-      expect(res.threadId).toBeUndefined();
+      expect(typeof res.threadId).toBe('string');
     });
 
     it('is get-or-create: same resourceId resumes the same thread', async () => {
@@ -100,15 +88,13 @@ describe('agent-controller routes', () => {
         controllerId: 'code',
         resourceId: 'user-1',
       } as any)) as { threadId?: string };
-      const threadId = await ensureSessionThread('user-1');
       const second = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any)) as { threadId?: string };
 
-      expect(first.threadId).toBeUndefined();
-      expect(second.threadId).toBe(threadId);
+      expect(second.threadId).toBe(first.threadId);
     });
 
     it('binds the session to an exact thread id when requested', async () => {
@@ -149,18 +135,10 @@ describe('agent-controller routes', () => {
         sessionScope: '/repo/worktree-b',
         tags: { projectPath: '/repo/worktree-b' },
       } as any)) as { threadId?: string };
-      expect(a.threadId).toBeUndefined();
-      expect(b.threadId).toBeUndefined();
 
-      const aThreadId = await ensureSessionThread('user-wt', {
-        scope: '/repo/worktree-a',
-        tags: { projectPath: '/repo/worktree-a' },
-      });
-      const bThreadId = await ensureSessionThread('user-wt', {
-        scope: '/repo/worktree-b',
-        tags: { projectPath: '/repo/worktree-b' },
-      });
-      expect(bThreadId).not.toBe(aThreadId);
+      expect(a.threadId).toBeDefined();
+      expect(b.threadId).toBeDefined();
+      expect(b.threadId).not.toBe(a.threadId);
 
       // Get-or-create still holds within one scope.
       const aAgain = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
@@ -170,7 +148,7 @@ describe('agent-controller routes', () => {
         sessionScope: '/repo/worktree-a',
         tags: { projectPath: '/repo/worktree-a' },
       } as any)) as { threadId?: string };
-      expect(aAgain.threadId).toBe(aThreadId);
+      expect(aAgain.threadId).toBe(a.threadId);
     });
 
     it('routes with a sessionScope address the scoped session, not the unscoped one', async () => {
@@ -230,7 +208,7 @@ describe('agent-controller routes', () => {
       if (!controller) throw new Error('Expected the code agent controller');
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
-      const threadId = await session.thread.ensureId();
+      const threadId = session.thread.requireId();
       const switchThread = vi.spyOn(session.thread, 'switch');
 
       const response = await SWITCH_AGENT_CONTROLLER_THREAD_ROUTE.handler({
@@ -877,14 +855,13 @@ describe('agent-controller routes', () => {
 
   describe('GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE', () => {
     it('returns the current mode, model, and thread', async () => {
-      const threadId = await ensureSessionThread('user-1');
       const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any)) as { modeId: string; threadId?: string; running?: boolean };
       expect(res.modeId).toBe('build');
-      expect(res.threadId).toBe(threadId);
+      expect(typeof res.threadId).toBe('string');
       // Idle session: hydration snapshot reports not running.
       expect(res.running).toBe(false);
     });
@@ -907,7 +884,7 @@ describe('agent-controller routes', () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
-      const threadId = await session.thread.ensureId();
+      const threadId = session.thread.requireId();
       const tasks = [
         { id: 'investigate', content: 'Investigate the bug', status: 'completed', activeForm: 'Investigating the bug' },
         { id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
@@ -929,7 +906,7 @@ describe('agent-controller routes', () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
-      const currentThreadId = await session.thread.ensureId();
+      const currentThreadId = session.thread.requireId();
       const requestedThread = await session.thread.create({ title: 'Requested thread' });
       await session.thread.switch({ threadId: currentThreadId });
       const tasks = [
@@ -968,7 +945,11 @@ describe('agent-controller routes', () => {
   describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
     it('returns persisted messages in the MastraDBMessage shape (nested content.parts)', async () => {
       // Given a session/thread with a persisted assistant DB message
-      const created = { threadId: await ensureSessionThread('user-msg-shape') };
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-msg-shape',
+      } as any)) as { threadId: string };
       const threadId = created.threadId;
 
       const memory = await mastra.getStorage()!.getStore('memory');
@@ -1150,7 +1131,11 @@ describe('agent-controller routes', () => {
     });
 
     it('forwards request context to memory FGA checks', async () => {
-      const created = { threadId: await ensureSessionThread('fga-user') };
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'fga-user',
+      } as any)) as { threadId: string };
       const require = vi.fn().mockResolvedValue(undefined);
       vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
       const requestContext = new RequestContext();
@@ -1178,7 +1163,11 @@ describe('agent-controller routes', () => {
 
     it('preserves signal-role messages with their data parts', async () => {
       // Given a session/thread with a persisted signal DB message
-      const created = { threadId: await ensureSessionThread('user-signal-shape') };
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-signal-shape',
+      } as any)) as { threadId: string };
       const threadId = created.threadId;
 
       const memory = await mastra.getStorage()!.getStore('memory');
@@ -1240,15 +1229,19 @@ describe('agent-controller routes', () => {
   });
 
   describe('LIST_AGENT_CONTROLLER_THREADS_ROUTE', () => {
-    it('lists the session threads', async () => {
-      const threadId = await ensureSessionThread('user-1');
+    it('lists the session threads (at least the auto-created one)', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any)) as { threads: { id: string }[] };
       expect(Array.isArray(res.threads)).toBe(true);
-      expect(res.threads.map(thread => thread.id)).toEqual([threadId]);
+      expect(res.threads.length).toBeGreaterThanOrEqual(1);
     });
 
     it('caps the result to `limit`, newest first', async () => {
@@ -1314,13 +1307,14 @@ describe('agent-controller routes', () => {
       } as any)) as { threads: { title?: string }[] };
       expect(onlyB.threads.map(t => t.title)).toEqual(['b1']);
 
-      // Without tags, every thread for the resource is returned.
+      // Without tags, every thread for the resource is returned (including the
+      // untagged auto-created startup thread).
       const all = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'user-wt',
       } as any)) as { threads: unknown[] };
-      expect(all.threads).toHaveLength(3);
+      expect(all.threads.length).toBeGreaterThanOrEqual(3);
     });
 
     it('keeps persisted session preferences out of a thread\u2019s tags', async () => {
@@ -1456,13 +1450,17 @@ describe('agent-controller routes', () => {
     // threadId path param is otherwise unscoped. These routes must not let a
     // session act on a thread owned by a different resourceId.
     async function setupTwoSessions() {
-      const victimThreadId = await ensureSessionThread('victim');
+      const victim = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'victim',
+      } as any)) as { threadId?: string };
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
         resourceId: 'attacker',
       } as any);
-      return { victimThreadId };
+      return { victimThreadId: victim.threadId! };
     }
 
     it('DELETE rejects a thread owned by another resource', async () => {

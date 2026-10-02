@@ -260,7 +260,7 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
 
 interface ThreadSwitchSession {
   thread: {
-    getId(): string | null;
+    requireId(): string;
     switch(input: { threadId: string }): Promise<unknown>;
   };
 }
@@ -1487,7 +1487,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
-    if (session.thread.getId() === binding.threadId) return;
+    if (session.thread.requireId() === binding.threadId) return;
     await session.thread.switch({ threadId: binding.threadId });
   }
 

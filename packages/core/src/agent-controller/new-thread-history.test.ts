@@ -16,7 +16,7 @@ class StrictMemory extends MockMemory {
 }
 
 describe('AgentController history subscription on a new thread', () => {
-  it('creates a thread that memory does not hold yet', async () => {
+  it('creates a session whose thread memory does not hold yet', async () => {
     const controller = new AgentController({
       workspace: createMockWorkspace(),
       id: 'test-controller',
@@ -41,6 +41,6 @@ describe('AgentController history subscription on a new thread', () => {
 
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    await expect(session.thread.ensureId()).resolves.toBeTruthy();
+    expect(session.thread.getId()).toBeTruthy();
   });
 });

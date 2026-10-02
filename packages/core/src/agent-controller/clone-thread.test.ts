@@ -298,10 +298,10 @@ describe('AgentController cloneThread', () => {
 
     await controller.init();
 
-    // The thread's history subscription resolves memory, so the empty factory
-    // surfaces when the session first creates a thread.
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    await expect(session.thread.ensureId()).rejects.toThrow('Function-based memory returned empty value');
+    // The session's history subscription resolves memory, so the empty factory surfaces there.
+    await expect(controller.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
+      'Function-based memory returned empty value',
+    );
   });
 
   it.each([

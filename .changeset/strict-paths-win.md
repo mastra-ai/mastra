@@ -2,18 +2,11 @@
 '@mastra/core': minor
 ---
 
-Fixed agent controller sessions creating an empty thread when no matching thread existed. `createSession()` now binds to the most recent matching thread, or leaves the session without a thread until it is needed. Sending a message or signal creates the thread on demand, so a session that is opened and closed without use no longer leaves an empty thread in storage. Passing an exact `threadId` still creates that thread immediately.
-
-Added `session.thread.ensureId()`, which returns the current thread ID and creates a thread first if the session has none. Concurrent calls share one thread.
-
-If your code reads the thread ID right after creating a session, use `ensureId()`. `requireId()` throws until a thread exists.
+Added a `createSession()` option to start a session without creating a thread, and `session.thread.ensureId()` to create one on first use. Sessions that are never used no longer leave empty threads behind. Sending a message or signal creates the thread automatically. The default is unchanged: sessions still get a thread when none matches.
 
 ```ts
-// Before
-const session = await controller.createSession({ resourceId });
-const threadId = session.thread.requireId();
+const session = await controller.createSession({ createInitialThread: false });
 
-// After
-const session = await controller.createSession({ resourceId });
+// Returns the current thread, or creates one. Concurrent calls share one thread.
 const threadId = await session.thread.ensureId();
 ```

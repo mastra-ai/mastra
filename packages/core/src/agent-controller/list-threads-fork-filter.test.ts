@@ -50,6 +50,8 @@ describe('AgentController listThreads — forked subagent filter', () => {
     const controller = createController('rid-1');
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(controller, { id: 'normal-1', resourceId: 'rid-1', title: 'Normal' });
     await writeThreadDirect(controller, {
@@ -68,6 +70,8 @@ describe('AgentController listThreads — forked subagent filter', () => {
     const controller = createController('rid-2');
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(controller, { id: 'normal-2', resourceId: 'rid-2' });
     await writeThreadDirect(controller, {
@@ -87,6 +91,8 @@ describe('AgentController listThreads — forked subagent filter', () => {
     const controller = createController('rid-3');
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(controller, { id: 'a-normal', resourceId: 'rid-other' });
     await writeThreadDirect(controller, {
@@ -105,6 +111,8 @@ describe('AgentController listThreads — forked subagent filter', () => {
     const controller = createController('rid-4');
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(controller, { id: 't-undef', resourceId: 'rid-4' });
     await writeThreadDirect(controller, { id: 't-false', resourceId: 'rid-4', metadata: { forkedSubagent: false } });

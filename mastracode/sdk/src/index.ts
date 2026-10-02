@@ -312,6 +312,8 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Create a thread during local boot when no existing thread matches. Default: true */
+  createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
     | string
@@ -1828,7 +1830,11 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
   base.startNotificationDispatch();
-  const session = await controller.createSession({ id: sessionId, ownerId });
+  const session = await controller.createSession({
+    id: sessionId,
+    ownerId,
+    createInitialThread: config?.createInitialThread,
+  });
   await wireSessionConcerns(base, session);
   const knowledgeInspector = await base.createKnowledgeInspector(session);
 

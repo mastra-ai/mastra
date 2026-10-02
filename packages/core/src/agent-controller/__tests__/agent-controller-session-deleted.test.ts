@@ -32,7 +32,7 @@ describe('AgentController.deleteSession', () => {
     const controller = createController(storage, { acquire: vi.fn(), release });
     await controller.init();
     const session = await controller.createSession({ resourceId: 'resource-1' });
-    const threadId = await session.thread.ensureId();
+    const threadId = session.thread.requireId();
     const deleted = vi.fn();
     controller.onSessionDeleted(deleted);
     const abort = vi.spyOn(session, 'abort');
@@ -52,7 +52,7 @@ describe('AgentController.deleteSession', () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
     const first = await controller.createSession({ resourceId: 'resource-1' });
-    const threadId = await first.thread.ensureId();
+    const threadId = first.thread.requireId();
 
     await controller.deleteSession({ resourceId: 'resource-1' });
     const rematerialized = await controller.createSession({ resourceId: 'resource-1' });
@@ -121,7 +121,7 @@ describe('AgentController.deleteSession', () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
     const original = await controller.createSession({ resourceId: 'resource-1' });
-    const threadId = await original.thread.ensureId();
+    const threadId = original.thread.requireId();
 
     // Fire create and delete concurrently for the same resource. Without the
     // race guard, createSession would await the same cached promise as
@@ -198,7 +198,6 @@ describe('AgentController.deleteSession', () => {
     });
     await controller.init();
     const session = await controller.createSession({ resourceId: 'resource-1' });
-    await session.thread.ensureId();
 
     // Start deletion — it will block at clearAndReleaseLock.
     const deletionPromise = controller.deleteSession({ resourceId: 'resource-1' });
@@ -230,7 +229,6 @@ describe('AgentController.deleteSession', () => {
     });
     await controller.init();
     const session = await controller.createSession({ resourceId: 'resource-1' });
-    await session.thread.ensureId();
     const deleted = vi.fn();
     controller.onSessionDeleted(deleted);
 

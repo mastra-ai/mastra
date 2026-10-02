@@ -96,6 +96,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
 
   const initialState = resolveInitialStateFromEnv();
   const result = await createMastraCode({
+    createInitialThread: false,
     coAuthor: TUI_CO_AUTHOR,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),

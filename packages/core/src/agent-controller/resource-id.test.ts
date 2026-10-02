@@ -102,6 +102,9 @@ describe('AgentController resource ID', () => {
       const ctx = await createSession({ storage });
       controller = ctx.controller;
       session = ctx.session;
+      // Drop the auto-created starter thread so resource-id assertions only
+      // reflect threads explicitly created by each test.
+      await session.thread.delete({ threadId: session.thread.getId()! });
     });
 
     it('returns an empty array when no threads exist', async () => {
