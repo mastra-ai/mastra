@@ -186,8 +186,14 @@ describe('ThreadTrace', () => {
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
-      // No close button on the span panel: re-clicking the selected span toggles it off.
+      // Re-clicking the selected span toggles it off...
       fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
+
+      // ...and so does the panel's close button.
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
       expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
       expect(getRow('trace-a').dataset.active).toBeUndefined();
