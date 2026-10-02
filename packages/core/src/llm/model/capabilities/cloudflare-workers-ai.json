@@ -1,7 +1,5 @@
 {
   "attachment": [
-    "@cf/cloudflare/clef",
-    "@cf/cloudflare/clef-flash",
     "@cf/google/gemma-4-26b-a4b-it",
     "@cf/meta/llama-3.2-11b-vision-instruct",
     "@cf/meta/llama-4-scout-17b-16e-instruct",
@@ -12,8 +10,6 @@
   ],
   "temperature": [
     "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
-    "@cf/cloudflare/clef",
-    "@cf/cloudflare/clef-flash",
     "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
     "@cf/deepseek-ai/deepseek-v4-flash-0731",
     "@cf/deepseek-ai/deepseek-v4-pro-0813",
@@ -42,8 +38,6 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "structuredOutput": [
-    "@cf/cloudflare/clef",
-    "@cf/cloudflare/clef-flash",
     "@cf/deepseek-ai/deepseek-v4-flash-0731",
     "@cf/deepseek-ai/deepseek-v4-pro-0813",
     "@cf/google/gemma-4-26b-a4b-it",
