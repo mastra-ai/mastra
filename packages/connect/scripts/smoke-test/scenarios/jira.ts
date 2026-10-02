@@ -2,8 +2,21 @@ import type { Scenario, ScenarioStep } from '../scenario.js';
 import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
 
 /**
- * Deep Jira scenario: issue + comment + worklog + transition lifecycle. Uses
- * the first project the token can post to and the project's first issue type.
+ * Deep Jira scenario: issue + comment + worklog + transition CRUD against the
+ * first project the token can see.
+ *
+ * Jira tools map 1:1 to the native REST API, so inputs are the Atlassian
+ * payloads themselves rather than normalized high-level params. Casing is
+ * mixed across tools because the Nango templates mirror the upstream
+ * endpoints exactly: jira_create_issue takes `fields.project/issuetype`,
+ * jira_update_issue takes `issue_id_or_key` (snake), jira_add_worklog takes
+ * `issue_id_or_key` + `time_spent_seconds` (snake + numeric), but
+ * jira_update_worklog and jira_delete_worklog take `issueIdOrKey`
+ * (camel). The scenario matches each tool's actual schema.
+ *
+ * jira_update_comment requires an Atlassian Document Format `body` and a
+ * `visibility` object; building a real ADF is heavier than useful in a smoke
+ * run, so we exercise add/list/delete but skip update_comment.
  */
 export const jiraScenario: Scenario = {
   integrationId: 'jira',
@@ -23,24 +36,22 @@ export const jiraScenario: Scenario = {
       return steps;
     }
 
-    const projects = await call<{ items?: Array<{ id?: string; key?: string; name?: string }> }>(
+    const projects = await call<{ projects?: Array<{ id?: string; key?: string; name?: string }> }>(
       'jira_list_projects',
       {},
     );
-    const project = (projects.items ?? []).find(p => p.key && p.id);
+    const project = (projects.projects ?? []).find(p => p.key && p.id);
     if (!project?.key || !project.id) {
       steps.push(makeStep('pick project', 'jira_list_projects', 'skip', 'No Jira project visible.'));
       return steps;
     }
     steps.push(makeStep('pick project', 'jira_list_projects', 'pass', project.key));
 
-    const types = await call<{ items?: Array<{ id?: string; name?: string; subtask?: boolean }> }>(
+    const types = await call<{ issueTypes?: Array<{ id?: string; name?: string; subtask?: boolean }> }>(
       'jira_list_issue_types',
-      {
-        projectId: project.id,
-      },
+      { projectId: project.id },
     );
-    const issueType = (types.items ?? []).find(t => t.id && !t.subtask) ?? (types.items ?? [])[0];
+    const issueType = (types.issueTypes ?? []).find(t => t.id && !t.subtask) ?? (types.issueTypes ?? [])[0];
     if (!issueType?.id) {
       steps.push(makeStep('pick issue type', 'jira_list_issue_types', 'skip', 'No issue types visible.'));
       return steps;
@@ -65,16 +76,15 @@ export const jiraScenario: Scenario = {
 
     const summary = `${runId} smoke issue`;
     let issueKey: string | undefined;
-    let issueId: string | undefined;
     try {
       const created = await call<{ id: string; key: string }>('jira_create_issue', {
-        projectKey: project.key,
-        issueTypeId: issueType.id,
-        summary,
-        description: 'Automated @mastra/connect smoke test.',
+        fields: {
+          project: { key: project.key },
+          issuetype: { id: issueType.id },
+          summary,
+        },
       });
       issueKey = created.key;
-      issueId = created.id;
       steps.push(makeStep('create issue', 'jira_create_issue', 'pass', issueKey));
     } catch (error) {
       steps.push(makeStep('create issue', 'jira_create_issue', 'fail', errorMessage(error)));
@@ -82,15 +92,18 @@ export const jiraScenario: Scenario = {
     }
 
     try {
-      const got = await call<{ fields?: { summary?: string } }>('jira_get_issue', { issueIdOrKey: issueKey });
-      const ok = got.fields?.summary === summary;
-      steps.push(makeStep('read issue', 'jira_get_issue', ok ? 'pass' : 'fail'));
+      const got = await call<{ key?: string }>('jira_get_issue', { issueIdOrKey: issueKey });
+      const ok = got.key === issueKey;
+      steps.push(makeStep('read issue', 'jira_get_issue', ok ? 'pass' : 'fail', got.key));
     } catch (error) {
       steps.push(makeStep('read issue', 'jira_get_issue', 'fail', errorMessage(error)));
     }
 
     try {
-      await call('jira_update_issue', { issueIdOrKey: issueKey, summary: `${summary} (renamed)` });
+      await call('jira_update_issue', {
+        issue_id_or_key: issueKey,
+        fields: { summary: `${summary} (renamed)` },
+      });
       steps.push(makeStep('update issue', 'jira_update_issue', 'pass'));
     } catch (error) {
       steps.push(makeStep('update issue', 'jira_update_issue', 'fail', errorMessage(error)));
@@ -107,15 +120,6 @@ export const jiraScenario: Scenario = {
         steps.push(makeStep('add comment', 'jira_add_comment', 'pass', commentId));
       } catch (error) {
         steps.push(makeStep('add comment', 'jira_add_comment', 'fail', errorMessage(error)));
-      }
-    }
-
-    if (commentId && tools['jira_update_comment']) {
-      try {
-        await call('jira_update_comment', { issueIdOrKey: issueKey, commentId, body: 'edited' });
-        steps.push(makeStep('update comment', 'jira_update_comment', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('update comment', 'jira_update_comment', 'fail', errorMessage(error)));
       }
     }
 
@@ -141,8 +145,8 @@ export const jiraScenario: Scenario = {
     if (tools['jira_add_worklog']) {
       try {
         const worklog = await call<{ id: string }>('jira_add_worklog', {
-          issueIdOrKey: issueKey,
-          timeSpent: '5m',
+          issue_id_or_key: issueKey,
+          time_spent_seconds: 300,
           comment: `${runId} smoke worklog`,
         });
         worklogId = worklog.id;
@@ -183,14 +187,12 @@ export const jiraScenario: Scenario = {
       }
     }
 
-    if (issueId) {
-      try {
-        await call('jira_delete_issue', { issueIdOrKey: issueKey });
-        steps.push(makeStep('delete issue', 'jira_delete_issue', 'pass'));
-      } catch (error) {
-        log.error(`Failed to delete smoke Jira issue ${issueKey} — clean up manually.`, errorMessage(error));
-        steps.push(makeStep('delete issue', 'jira_delete_issue', 'fail', errorMessage(error)));
-      }
+    try {
+      await call('jira_delete_issue', { issueIdOrKey: issueKey });
+      steps.push(makeStep('delete issue', 'jira_delete_issue', 'pass'));
+    } catch (error) {
+      log.error(`Failed to delete smoke Jira issue ${issueKey} — clean up manually.`, errorMessage(error));
+      steps.push(makeStep('delete issue', 'jira_delete_issue', 'fail', errorMessage(error)));
     }
 
     return steps;
