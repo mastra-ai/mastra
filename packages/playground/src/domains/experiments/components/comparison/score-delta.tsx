@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 
@@ -12,10 +13,10 @@ interface ScoreDeltaProps {
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
   const tone =
-    delta > 0 ? 'text-success-indicator' : delta < 0 ? 'text-destructive-indicator' : 'text-muted-foreground';
+    delta > 0 ? 'text-success-indicator' : delta < 0 ? 'text-destructive-foreground' : 'text-muted-foreground';
 
   return (
-    <span className={cn('inline-flex min-w-20 items-center gap-1 text-body tabular-nums', tone)}>
+    <Txt as="span" className={cn('inline-flex min-w-20 items-center gap-1 tabular-nums', tone)}>
       <span className="inline-block w-3">{delta > 0 ? '+' : delta < 0 ? '-' : ''}</span>
       {Math.abs(delta).toFixed(2)}
       {delta > 0 ? (
@@ -23,6 +24,6 @@ export function ScoreDelta({ delta }: ScoreDeltaProps) {
       ) : delta < 0 ? (
         <ArrowDownRightIcon className="size-3.5" />
       ) : null}
-    </span>
+    </Txt>
   );
 }

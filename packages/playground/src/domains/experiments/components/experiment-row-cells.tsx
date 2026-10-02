@@ -1,6 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
@@ -27,30 +27,30 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
 
   return (
     <>
-      <EntityList.Cell>
+      <DataList.Cell>
         <ExperimentNameLabel experiment={exp} />
-      </EntityList.Cell>
-      <EntityList.Cell>
+      </DataList.Cell>
+      <DataList.Cell>
         <ExperimentDescriptionLabel experiment={exp} />
-      </EntityList.Cell>
-      {datasetName !== undefined && <EntityList.TextCell>{datasetName}</EntityList.TextCell>}
-      <EntityList.Cell>
+      </DataList.Cell>
+      {datasetName !== undefined && <DataList.TextCell>{datasetName}</DataList.TextCell>}
+      <DataList.Cell>
         <ExperimentTargetCell experiment={exp} />
-      </EntityList.Cell>
-      <EntityList.Cell>
+      </DataList.Cell>
+      <DataList.Cell>
         <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
           {STATUS_LABEL[status] ?? status}
         </Badge>
-      </EntityList.Cell>
-      <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">{succeeded}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">
-        <span className={failed > 0 ? 'text-destructive-indicator' : ''}>{failed}</span>
-      </EntityList.TextCell>
-      <EntityList.Cell className="text-center">
+      </DataList.Cell>
+      <DataList.TextCell className="text-center">{total}</DataList.TextCell>
+      <DataList.TextCell className="text-center">{succeeded}</DataList.TextCell>
+      <DataList.TextCell className="text-center">
+        <span className={failed > 0 ? 'text-destructive-foreground' : ''}>{failed}</span>
+      </DataList.TextCell>
+      <DataList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
-      </EntityList.Cell>
-      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
+      </DataList.Cell>
+      <DataList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</DataList.TextCell>
     </>
   );
 }

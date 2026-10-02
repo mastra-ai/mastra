@@ -1,6 +1,6 @@
 import { hashLabel } from '@/lib/colors';
 
-type SignalHue = 'green' | 'orange' | 'blue' | 'purple' | 'pink' | 'yellow';
+type SignalHue = 'green' | 'orange' | 'blue' | 'purple' | 'pink' | 'amber';
 
 const SIGNAL_HUES: Record<string, SignalHue> = {
   goal: 'green',
@@ -9,15 +9,15 @@ const SIGNAL_HUES: Record<string, SignalHue> = {
   sentiment: 'purple',
 };
 
-const CUSTOM_SIGNAL_HUES: SignalHue[] = ['pink', 'yellow'];
+const CUSTOM_SIGNAL_HUES: SignalHue[] = ['pink', 'amber'];
 
 const SIGNAL_AREA_CLASS: Record<SignalHue, string> = {
-  green: 'fill-badge-green-subtle',
-  orange: 'fill-badge-orange-subtle',
-  blue: 'fill-badge-blue-subtle',
-  purple: 'fill-badge-purple-subtle',
-  pink: 'fill-badge-pink-subtle',
-  yellow: 'fill-badge-yellow-subtle',
+  green: 'fill-badge-green-strong',
+  orange: 'fill-badge-orange-strong',
+  blue: 'fill-badge-blue-strong',
+  purple: 'fill-badge-purple-strong',
+  pink: 'fill-badge-pink-strong',
+  amber: 'fill-badge-amber-strong',
 };
 
 const SIGNAL_CONNECTOR_CLASS: Record<SignalHue, string> = {
@@ -26,7 +26,7 @@ const SIGNAL_CONNECTOR_CLASS: Record<SignalHue, string> = {
   blue: 'stroke-badge-blue-edge',
   purple: 'stroke-badge-purple-edge',
   pink: 'stroke-badge-pink-edge',
-  yellow: 'stroke-badge-yellow-edge',
+  amber: 'stroke-badge-amber-edge',
 };
 
 function getSignalHue(signalName: string): SignalHue {

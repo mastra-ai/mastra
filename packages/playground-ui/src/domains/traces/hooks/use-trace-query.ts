@@ -35,6 +35,8 @@ export interface UseTraceQueryReturn {
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
   isLoading: boolean;
+  /** The rows belong to the previous query key (e.g. another thread) while the new one loads. */
+  isPlaceholderData: boolean;
   isFetching: boolean;
   isRefetching: boolean;
   fetchStatus: 'idle' | 'fetching' | 'paused';
@@ -62,7 +64,7 @@ export function selectTraceQueryTraces(data: { pages: TraceQueryKeysetTraceRespo
 const toIsoString = (value: Date | string): string => (typeof value === 'string' ? value : value.toISOString());
 
 /** Maps a legacy light root span to a trace-query row. The light record carries no
- *  thread/resource/environment, so those stay null. Running spans have no `endedAt` and may carry a
+ *  environment, so it stays null. Running spans have no `endedAt` and may carry a
  *  status outside the query API's enum; both are kept as-is (the list view handles them), hence the
  *  assertion at this compatibility boundary. */
 export function lightSpanToTraceQueryTrace(span: LightSpanRecord): TraceQueryTrace {
@@ -75,8 +77,8 @@ export function lightSpanToTraceQueryTrace(span: LightSpanRecord): TraceQueryTra
     createdAt: toIsoString(span.createdAt),
     metadata: span.metadata ?? null,
     inputPreview: span.inputPreview ?? null,
-    threadId: null,
-    resourceId: null,
+    threadId: span.threadId ?? null,
+    resourceId: span.resourceId ?? null,
     startedAt: toIsoString(span.startedAt),
     endedAt: span.endedAt == null ? span.endedAt : toIsoString(span.endedAt),
     entityName: span.entityName ?? null,
@@ -167,6 +169,7 @@ export function useTraceQuery({
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
+    isPlaceholderData,
     isFetching,
     isRefetching,
     fetchStatus,
@@ -188,6 +191,7 @@ export function useTraceQuery({
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
+    isPlaceholderData,
     isFetching,
     isRefetching,
     fetchStatus,

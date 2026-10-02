@@ -68,22 +68,41 @@ import {
   unsubscribeCurrentSessionFromPullRequest,
   upsertFactoryTriageComment,
 } from './session-subscriptions.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './token-refresh.js';
+import { registerGithubPatKind, registerGithubRefreshTarget, registerGithubTokenInjector } from './token-refresh.js';
 
-function authenticatedRequestContext(scope = '/worktrees/a') {
+function authenticatedRequestContext(
+  scope = '/worktrees/a',
+  state: { factoryProjectId?: string; projectRepositoryId?: string } = {
+    factoryProjectId: 'resource-1',
+    projectRepositoryId: 'project-repository-1',
+  },
+  threadId: string | undefined = 'thread-1',
+) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
   requestContext.set('controller', {
     resourceId: 'resource-1',
-    threadId: 'thread-1',
+    threadId,
     scope,
     session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
-    getState: () => ({ factoryProjectId: 'resource-1', projectRepositoryId: 'project-repository-1' }),
+    getState: () => state,
   });
   return requestContext;
 }
 
+/** A request the workspace resolver authorized for a GitHub-backed session. */
+function refreshableRequestContext(
+  inject: ((token: string) => void) | null = vi.fn(),
+  state?: { factoryProjectId?: string; projectRepositoryId?: string },
+) {
+  const requestContext = authenticatedRequestContext('/worktrees/a', state);
+  registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1' });
+  if (inject) registerGithubTokenInjector(requestContext, inject);
+  return requestContext;
+}
+
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   delete integrationStorage.settings;
 });
@@ -156,27 +175,65 @@ describe('parseCreatedPullRequest', () => {
 });
 
 describe('GitHub subscription entry points', () => {
-  it('does not expose tools without authenticated repository context', () => {
+  it.each([
+    { user: undefined, resourceId: 'resource-1' },
+    { user: { workosId: 'user-1' }, resourceId: 'resource-1' },
+    { user: { organizationId: 'org-1' }, resourceId: 'resource-1' },
+  ])('does not expose tools without authenticated identity: %o', ({ user, resourceId }) => {
     const requestContext = new RequestContext();
-    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
-
+    if (user) requestContext.set('user', user);
+    requestContext.set('controller', {
+      resourceId,
+      getState: () => ({ projectRepositoryId: 'project-repository-1' }),
+    });
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
-  it('does not expose tools without an active thread', () => {
-    const requestContext = new RequestContext();
-    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    requestContext.set('controller', { getState: () => ({ projectRepositoryId: 'project-repository-1' }) });
+  it('exposes only repository tools without a registered GitHub refresh target', () => {
+    expect(Object.keys(createGithubSubscriptionTools(authenticatedRequestContext(), githubStub))).toEqual([
+      'github_upsert_factory_triage_comment',
+      'github_subscribe_pr',
+      'github_unsubscribe_pr',
+    ]);
+  });
 
+  it('does not expose refresh to chat-only or non-GitHub sessions', () => {
+    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    registerGithubTokenInjector(requestContext, vi.fn());
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
 
-  it('mints repository access and injects the fresh token into the active sandbox', async () => {
+  it('exposes refresh for a GitHub-backed session without repository controller state', async () => {
+    const inject = vi.fn();
+    const requestContext = refreshableRequestContext(inject, {});
+    const tools = createGithubSubscriptionTools(requestContext, githubStub);
+    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    await expect(tools.github_refresh_token!.execute!({}, {} as never)).resolves.toEqual({ refreshed: true });
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
+  });
+
+  it('exposes refresh before sandbox start but refuses to read credentials without its injector', async () => {
+    const requestContext = refreshableRequestContext(null);
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('active Factory sandbox workspace');
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('rejects direct refresh without a registered GitHub target before reading credentials', async () => {
     const requestContext = authenticatedRequestContext();
     const inject = vi.fn();
     registerGithubTokenInjector(requestContext, inject);
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    await expect(refreshGithubToken(requestContext, githubStub)).rejects.toThrow('not backed by a GitHub workspace');
+    expect(integrationStorage.settings.get).not.toHaveBeenCalled();
+    expect(inject).not.toHaveBeenCalled();
+  });
 
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+  it('mints repository access and injects the fresh token into the active sandbox', async () => {
+    const inject = vi.fn();
+    await expect(refreshGithubToken(refreshableRequestContext(inject), githubStub)).resolves.toBeUndefined();
 
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
     expect(inject).toHaveBeenCalledWith('fresh-gh-token');
@@ -184,11 +241,8 @@ describe('GitHub subscription entry points', () => {
 
   it('re-injects a configured org PAT instead of minting an installation token', async () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_org_pat' })) };
-    const requestContext = authenticatedRequestContext();
     const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
-
-    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+    await expect(refreshGithubToken(refreshableRequestContext(inject), githubStub)).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledWith('ghp_org_pat');
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
@@ -196,14 +250,46 @@ describe('GitHub subscription entry points', () => {
 
   it('re-injects the reviewer PAT when the sandbox was provisioned as a reviewer', async () => {
     integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker', reviewerPat: 'ghp_reviewer' })) };
-    const requestContext = authenticatedRequestContext();
     const inject = vi.fn();
-    registerGithubTokenInjector(requestContext, inject);
+    const requestContext = refreshableRequestContext(inject);
     registerGithubPatKind(requestContext, 'reviewer');
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledWith('ghp_reviewer');
+  });
+
+  it('falls back from an absent reviewer PAT to the worker PAT', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    const inject = vi.fn();
+    const requestContext = refreshableRequestContext(inject);
+    registerGithubPatKind(requestContext, 'reviewer');
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(inject).toHaveBeenCalledWith('ghp_worker');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+  });
+
+  it('refuses missing repository bearer tokens without claiming success', async () => {
+    mocks.getRepositoryAccess.mockResolvedValueOnce({
+      cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+      authorization: { scheme: 'bearer', token: '' },
+    });
+    const inject = vi.fn();
+    const tool = createGithubSubscriptionTools(refreshableRequestContext(inject), githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('did not include a bearer token');
+    expect(inject).not.toHaveBeenCalled();
+  });
+
+  it('propagates injector failures without returning token material', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_secret' })) };
+    const requestContext = refreshableRequestContext(() => {
+      throw new Error('sandbox retired');
+    });
+    const tool = createGithubSubscriptionTools(requestContext, githubStub).github_refresh_token!;
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow('sandbox retired');
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

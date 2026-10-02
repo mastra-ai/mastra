@@ -2,18 +2,17 @@
 import '@/test/jsdom-polyfills';
 import type { AutoFormFieldProps } from '@autoform/react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { FormHTMLAttributes, PropsWithChildren } from 'react';
+import type { PropsWithChildren } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { Form } from '../components/form';
 import { CustomAutoForm } from '../custom-auto-form';
 import { DynamicForm } from '../dynamic-form';
 import { CustomZodProvider } from '../zod-provider';
 
 const uiComponents = {
-  Form: ({ children, ...props }: PropsWithChildren<FormHTMLAttributes<HTMLFormElement>>) => (
-    <form {...props}>{children}</form>
-  ),
+  Form,
   FieldWrapper: ({ label, children }: PropsWithChildren<{ label: string }>) => (
     <label>
       {label}

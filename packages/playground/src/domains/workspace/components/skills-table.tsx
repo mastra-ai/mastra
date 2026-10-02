@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
@@ -104,7 +105,7 @@ export function SkillsTable({
 
       {hasUndiscoveredAgentSkills && (
         <div className="flex items-start gap-3 rounded-lg border border-warning-edge bg-warning-subtle p-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-indicator" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-foreground" />
           <div className="text-body">
             <p className="font-medium text-warning-subtle-foreground">Skills installed but not discovered</p>
             <p className="mt-1 text-muted-foreground">
@@ -217,11 +218,13 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
         <div className="mb-4 rounded-full bg-muted p-4">
           <CircleSlashIcon className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h2 className="mb-2 text-heading text-foreground">Skills Not Configured</h2>
-        <p className="mb-6 text-body text-muted-foreground">
+        <Txt as="h2" variant="heading" tone="ink" className="mb-2">
+          Skills Not Configured
+        </Txt>
+        <Txt tone="muted" className="mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
-        </p>
+        </Txt>
         <div className="flex gap-3">
           {onAddSkill && (
             <Button size="lg" variant="default" onClick={onAddSkill} icon={<Plus />}>

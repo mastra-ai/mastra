@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import {
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
-import { Segmented } from './SettingsFields';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -22,12 +22,6 @@ function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === false) return 'off';
   return 'auto';
 }
-
-const ATTACHMENT_OPTIONS: { value: AttachmentChoice; label: string }[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'on', label: 'On' },
-  { value: 'off', label: 'Off' },
-];
 
 function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
@@ -125,7 +119,7 @@ export function OMSection({
   return (
     <>
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-indicator px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground px-4 py-3">
           {error}
         </Txt>
       )}
@@ -142,27 +136,23 @@ export function OMSection({
       )}
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.observerModelId ?? ''}
-            placeholder="Select observer model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('observer', modelId)}
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.observerModelId ?? ''}
+          placeholder="Select observer model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('observer', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
-        <div className="w-full max-w-72">
-          <ModelCombobox
-            models={models}
-            value={config?.reflectorModelId ?? ''}
-            placeholder="Select reflector model…"
-            disabled={busy}
-            onValueChange={modelId => switchModel('reflector', modelId)}
-          />
-        </div>
+        <ModelCombobox
+          models={models}
+          value={config?.reflectorModelId ?? ''}
+          placeholder="Select reflector model…"
+          disabled={busy}
+          onValueChange={modelId => switchModel('reflector', modelId)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
@@ -199,13 +189,16 @@ export function OMSection({
       </SettingsRow>
 
       <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
-        <Segmented
-          ariaLabel="Observe attachments"
+        <SegmentedControl
+          aria-label="Observe attachments"
           value={attachmentChoice}
-          options={ATTACHMENT_OPTIONS}
           disabled={busy || !config}
-          onChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-        />
+          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+        >
+          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+          <SegmentedControlItem value="on">On</SegmentedControlItem>
+          <SegmentedControlItem value="off">Off</SegmentedControlItem>
+        </SegmentedControl>
       </SettingsRow>
     </>
   );

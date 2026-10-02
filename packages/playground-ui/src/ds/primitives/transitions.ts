@@ -40,17 +40,14 @@ export const hoverEffects = {
   lift: 'hover:bg-foreground/10',
 } as const;
 
-// Focus ring styles
-export const focusRing = {
-  // Standard focus ring with glow
-  default: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus focus:shadow-focus-ring',
-  // Focus ring without glow
-  simple: 'focus:outline-hidden focus:ring-1 focus:ring-border-focus',
-  // Focus visible only (keyboard navigation)
-  visible:
-    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:shadow-focus-ring',
-} as const;
+// An outline, not a ring: `ring-*` rewrites box-shadow and would erase a raised surface's rim and elevation.
+const focusLine = 'focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-border-focus';
+
+export const focusRing = `${focusLine} focus-visible:outline-offset-0`;
+
+export const focusRingInset = `${focusLine} focus-visible:-outline-offset-1`;
+
+export const focusRingOffset = `${focusLine} focus-visible:outline-offset-2`;
 
 export type TransitionPreset = keyof typeof transitions;
 export type HoverEffect = keyof typeof hoverEffects;
-export type FocusRingStyle = keyof typeof focusRing;

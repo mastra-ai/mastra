@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { FlaskConicalIcon } from 'lucide-react';
@@ -33,24 +34,25 @@ export function ExperimentalUIManager({ pathname }: { pathname?: string }) {
       <PopoverContent side="top" align="start" className="w-auto p-4">
         <div className="grid gap-4">
           {visibleExperiments.map(experiment => (
-            <div key={experiment.key}>
-              <span className="text-body text-muted-foreground">{experiment.name}</span>
-              <RadioGroup
-                value={getVariant(experiment.key)}
-                onValueChange={(v: string) => setVariant(experiment.key, v)}
-                className="mt-2"
+            <Field key={experiment.key}>
+              <Fieldset
+                className="gap-2"
+                render={
+                  <RadioGroup
+                    value={getVariant(experiment.key)}
+                    onValueChange={(v: string) => setVariant(experiment.key, v)}
+                  />
+                }
               >
+                <FieldsetLegend className="text-body text-muted-foreground">{experiment.name}</FieldsetLegend>
                 {experiment.variants.map(option => (
-                  <label
-                    key={option.value}
-                    className="flex cursor-pointer items-center gap-3 text-caption text-muted-foreground"
-                  >
+                  <FieldItem key={option.value}>
                     <RadioGroupItem value={option.value} />
-                    {option.label}
-                  </label>
+                    <FieldLabel size="smaller">{option.label}</FieldLabel>
+                  </FieldItem>
                 ))}
-              </RadioGroup>
-            </div>
+              </Fieldset>
+            </Field>
           ))}
         </div>
       </PopoverContent>

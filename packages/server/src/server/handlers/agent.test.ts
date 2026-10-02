@@ -7,7 +7,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_IS_STUDIO_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
@@ -739,6 +739,24 @@ describe('Agent Handlers', () => {
         modelVersion: 'v2',
         modelList: undefined,
       });
+    });
+
+    it('should keep the gateway as the provider for dynamic gateway models', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const gatewayAgent = makeMockAgent({
+        name: 'gateway-agent',
+        model: () => 'mastra/openai/gpt-5-mini',
+      });
+      const mastraWithGatewayAgent = makeMastraMock({ agents: { 'gateway-agent': gatewayAgent } });
+      const context = { ...createTestServerContext({ mastra: mastraWithGatewayAgent }), requestContext };
+
+      const agentById = await GET_AGENT_BY_ID_ROUTE.handler({ ...context, agentId: 'gateway-agent' });
+      const agents = await LIST_AGENTS_ROUTE.handler(context);
+
+      for (const result of [agentById, agents['gateway-agent']]) {
+        expect(result).toMatchObject({ provider: 'mastra', modelId: 'openai/gpt-5-mini' });
+      }
     });
 
     it('should throw 404 when agent not found', async () => {

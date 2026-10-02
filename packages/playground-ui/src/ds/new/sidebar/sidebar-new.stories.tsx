@@ -22,6 +22,7 @@ import { SidebarNew, useSidebarNew } from '.';
 import { Avatar } from '@/ds/components/Avatar';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -33,8 +34,10 @@ import { Input } from '@/ds/components/Input';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
+import { focusRing } from '@/ds/primitives/transitions';
 import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@/lib/keyboard/use-keydown';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof SidebarNew> = {
   title: 'New/SidebarNew',
@@ -73,35 +76,40 @@ type Story = StoryObj<typeof SidebarNew>;
 
 function SidebarNewStoryShortcuts() {
   const { toggleSidebar } = useSidebarNew();
-  useKeydown({ '[': toggleSidebar });
+  useKeydown({ '[': toggleSidebar }, { repeat: false });
   return null;
 }
 
 type SidebarNewStoryProps = {
   header?: 'default' | 'command';
   version?: string;
+  variant?: 'default' | 'raised';
 };
 
 function SidebarSearchDialog() {
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <SidebarNew.SearchTrigger aria-label="Search" shortcut="⌘ K">
-          <Search />
-        </SidebarNew.SearchTrigger>
-      </DialogTrigger>
-      <DialogContent className="border-border bg-popover text-foreground">
+      <DialogTrigger
+        render={
+          <SidebarNew.SearchTrigger aria-label="Search" shortcut="⌘ K">
+            <Search />
+          </SidebarNew.SearchTrigger>
+        }
+      />
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>Find projects, pages, and settings.</DialogDescription>
         </DialogHeader>
-        <Input aria-label="Search projects, pages, and settings" placeholder="Search" autoFocus />
+        <DialogBody>
+          <Input aria-label="Search projects, pages, and settings" placeholder="Search" autoFocus />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
 }
 
-function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) {
+function SidebarNewStory({ header = 'default', version, variant = 'default' }: SidebarNewStoryProps) {
   const { state, expand } = useSidebarNew();
   const [view, setView] = useState('root');
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -112,15 +120,11 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
   }
 
   return (
-    <div className="flex h-dvh w-dvw bg-background">
-      <SidebarNew className="border-r border-border">
+    <div className={variant === 'raised' ? 'flex h-dvh w-dvw bg-sidebar' : 'flex h-dvh w-dvw bg-background'}>
+      <SidebarNew variant={variant} className={variant === 'default' ? 'border-r border-border' : undefined}>
         {header === 'command' ? (
           <SidebarNew.CommandHeader>
-            <a
-              href="/projects"
-              aria-label="Project list"
-              className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
-            >
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <SidebarNew.Brand
                 logo={<LogoWithoutText className="size-6" />}
                 title={
@@ -136,29 +140,14 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             <SidebarSearchDialog />
           </SidebarNew.CommandHeader>
         ) : (
-          <SidebarNew.Header>
-            {state === 'collapsed' ? (
-              <div className="group/brand relative mx-auto grid size-9 place-items-center">
-                <LogoWithoutText className="size-6 transition-opacity duration-normal group-hover/brand:opacity-0 motion-reduce:transition-none" />
-                <div className="absolute inset-0 opacity-0 transition-opacity duration-normal group-hover/brand:opacity-100 focus-within:opacity-100 motion-reduce:transition-none">
-                  <SidebarNew.Trigger />
-                </div>
-              </div>
-            ) : (
-              <>
-                <a
-                  href="/projects"
-                  aria-label="Project list"
-                  className="flex min-w-0 flex-1 rounded-md focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-border-focus focus-visible:outline-hidden"
-                >
-                  <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
-                </a>
-                <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
-                  Staging
-                </span>
-                <SidebarNew.Trigger />
-              </>
-            )}
+          <SidebarNew.Header collapsedLogo={<LogoWithoutText className="size-6" />}>
+            <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
+              <SidebarNew.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
+            </a>
+            <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-meta text-muted-foreground">
+              Staging
+            </span>
+            <SidebarNew.Trigger />
           </SidebarNew.Header>
         )}
 
@@ -251,7 +240,7 @@ function SidebarNewStory({ header = 'default', version }: SidebarNewStoryProps) 
             value="$4"
             status="Credits are low"
             tone="warning"
-            icon={<AlertTriangle className="size-3 shrink-0 text-warning-indicator" aria-hidden />}
+            icon={<AlertTriangle className="size-3 shrink-0 text-warning-foreground" aria-hidden />}
             href="/organization/billing"
             linkLabel="Credit balance"
           />
@@ -351,6 +340,18 @@ export const SelfHostedCommandHeader: Story = {
       description: {
         story:
           'Self-hosted products may add their running version through FooterMeta without changing the sidebar root API.',
+      },
+    },
+  },
+};
+
+export const Raised: Story = {
+  render: () => <SidebarNewStory variant="raised" />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The raised variant places the sidebar contents on a raised surface that bleeds off the left edge. On mobile it falls back to the standard drawer.',
       },
     },
   },

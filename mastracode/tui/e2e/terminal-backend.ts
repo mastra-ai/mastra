@@ -361,6 +361,7 @@ async function startMastraCodeApp(
       ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
       : undefined;
   const result = await createMastraCode({
+    createInitialThread: false,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
@@ -391,6 +392,7 @@ async function startMastraCodeApp(
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
+    threadScheduler: result.threadScheduler,
     terminal,
     ...(options?.tui ?? {}),
   });
@@ -419,6 +421,7 @@ async function startMastraCodeApp(
       if (stopped) return;
       stopped = true;
       tui.stop();
+      result.threadScheduler.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),

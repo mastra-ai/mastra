@@ -988,10 +988,10 @@ describe('ObservabilityStorageDuckDB', () => {
             entityName: 'myWorkflow',
             userId: null,
             organizationId: null,
-            resourceId: null,
+            resourceId: 'user-light',
             runId: null,
             sessionId: null,
-            threadId: null,
+            threadId: 'thread-light',
             requestId: null,
             environment: 'production',
             source: null,
@@ -1019,6 +1019,8 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(row.inputPreview).toBe('summarize this thread');
       expect(row.status).toBe('success');
       expect(row.metadata).toEqual({ customer: 'acme' });
+      expect(row.threadId).toBe('thread-light');
+      expect(row.resourceId).toBe('user-light');
     });
 
     it('listTracesLight computes status from error and endedAt', async () => {

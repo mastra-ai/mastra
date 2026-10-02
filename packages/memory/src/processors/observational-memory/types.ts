@@ -57,8 +57,29 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | 'auto' | false;
+export type ActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs, e.g. `{ default: 'auto', anthropic: '1h' }`.
+ * Keys match the actor model's provider before the first `.`, case-insensitively.
+ */
+export type ActivationTTLByProvider = {
+  default?: ActivationTTLValue;
+  [provider: string]: ActivationTTLValue | undefined;
+};
+
+export type ActivationTTL = ActivationTTLValue | ActivationTTLByProvider;
 export type ResolvedActivationTTL = number | 'auto';
+
+/**
+ * Parsed form of {@link ActivationTTLByProvider}. Provider keys are lowercased.
+ * A provider value of `false` disables idle activation for that provider.
+ * @internal
+ */
+export interface ParsedActivationTTLMap {
+  default?: ResolvedActivationTTL;
+  providers: Record<string, ResolvedActivationTTL | false>;
+}
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -1013,6 +1034,7 @@ export interface ObservationalMemoryConfig {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
 
   /**
@@ -1115,7 +1137,8 @@ export interface ObservationalMemoryConfig {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`, `"auto"`,
+   * or an object of per-provider TTLs like `{ default: 'auto', anthropic: '1h' }`.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached.
@@ -1165,7 +1188,7 @@ export interface ResolvedObservationConfig {
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -1196,7 +1219,7 @@ export interface ResolvedReflectionConfig {
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */

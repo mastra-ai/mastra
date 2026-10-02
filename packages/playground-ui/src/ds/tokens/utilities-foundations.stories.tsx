@@ -94,7 +94,7 @@ const stateSpecimens: UtilitySpecimen[] = [
         <input
           aria-label="Filter runs"
           placeholder="Filter runs"
-          className="h-8 w-full rounded-full bg-card px-3 text-body text-foreground shadow-raised outline-hidden placeholder:text-placeholder focus-visible:[--surface-rim:var(--surface-rim-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
+          className="h-8 w-full rounded-full bg-card px-3 text-body text-foreground shadow-raised outline-hidden placeholder:text-placeholder focus-visible:[--surface-rim:var(--border-focus)] [&:hover:not(:focus-visible)]:[--surface-tint:var(--fill-subtle)]"
         />
       </div>
     ),

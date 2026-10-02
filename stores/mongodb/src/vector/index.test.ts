@@ -2847,6 +2847,33 @@ describe('MongoDBVector autoEmbed', () => {
       expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: { $eq: 'astronaut' } });
     });
 
+    it.each([
+      ['a $regex operator', { $regex: /astronaut/ }],
+      ['a bare RegExp', /astronaut/],
+      ['a RegExp inside $in', { $in: [/astronaut/] }],
+      ['a RegExp inside $ne', { $ne: /astronaut/ }],
+    ])('pre-filters a documentFilter with %s, which $vectorSearch.filter rejects', async (_, documentFilter) => {
+      const v = makeVector();
+      const aggregate = vi
+        .fn()
+        .mockReturnValueOnce({
+          map: () => ({ toArray: async () => ['doc-1'] }),
+          toArray: async () => [{ _id: 'doc-1' }],
+        })
+        .mockReturnValueOnce({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'movies',
+        searchIndexName: 'movies_vector_index',
+        isByo: false,
+      });
+
+      await v.query({ indexName: 'movies', queryVector: [0.1], documentFilter: documentFilter as any });
+
+      expect(aggregate.mock.calls[0][0][0].$match).toEqual({ document: documentFilter });
+      expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['doc-1'] } });
+    });
+
     it('returns the embedded text as document when a custom path is configured', async () => {
       const v = makeVector();
       const aggregate = stubQuery(v, { model: 'voyage-4', path: 'fullplot' });

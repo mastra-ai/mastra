@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { coreAuthMiddleware } from '@mastra/server/auth';
+import { coreAuthMiddleware, isCustomRoutePublic } from '@mastra/server/auth';
 
 export interface ElysiaAuthMiddlewareOptions {
   mastra: Mastra;
@@ -28,7 +28,10 @@ export function createAuthMiddleware({
     const path = url.pathname;
     const method = ctx.request.method;
     const customRouteAuthConfig = new Map<string, boolean>(ctx.customRouteAuthConfig ?? []);
-    customRouteAuthConfig.set(`${method}:${path}`, true);
+    // Don't reclassify a custom route the app declared public (requiresAuth: false).
+    if (!isCustomRoutePublic(path, method, customRouteAuthConfig)) {
+      customRouteAuthConfig.set(`${method}:${path}`, true);
+    }
 
     const authHeader = ctx.request.headers.get('authorization');
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;

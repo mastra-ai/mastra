@@ -7,5 +7,5 @@ export function validateAgentId(
   cachedAgents: Record<string, unknown> | null | undefined,
 ): string | null {
   if (decodedAgentId == null || cachedAgents == null) return null;
-  return decodedAgentId in cachedAgents ? decodedAgentId : null;
+  return Object.hasOwn(cachedAgents, decodedAgentId) ? decodedAgentId : null;
 }

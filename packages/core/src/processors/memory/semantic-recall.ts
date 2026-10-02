@@ -322,12 +322,12 @@ export class SemanticRecall implements Processor {
         contentText = textParts.map((p: any) => p.text).join(' ');
       }
 
-      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}`;
+      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}\n`;
 
       lastYmd = ymd;
     }
 
-    const formattedContent = `The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${result}\n<end_remembered_from_other_conversation>`;
+    const formattedContent = `The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${result}<end_remembered_from_other_conversation>`;
 
     return {
       role: 'system',

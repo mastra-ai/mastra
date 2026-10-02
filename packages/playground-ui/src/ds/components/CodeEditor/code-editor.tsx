@@ -16,6 +16,7 @@ import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
 import { useTheme } from '@/ds/components/ThemeProvider';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import type { JsonSchema } from '@/lib/json-schema';
@@ -106,7 +107,7 @@ function buildDarkTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--warning-indicator) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
@@ -148,7 +149,7 @@ function buildLightTheme(): Extension {
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'var(--info-subtle) !important',
+        background: 'var(--info-edge) !important',
       },
     '.cm-tooltip-autocomplete': {
       backgroundColor: 'var(--background)',
@@ -182,7 +183,7 @@ function buildLightTheme(): Extension {
       color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--warning-indicator) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
@@ -212,7 +213,7 @@ function buildLightTheme(): Extension {
     { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
     { tag: [t.deleted], color: 'var(--syntax-keyword)' },
-    { tag: t.invalid, color: 'var(--destructive-indicator)' },
+    { tag: t.invalid, color: 'var(--destructive-foreground)' },
     { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
   ]);
 
@@ -274,6 +275,7 @@ const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTh
 type CodeEditorContentAttributes = {
   'aria-label': string;
   id?: string;
+  'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: string;
 };
@@ -317,19 +319,27 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       editable,
       variant,
       id,
-      'aria-label': ariaLabel = 'Code editor',
-      'aria-describedby': ariaDescribedBy,
-      'aria-invalid': ariaInvalid,
+      'aria-label': ariaLabelProp,
+      'aria-labelledby': ariaLabelledByProp,
+      'aria-describedby': ariaDescribedByProp,
+      'aria-invalid': ariaInvalidProp,
       ...props
     },
     ref,
   ) => {
+    const fieldAria = useFieldControlAria({ 'aria-label': ariaLabelProp });
+    const ariaLabel = ariaLabelProp ?? 'Code editor';
+    const controlId = id ?? fieldAria.id;
+    const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
+    const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
+    const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
     const theme = useCodemirrorTheme();
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
-      if (id) contentAttributes.id = id;
+      if (controlId) contentAttributes.id = controlId;
+      if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
@@ -358,7 +368,18 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping, id, ariaLabel, ariaDescribedBy, ariaInvalid]);
+    }, [
+      language,
+      highlightVariables,
+      schema,
+      editable,
+      lineWrapping,
+      controlId,
+      ariaLabel,
+      ariaLabelledBy,
+      ariaDescribedBy,
+      ariaInvalid,
+    ]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>

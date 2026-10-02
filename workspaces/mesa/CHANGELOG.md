@@ -1,5 +1,46 @@
 # @mastra/mesa
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Upgraded to `@mesadev/sdk` 0.49.1. `MesaFilesystem` now authenticates with a Mesa private key and mounts a Mesa layout, matching the current Mesa SDK. `privateKey` falls back to `MESA_PRIVATE_KEY` when omitted. ([#25738](https://github.com/mastra-ai/mastra/pull/25738))
+
+  **Breaking:** `apiKey`, `org`, and `repos` are replaced by `privateKey`, `authors`, and `layout`. Paths now start at the layout path instead of `/<org>/<repo>`.
+
+  **Before**
+
+  ```ts
+  import { MesaFilesystem } from '@mastra/mesa';
+
+  const filesystem = new MesaFilesystem({
+    apiKey: process.env.MESA_API_KEY,
+    org: 'acme',
+    repos: [{ name: 'docs', bookmark: 'main' }],
+  });
+
+  await filesystem.readFile('/acme/docs/README.md');
+  ```
+
+  **After**
+
+  ```ts
+  import { MesaFilesystem, repo } from '@mastra/mesa';
+
+  const filesystem = new MesaFilesystem({
+    privateKey: process.env.MESA_PRIVATE_KEY,
+    authors: [{ name: 'My Agent', email: 'agent@example.com' }],
+    layout: { '/docs': repo('docs', { mode: 'rw', at: { bookmark: 'main' } }) },
+  });
+
+  await filesystem.readFile('/docs/README.md');
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6)]:
+  - @mastra/core@1.75.0-alpha.0
+
 ## 0.2.1
 
 ### Patch Changes

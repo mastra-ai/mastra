@@ -138,7 +138,7 @@ Retries with the same `externalId` retain the original item's representation. Fo
 
 Unset configuration now reads as `undefined` where some adapters previously returned `null`, so serialized responses omit those properties. Use nullish checks such as `value ?? fallback` rather than relying on an explicit `null` property. LibSQL also returns an omitted dataset description as `undefined`, matching its declared type.
 
-Older LibSQL, PostgreSQL, MySQL, and Spanner writes stored optional JSON `null` values as SQL `NULL`, so those values remain indistinguishable from omitted fields. Older MongoDB writes stored omitted optional payload fields as BSON `null`. The storage fixes preserve new writes but don't reconstruct previously lost distinctions.
+Older LibSQL, PostgreSQL, MySQL, and Spanner writes stored optional JSON `null` values as SQL `NULL`. Those values remain indistinguishable from omitted fields. Older MongoDB writes stored omitted optional payload fields as BSON `null`. The storage fixes preserve new writes but don't reconstruct previously lost distinctions.
 
 ## Validate snapshot artifacts
 
