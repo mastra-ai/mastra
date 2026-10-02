@@ -44,6 +44,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 import { polledPullRequestEvent } from './rules.js';
+import type { ReconcilePullRequestState, ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -313,43 +314,53 @@ function polledIssueEvent(
   };
 }
 
+interface ListedPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels: string[];
+  headBranch: string;
+  baseBranch: string;
+  createdAt: string;
+}
+
 function listedPullRequestEvent(
   project: ResolvedProjectRepository,
-  pullRequest: {
-    number: number;
-    title: string;
-    url: string;
-    author: string | null;
-    assignees: string[];
-    requestedReviewers: string[];
-    labels: string[];
-    headBranch: string;
-    baseBranch: string;
-    createdAt: string;
-  },
+  pullRequest: ListedPullRequest,
 ): ParsedGithubWebhook {
   return polledPullRequestEvent(
-    {
-      id: Number(project.repository.externalId),
-      fullName: project.repository.slug,
-      installationId: Number(project.installation.externalId),
-    },
+    reconcileRepositoryOf(project),
     pullRequest.number,
-    {
-      title: pullRequest.title,
-      url: pullRequest.url,
-      state: 'open',
-      draft: false,
-      merged: false,
-      assignees: pullRequest.assignees,
-      requestedReviewers: pullRequest.requestedReviewers,
-      labels: pullRequest.labels,
-      headBranch: pullRequest.headBranch,
-      baseBranch: pullRequest.baseBranch,
-      ...(pullRequest.author ? { author: pullRequest.author } : {}),
-      createdAt: pullRequest.createdAt,
-    },
+    listedOpenPullRequestState(pullRequest),
   );
+}
+
+function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
+  return {
+    id: Number(project.repository.externalId),
+    fullName: project.repository.slug,
+    installationId: Number(project.installation.externalId),
+  };
+}
+
+function listedOpenPullRequestState(pullRequest: ListedPullRequest): ReconcilePullRequestState & { createdAt: string } {
+  return {
+    title: pullRequest.title,
+    url: pullRequest.url,
+    state: 'open',
+    draft: false,
+    merged: false,
+    assignees: pullRequest.assignees,
+    requestedReviewers: pullRequest.requestedReviewers,
+    labels: pullRequest.labels,
+    headBranch: pullRequest.headBranch,
+    baseBranch: pullRequest.baseBranch,
+    author: pullRequest.author ?? undefined,
+    createdAt: pullRequest.createdAt,
+  };
 }
 
 async function ingestPolledEvents(

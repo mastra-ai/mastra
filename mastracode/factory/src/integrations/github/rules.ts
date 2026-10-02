@@ -1077,7 +1077,7 @@ export function reconciledIssueClosedEvent(
         ...(state.stateReason ? { state_reason: state.stateReason } : {}),
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
+        assignees: githubUsers(state.assignees),
       },
     },
   };
@@ -1123,8 +1123,8 @@ export function reconciledIssueRelabeledEvent(
         state: 'open',
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        labels: labels.map(name => ({ name })),
+        assignees: githubUsers(state.assignees),
+        labels: githubLabels(labels),
       },
     },
   };
@@ -1169,11 +1169,12 @@ export function reconciledClosedEvent(
   pullRequestNumber: number,
   state: ReconcilePullRequestState,
 ): ParsedGithubWebhook {
+  const outcome = state.merged ? 'merged' : 'closed';
   return {
     event: 'pull_request',
     // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
-    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${outcome}`,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
@@ -1185,21 +1186,30 @@ export function reconciledClosedEvent(
 }
 
 function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     number: pullRequestNumber,
     title: state.title,
     html_url: state.url,
-    ...(state.createdAt ? { created_at: state.createdAt } : {}),
-    ...(state.author ? { user: { login: state.author } } : {}),
     state: state.state,
     draft: state.draft,
     merged: state.merged,
-    assignees: (state.assignees ?? []).map(login => ({ login })),
-    requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
-    labels: (state.labels ?? []).map(name => ({ name })),
+    assignees: githubUsers(state.assignees),
+    requested_reviewers: githubUsers(state.requestedReviewers),
+    labels: githubLabels(state.labels),
     head: { ref: state.headBranch },
     base: { ref: state.baseBranch },
   };
+  if (state.createdAt) payload.created_at = state.createdAt;
+  if (state.author) payload.user = { login: state.author };
+  return payload;
+}
+
+function githubUsers(logins: readonly string[] = []): Array<{ login: string }> {
+  return logins.map(login => ({ login }));
+}
+
+function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
+  return names.map(name => ({ name }));
 }
 
 function reconciledPullRequestMetadata(
