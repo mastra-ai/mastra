@@ -1,13 +1,9 @@
-import type { RouteResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // =============================================================================
 // Skill Management Hooks (via server proxy)
 // =============================================================================
-
-const skillsShPath = (workspaceId: string, route: 'install' | 'update' | 'remove') =>
-  `/workspaces/${encodeURIComponent(workspaceId)}/skills-sh/${route}`;
 
 export interface InstallSkillParams {
   workspaceId: string;
@@ -32,14 +28,9 @@ export const useInstallSkill = () => {
       if (!owner || !repo) {
         throw new Error('Invalid repository format. Expected owner/repo');
       }
-      return client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/install'>>(
-        skillsShPath(params.workspaceId, 'install'),
-        {
-          method: 'POST',
-          body: { owner, repo, skillName: params.skillName, ...(params.mount ? { mount: params.mount } : {}) },
-          retries: 0,
-        },
-      );
+      return client
+        .getWorkspace(params.workspaceId)
+        .installSkillsSh({ owner, repo, skillName: params.skillName, mount: params.mount });
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
@@ -61,10 +52,7 @@ export const useUpdateSkills = () => {
 
   return useMutation({
     mutationFn: (params: UpdateSkillsParams) =>
-      client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/update'>>(
-        skillsShPath(params.workspaceId, 'update'),
-        { method: 'POST', body: { skillName: params.skillName }, retries: 0 },
-      ),
+      client.getWorkspace(params.workspaceId).updateSkillsSh({ skillName: params.skillName }),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
@@ -85,10 +73,7 @@ export const useRemoveSkill = () => {
 
   return useMutation({
     mutationFn: (params: RemoveSkillParams) =>
-      client.request<RouteResponse<'POST /workspaces/:workspaceId/skills-sh/remove'>>(
-        skillsShPath(params.workspaceId, 'remove'),
-        { method: 'POST', body: { skillName: params.skillName }, retries: 0 },
-      ),
+      client.getWorkspace(params.workspaceId).removeSkillsSh({ skillName: params.skillName }),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },

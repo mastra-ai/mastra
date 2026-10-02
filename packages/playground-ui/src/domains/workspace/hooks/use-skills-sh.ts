@@ -1,29 +1,19 @@
-import type { RouteResponse } from '@mastra/client-js';
+import type { SkillsShSkill } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 
-export type SkillsShSearchResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/search'>;
-export type SkillsShListResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/popular'>;
-export type SkillsShPreviewResponse = RouteResponse<'GET /workspaces/:workspaceId/skills-sh/preview'>;
-
-export type SkillsShSkill = SkillsShListResponse['skills'][number];
-
-const skillsShPath = (workspaceId: string, route: string, params: Record<string, string>) =>
-  `/workspaces/${encodeURIComponent(workspaceId)}/skills-sh/${route}?${new URLSearchParams(params)}`;
+export type { SkillsShSkill };
 
 /**
  * Search skills on skills.sh (via server proxy)
  */
-export const useSearchSkillsSh = (
-  workspaceId: string | undefined,
-): UseMutationResult<SkillsShSearchResponse, Error, string> => {
+export const useSearchSkillsSh = (workspaceId: string | undefined) => {
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: (query: string): Promise<SkillsShSearchResponse> => {
+    mutationFn: (query: string) => {
       if (!workspaceId) throw new Error('Workspace ID is required');
-      return client.request<SkillsShSearchResponse>(skillsShPath(workspaceId, 'search', { q: query, limit: '10' }));
+      return client.getWorkspace(workspaceId).searchSkillsSh({ q: query, limit: 10 });
     },
   });
 };
@@ -31,14 +21,14 @@ export const useSearchSkillsSh = (
 /**
  * Get popular skills from skills.sh (via server proxy, cached for 5 minutes)
  */
-export const usePopularSkillsSh = (workspaceId: string | undefined): UseQueryResult<SkillsShListResponse> => {
+export const usePopularSkillsSh = (workspaceId: string | undefined) => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['skills-sh', 'popular', workspaceId],
-    queryFn: (): Promise<SkillsShListResponse> => {
+    queryFn: () => {
       if (!workspaceId) throw new Error('Workspace ID is required');
-      return client.request<SkillsShListResponse>(skillsShPath(workspaceId, 'popular', { limit: '10', offset: '0' }));
+      return client.getWorkspace(workspaceId).listPopularSkillsSh({ limit: 10, offset: 0 });
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!workspaceId,
@@ -63,11 +53,8 @@ export const useSkillPreview = (
       if (!workspaceId || !owner || !repo || !skillPath) {
         throw new Error('workspaceId, owner, repo, and skillPath are required');
       }
-      const data = await client.request<SkillsShPreviewResponse>(
-        skillsShPath(workspaceId, 'preview', { owner, repo, path: skillPath }),
-        { retries: 0 },
-      );
-      return data.content;
+      const { content } = await client.getWorkspace(workspaceId).previewSkillsSh({ owner, repo, path: skillPath });
+      return content;
     },
     enabled: options?.enabled !== false && !!workspaceId && !!owner && !!repo && !!skillPath,
     retry: false,
