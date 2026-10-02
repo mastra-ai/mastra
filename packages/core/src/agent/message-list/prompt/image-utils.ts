@@ -229,8 +229,10 @@ function isHeifImage(bytes: Uint8Array): boolean {
 }
 
 // A relative path such as `/api/attachments/123` or `uploads/abc` is made only of base64
-// characters, so it passes as base64. Real encoded files almost always contain `+` or `=`.
+// characters, so it passes as base64. Base64 content can look like a path too (text often has
+// no `+` or `=`), but real paths are short, so only short payloads are treated as paths.
 const PATH_PATTERN = /^\/?[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)+\/?$|^\/[A-Za-z0-9_-]+\/?$/;
+const MAX_PATH_LENGTH = 256;
 
 /**
  * Checks whether inline base64 content can be decoded. Images with a known signature and PDFs
@@ -254,7 +256,8 @@ function isValidInlineContent(base64: string, mediaType: string | undefined): bo
     return detectMediaType({ data: bytes, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(bytes);
   }
   if (mediaType === 'application/pdf') return ascii(head(1368), 0, 1026).includes('%PDF');
-  return !PATH_PATTERN.test(base64.trim());
+  const trimmed = base64.trim();
+  return trimmed.length > MAX_PATH_LENGTH || !PATH_PATTERN.test(trimmed);
 }
 
 /** Whether a data URL's header declares base64 content (`data:<type>;base64,...`). */
