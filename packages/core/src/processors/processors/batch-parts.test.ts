@@ -555,6 +555,41 @@ describe('BatchPartsProcessor', () => {
       // The pending timeout was cleared by the flush.
       expect(state.timeoutId).toBeUndefined();
     });
+
+    it('does not buffer a non-text part that arrives after the timeout fired (#25532)', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 10, maxWaitTime: 40 });
+      const writer = { custom: async () => {} };
+      const abort = () => {
+        throw new Error('abort');
+      };
+
+      const text: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const stepFinish = { type: 'step-finish', runId: '1', from: ChunkFrom.AGENT, payload: {} } as ChunkType;
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      expect(await processor.processOutputStream({ part: text, streamParts: [text], state, abort, writer })).toBeNull();
+      vi.advanceTimersByTime(50);
+      expect(state.timeoutTriggered).toBe(true);
+
+      const result = await processor.processOutputStream({
+        part: stepFinish,
+        streamParts: [stepFinish],
+        state,
+        abort,
+        writer,
+      });
+
+      expect(result).toEqual(text);
+      expect((state as Record<string, unknown>).__mastraReprocessPart).toBe(stepFinish);
+      expect(state.batch).toEqual([]);
+      expect(state.timeoutTriggered).toBe(false);
+    });
   });
 
   describe('flush functionality', () => {

@@ -2657,6 +2657,60 @@ describe('Agent Routes Authorization', () => {
       }
     }, 30_000);
 
+    it.each([true, false])(
+      'should strip nested credential headers from tool approval (approved=%s)',
+      async approved => {
+        const sendToolApproval = vi.fn(async params => ({
+          accepted: true,
+          runId: 'run-123',
+          toolCallId: params.toolCallId,
+        }));
+        (mockAgent as any).sendToolApproval = sendToolApproval;
+        const requestContext = new RequestContext();
+        const streamOptions = {
+          maxSteps: 4,
+          modelSettings: {
+            temperature: 0.3,
+            headers: {
+              aUtHoRiZaTiOn: 'Bearer client-token',
+              'Proxy-Authorization': 'Basic proxy-token',
+              'X-API-Key': 'client-key',
+              'Api-Key': 'client-key',
+              'X-Goog-Api-Key': 'client-key',
+              COOKIE: 'session=client-token',
+              'X-Trace-Id': 'trace-123',
+            },
+          },
+        };
+
+        const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          ...sendToolApprovalBodySchema.parse({
+            resourceId: 'resource-123',
+            threadId: 'thread-123',
+            toolCallId: 'tool-call-123',
+            approved,
+            streamOptions,
+          }),
+        });
+
+        expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+        expect(sendToolApproval).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            approved,
+            streamOptions: {
+              maxSteps: 4,
+              modelSettings: { temperature: 0.3, headers: { 'X-Trace-Id': 'trace-123' } },
+              requestContext,
+            },
+          }),
+        );
+      },
+    );
+
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
         accepted: true,
@@ -3000,6 +3054,19 @@ describe('Agent Routes Authorization', () => {
           attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -3018,6 +3085,11 @@ describe('Agent Routes Authorization', () => {
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
       expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
@@ -3057,6 +3129,19 @@ describe('Agent Routes Authorization', () => {
         ifIdle: {
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -3069,6 +3154,11 @@ describe('Agent Routes Authorization', () => {
 
       expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');

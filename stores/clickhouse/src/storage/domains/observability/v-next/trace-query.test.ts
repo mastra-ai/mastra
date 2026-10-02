@@ -392,8 +392,53 @@ describe('ClickHouse advanced trace query', () => {
       trace_query_6: 'assistant',
       trace_query_7: 'tool',
       trace_query_8: 'parentMessageId',
-      trace_query_9: 101,
+      // `candidates` re-applies the same predicate after the window seed.
+      trace_query_9: key,
+      trace_query_14: 'parentMessageId',
+      trace_query_15: 101,
     });
+  });
+
+  it('pushes root-row conjuncts into the window seed and keeps relation conjuncts after the dedupe', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: 'triage' } },
+            { spans: { some: { op: 'exists', path: 'error' } } },
+          ],
+        },
+      }),
+    );
+
+    const seed = compiled.query.slice(
+      compiled.query.indexOf('SELECT traceId\n        FROM mastra_trace_roots r'),
+      compiled.query.indexOf('ORDER BY dedupeKey'),
+    );
+    expect(seed).toContain('AND (ifNull(r.entityName = {trace_query_3:String}, 0))');
+    expect(seed).not.toContain('current_spans');
+    expect(compiled.query).toMatch(
+      /candidates AS \(\s+SELECT [\s\S]+FROM root_scope r\s+WHERE \(ifNull\(r\.entityName = \{trace_query_\d+:String\}, 0\)\) AND \(EXISTS/,
+    );
+  });
+
+  it('does not push a disjunction that reads related spans into the window seed', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'or',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: 'triage' } },
+            { spans: { some: { op: 'exists', path: 'error' } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).toMatch(
+      /FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:[^}]+\}\s+AND startedAt < \{trace_query_2:[^}]+\}\s+\)/,
+    );
   });
 
   it('scopes root_scope and related CTEs to the tenant with named parameters', () => {
@@ -455,7 +500,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
     // The time range narrows the dedupe input instead of filtering the whole deduped table.
     expect(compiled.query).toMatch(
-      /FROM mastra_trace_roots\s+WHERE traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
+      /FROM mastra_trace_roots\s+WHERE traceId IN \(\s+SELECT traceId\s+FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:DateTime64\(3, 'UTC'\)\}/,
     );
     expect(compiled.query).not.toMatch(/\bingestionVersion\b|\bisPending\b|\bFINAL\b|\bOPTIMIZE\b/);
   });

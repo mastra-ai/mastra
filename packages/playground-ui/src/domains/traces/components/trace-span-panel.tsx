@@ -1,3 +1,4 @@
+import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
@@ -6,7 +7,9 @@ import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-p
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
+import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
+import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
 
@@ -51,7 +54,7 @@ export interface TraceSpanPanelProps {
   featuredSpanIds?: string[];
   /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
   onHighlightSpans?: (spanIds: string[]) => void;
-  /** When true, the whole panel shows the trace's thread (every turn) instead of the trace timeline. */
+  /** When true, opens the trace's thread (every turn) in a stacked drawer above the trace panel. */
   isFullThreadOpen?: boolean;
   /** Enables the in-place "Open full thread" swap; without it the action falls back to a link. */
   onFullThreadOpenChange?: (open: boolean) => void;
@@ -138,78 +141,91 @@ export function TraceSpanPanel({
     : spans?.find(s => s.parentSpanId == null);
   const entityHref = getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
+  const hasMessagesPanel = !!(traceId && showPartialThread && threadId);
+  // A single-trace thread would show exactly what the Messages column already shows.
+  const hasOtherTraces = useThreadHasOtherTraces(hasMessagesPanel ? threadId : undefined);
+  const showFullThreadAction = hasMessagesPanel && hasOtherTraces && !!onFullThreadOpenChange;
 
-  if (traceId && isFullThreadOpen && threadId) {
-    return (
-      <TraceThreadPanel
+  return (
+    <>
+      <TraceDataPanel
+        traceId={traceId}
+        spans={spans}
+        anchorSpanId={anchorSpanId}
+        entityHref={entityHref}
+        usage={usage}
+        isLoading={isLoadingSpans}
+        onClose={onClose}
+        onSpanSelect={onSpanSelect}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+        onAddTraceMocksToItem={onAddTraceMocksToItem}
+        initialSpanId={initialSpanId ?? selectedSpanId}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        placement="traces-list"
+        LinkComponent={Link}
+        traceHref={traceHref}
+        size={size}
+        depth={depth}
+        headerSlot={headerSlot}
         title={title}
-        threadId={threadId}
+        showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
+        spanView={spanView}
+        onSpanViewChange={onSpanViewChange}
+        feedbackTabBadge={feedbackTabBadge}
+        feedbackTabSlot={feedbackTabSlot}
+        featuredSpanIds={featuredSpanIds}
+        messagesPanelSlot={
+          hasMessagesPanel ? <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} /> : undefined
+        }
+        sideHeaderActions={
+          showFullThreadAction
+            ? ({ compact }) => (
+                <Button
+                  tooltip={compact ? 'Open full thread' : undefined}
+                  icon={<MessagesSquareIcon />}
+                  variant="ghost"
+                  size="sm"
+                  // At a side column of 500px or less, collapse to a round icon button; the label stays for screen readers.
+                  className="@max-[501px]:w-control-sm @max-[501px]:rounded-full @max-[501px]:px-0 @max-[501px]:[&>[data-slot=button-icon]]:ml-0"
+                  onClick={() => onFullThreadOpenChange(true)}
+                >
+                  <span className="@max-[501px]:sr-only">Open full thread</span>
+                </Button>
+              )
+            : undefined
+        }
+        scoresTabBadge={scoresTabBadge}
+        scoresTabSlot={scoresTabSlot}
+        spanPanelSlot={
+          traceId && selectedSpanId ? (
+            <SpanDataPanelView
+              traceId={traceId}
+              spanId={selectedSpanId}
+              span={spanDetailData?.span}
+              isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
+              isLoading={isLoadingSpanDetail}
+              onPrevious={handlePreviousSpan}
+              onNext={handleNextSpan}
+              onClose={() => onSpanSelect(undefined)}
+              activeTab={spanActiveTab}
+              onTabChange={onSpanTabChange}
+              feedbackTabBadge={spanFeedbackTabBadge}
+              feedbackTabSlot={spanFeedbackTabSlot}
+            />
+          ) : null
+        }
+      />
+      {/* Rendered after the trace panel: DataPanel stacking follows DOM order. */}
+      <TraceThreadPanel
+        open={!!(traceId && isFullThreadOpen && threadId)}
+        depth={depth && depth > 1 ? 3 : 2}
+        threadId={threadId ?? ''}
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
-        onBack={() => onFullThreadOpenChange?.(false)}
-        onClose={onClose}
+        onClose={() => onFullThreadOpenChange?.(false)}
       />
-    );
-  }
-
-  return (
-    <TraceDataPanel
-      traceId={traceId}
-      spans={spans}
-      anchorSpanId={anchorSpanId}
-      entityHref={entityHref}
-      usage={usage}
-      isLoading={isLoadingSpans}
-      onClose={onClose}
-      onSpanSelect={onSpanSelect}
-      onSaveAsDatasetItem={onSaveAsDatasetItem}
-      onAddTraceMocksToItem={onAddTraceMocksToItem}
-      initialSpanId={initialSpanId ?? selectedSpanId}
-      onPrevious={onPrevious}
-      onNext={onNext}
-      placement="traces-list"
-      LinkComponent={Link}
-      traceHref={traceHref}
-      size={size}
-      depth={depth}
-      headerSlot={headerSlot}
-      title={title}
-      showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
-      spanView={spanView}
-      onSpanViewChange={onSpanViewChange}
-      feedbackTabBadge={feedbackTabBadge}
-      feedbackTabSlot={feedbackTabSlot}
-      featuredSpanIds={featuredSpanIds}
-      messagesPanelSlot={
-        traceId && showPartialThread && threadId ? (
-          <TraceMessagesPanel
-            traceId={traceId}
-            threadId={threadId}
-            onViewFullThread={onFullThreadOpenChange ? () => onFullThreadOpenChange(true) : undefined}
-            onHighlightSpans={onHighlightSpans}
-          />
-        ) : undefined
-      }
-      scoresTabBadge={scoresTabBadge}
-      scoresTabSlot={scoresTabSlot}
-      spanPanelSlot={
-        traceId && selectedSpanId ? (
-          <SpanDataPanelView
-            traceId={traceId}
-            spanId={selectedSpanId}
-            span={spanDetailData?.span}
-            isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
-            isLoading={isLoadingSpanDetail}
-            onPrevious={handlePreviousSpan}
-            onNext={handleNextSpan}
-            activeTab={spanActiveTab}
-            onTabChange={onSpanTabChange}
-            feedbackTabBadge={spanFeedbackTabBadge}
-            feedbackTabSlot={spanFeedbackTabSlot}
-          />
-        ) : null
-      }
-    />
+    </>
   );
 }

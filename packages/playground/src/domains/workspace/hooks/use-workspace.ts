@@ -4,13 +4,9 @@ import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSuppor
 import type {
   WorkspaceInfo,
   WorkspacesListResponse,
-  FileListResponse,
-  FileReadResponse,
   FileStatResponse,
   WriteFileParams,
   WriteFileFromFileParams,
-  SearchWorkspaceParams,
-  SearchResponse,
 } from '../types';
 
 function getParentPath(path: string): string {
@@ -66,57 +62,6 @@ export const useWorkspaces = () => {
 // =============================================================================
 // Filesystem Hooks
 // =============================================================================
-
-export const useWorkspaceFiles = (
-  path: string,
-  options?: { enabled?: boolean; recursive?: boolean; workspaceId?: string },
-) => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['workspace', 'files', path, options?.recursive, options?.workspaceId],
-    queryFn: async (): Promise<FileListResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-      if (!options?.workspaceId) {
-        throw new Error('workspaceId is required');
-      }
-      const workspace = (client as any).getWorkspace(options.workspaceId);
-      return workspace.listFiles(path, options?.recursive);
-    },
-    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
-    retry: shouldRetryWorkspaceQuery,
-  });
-};
-
-export const useWorkspaceFile = (
-  path: string,
-  options?: { enabled?: boolean; encoding?: string; workspaceId?: string },
-) => {
-  const client = useMastraClient();
-
-  return useQuery({
-    // encoding is part of the cache key: without it, a text fetch and a base64
-    // fetch of the same path/workspace collide on the same cache entry, so
-    // whichever ran first gets served back for the other — a stale response
-    // in the wrong encoding for both the file browser (garbled text) and the
-    // image preview (the InvalidCharacterError this whole fix exists for).
-    queryKey: ['workspace', 'file', path, options?.workspaceId, options?.encoding],
-    queryFn: async (): Promise<FileReadResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-      if (!options?.workspaceId) {
-        throw new Error('workspaceId is required');
-      }
-      const workspace = (client as any).getWorkspace(options.workspaceId);
-      return workspace.readFile(path, options?.encoding);
-    },
-    enabled: options?.enabled !== false && !!path && !!options?.workspaceId && isWorkspaceV1Supported(client),
-    retry: shouldRetryWorkspaceQuery,
-  });
-};
 
 export const useWorkspaceFileStat = (path: string, options?: { enabled?: boolean; workspaceId?: string }) => {
   const client = useMastraClient();
@@ -233,25 +178,6 @@ export const useCreateWorkspaceDirectory = () => {
 // =============================================================================
 // Search Hooks
 // =============================================================================
-
-export const useSearchWorkspace = () => {
-  const client = useMastraClient();
-
-  return useMutation({
-    mutationFn: async (params: SearchWorkspaceParams): Promise<SearchResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      return workspace.search({
-        query: params.query,
-        topK: params.topK,
-        mode: params.mode,
-        minScore: params.minScore,
-      });
-    },
-  });
-};
 
 export const useIndexWorkspaceContent = () => {
   const client = useMastraClient();

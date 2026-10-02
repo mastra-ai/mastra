@@ -35,6 +35,8 @@ export interface UseTraceQueryReturn {
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
   isLoading: boolean;
+  /** The rows belong to the previous query key (e.g. another thread) while the new one loads. */
+  isPlaceholderData: boolean;
   isFetching: boolean;
   isRefetching: boolean;
   fetchStatus: 'idle' | 'fetching' | 'paused';
@@ -167,6 +169,7 @@ export function useTraceQuery({
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
+    isPlaceholderData,
     isFetching,
     isRefetching,
     fetchStatus,
@@ -188,6 +191,7 @@ export function useTraceQuery({
     isFetchingNextPage,
     fetchNextPage,
     isLoading,
+    isPlaceholderData,
     isFetching,
     isRefetching,
     fetchStatus,
