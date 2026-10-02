@@ -75,6 +75,7 @@
     "@mastra/discord": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@mastra/slack": "workspace:^",
+    "@mastra/teams": "workspace:^",
     "@mastra/telegram": "workspace:^"
   }
 }
