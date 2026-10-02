@@ -749,14 +749,15 @@ describe('background processes killed by an aborted run', () => {
     const sandbox = new LocalSandbox({ workingDirectory: dir });
     const workspace = new Workspace({ sandbox });
     await workspace.init();
+    // Capture handles from spawn(): `get()` would prune a process that already exited.
+    const spawn = vi.spyOn(sandbox.processes!, 'spawn');
     const start = async (command: string, abortSignal?: AbortSignal) => {
       const started = await executeCommandWithBackgroundTool.execute!({ command, background: true }, {
         workspace,
         abortSignal,
       } as any);
       const pid = String(started).match(/PID: (.+)\)/)![1]!;
-      // `get()` only prunes exited handles, so this is safe to call while running.
-      const handle = (await sandbox.processes!.get(pid))!;
+      const handle = await spawn.mock.results.at(-1)!.value;
       return { pid, handle };
     };
     const read = (pid: string, opts: { wait?: boolean; abortSignal?: AbortSignal } = {}) =>
