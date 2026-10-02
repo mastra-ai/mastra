@@ -21,6 +21,7 @@
  */
 
 import type { PrepareStepFunction } from '@mastra/core/agent';
+import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from './agent-browser';
 
@@ -36,6 +37,12 @@ export type WebMcpPrepareStepFn = PrepareStepFunction;
 export interface WebMcpPrepareStepConfig {
   mode: 'auto' | 'manual';
   prefix: string;
+  /**
+   * Fallback thread id used when the step args don't carry one via
+   * `requestContext[MASTRA_THREAD_ID_KEY]`. Set this when you build the
+   * prepare-step outside an agent run; agent-driven runs should leave it
+   * unset so each step uses its own thread id.
+   */
   threadId?: string;
 }
 
@@ -51,40 +58,57 @@ export interface AttachedPageTool {
   inputSchema: unknown;
 }
 
+interface PerThreadCache {
+  url: string | null;
+  tools: Record<string, MastraTool> | null;
+  attachedKey: string | null;
+}
+
 /**
  * Build the single `prepareStep` function that AgentBrowser hands users.
- * The function is stateful: it owns its own URL / attached-set memos so
- * repeat steps on the same page produce the same tool bytes.
+ * The function is stateful: it owns a per-thread memo (URL and attached-set)
+ * so repeat steps on the same page produce the same tool bytes, and so
+ * concurrent runs on different threads don't share each other's tool lists.
  */
 export function buildWebMcpPrepareStep(browser: AgentBrowser, config: WebMcpPrepareStepConfig): WebMcpPrepareStepFn {
-  let cachedUrl: string | null = null;
-  let cachedTools: Record<string, MastraTool> | null = null;
-  let cachedAttachedKey: string | null = null;
+  const caches = new Map<string, PerThreadCache>();
+  const cacheKeyFor = (threadId: string | undefined) => threadId ?? '__default__';
 
   return async function webMcpPrepareStep(args) {
     const baseTools = (args.tools ?? {}) as Record<string, unknown>;
 
-    const url = await safeGetUrl(browser, config.threadId);
+    // Prefer the step's own thread id over any fallback captured when the
+    // prepare-step was built. In an agent run each step carries its own
+    // `requestContext`, so this is what keeps concurrent runs isolated.
+    const threadId = resolveThreadId(args, config.threadId);
+    const cacheKey = cacheKeyFor(threadId);
+    let cache = caches.get(cacheKey);
+    if (!cache) {
+      cache = { url: null, tools: null, attachedKey: null };
+      caches.set(cacheKey, cache);
+    }
+
+    const url = await safeGetUrl(browser, threadId);
     if (url == null) return undefined;
 
     let pageTools: Record<string, MastraTool>;
 
     if (config.mode === 'auto') {
-      if (cachedTools == null || cachedUrl !== url) {
-        cachedUrl = url;
-        cachedTools = await fetchAllPageTools(browser, config);
+      if (cache.tools == null || cache.url !== url) {
+        cache.url = url;
+        cache.tools = await fetchAllPageTools(browser, config, threadId);
       }
-      pageTools = cachedTools;
+      pageTools = cache.tools;
     } else {
       // manual mode — only the tools the agent attached via the discover tool
-      const attached = browser.getAttachedWebMcpTools(config.threadId);
+      const attached = browser.getAttachedWebMcpTools(threadId);
       const attachedKey = `${url}\u0000${attached.map(t => t.id).join('\u0000')}`;
-      if (cachedTools == null || cachedUrl !== url || cachedAttachedKey !== attachedKey) {
-        cachedUrl = url;
-        cachedAttachedKey = attachedKey;
-        cachedTools = buildToolsFromAttached(browser, attached, config.threadId);
+      if (cache.tools == null || cache.url !== url || cache.attachedKey !== attachedKey) {
+        cache.url = url;
+        cache.attachedKey = attachedKey;
+        cache.tools = buildToolsFromAttached(browser, attached, threadId);
       }
-      pageTools = cachedTools;
+      pageTools = cache.tools;
     }
 
     if (Object.keys(pageTools).length === 0) return undefined;
@@ -100,11 +124,28 @@ export function buildWebMcpPrepareStep(browser: AgentBrowser, config: WebMcpPrep
   };
 }
 
+/**
+ * Pull the effective thread id for this step out of the agent's
+ * `requestContext`. Each `generate`/`stream` call carries its own context,
+ * so this is how we keep concurrent runs on the same browser isolated.
+ * Falls back to the config value for callers that drive `prepareStep`
+ * outside an agent run.
+ */
+function resolveThreadId(
+  args: { requestContext?: { get: (key: string) => unknown } },
+  fallback: string | undefined,
+): string | undefined {
+  const fromContext = args.requestContext?.get(MASTRA_THREAD_ID_KEY);
+  if (typeof fromContext === 'string' && fromContext.length > 0) return fromContext;
+  return fallback;
+}
+
 async function fetchAllPageTools(
   browser: AgentBrowser,
   config: WebMcpPrepareStepConfig,
+  threadId: string | undefined,
 ): Promise<Record<string, MastraTool>> {
-  const listed = await browser.listWebMcpTools(config.threadId);
+  const listed = await browser.listWebMcpTools(threadId);
   if (!('success' in listed) || listed.success !== true) return {};
   const sorted = [...listed.tools].sort((a, b) => a.name.localeCompare(b.name));
   const out: Record<string, MastraTool> = {};
@@ -117,7 +158,7 @@ async function fetchAllPageTools(
       description: tool.description ?? `WebMCP tool "${tool.name}" from ${listed.origin} (source: ${tool.source}).`,
       inputSchema: tool.inputSchema,
       browser,
-      threadId: config.threadId,
+      threadId,
     });
   }
   return out;

@@ -4,6 +4,7 @@
  * - manual mode: only tools attached via `attachWebMcpTools` are merged
  * - memoization, pass-through, prefixing, collision handling, name sanitization
  */
+import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockPage, mockManager } = vi.hoisted(() => {
@@ -242,5 +243,107 @@ describe('browser.prepareStep (manual mode)', () => {
     expect(out).toEqual({ ok: true });
     const callArgs = mockPage.evaluate.mock.calls.at(-1);
     expect(callArgs?.[1]).toMatchObject({ name: 'add_to_cart', args: { itemId: 'abc' } });
+  });
+});
+
+describe('browser.prepareStep thread isolation', () => {
+  let browser: AgentBrowser;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://shop.test/');
+    browser = makeBrowser();
+    await browser.launch();
+  });
+
+  afterEach(async () => {
+    await browser.close();
+  });
+
+  function stepArgsForThread(threadId: string | undefined) {
+    const map = new Map<string, unknown>();
+    if (threadId !== undefined) map.set(MASTRA_THREAD_ID_KEY, threadId);
+    const requestContext = {
+      get: (key: string) => map.get(key),
+      has: (key: string) => map.has(key),
+    } as unknown as import('@mastra/core/request-context').RequestContext;
+    return { stepNumber: 0, tools: {}, requestContext };
+  }
+
+  it('passes requestContext thread id to listWebMcpTools instead of a mutable fallback', async () => {
+    const listSpy = vi
+      .spyOn(browser, 'listWebMcpTools')
+      .mockResolvedValue({ success: true, tools: [], origin: 'https://shop.test', hint: '' });
+    const getUrlSpy = vi.spyOn(browser, 'getCurrentUrl').mockResolvedValue('https://shop.test/');
+    // Mutable "current thread" state is deliberately set to something else so
+    // we can prove the step args win over it.
+    browser.setCurrentThread('leaked-thread');
+    await browser.prepareStep(stepArgsForThread('thread-A'));
+    expect(getUrlSpy).toHaveBeenLastCalledWith('thread-A');
+    expect(listSpy).toHaveBeenLastCalledWith('thread-A');
+  });
+
+  it('keeps separate memo caches per thread so concurrent runs do not share tool lists', async () => {
+    vi.spyOn(browser, 'getCurrentUrl').mockImplementation(async threadId =>
+      threadId === 'thread-A' ? 'https://shop.test/a' : 'https://shop.test/b',
+    );
+    const listSpy = vi.spyOn(browser, 'listWebMcpTools').mockImplementation(async threadId => ({
+      success: true,
+      origin: 'https://shop.test',
+      hint: '',
+      tools:
+        threadId === 'thread-A'
+          ? [
+              {
+                name: 'a_only',
+                source: 'mcpb' as const,
+                description: null,
+                inputSchema: { type: 'object', properties: {} },
+              },
+            ]
+          : [
+              {
+                name: 'b_only',
+                source: 'mcpb' as const,
+                description: null,
+                inputSchema: { type: 'object', properties: {} },
+              },
+            ],
+    }));
+
+    const a1 = (await browser.prepareStep(stepArgsForThread('thread-A'))) as { tools: Record<string, unknown> };
+    const b1 = (await browser.prepareStep(stepArgsForThread('thread-B'))) as { tools: Record<string, unknown> };
+    expect(Object.keys(a1.tools)).toEqual(['page_a_only']);
+    expect(Object.keys(b1.tools)).toEqual(['page_b_only']);
+
+    // Second step on each thread hits its own cache: still one list call per thread.
+    await browser.prepareStep(stepArgsForThread('thread-A'));
+    await browser.prepareStep(stepArgsForThread('thread-B'));
+    const callsByThread = listSpy.mock.calls.map(c => c[0]);
+    expect(callsByThread.filter(t => t === 'thread-A')).toHaveLength(1);
+    expect(callsByThread.filter(t => t === 'thread-B')).toHaveLength(1);
+  });
+
+  it('manual mode reads attached tools under the step thread id, not the mutable fallback', async () => {
+    const manual = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await manual.launch();
+    vi.spyOn(manual, 'getCurrentUrl').mockResolvedValue('https://shop.test/');
+    vi.spyOn(manual, 'listWebMcpTools').mockResolvedValue({
+      success: true,
+      origin: 'https://shop.test',
+      hint: '',
+      tools: SHOP_TOOLS,
+    });
+    await manual.attachWebMcpTools({ names: ['get_price'] }, 'thread-A');
+    manual.setCurrentThread('leaked-thread');
+
+    const forA = (await manual.prepareStep(stepArgsForThread('thread-A'))) as { tools: Record<string, unknown> };
+    const forB = await manual.prepareStep(stepArgsForThread('thread-B'));
+    expect(Object.keys(forA.tools)).toEqual(['page_get_price']);
+    expect(forB).toBeUndefined();
+    await manual.close();
   });
 });

@@ -121,9 +121,11 @@ export interface WebmcpOptions {
    */
   allowedOrigins?: string[];
   /**
-   * How page WebMCP tools become visible to the agent during a run. Only
-   * takes effect when `browser.prepareStep` is passed to the agent's
-   * generate/stream call. Defaults to `'auto'`.
+   * How page WebMCP tools become visible to the agent during a run. The
+   * Agent applies the browser's `prepareStep` automatically (via
+   * {@link AgentBrowser.getPrepareStep}) when the browser is passed to
+   * `new Agent({ browser })`, unless a user-supplied `prepareStep` overrides
+   * it. Defaults to `'auto'`.
    */
   toolDiscovery?: WebmcpToolDiscovery;
   /**
