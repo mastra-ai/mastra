@@ -2,10 +2,11 @@ import type { Scenario, ScenarioStep } from '../scenario.js';
 import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
- * Deep GitHub scenario: issue + comment + label lifecycle in the first repo
- * the authenticated user has write access to. Repository creation is out of
- * scope because repos are workspace-level objects; the scenario relies on the
- * token already having an active repo it can post to.
+ * Deep GitHub scenario: issue + comment + label lifecycle inside a target
+ * repo. Nango/mastra-connect expose no `list_repositories` tool, so the
+ * scenario needs to be pointed at an existing repo the authenticated token
+ * can write to. Set `MASTRA_SMOKE_GITHUB_REPO=owner/repo`; the scenario
+ * resolves it with `github_get_repository` and skips cleanly when unset.
  */
 export const githubScenario: Scenario = {
   integrationId: 'github',
@@ -13,7 +14,7 @@ export const githubScenario: Scenario = {
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
-      'github_list_repositories',
+      'github_get_repository',
       'github_create_issue',
       'github_get_issue',
       'github_update_issue',
@@ -23,26 +24,40 @@ export const githubScenario: Scenario = {
       return steps;
     }
 
-    const repos = await call<{
-      items?: Array<{
-        full_name?: string;
-        owner?: { login?: string };
-        name?: string;
-        permissions?: { push?: boolean };
-      }>;
-    }>('github_list_repositories', { per_page: 20 });
-    const writable = (repos.items ?? []).find(
-      r => r.permissions?.push === true && typeof r.owner?.login === 'string' && typeof r.name === 'string',
-    );
-    if (!writable?.owner?.login || !writable.name) {
+    const targetSpec = process.env.MASTRA_SMOKE_GITHUB_REPO?.trim();
+    if (!targetSpec) {
       steps.push(
-        makeStep('pick repo', 'github_list_repositories', 'skip', 'No writable repo visible to the connected user.'),
+        makeStep(
+          'pick repo',
+          'github_get_repository',
+          'skip',
+          'Set MASTRA_SMOKE_GITHUB_REPO=owner/repo to run the GitHub scenario (no list_repositories tool exists).',
+        ),
       );
       return steps;
     }
-    const owner = writable.owner.login;
-    const repo = writable.name;
-    steps.push(makeStep('pick repo', 'github_list_repositories', 'pass', `${owner}/${repo}`));
+    const slashIndex = targetSpec.indexOf('/');
+    if (slashIndex <= 0 || slashIndex === targetSpec.length - 1) {
+      steps.push(
+        makeStep(
+          'pick repo',
+          'github_get_repository',
+          'skip',
+          `Invalid MASTRA_SMOKE_GITHUB_REPO="${targetSpec}"; expected "owner/repo".`,
+        ),
+      );
+      return steps;
+    }
+    const owner = targetSpec.slice(0, slashIndex);
+    const repo = targetSpec.slice(slashIndex + 1);
+
+    try {
+      await call('github_get_repository', { owner, repo });
+    } catch (error) {
+      steps.push(makeStep('pick repo', 'github_get_repository', 'fail', errorMessage(error)));
+      return steps;
+    }
+    steps.push(makeStep('pick repo', 'github_get_repository', 'pass', `${owner}/${repo}`));
 
     steps.push(
       ...(await runReadBatch(
