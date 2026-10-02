@@ -344,7 +344,7 @@ export interface DurableLLMStepOutput {
   toolCalls: DurableToolCallInput[];
   /** Step result metadata */
   stepResult: {
-    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
     logprobs?: LanguageModelV1LogProbs;

@@ -36,6 +36,7 @@ import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
+  AgentAbortEventData,
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
@@ -573,6 +574,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback when the recovered run errors */
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when the recovered run is aborted */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /**
@@ -959,6 +962,10 @@ export class DurableAgent<
         onStreamFinished: scheduleAutoCleanup,
         onError: async error => {
           await options?.onError?.(error);
+          scheduleAutoCleanup();
+        },
+        onAbort: async data => {
+          await options?.onAbort?.(data);
           scheduleAutoCleanup();
         },
         onSuspended: options?.onSuspended,
@@ -3757,6 +3764,7 @@ export class DurableAgent<
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
@@ -3831,7 +3839,13 @@ export class DurableAgent<
           if (runDead !== false) completeTerminalLifecycle();
         }
       },
-      onAbort: completeTerminalLifecycle,
+      onAbort: async data => {
+        try {
+          await options?.onAbort?.(data);
+        } finally {
+          completeTerminalLifecycle();
+        }
+      },
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
