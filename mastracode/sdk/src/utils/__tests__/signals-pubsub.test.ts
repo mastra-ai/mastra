@@ -274,15 +274,17 @@ describe('SignalsPubSub', () => {
     expect(mocks.instances.map(instance => instance.socketPath)).toEqual(['/tmp/mc/mastra-bbb/.leases.sock']);
   });
 
-  it("holds a resource's notification dispatch lease in that resource's directory", async () => {
+  it("routes a resource's safe notification dispatch lease and rejects an unsafe one", async () => {
     const { createSignalsPubSub, notificationDispatchLeaseKey } = await import('../signals-pubsub.js');
     const pubsub = createSignalsPubSub('mastra-bbb');
 
     await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('sentinel-aaa'), 'owner', 1000);
-    await pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('../escape'), 'owner', 1000);
+    await expect(
+      pubsub.getLeaseProvider().acquireLease(notificationDispatchLeaseKey('../escape'), 'owner', 1000),
+    ).rejects.toThrow(/resourceId .* is not a safe directory name/);
 
     expect(findSocket('/tmp/mc/sentinel-aaa/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:sentinel-aaa']);
-    expect(findSocket('/tmp/mc/mastra-bbb/.leases.sock')?.leaseKeys).toEqual(['notification-dispatch:../escape']);
+    expect(mocks.instances.some(instance => instance.socketPath.includes('escape'))).toBe(false);
   });
 
   it("routes another resource's thread stream to that resource's directory", async () => {
@@ -309,15 +311,17 @@ describe('SignalsPubSub', () => {
     expect(findSocket('/tmp/mc/mastra-bbb/agent_thread-peer-discovery.sock')).toBeDefined();
   });
 
-  it('keeps a thread topic in its own directory when the resource id cannot name a directory', async () => {
+  it('rejects a thread topic and lease whose resource id cannot name a directory', async () => {
     const { createSignalsPubSub } = await import('../signals-pubsub.js');
     const pubsub = createSignalsPubSub('mastra-bbb');
 
-    await pubsub.publish(threadTopic('../escape', 'thread-1'), event);
-    await pubsub.getLeaseProvider().acquireLease('../escape\0thread-1', 'run-1', 1000);
+    await expect(pubsub.publish(threadTopic('../escape', 'thread-1'), event)).rejects.toThrow(
+      /resourceId .* is not a safe directory name/,
+    );
+    await expect(
+      pubsub.getLeaseProvider().acquireLease('../escape\0thread-1', 'run-1', 1000),
+    ).rejects.toThrow(/resourceId .* is not a safe directory name/);
 
-    expect(findSocket('/tmp/mc/mastra-bbb/thread-1.sock')).toBeDefined();
-    expect(findSocket('/tmp/mc/mastra-bbb/.leases.sock')?.leaseKeys).toEqual(['../escape\0thread-1']);
     expect(mocks.instances.some(instance => instance.socketPath.includes('escape'))).toBe(false);
   });
 
@@ -635,35 +639,48 @@ describe('SignalsPubSub', () => {
       expect(findSocket(`${root}/${ownResource}/thread-2.sock`)?.closed).toBe(false);
     });
 
-    it('rejects a foreign threadId that is not a safe file name and creates nothing', async () => {
+    it('rejects an unsafe threadId for own and foreign resources, with sharing on or off', async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
-      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
 
-      for (const threadId of ['../evil', 'a/b', 'a\\b', '..', 'x\u0001']) {
-        await expect(pubsub.publish(threadTopic(foreignResourceId, threadId), event)).rejects.toThrow(
-          /threadId is not a safe file name/,
-        );
-        await expect(pubsub.subscribe(threadTopic(foreignResourceId, threadId), vi.fn())).rejects.toThrow(
-          /threadId is not a safe file name/,
-        );
+      for (const sharedAgentDiscovery of [false, true]) {
+        const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery, rootDir: root });
+        for (const scope of [resourceId, foreignResourceId, '']) {
+          for (const threadId of ['../evil', 'a/b', 'a\\b', '.', '..', '.leases', 'x\u0001']) {
+            await expect(pubsub.publish(threadTopic(scope, threadId), event)).rejects.toThrow(
+              /threadId is not a safe file name/,
+            );
+            await expect(pubsub.subscribe(threadTopic(scope, threadId), vi.fn())).rejects.toThrow(
+              /threadId is not a safe file name/,
+            );
+          }
+        }
       }
 
       expect(socketPaths().filter(path => !path.endsWith('.leases.sock'))).toEqual([]);
       expect(mocks.mkdir).not.toHaveBeenCalled();
     });
 
-    it('keeps a thread whose resourceId is not a safe directory name on the resource-local path', async () => {
+    it('rejects an unsafe idle-acceptance suffix instead of treating it as a path', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { rootDir: root });
+      const topic = `${threadTopic(foreignResourceId, 'thread-safe')}.idle-acceptance.${requestId}/../escaped`;
+
+      await expect(pubsub.publish(topic, event)).rejects.toThrow(/threadId is not a safe file name/);
+      expect(socketPaths().filter(path => !path.endsWith('.leases.sock'))).toEqual([]);
+    });
+
+    it('rejects a thread whose resourceId is not a safe directory name', async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
       const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
 
-      for (const hostile of ['../evil', 'a/b', 'a\\b', '..', 'x\u0001', 'r'.repeat(129)]) {
-        await pubsub.publish(threadTopic(hostile, 'thread-x'), event);
+      for (const hostile of ['../evil', 'a/b', 'a\\b', '.', '..', 'x\u0001', 'r'.repeat(129)]) {
+        await expect(pubsub.publish(threadTopic(hostile, 'thread-x'), event)).rejects.toThrow(
+          /resourceId .* is not a safe directory name/,
+        );
       }
 
-      expect(new Set(socketPaths().filter(path => !path.endsWith('.leases.sock')))).toEqual(
-        new Set([`${root}/${resourceId}/thread-x.sock`]),
-      );
-      expect(mocks.mkdir.mock.calls.every(([dir]) => dir === `${root}/${resourceId}`)).toBe(true);
+      expect(socketPaths().filter(path => !path.endsWith('.leases.sock'))).toEqual([]);
+      expect(mocks.mkdir).not.toHaveBeenCalled();
     });
 
     it('ignores a relative MASTRACODE_SIGNALS_SOCKET_ROOT', async () => {
@@ -676,13 +693,13 @@ describe('SignalsPubSub', () => {
       expect(socketPaths()).toEqual([`/tmp/mc/${resourceId}/.leases.sock`, `/tmp/mc/${resourceId}/workflows.sock`]);
     });
 
-    it("routes another resource's thread when its resourceId is an ordinary override such as resource:b", async () => {
+    it("routes another resource's thread when its resourceId and threadId use ordinary punctuation and Unicode", async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
       const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
 
-      await pubsub.publish(threadTopic('resource:b', 'thread-b'), event);
+      await pubsub.publish(threadTopic('resource:b', 'thread 1:é.%2F'), event);
 
-      expect(findSocket(`${root}/resource:b/thread-b.sock`)?.published).toHaveLength(1);
+      expect(findSocket(`${root}/resource:b/thread 1:é.%2F.sock`)?.published).toHaveLength(1);
     });
 
     it("keeps another resource's thread socket open while subscribed, even across clearTopic", async () => {
@@ -703,16 +720,23 @@ describe('SignalsPubSub', () => {
       expect(socket.closed).toBe(true);
     });
 
-    it('does not join the shared scope when its own resourceId cannot be a directory name', async () => {
+    it('rejects an unsafe own resourceId before creating any socket path', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
-      const pubsub = createSignalsPubSub('team/a', { sharedAgentDiscovery: true, rootDir: root });
 
-      await pubsub.subscribe(peerRequestTopic, vi.fn());
+      expect(() => createSignalsPubSub('team/a', { sharedAgentDiscovery: true, rootDir: root })).toThrow(
+        /resourceId .* is not a safe directory name/,
+      );
+      expect(() => createSignalsPubSub('../escape-own', { rootDir: root })).toThrow(
+        /resourceId .* is not a safe directory name/,
+      );
+      expect(() => createSignalsPubSub('r'.repeat(129), { rootDir: root })).toThrow(
+        /resourceId .* is not a safe directory name/,
+      );
 
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]![0]).toMatch(/resource id "team\/a" cannot be used/);
-      expect(socketPaths().some(path => path.includes('_shared'))).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+      expect(mocks.instances).toEqual([]);
+      expect(mocks.mkdir).not.toHaveBeenCalled();
     });
 
     it('fails a peer discovery subscribe when the shared directory is unavailable, so the claim is retried', async () => {
