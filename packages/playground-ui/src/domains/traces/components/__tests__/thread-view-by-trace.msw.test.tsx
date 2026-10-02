@@ -559,7 +559,7 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  it('emphasises the first row in view while the others stay dimmed', async () => {
+  it('keeps every row at full opacity, whichever is in view', async () => {
     const { intersect } = stubIntersectionObserver();
     installHandlers();
     const { queryClient } = renderView();
@@ -571,11 +571,10 @@ describe('ThreadViewByTrace', () => {
         .getByTestId('thread-view-by-trace')
         .querySelector<HTMLElement>(`[data-trace-id="${traceId}"]`) as HTMLElement;
 
-    expect(rowOf('trace-a').className).toContain('opacity-50');
     act(() => intersect(rowOf('trace-a')));
 
-    expect(rowOf('trace-a').className).not.toContain('opacity-50');
-    expect(rowOf('trace-b').className).toContain('opacity-50');
+    expect(rowOf('trace-a').className).not.toMatch(/opacity/);
+    expect(rowOf('trace-b').className).not.toMatch(/opacity/);
     vi.unstubAllGlobals();
   });
 

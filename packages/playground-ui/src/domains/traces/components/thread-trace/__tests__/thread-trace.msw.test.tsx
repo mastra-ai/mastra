@@ -177,15 +177,14 @@ describe('ThreadTrace', () => {
   });
 
   describe('row emphasis', () => {
-    it('marks the first row in view as active without dimming the others', async () => {
+    it('keeps every row at full opacity, whichever is in view', async () => {
       const { intersect } = stubIntersectionObserver();
       renderView();
       await screen.findByText('Chef agent run');
 
       act(() => intersect(getRow('trace-b')));
-      expect(getRow('trace-b').hasAttribute('data-active')).toBe(true);
-      expect(getRow('trace-a').hasAttribute('data-active')).toBe(false);
       expect(getRow('trace-a').className).not.toMatch(/opacity/);
+      expect(getRow('trace-b').className).not.toMatch(/opacity/);
     });
   });
 
