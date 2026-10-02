@@ -132,8 +132,10 @@ describe('DurableAgent toModelOutput parity', () => {
       }
 
       const streamedError = chunks.find(chunk => chunk.type === 'error')?.payload?.error;
-      const surfacedError = receivedError ?? streamedError;
-      expect(surfacedError instanceof Error ? surfacedError.message : String(surfacedError)).toContain(
+      expect(receivedError instanceof Error ? receivedError.message : String(receivedError)).toContain(
+        mappingError.message,
+      );
+      expect(streamedError instanceof Error ? streamedError.message : String(streamedError)).toContain(
         mappingError.message,
       );
       expect(finished).toBe(false);

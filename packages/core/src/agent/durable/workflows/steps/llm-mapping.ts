@@ -213,13 +213,12 @@ export function createDurableLLMMappingStep() {
           }
 
           // Compute toModelOutput for successful tool results (Bug 9 parity).
-          // Start from the existing providerMetadata so it's preserved when
-          // toModelOutput is absent — otherwise tools without a mapper lose
-          // their metadata. Results that already
-          // carry a mapped output from tool-call.ts (`modelOutputComputed`) are
-          // not recomputed: the serialization boundary is why tool-call maps
-          // eagerly, and this step only covers results that crossed the boundary
-          // unmapped (background completion, provider fallback).
+          // Start from the existing providerMetadata so tools without a mapper
+          // preserve their metadata. Results that already carry a mapped output
+          // from tool-call.ts (`modelOutputComputed`) are not recomputed: the
+          // serialization boundary is why tool-call maps eagerly, and this step
+          // only covers results that crossed the boundary unmapped (background
+          // completion, provider fallback).
           let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
             | Record<string, unknown>
             | undefined;

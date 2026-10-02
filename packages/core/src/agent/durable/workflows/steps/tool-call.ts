@@ -90,16 +90,16 @@ const durableToolCallInputSchema = z.object({
  * validation defaults). If validation is enabled, an undeclared field would
  * be silently stripped at the boundary — declare new output fields here.
  */
+const serializedErrorSchema = z.object({
+  name: z.string(),
+  message: z.string(),
+  stack: z.string().optional(),
+});
+
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
-  mappingError: z
-    .object({
-      name: z.string(),
-      message: z.string(),
-      stack: z.string().optional(),
-    })
-    .optional(),
+  mappingError: serializedErrorSchema.optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema.
@@ -107,13 +107,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
-  error: z
-    .object({
-      name: z.string(),
-      message: z.string(),
-      stack: z.string().optional(),
-    })
-    .optional(),
+  error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
   approval: z
