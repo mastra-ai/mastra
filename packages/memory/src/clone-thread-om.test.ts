@@ -513,8 +513,9 @@ describe('cloneThread – Observational Memory', () => {
       const session = await controller.createSession({ resourceId });
       const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-controller-dynamic' });
 
-      // Once for the clone, and once per history subscription: the new session's thread and the clone.
-      expect(memoryFactory).toHaveBeenCalledTimes(3);
+      // Once for the clone, and once for the clone's history subscription. Creating the
+      // session opens no thread of its own, so it adds no call.
+      expect(memoryFactory).toHaveBeenCalledTimes(2);
 
       const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
       expect(clonedOM).not.toBeNull();
