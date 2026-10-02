@@ -37,33 +37,38 @@ import { AgentBrowser } from '../agent-browser';
 import { BROWSER_TOOLS } from '../tools/constants';
 
 describe('WebMCP: tool registration gating', () => {
-  it('hides browser_webmcp by default (no webmcp config)', () => {
+  it('hides browser_webmcp_discover by default (no webmcp config)', () => {
     const browser = new AgentBrowser({ scope: 'shared' });
-    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
   });
 
-  it('hides browser_webmcp when webmcp is an empty object (enabled not set)', () => {
+  it('hides browser_webmcp_discover when webmcp is an empty object (enabled not set)', () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
-    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
   });
 
-  it('exposes browser_webmcp when webmcp.enabled is true', () => {
+  it('hides browser_webmcp_discover in auto mode (default)', () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
-    expect(Object.keys(browser.getTools())).toContain(BROWSER_TOOLS.WEBMCP);
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
   });
 
-  it('hides browser_webmcp when webmcp.enabled is false', () => {
-    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
-    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
+  it('exposes browser_webmcp_discover when toolDiscovery is manual', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true, toolDiscovery: 'manual' } });
+    expect(Object.keys(browser.getTools())).toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
   });
 
-  it('respects excludeTools for browser_webmcp', () => {
+  it('hides browser_webmcp_discover when webmcp.enabled is false', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false, toolDiscovery: 'manual' } });
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
+  });
+
+  it('respects excludeTools for browser_webmcp_discover', () => {
     const browser = new AgentBrowser({
       scope: 'shared',
-      webmcp: { enabled: true },
-      excludeTools: [BROWSER_TOOLS.WEBMCP],
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+      excludeTools: [BROWSER_TOOLS.WEBMCP_DISCOVER],
     });
-    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP);
+    expect(Object.keys(browser.getTools())).not.toContain(BROWSER_TOOLS.WEBMCP_DISCOVER);
   });
 });
 
@@ -146,7 +151,7 @@ describe('WebMCP: list', () => {
     if (result.success) {
       expect(result.tools).toEqual([{ name: 'add', source: 'w3c', description: 'Add two numbers', inputSchema: null }]);
       expect(result.origin).toBe('https://example.com');
-      expect(result.hint).toMatch(/action="call"/);
+      expect(result.hint).toMatch(/browser_webmcp_discover|prepareStep/);
     }
   });
 

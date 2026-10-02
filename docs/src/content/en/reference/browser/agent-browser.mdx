@@ -108,7 +108,7 @@ then interact with elements using their refs (e.g., @e5).`,
     name: 'webmcp',
     type: 'WebmcpOptions',
     description:
-      "Beta WebMCP settings. WebMCP is opt-in: pass { enabled: true } to have AgentBrowser inject an in-page bridge and add a browser_webmcp tool. `protocols` restricts which surfaces the bridge listens for ('mcpb' for in-page MCP servers over the @mcp-b/transports Tab transport, 'w3c' for the navigator.modelContext draft); omit it to listen for all protocols. `allowedOrigins` restricts which page origins can expose callable tools; omit it to allow any origin.",
+      "Beta WebMCP settings. WebMCP is opt-in: pass { enabled: true } to have AgentBrowser inject an in-page bridge. Pass `browser.prepareStep` to agent.generate / agent.stream for page tools to surface as first-class `page_*` tools. `toolDiscovery: 'auto'` (default) auto-attaches every page tool each step; `'manual'` adds a browser_webmcp_discover tool so the agent attaches tools on demand. `protocols` restricts which surfaces the bridge listens for ('mcpb', 'w3c'); omit for all. `allowedOrigins` restricts which page origins can expose callable tools; omit to allow any origin. `toolPrefix` overrides the default `page_` tool id prefix.",
     isOptional: true,
   },
 ]}
@@ -120,43 +120,39 @@ then interact with elements using their refs (e.g., @e5).`,
 
 When `recording` is configured, `AgentBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser#record-browser-sessions).
 
-When `webmcp: { enabled: true }` is configured, `AgentBrowser` also adds the Beta `browser_webmcp` tool. See [WebMCP](/integrations/browsers/agent-browser#webmcp).
+When `webmcp: { enabled: true, toolDiscovery: 'manual' }` is configured, `AgentBrowser` also adds the Beta `browser_webmcp_discover` tool. See [WebMCP](/integrations/browsers/agent-browser#webmcp).
 
-## Mid-turn tool discovery
+## WebMCP surface
 
-`AgentBrowser` exposes two helpers that convert a page's WebMCP tools into first-class Mastra tools so an agent can call them directly instead of going through the `browser_webmcp` meta-tool.
+`AgentBrowser` exposes a single `prepareStep` function. Pass it to `agent.generate` / `agent.stream`, and page WebMCP tools surface as first-class Mastra tools (`page_<tool_name>`) the agent can call directly.
 
-### `createWebMcpPrepareStep(opts?)`
+### `browser.prepareStep`
 
-Returns a `prepareStep` function to pass to `agent.generate` / `agent.stream`. Memoizes the page tool list by current URL inside the returned instance so repeat steps on the same page produce the same tool bytes.
+A property, not a factory — one stable reference per browser instance. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is disabled, it's a no-op that returns `undefined`.
+
+The tool list is memoized by the current page URL inside the function, so repeat steps on the same page produce the same tool bytes. Base `browser_*` tools win on name collision.
+
+```typescript
+await agent.generate(input, {
+  prepareStep: browser.prepareStep,
+})
+```
+
+### `browser_webmcp_discover`
+
+Added to the toolset when `toolDiscovery: 'manual'`. The agent calls it to attach page tools to its own toolset; attached tools surface on the next step.
 
 <PropertiesTable
   content={[
   {
-    name: 'threadId',
-    type: 'string',
-    description: 'Thread to look up. Defaults to the browser’s current thread.',
-    isOptional: true,
-  },
-  {
-    name: 'prefix',
-    type: 'string',
+    name: 'names',
+    type: 'string[]',
     description:
-      'Id prefix applied to each page tool. Defaults to `page_`. Pass `` to disable prefixing (collisions drop the page tool).',
-    isOptional: true,
-  },
-  {
-    name: 'passthrough',
-    type: '(args) => PrepareStepResult | undefined',
-    description: 'Existing `prepareStep` to chain. Its result is merged with the page tools.',
+      'Optional subset of page tool names to attach. When omitted, every tool the page exposes is attached. Unknown names are returned in `notFound`.',
     isOptional: true,
   },
 ]}
 />
-
-### `getPageWebMcpTools(opts?)`
-
-Lower-level helper that returns a `Record<string, Tool>` of the current page's WebMCP tools without wiring them into `prepareStep`. Accepts the same `threadId` and `prefix` options.
 
 ### Core tools
 

@@ -235,21 +235,33 @@ describe('AgentBrowser', () => {
     it('returns provider tools without recording or webmcp tools by default', () => {
       const tools = browser.getTools();
 
-      // 16 standard provider tools; browser_webmcp and recording are opt-in.
+      // 16 standard provider tools; webmcp and recording are opt-in.
       expect(Object.keys(tools)).toHaveLength(16);
       expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
-      expect(tools[BROWSER_TOOLS.WEBMCP]).toBeUndefined();
+      expect(tools[BROWSER_TOOLS.WEBMCP_DISCOVER]).toBeUndefined();
       expect(tools.browser_record).toBeUndefined();
       expect(tools.browser_record_caption).toBeUndefined();
     });
 
-    it('includes browser_webmcp when opted in', () => {
+    it('omits browser_webmcp_discover in auto mode (default)', () => {
       const webmcpBrowser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
       const tools = webmcpBrowser.getTools();
 
-      // 16 standard + browser_webmcp.
+      // Still 16 — tools arrive via prepareStep, not via a discovery tool.
+      expect(Object.keys(tools)).toHaveLength(16);
+      expect(tools[BROWSER_TOOLS.WEBMCP_DISCOVER]).toBeUndefined();
+    });
+
+    it('includes browser_webmcp_discover in manual mode', () => {
+      const webmcpBrowser = new AgentBrowser({
+        scope: 'shared',
+        webmcp: { enabled: true, toolDiscovery: 'manual' },
+      });
+      const tools = webmcpBrowser.getTools();
+
+      // 16 standard + browser_webmcp_discover.
       expect(Object.keys(tools)).toHaveLength(17);
-      expect(tools[BROWSER_TOOLS.WEBMCP]).toBeDefined();
+      expect(tools[BROWSER_TOOLS.WEBMCP_DISCOVER]).toBeDefined();
     });
 
     it('includes recording tools when opted in', () => {

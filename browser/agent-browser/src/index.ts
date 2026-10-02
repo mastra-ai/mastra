@@ -17,15 +17,14 @@ export { getBrowserPid } from './utils';
 export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
 export type { BrowserToolName } from './tools';
 
-// WebMCP mid-turn tool discovery helpers
-export { createWebMcpPrepareStep, getPageWebMcpTools } from './webmcp-prepare-step';
+// WebMCP mid-turn tool discovery types
 export type {
-  WebMcpToolOptions,
-  CreateWebMcpPrepareStepOptions,
   WebMcpPrepareStepFn,
   WebMcpPrepareStepArgs,
   WebMcpPrepareStepResult,
+  AttachedPageTool,
 } from './webmcp-prepare-step';
+export type { WebmcpOptions, WebmcpProtocol, WebmcpToolDiscovery } from './types';
 
 // Schema exports
 export {

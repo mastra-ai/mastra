@@ -10,8 +10,12 @@
  *   exactly what pages get from `McpServer` + `TabServerTransport`.
  *
  * Also drives the full @mastra/core Agent tool-execution loop with a
- * scripted model, so the browser_goto → browser_webmcp list/call path is
- * covered end to end against real page state.
+ * scripted model, covering both discovery modes:
+ *
+ * - auto: `browser.prepareStep` merges every page tool each step so the agent
+ *   can go browser_goto → page_add_to_cart directly.
+ * - manual: `browser_webmcp_discover` attaches tools on demand, and
+ *   `browser.prepareStep` surfaces the attached ones on the next step.
  *
  * Skip when Playwright/Chromium is not available (CI without browsers).
  */
@@ -299,17 +303,19 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
   });
 
   describe('full agent loop with the real toolset', () => {
-    it('an Agent discovers and calls page tools through browser_webmcp', async () => {
-      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+    it('an Agent discovers and calls page tools in manual mode via browser_webmcp_discover', async () => {
+      const browser = new AgentBrowser({
+        headless: true,
+        scope: 'shared',
+        webmcp: { enabled: true, toolDiscovery: 'manual' },
+      });
 
+      // Script: goto → discover (attaches page tools) → page_add_to_cart → page_get_cart → finish.
       const script: Array<{ toolName: string; input: Record<string, unknown> } | { text: string }> = [
         { toolName: 'browser_goto', input: { url: '__URL__' } },
-        { toolName: 'browser_webmcp', input: { action: 'list' } },
-        {
-          toolName: 'browser_webmcp',
-          input: { action: 'call', toolName: 'add_to_cart', args: { sku: 'sku-7', qty: 3 } },
-        },
-        { toolName: 'browser_webmcp', input: { action: 'call', toolName: 'get_cart' } },
+        { toolName: 'browser_webmcp_discover', input: {} },
+        { toolName: 'page_add_to_cart', input: { sku: 'sku-7', qty: 3 } },
+        { toolName: 'page_get_cart', input: {} },
         { text: 'Added 3x sku-7 to the cart.' },
       ];
       let step = 0;
@@ -391,17 +397,20 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       const agent = new Agent({
         id: 'webmcp-test-agent',
         name: 'WebMCP test agent',
-        instructions: 'Use browser_webmcp to discover and call tools the page exposes.',
+        instructions: 'Call browser_webmcp_discover after navigating, then call the attached page tools.',
         model: scriptedModel as never,
         tools: browser.getTools() as never,
       });
 
       try {
-        const result = await agent.generate('Add 3 of sku-7 to the cart.', { maxSteps: 8 });
+        const result = await agent.generate('Add 3 of sku-7 to the cart.', {
+          maxSteps: 8,
+          prepareStep: browser.prepareStep as never,
+        });
         expect(result.text).toBe('Added 3x sku-7 to the cart.');
 
         const toolNames = result.steps.flatMap(s => (s.toolCalls ?? []).map(c => c.payload.toolName));
-        expect(toolNames).toEqual(['browser_goto', 'browser_webmcp', 'browser_webmcp', 'browser_webmcp']);
+        expect(toolNames).toEqual(['browser_goto', 'browser_webmcp_discover', 'page_add_to_cart', 'page_get_cart']);
 
         // The agent's tool call mutated real page state.
         const page = await getPage(browser);
@@ -411,11 +420,12 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       }
     }, 60_000);
 
-    it('an Agent calls first-class page tools via createWebMcpPrepareStep', async () => {
+    it('an Agent calls first-class page tools via browser.prepareStep (auto mode)', async () => {
       const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
 
-      // Note: no browser_webmcp calls. The scripted model goes straight from
-      // browser_goto to the first-class page_* tools injected by prepareStep.
+      // Note: no discover tool. In auto mode, page tools are auto-merged every
+      // step. The scripted model goes straight from browser_goto to the
+      // first-class page_* tools.
       const script: Array<{ toolName: string; input: Record<string, unknown> } | { text: string }> = [
         { toolName: 'browser_goto', input: { url: '__URL__' } },
         { toolName: 'page_add_to_cart', input: { sku: 'sku-9', qty: 2 } },
@@ -519,7 +529,7 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       try {
         const result = await agent.generate('Add 2 of sku-9 to the cart.', {
           maxSteps: 8,
-          prepareStep: browser.createWebMcpPrepareStep() as never,
+          prepareStep: browser.prepareStep as never,
         });
         expect(result.text).toBe('Added 2x sku-9 to the cart.');
 

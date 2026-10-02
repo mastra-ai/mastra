@@ -82,6 +82,19 @@ export interface AgentBrowserConfigExtensions {
 export type WebmcpProtocol = 'mcpb' | 'w3c';
 
 /**
+ * How WebMCP page tools are surfaced to the agent during a run.
+ *
+ * - `auto` (default): every step, the agent's toolset is extended with the
+ *   current page's WebMCP tools. The agent can call them directly as
+ *   `page_<tool>`. No discovery call is needed.
+ * - `manual`: page tools are only attached after the agent calls the
+ *   `browser_webmcp_discover` tool. The agent lists what's available first,
+ *   then opts in to the tools it wants. Keeps the toolset (and prompt-cache
+ *   footprint) small on pages with lots of tools.
+ */
+export type WebmcpToolDiscovery = 'auto' | 'manual';
+
+/**
  * Beta configuration for WebMCP tool discovery. Opt-in via `enabled: true`.
  */
 export interface WebmcpOptions {
@@ -107,6 +120,19 @@ export interface WebmcpOptions {
    * `about:blank` is never callable.
    */
   allowedOrigins?: string[];
+  /**
+   * How page WebMCP tools become visible to the agent during a run. Only
+   * takes effect when `browser.prepareStep` is passed to the agent's
+   * generate/stream call. Defaults to `'auto'`.
+   */
+  toolDiscovery?: WebmcpToolDiscovery;
+  /**
+   * Prefix prepended to every page tool name when it is merged into the
+   * agent's toolset. Defaults to `'page_'`. Pass `''` to use the page's
+   * raw tool names (collisions with base `browser_*` tools are still
+   * resolved in favor of the base tool).
+   */
+  toolPrefix?: string;
 }
 
 /**
