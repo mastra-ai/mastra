@@ -25,11 +25,16 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks';
+import {
+  useDatasetMutations,
+  useDataset,
+  useScoresByExperimentId,
+  useReviewItems,
+  useCompletedItems,
+} from '@mastra/react/hooks';
 import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
