@@ -7844,6 +7844,136 @@ describe('Agent signals', () => {
     } as any;
   }
 
+  it('notifies only the owning run synchronously after pending input is queued', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'pending-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'pending-user', threadId: 'pending-thread' };
+    const runId = 'pending-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const admitted: string[][] = [];
+    const unsubscribe = runtime.subscribePendingSignals(
+      runId,
+      () => {
+        admitted.push(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id));
+      },
+      pubsub,
+    );
+    const observer = vi.fn();
+    const unobserve = runtime.subscribePendingSignals('not-an-owner', observer, pubsub);
+    try {
+      const first = runtime.sendMessage(agent, 'first', target, pubsub);
+      expect(admitted).toEqual([[first.signal.id]]);
+      await first.accepted;
+      await pubsub.flush();
+      expect(admitted).toHaveLength(1); // The publisher's own echo must not notify twice.
+      expect(observer).not.toHaveBeenCalled();
+      for (const behavior of ['discard', 'persist'] as const) {
+        const ignored = runtime.sendSignal(
+          agent,
+          { type: 'notification', contents: 'ignored', transient: true },
+          { ...target, ifActive: { behavior } },
+          pubsub,
+        );
+        await ignored.accepted;
+      }
+      const wrongResource = runtime.sendMessage(
+        agent,
+        'wrong resource',
+        { ...target, resourceId: 'other-user', ifIdle: { behavior: 'discard' } },
+        pubsub,
+      );
+      const wrongThread = runtime.sendMessage(
+        agent,
+        'wrong thread',
+        { ...target, threadId: 'other-thread', ifIdle: { behavior: 'discard' } },
+        pubsub,
+      );
+      await Promise.all([wrongResource.accepted, wrongThread.accepted]);
+      const queued = runtime.queueMessage(agent, 'idle only', target, pubsub);
+      await queued.accepted;
+      runtime.cancelQueuedMessages(agent, { ...target, signalIds: [queued.signal.id] }, pubsub);
+      expect(admitted).toHaveLength(1);
+      unsubscribe();
+      const next = runtime.sendMessage(agent, 'after unsubscribe', target, pubsub);
+      await next.accepted;
+      expect(admitted).toHaveLength(1);
+      expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual([next.signal.id]);
+    } finally {
+      unsubscribe();
+      unobserve();
+      finish();
+    }
+  });
+
+  it('preserves input queued before registration and removes listeners after failed startup', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'reserved-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'reserved-user', threadId: 'reserved-thread' };
+    const runId = 'reserved-notification-run';
+    const options = { runId, memory: { resource: target.resourceId, thread: target.threadId } };
+    await runtime.waitForCrossAgentThreadRun(agent, options, pubsub);
+    const before = runtime.sendMessage(agent, 'before listener', target, pubsub);
+    const listener = vi.fn();
+    const unsubscribe = runtime.subscribePendingSignals(runId, listener, pubsub);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([before.signal.id]);
+    const after = runtime.sendMessage(agent, 'after listener', target, pubsub);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([after.signal.id]);
+    runtime.releaseThreadRunReservation(runId, pubsub);
+    // Reusing the identity proves startup cleanup removed the old listener, even without its unsubscribe.
+    await runtime.waitForCrossAgentThreadRun(agent, options, pubsub);
+    const replacement = runtime.sendMessage(agent, 'replacement reservation', target, pubsub);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([
+      replacement.signal.id,
+    ]);
+    unsubscribe();
+    runtime.releaseThreadRunReservation(runId, pubsub);
+  });
+
+  it('removes pending-input listeners when the owning run completes', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'completed-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'completed-user', threadId: 'completed-thread' };
+    const runId = 'completed-notification-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const listener = vi.fn();
+    const unsubscribe = runtime.subscribePendingSignals(runId, listener, pubsub);
+    finish();
+    await vi.waitFor(() => expect(runtime.getThreadState(target, pubsub)).toBe('idle'));
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const signal = runtime.sendMessage(agent, 'replacement', target, pubsub);
+    expect(listener).not.toHaveBeenCalled();
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(item => item.id)).toEqual([signal.signal.id]);
+    unsubscribe();
+    runtime.releaseThreadRunReservation(runId, pubsub);
+  });
+
   it('restores the failed signal at the queue head ahead of later queued signals', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const streamMock = vi.fn().mockRejectedValue(new Error('connection error: ECONNRESET'));

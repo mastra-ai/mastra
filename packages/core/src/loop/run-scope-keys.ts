@@ -67,6 +67,8 @@ export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTask
 
 export const DRAIN_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]>('loop:drainPendingSignals');
+export const SUBSCRIBE_PENDING_SIGNALS_KEY =
+  createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
 
 // --- Tool payload transform ------------------------------------------------
