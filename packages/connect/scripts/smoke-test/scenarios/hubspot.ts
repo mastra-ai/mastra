@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '../scenario.js';
 
 /**
  * Deep HubSpot scenario: contact + company + deal + ticket + task lifecycle
@@ -142,6 +142,253 @@ export const hubspotScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('create task', 'hubspot_create_task', 'fail', errorMessage(error)));
       }
+    }
+
+    // Getters on created primary objects (get_company, get_deal, get_ticket).
+    if (companyId && tools['hubspot_get_company']) {
+      try {
+        await call('hubspot_get_company', { id: companyId });
+        steps.push(makeStep('get company', 'hubspot_get_company', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get company', 'hubspot_get_company', 'fail', errorMessage(error)));
+      }
+    }
+    if (dealId && tools['hubspot_get_deal']) {
+      try {
+        await call('hubspot_get_deal', { dealId });
+        steps.push(makeStep('get deal', 'hubspot_get_deal', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get deal', 'hubspot_get_deal', 'fail', errorMessage(error)));
+      }
+    }
+    if (ticketId && tools['hubspot_get_ticket']) {
+      try {
+        await call('hubspot_get_ticket', { ticketId });
+        steps.push(makeStep('get ticket', 'hubspot_get_ticket', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get ticket', 'hubspot_get_ticket', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Updates on created primary objects.
+    if (companyId && tools['hubspot_update_company']) {
+      try {
+        await call('hubspot_update_company', { id: companyId, name: `${runId} smoke company (edit)` });
+        steps.push(makeStep('update company', 'hubspot_update_company', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update company', 'hubspot_update_company', 'fail', errorMessage(error)));
+      }
+    }
+    if (dealId && tools['hubspot_update_deal']) {
+      try {
+        await call('hubspot_update_deal', { dealId, dealname: `${runId} smoke deal (edit)` });
+        steps.push(makeStep('update deal', 'hubspot_update_deal', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update deal', 'hubspot_update_deal', 'fail', errorMessage(error)));
+      }
+    }
+    if (ticketId && tools['hubspot_update_ticket']) {
+      try {
+        await call('hubspot_update_ticket', { ticketId, subject: `${runId} smoke ticket (edit)` });
+        steps.push(makeStep('update ticket', 'hubspot_update_ticket', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update ticket', 'hubspot_update_ticket', 'fail', errorMessage(error)));
+      }
+    }
+    if (taskId && tools['hubspot_update_task']) {
+      try {
+        await call('hubspot_update_task', { taskId, subject: `${runId} smoke task (edit)` });
+        steps.push(makeStep('update task', 'hubspot_update_task', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update task', 'hubspot_update_task', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Search surfaces (name/subject filters hit our runId-tagged records).
+    if (tools['hubspot_search_companies']) {
+      try {
+        await call('hubspot_search_companies', { name: runId });
+        steps.push(makeStep('search companies', 'hubspot_search_companies', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search companies', 'hubspot_search_companies', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['hubspot_search_deals']) {
+      try {
+        await call('hubspot_search_deals', { dealName: runId });
+        steps.push(makeStep('search deals', 'hubspot_search_deals', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search deals', 'hubspot_search_deals', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['hubspot_search_tickets']) {
+      try {
+        await call('hubspot_search_tickets', { subject: runId });
+        steps.push(makeStep('search tickets', 'hubspot_search_tickets', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('search tickets', 'hubspot_search_tickets', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Note creation (associates with the smoke contact so it cleans up with it).
+    if (contactId && tools['hubspot_create_note']) {
+      try {
+        await call('hubspot_create_note', {
+          body: `${runId} smoke note`,
+          timestamp: new Date().toISOString(),
+          association: { objectType: 'contact', objectId: contactId },
+        });
+        steps.push(makeStep('create note', 'hubspot_create_note', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('create note', 'hubspot_create_note', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Batch company CRUD using the smoke company id when available.
+    if (tools['hubspot_batch_create_companies']) {
+      steps.push(
+        await probeTool(call, tools, 'batch create companies (probe)', 'hubspot_batch_create_companies', {
+          companies: [{ properties: { name: `${runId} batch co`, domain: `batch-${runId}.mastra-smoke.invalid` } }],
+        }),
+      );
+    }
+    if (companyId && tools['hubspot_batch_update_companies']) {
+      try {
+        await call('hubspot_batch_update_companies', {
+          companies: [{ id: companyId, properties: { name: `${runId} smoke company (batched)` } }],
+        });
+        steps.push(makeStep('batch update companies', 'hubspot_batch_update_companies', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('batch update companies', 'hubspot_batch_update_companies', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Property + user + owner + marketing-email + workflow probes. Writes
+    // target reserved domains / synthetic ids and either succeed or surface
+    // the HubSpot 4xx that proves the endpoint is wired.
+    if (tools['hubspot_create_property']) {
+      steps.push(
+        await probeTool(call, tools, 'create property (probe)', 'hubspot_create_property', {
+          objectType: 'contacts',
+          name: `mastra_smoke_${runId.replace(/-/g, '_')}`,
+          label: `Mastra smoke ${runId}`,
+          type: 'string',
+          fieldType: 'text',
+          groupName: 'contactinformation',
+        }),
+      );
+    }
+    if (tools['hubspot_create_user']) {
+      steps.push(
+        await probeTool(call, tools, 'create user (probe)', 'hubspot_create_user', {
+          email: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+          firstName: 'Mastra',
+          lastName: `Smoke-${runId}`,
+          sendWelcomeEmail: false,
+        }),
+      );
+    }
+    if (tools['hubspot_change_user_role']) {
+      steps.push(
+        await probeTool(call, tools, 'change user role (probe)', 'hubspot_change_user_role', {
+          userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+          idProperty: 'EMAIL',
+          roleId: '0',
+        }),
+      );
+    }
+    if (tools['hubspot_delete_user']) {
+      steps.push(
+        await probeTool(call, tools, 'delete user (probe)', 'hubspot_delete_user', {
+          userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+          idProperty: 'EMAIL',
+        }),
+      );
+    }
+    if (tools['hubspot_get_owner']) {
+      steps.push(await probeTool(call, tools, 'get owner (probe)', 'hubspot_get_owner', { ownerId: '0' }));
+    }
+    if (tools['hubspot_list_marketing_emails']) {
+      try {
+        await call('hubspot_list_marketing_emails', {});
+        steps.push(makeStep('list marketing emails', 'hubspot_list_marketing_emails', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list marketing emails', 'hubspot_list_marketing_emails', 'fail', errorMessage(error)));
+      }
+    }
+    let marketingEmailId: string | undefined;
+    if (tools['hubspot_create_marketing_email']) {
+      try {
+        const email = await call<{ id?: string }>('hubspot_create_marketing_email', {
+          name: `${runId} smoke email`,
+          subject: `${runId} smoke subject`,
+          htmlBody: '<p>mastra smoke</p>',
+          textBody: 'mastra smoke',
+        });
+        marketingEmailId = email.id;
+        steps.push(makeStep('create marketing email', 'hubspot_create_marketing_email', 'pass', marketingEmailId));
+      } catch (error) {
+        steps.push(makeStep('create marketing email', 'hubspot_create_marketing_email', 'fail', errorMessage(error)));
+      }
+    }
+    if (marketingEmailId && tools['hubspot_get_marketing_email']) {
+      try {
+        await call('hubspot_get_marketing_email', { emailId: marketingEmailId });
+        steps.push(makeStep('get marketing email', 'hubspot_get_marketing_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get marketing email', 'hubspot_get_marketing_email', 'fail', errorMessage(error)));
+      }
+    }
+    if (marketingEmailId && tools['hubspot_update_marketing_email']) {
+      try {
+        await call('hubspot_update_marketing_email', { emailId: marketingEmailId, name: `${runId} smoke (edit)` });
+        steps.push(makeStep('update marketing email', 'hubspot_update_marketing_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update marketing email', 'hubspot_update_marketing_email', 'fail', errorMessage(error)));
+      }
+    }
+    if (marketingEmailId && tools['hubspot_clone_marketing_email']) {
+      try {
+        await call('hubspot_clone_marketing_email', { emailId: marketingEmailId, cloneName: `${runId} clone` });
+        steps.push(makeStep('clone marketing email', 'hubspot_clone_marketing_email', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('clone marketing email', 'hubspot_clone_marketing_email', 'fail', errorMessage(error)));
+      }
+    }
+    if (marketingEmailId && tools['hubspot_delete_marketing_email']) {
+      try {
+        await call('hubspot_delete_marketing_email', { emailId: marketingEmailId });
+        steps.push(makeStep('delete marketing email', 'hubspot_delete_marketing_email', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke marketing email ${marketingEmailId}`, errorMessage(error));
+        steps.push(makeStep('delete marketing email', 'hubspot_delete_marketing_email', 'fail', errorMessage(error)));
+      }
+    } else if (tools['hubspot_delete_marketing_email']) {
+      steps.push(
+        await probeTool(call, tools, 'delete marketing email (probe)', 'hubspot_delete_marketing_email', {
+          emailId: `smoke-${runId}`,
+        }),
+      );
+    }
+
+    // Workflow delete probe (requires existing workflow id — probe with synthetic).
+    if (tools['hubspot_delete_a_workflow']) {
+      steps.push(
+        await probeTool(call, tools, 'delete workflow (probe)', 'hubspot_delete_a_workflow', {
+          workflowId: `smoke-${runId}`,
+        }),
+      );
+    }
+
+    // Form submit probe (requires portal + form guid — probe with synthetics).
+    if (tools['hubspot_submit_form']) {
+      steps.push(
+        await probeTool(call, tools, 'submit form (probe)', 'hubspot_submit_form', {
+          portal_id: '0',
+          form_guid: '00000000-0000-0000-0000-000000000000',
+          fields: [{ name: 'email', value: `smoke+${runId}@mastra-smoke.invalid` }],
+        }),
+      );
     }
 
     if (taskId && tools['hubspot_delete_task']) {
