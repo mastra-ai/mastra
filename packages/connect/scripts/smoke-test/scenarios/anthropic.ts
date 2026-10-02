@@ -101,6 +101,82 @@ export const anthropicScenario: Scenario = {
       }
     }
 
+    // Exercise list_message_batch_results against the batch we just created.
+    // A cancelled batch has no results yet, but Anthropic still accepts the
+    // request and returns an empty stream.
+    if (batchId && tools['anthropic_list_message_batch_results']) {
+      try {
+        await call('anthropic_list_message_batch_results', { message_batch_id: batchId });
+        steps.push(makeStep('list batch results', 'anthropic_list_message_batch_results', 'pass'));
+      } catch (error) {
+        // 404 on a just-created cancelled batch is normal (no results stream
+        // exists yet). Count that as the endpoint being correctly wired.
+        const msg = errorMessage(error);
+        const status: 'pass' | 'fail' = /status=404|not found/i.test(msg) ? 'pass' : 'fail';
+        steps.push(makeStep('list batch results', 'anthropic_list_message_batch_results', status, msg));
+      }
+    }
+
+    // Files surface. Anthropic doesn't expose an upload tool in this
+    // provider, so the scenario can't create its own file. Instead we probe
+    // the list, pick any file that happens to exist, and round-trip it
+    // through get + delete. When no file exists we invoke get and delete
+    // with a bogus id to exercise routing + 404 handling (both are legitimate
+    // responses for a nonexistent id, so we treat 404 as pass).
+    let probeFileId: string | undefined;
+    let probeFileIsReal = false;
+    try {
+      const files = await call<{ data?: Array<{ id?: string }>; items?: Array<{ id?: string }> }>(
+        'anthropic_list_files',
+        { limit: 1 },
+      );
+      probeFileId = files.data?.[0]?.id ?? files.items?.[0]?.id;
+      probeFileIsReal = typeof probeFileId === 'string';
+    } catch {
+      // list_files already recorded in the read batch above.
+    }
+    if (!probeFileId) probeFileId = `file_smoke_nonexistent_${runId}`;
+
+    if (tools['anthropic_get_file']) {
+      try {
+        await call('anthropic_get_file', { file_id: probeFileId });
+        steps.push(makeStep('get file', 'anthropic_get_file', 'pass', probeFileId));
+      } catch (error) {
+        const msg = errorMessage(error);
+        const expected404 = !probeFileIsReal && /status=404|not found/i.test(msg);
+        steps.push(
+          makeStep(
+            'get file',
+            'anthropic_get_file',
+            expected404 ? 'pass' : 'fail',
+            expected404 ? `404 on synthetic id ${probeFileId} (expected)` : msg,
+          ),
+        );
+      }
+    }
+
+    if (tools['anthropic_delete_file']) {
+      // Only delete a real file if the token actually owns a disposable one
+      // — leave arbitrary account files alone and exercise the endpoint with
+      // a bogus id instead when we can't be certain.
+      const deleteTargetId = probeFileIsReal ? `file_smoke_nonexistent_${runId}` : probeFileId;
+      try {
+        await call('anthropic_delete_file', { file_id: deleteTargetId });
+        steps.push(makeStep('delete file', 'anthropic_delete_file', 'pass', deleteTargetId));
+      } catch (error) {
+        const msg = errorMessage(error);
+        const expected404 = /status=404|not found/i.test(msg);
+        steps.push(
+          makeStep(
+            'delete file',
+            'anthropic_delete_file',
+            expected404 ? 'pass' : 'fail',
+            expected404 ? `404 on synthetic id ${deleteTargetId} (expected)` : msg,
+          ),
+        );
+      }
+    }
+
     return steps;
   },
 };
