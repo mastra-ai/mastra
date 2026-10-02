@@ -63,6 +63,7 @@ function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPane
       isLoading={isLoading}
       onPrevious={handlePreviousSpan}
       onNext={handleNextSpan}
+      onClose={() => selectSpan(traceId, undefined)}
     />
   );
 }

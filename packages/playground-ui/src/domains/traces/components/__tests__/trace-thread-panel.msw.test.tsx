@@ -80,7 +80,7 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
-      expect(screen.queryAllByRole('button', { name: 'Show less' })).toHaveLength(0);
+      expect(screen.queryAllByRole('button', { name: 'Collapse' })).toHaveLength(0);
     });
 
     it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
