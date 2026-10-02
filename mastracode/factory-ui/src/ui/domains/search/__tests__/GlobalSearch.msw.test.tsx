@@ -374,7 +374,10 @@ describe('Global search', () => {
       'Connections',
       'Repositories',
       'Work Intake',
-      'Models',
+      'Factory models',
+      'Your models',
+      'Factory memory',
+      'Your memory',
       'Behavior',
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
