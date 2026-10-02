@@ -21,7 +21,7 @@ import {
   RESPONSE_ITEM_ID_PROVIDERS,
   RESPONSE_RESULT_ITEM_ID_KEY,
 } from '../utils/response-item-metadata';
-import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
+import { normalizeToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Merges text parts that share the same OpenAI-compatible itemId.
@@ -373,26 +373,10 @@ export function sanitizeV5UIMessages(
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
-              output: (() => {
-                const o = part.output;
-                if (o == null || typeof o !== 'object') return o;
-                const obj = o as Record<string, unknown>;
-                // Preserve { type: 'content', value: [...] } — this is the AI SDK's
-                // native multimodal tool result shape. Unwrapping it here causes
-                // convertToModelMessages to receive a raw array which gets stringified.
-                // See: https://github.com/mastra-ai/mastra/issues/17876
-                if (obj.type === 'content' && Array.isArray(obj.value)) return o;
-                // Unwrap AI SDK typed output wrappers before model-message conversion.
-                const isTypedOutputWrapper =
-                  (obj.type === 'text' ||
-                    obj.type === 'json' ||
-                    obj.type === 'error-text' ||
-                    obj.type === 'error-json') &&
-                  'value' in obj &&
-                  Object.keys(obj).length === 2;
-                if (isTypedOutputWrapper) return obj.value;
-                return unwrapLegacyToolOutput(o);
-              })(),
+              // Preserve the AI SDK's native multimodal content wrapper here.
+              // convertToModelMessages stringifies the raw array if it is unwrapped.
+              // See: https://github.com/mastra-ai/mastra/issues/17876
+              output: normalizeToolOutput(part.output, { unwrapContent: false }).output,
             };
           }
           return part;

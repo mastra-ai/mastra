@@ -145,7 +145,7 @@ function TokenRow({
       )}
 
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-indicator">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}

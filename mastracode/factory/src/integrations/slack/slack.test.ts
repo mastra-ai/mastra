@@ -3,6 +3,17 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+
+// Captures the tenant each prime saw: the stamp can be overwritten later in
+// the gate, so asserting on the final request context alone isn't enough.
+const primedUsers: unknown[] = [];
+const prime = vi.fn(async (context: RequestContext) => {
+  primedUsers.push(context.get('user'));
+});
+vi.mock('../../routes/tenant-credentials.js', () => ({
+  primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
+}));
+
 import {
   createChannelResourceIdResolver,
   createChannelSessionResolver,
@@ -58,6 +69,8 @@ const OLD_ENV = { ...process.env };
 afterEach(() => {
   process.env = { ...OLD_ENV };
   vi.restoreAllMocks();
+  prime.mockClear();
+  primedUsers.length = 0;
 });
 
 describe('resolveLinkedSender', () => {
@@ -341,6 +354,26 @@ describe('handler dispatch gating', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     // The run must carry the linked tenant, or it resolves default credentials.
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
+  });
+
+  it("primes the linked sender's credentials before a fresh mention dispatches", async () => {
+    // A mention after a restart: no Factory session exists yet and nothing has
+    // warmed the credential snapshot, so the gate itself must prime it.
+    const thread = makeThread();
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
+    const projects = makeProjects([{ id: 'fp-1' }]);
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ accountLinks, projects });
+
+    const ctx = handlerCtx(chatOnlyMastra());
+    await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
+    expect(primedUsers).toEqual([{ id: 'user-1', organizationId: 'org-1' }]);
+    expect(prime.mock.invocationCallOrder[0]).toBeLessThan(defaultHandler.mock.invocationCallOrder[0]!);
   });
 
   it("uses the existing Factory session owner's credentials when another linked user replies", async () => {
@@ -371,6 +404,7 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).toHaveBeenCalledWith(thread, message);
     expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
   it("rejects an existing Factory session when the responder is linked to another organization", async () => {
@@ -403,6 +437,7 @@ describe('handler dispatch gating', () => {
     );
     expect(output).not.toHaveBeenCalled();
     expect(defaultHandler).not.toHaveBeenCalled();
+    expect(prime).not.toHaveBeenCalled();
   });
 
   it('rejects a subscribed Factory follow-up when its internal thread cannot be resolved', async () => {
@@ -486,6 +521,7 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(ctx.requestContext.get('user')).toBeUndefined();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
+    expect(prime).not.toHaveBeenCalled();
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {

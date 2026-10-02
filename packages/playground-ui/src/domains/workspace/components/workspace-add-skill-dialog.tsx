@@ -1,4 +1,4 @@
-import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -14,10 +14,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
-import { Input } from '@/ds/components/Input';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
@@ -93,9 +94,10 @@ export function WorkspaceAddSkillDialog({
 }: AddSkillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillsShSkill | null>(null);
-  const [selectedMount, setSelectedMount] = useState<string | undefined>(
-    writableMounts && writableMounts.length > 0 ? writableMounts[0]?.path : undefined,
-  );
+  const [selectedMount, setSelectedMount] = useState<string>();
+  const installMount = writableMounts?.some(mount => mount.path === selectedMount)
+    ? selectedMount
+    : writableMounts?.[0]?.path;
 
   const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
 
@@ -164,20 +166,20 @@ export function WorkspaceAddSkillDialog({
     onInstall({
       repository: `${parsedSource.owner}/${parsedSource.repo}`,
       skillName: selectedSkill.name,
-      mount: writableMounts && writableMounts.length > 1 ? selectedMount : undefined,
+      mount: writableMounts && writableMounts.length > 1 ? installMount : undefined,
     });
-  }, [selectedSkill, parsedSource, onInstall, writableMounts, selectedMount]);
+  }, [selectedSkill, parsedSource, onInstall, writableMounts, installMount]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (!newOpen) {
         setSearchQuery('');
         setSelectedSkill(null);
-        setSelectedMount(writableMounts?.[0]?.path);
+        setSelectedMount(undefined);
       }
       onOpenChange(newOpen);
     },
-    [onOpenChange, writableMounts],
+    [onOpenChange],
   );
 
   return (
@@ -189,15 +191,12 @@ export function WorkspaceAddSkillDialog({
         </DialogHeader>
 
         <DialogBody layout="fill">
-          <div className="relative">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search skills..."
-              value={searchQuery}
-              onChange={e => handleSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            label="Search skills"
+            placeholder="Search skills..."
+            value={searchQuery}
+            onValueChange={handleSearch}
+          />
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
@@ -350,27 +349,25 @@ export function WorkspaceAddSkillDialog({
           </div>
 
           {selectedSkill && writableMounts && writableMounts.length > 1 && (
-            <div className={cn(raisedSurfaceStyle, 'flex items-center gap-3 rounded-lg p-3')}>
+            <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
               <Folder className="size-4 shrink-0 text-muted-foreground" />
-              <FieldBlock.Label name="mount-select" htmlFor="mount-select" className="whitespace-nowrap">
-                Install to
-              </FieldBlock.Label>
-              <select
-                id="mount-select"
-                value={selectedMount ?? ''}
-                onChange={e => setSelectedMount(e.target.value)}
-                className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-body text-foreground"
-              >
-                {writableMounts.map(m => {
-                  const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
-                  return (
-                    <option key={m.path} value={m.path}>
-                      {name} ({m.path})
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+              <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
+              <Select value={installMount} onValueChange={setSelectedMount}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {writableMounts.map(m => {
+                    const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
+                    return (
+                      <SelectItem key={m.path} value={m.path}>
+                        {name} ({m.path})
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </Field>
           )}
         </DialogBody>
 

@@ -1,5 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -83,19 +84,20 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
 
                 return (
                   <div className="flex flex-col gap-2">
-                    <Combobox
-                      multiple
-                      name="tools"
-                      aria-label="Tools"
-                      options={options}
-                      value={selectedIds}
-                      onValueChange={handleValueChange}
-                      placeholder="Select tools..."
-                      searchPlaceholder="Search tools..."
-                      emptyText="No tools available"
-                      disabled={isLoading || readOnly}
-                      error={error}
-                    />
+                    <Field invalid={Boolean(error)}>
+                      <Combobox
+                        multiple
+                        aria-label="Tools"
+                        options={options}
+                        value={selectedIds}
+                        onValueChange={handleValueChange}
+                        placeholder="Select tools..."
+                        searchPlaceholder="Search tools..."
+                        emptyText="No tools available"
+                        disabled={isLoading || readOnly}
+                      />
+                      <FieldError>{error}</FieldError>
+                    </Field>
                     {selectedOptions.length > 0 && (
                       <div className="mt-2 flex flex-col gap-3">
                         {selectedOptions.map(tool => (

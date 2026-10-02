@@ -69,6 +69,11 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  // Stamps from the step's *effective* tool set so the durable foreach
+  // concurrency gate can see approval/suspension capability that the run-start
+  // `toolsMetadata` lacks (e.g. tools added by input processors, issue #24377).
+  requireApproval: z.boolean().optional(),
+  hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
 });
@@ -243,7 +248,10 @@ async function processChunkThroughOutputProcessors(
       : undefined,
     emitChunk: async c => {
       if (pubsub) {
-        await emitChunkEvent(pubsub, runId, c);
+        // Mark chunks the processors ran on so the stream consumer doesn't run
+        // them again. Without a runner (no processors, or none in this process)
+        // the chunk goes out unmarked and the consumer processes it.
+        await emitChunkEvent(pubsub, runId, c, !!runner);
       }
     },
     onProcessorError: error => {
@@ -720,6 +728,7 @@ export function createDurableToolCallStep() {
         };
 
         const changedMessages = [];
+        let matchedEntry: Record<string, any> | undefined;
         for (const message of messageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
@@ -732,6 +741,7 @@ export function createDurableToolCallStep() {
           if (entries) {
             for (const [key, entry] of Object.entries(entries)) {
               if (entryMatches(entry, key)) {
+                matchedEntry ??= { ...entry, toolCallId: entry?.toolCallId ?? key };
                 delete entries[key];
                 messageChanged = true;
               }
@@ -741,6 +751,7 @@ export function createDurableToolCallStep() {
 
           message.content.parts = message.content.parts?.map(part => {
             if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            matchedEntry ??= { ...(part.data as Record<string, any>) };
             if ((part.data as { resumed?: boolean }).resumed) return part;
             messageChanged = true;
             return { ...part, data: { ...(part.data as any), resumed: true } };
@@ -749,9 +760,49 @@ export function createDurableToolCallStep() {
           if (messageChanged) changedMessages.push(message);
         }
 
-        if (changedMessages.length === 0) return;
-        messageList.add(changedMessages, 'response');
-        await doFlush();
+        if (changedMessages.length > 0) {
+          messageList.add(changedMessages, 'response');
+          await doFlush();
+        }
+        // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
+        if (matchedEntry && pubsub) {
+          // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
+          const displayed = await applyToolPayloadTransformToChunk(
+            {
+              type: type === 'approval' ? ('tool-call-approval' as const) : ('tool-call-suspended' as const),
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: matchedEntry.toolCallId ?? toolCallId,
+                // Delegated approvals store the inner tool's name; policies select redaction by it.
+                toolName: matchedEntry.toolName ?? toolName,
+                args: matchedEntry.args,
+                ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
+                resumeSchema: matchedEntry.resumeSchema,
+              },
+              metadata: undefined as Record<string, any> | undefined,
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-call-resumed',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: matchedEntry.toolCallId ?? toolCallId,
+              toolName: matchedEntry.toolName ?? toolName,
+              kind: type,
+              args: displayed.payload.args,
+              ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
+              resumeSchema: displayed.payload.resumeSchema,
+            },
+            ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
+          });
+        }
       };
 
       const suspendedForApproval =
@@ -1023,6 +1074,7 @@ export function createDurableToolCallStep() {
       const toolOptions = {
         toolCallId,
         messages: [],
+        getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
         mcp: registryEntry?.mcp,

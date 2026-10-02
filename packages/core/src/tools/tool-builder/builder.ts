@@ -755,6 +755,7 @@ export class CoreToolBuilder extends MastraBase {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
+                getMessages: execOptions.getMessages,
                 suspend,
                 resumeData,
                 suspendedToolRunId: execOptions.suspendedToolRunId,

@@ -98,7 +98,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
-function hashConfig(
+export function hashConfig(
   opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
   baseUrl: string,
   resolvedAppName: string,
@@ -1193,7 +1193,13 @@ export class SlackProvider implements ChannelProvider {
     const authorizationUrl = authUrl.toString();
 
     // Store pending installation (includes auth URL for UI to fetch later)
-    const configHash = hashConfig(config, baseUrl, appName, appDescription);
+    // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
+    const configHash = hashConfig(
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
+      baseUrl,
+      appName,
+      appDescription,
+    );
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
