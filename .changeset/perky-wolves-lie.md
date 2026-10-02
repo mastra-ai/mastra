@@ -14,3 +14,5 @@ const mastraCode = await createMastraCode({
 ```
 
 Any local process running as the same user can discover and message advertised agents. Set `MASTRACODE_SIGNALS_SOCKET_ROOT` to an absolute path to keep an instance or a test away from the shared `/tmp/mc` directory.
+
+Also fixed signal sockets piling up under `/tmp/mc`. Every agent discovery request used to leave an open socket, and often a socket file, behind, so long-running instances could accumulate thousands. One-off discovery replies now close as soon as they're answered. Headless `mastracode --prompt` runs also close their signal sockets on exit instead of leaving the files behind.
