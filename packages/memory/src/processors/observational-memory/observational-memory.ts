@@ -3038,9 +3038,13 @@ ${formattedMessages}
    * @example
    * ```ts
    * const status = await om.getStatus({ threadId });
-   * if (status.shouldObserve) {
+   * if (status.shouldObserve && status.canActivate) {
+   *   await om.activate({ threadId });
+   * } else if (status.shouldObserve && !status.inAsyncObservationBand) {
+   *   // At/above blockAfter (or async buffering disabled): observe synchronously
    *   await om.observe({ threadId });
    * } else if (status.shouldBuffer) {
+   *   // Below the threshold, or in the threshold→blockAfter band: buffer in the background
    *   await om.buffer({ threadId });
    * }
    * if (status.shouldReflect) {
