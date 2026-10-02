@@ -60,6 +60,13 @@ export async function runSmokeTests(options: RunnerOptions = {}): Promise<RunRes
   });
   const toolset = (await resolver()) as unknown as ResolvedToolset;
 
+  if (process.env.MASTRA_SMOKE_DEBUG === '1') {
+    const keys = Object.keys(toolset).sort();
+    console.log(`[smoke-test] resolver returned ${keys.length} tools:`);
+    for (const key of keys) console.log(`  - ${key}`);
+    console.log('');
+  }
+
   const requested = options.providers?.length ? new Set(options.providers) : null;
   const scenarioByProvider = new Map(REGISTERED_SCENARIOS.map(s => [s.integrationId, s] as const));
   const providerIds = (
@@ -135,8 +142,15 @@ async function executeScenario(
     // input values; the tool's internal `execute` validates against its own
     // Zod schema. `Tool.execute` accepts `(inputData, context?)` so an empty
     // context is fine for a smoke run.
-    const result = await (tool.execute as (input: unknown, context?: unknown) => Promise<unknown>)(input);
-    return result as T;
+    try {
+      const result = await (tool.execute as (input: unknown, context?: unknown) => Promise<unknown>)(input);
+      return result as T;
+    } catch (error) {
+      // Re-throw with provider detail and HTTP status appended so scenario
+      // steps don't just say "Provider request failed (400)." when the real
+      // error body carries the diagnostic (GraphQL errors, validation details).
+      throw enrichToolError(toolId, error);
+    }
   };
 
   try {
@@ -194,4 +208,33 @@ function format(data: unknown): string {
   } catch {
     return String(data);
   }
+}
+
+interface MaybeConnectError {
+  message?: unknown;
+  code?: unknown;
+  status?: unknown;
+  detail?: unknown;
+}
+
+/**
+ * Normalizes thrown values into a single Error whose message carries the
+ * platform/provider detail, HTTP status, and error code the client stashed on
+ * `MastraConnectError`. Without this, scenarios surface opaque strings like
+ * "Provider request failed (400)." and operators can't tell what the upstream
+ * actually rejected.
+ */
+function enrichToolError(toolId: string, error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(`${toolId}: ${String(error)}`);
+  }
+  const extras: string[] = [];
+  const data = error as MaybeConnectError;
+  if (typeof data.status === 'number') extras.push(`status=${data.status}`);
+  if (typeof data.code === 'string' && data.code) extras.push(`code=${data.code}`);
+  if (typeof data.detail === 'string' && data.detail) extras.push(`detail=${data.detail}`);
+  if (extras.length === 0) return error;
+  const enriched = new Error(`${error.message} [${extras.join(', ')}]`);
+  enriched.stack = error.stack;
+  return enriched;
 }
