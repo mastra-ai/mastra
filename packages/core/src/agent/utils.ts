@@ -2,9 +2,13 @@ import { JSONParseError, NoObjectGeneratedError, TypeValidationError } from '@in
 
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLegacyLanguageModel, MastraLanguageModel } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory';
+import type { MastraMemory } from '../memory/memory';
+import type { RequestContext } from '../request-context';
 import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { FullOutput } from '../stream/base/output';
+import type { DynamicArgument } from '../types';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.types';
 import type { MessageListInput } from './message-list';
@@ -218,4 +222,25 @@ export function resolveThreadIdFromArgs(args: {
   }
 
   return resolved;
+}
+
+const OPTIONAL_DYNAMIC_MEMORY = Symbol.for('mastra.agent.optionalDynamicMemory');
+
+/**
+ * Marks a dynamic memory resolver whose empty result means "no memory for this call"
+ * instead of a configuration error. Used for memory resolved from a registry reference,
+ * which may be registered after the agent is created.
+ */
+export function optionalDynamicMemory<TRequestContext extends Record<string, any> | unknown = unknown>(
+  resolve: (args: {
+    requestContext: RequestContext<TRequestContext>;
+    mastra?: Mastra;
+  }) => MastraMemory | undefined | Promise<MastraMemory | undefined>,
+): DynamicArgument<MastraMemory, TRequestContext> {
+  // getMemory() checks the marker before treating an empty result as an error.
+  return Object.assign(resolve, { [OPTIONAL_DYNAMIC_MEMORY]: true }) as DynamicArgument<MastraMemory, TRequestContext>;
+}
+
+export function isOptionalDynamicMemory(value: unknown): boolean {
+  return typeof value === 'function' && OPTIONAL_DYNAMIC_MEMORY in value;
 }

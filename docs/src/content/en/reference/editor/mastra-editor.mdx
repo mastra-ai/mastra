@@ -462,7 +462,7 @@ await editor.agent.create({
 })
 ```
 
-If no registered memory matches `memoryId`, the agent loads without memory and the editor logs a warning that names the missing key. The stored reference isn't changed. Renaming or removing a key in the Mastra `memory` config detaches memory from every stored agent that references it, so keep keys stable across deployments.
+The reference is resolved each time the agent uses memory. If no registered memory matches `memoryId`, the agent runs without memory and the editor logs a warning that names the missing key. The stored reference isn't changed. Once you register the key with `mastra.addMemory()`, already loaded agents pick it up on their next call. Renaming or removing a key in the Mastra `memory` config detaches memory from every stored agent that references it, so keep keys stable across deployments.
 
 `editor.agent.clone()` stores a reference when the source agent uses a registered memory instance, and an inline config otherwise.
 

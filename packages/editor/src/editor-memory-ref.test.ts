@@ -76,14 +76,13 @@ describe('stored agent memory references', () => {
     expect(await (await editor.agent.getById('by-id'))!.getMemory()).toBe(keyedMemory);
   });
 
-  it('hydrates without memory and warns when the reference is missing, then resolves once registered', async () => {
+  it('runs without memory and warns while the reference is missing, then the same agent resolves it once registered', async () => {
     const { editor, mastra, logger } = await setup({
       agents: [{ id: 'support', memory: { type: 'id', memoryId: 'support-memory' } }],
     });
 
     const agent = await editor.agent.getById('support');
     expect(agent).toBeInstanceOf(Agent);
-    expect(agent!.hasOwnMemory()).toBe(false);
     expect(await agent!.getMemory()).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Memory "support-memory"'));
 
@@ -91,11 +90,11 @@ describe('stored agent memory references', () => {
     const storedRecord = await (await mastra.getStorage()!.getStore('agents'))!.getByIdResolved('support');
     expect(storedRecord?.memory).toEqual({ type: 'id', memoryId: 'support-memory' });
 
-    // Restoring the registry key makes the reference resolve on the next hydration
+    // Registering the key later is picked up by the already-hydrated (cached) agent
     const restored = new Memory();
     mastra.addMemory(restored, 'support-memory');
-    editor.agent.clearCache('support');
-    expect(await (await editor.agent.getById('support'))!.getMemory()).toBe(restored);
+    expect(await editor.agent.getById('support')).toBe(agent);
+    expect(await agent!.getMemory()).toBe(restored);
   });
 
   it('keeps legacy untagged and tagged inline configs working', async () => {
@@ -177,6 +176,23 @@ describe('stored agent memory references', () => {
       const defaultMemory = await agent!.getMemory({ requestContext: new RequestContext() });
       expect(defaultMemory).not.toBe(premiumMemory);
       expect(defaultMemory!.getConfig().options).toMatchObject({ lastMessages: 5 });
+    });
+
+    it('runs without memory when the matching reference is not registered', async () => {
+      const { editor, logger } = await setup({
+        agents: [
+          {
+            id: 'missing-conditional',
+            memory: [{ value: { type: 'id', memoryId: 'premium' }, rules: premiumRule }],
+          },
+        ],
+      });
+
+      const agent = await editor.agent.getById('missing-conditional');
+      await expect(
+        agent!.getMemory({ requestContext: new RequestContext([['tier', 'premium']]) }),
+      ).resolves.toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Memory "premium"'));
     });
 
     it('lets a later inline variant replace a reference instead of producing a hybrid', async () => {

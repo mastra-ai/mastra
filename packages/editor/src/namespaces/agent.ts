@@ -1,5 +1,5 @@
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core/agent';
+import { Agent, optionalDynamicMemory } from '@mastra/core/agent';
 import type { AgentInstructions, ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
@@ -173,8 +173,8 @@ function getProvidedAgentRecordFields(input: StorageUpdateAgentInput): StorageUp
   return Object.keys(recordFields).length > 1 ? recordFields : null;
 }
 
-function isMemoryIdRef(ref: StorageMemoryRef): ref is { type: 'id'; memoryId: string } {
-  return 'type' in ref && ref.type === 'id';
+function isMemoryIdRef(ref: StorageMemoryRef | undefined): ref is { type: 'id'; memoryId: string } {
+  return !!ref && 'type' in ref && ref.type === 'id';
 }
 
 /** Tagged inline refs and legacy untagged configs both resolve to the serialized config. */
@@ -969,17 +969,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
-    // Memory: inline variants merge; a registered-memory reference replaces the accumulated value
+    // Memory: inline variants merge; a registered-memory reference replaces the accumulated value.
+    // References resolve on each call, so memory registered after hydration is picked up and a
+    // missing reference means "no memory" rather than an error.
+    const staticMemory = storedAgent.memory as StorageMemoryRef | undefined;
     const memory = hasConditionalMemory
-      ? ({ requestContext }: { requestContext: RequestContext }) => {
+      ? optionalDynamicMemory(({ requestContext }) => {
           const ctx = requestContext.toJSON();
           const resolved = this.accumulateMemoryVariants(
             storedAgent.memory as StorageConditionalVariant<StorageMemoryRef>[],
             ctx,
           );
           return this.resolveStoredMemory(resolved);
-        }
-      : this.resolveStoredMemory(storedAgent.memory as StorageMemoryRef | undefined);
+        })
+      : isMemoryIdRef(staticMemory)
+        ? optionalDynamicMemory(() => this.resolveStoredMemory(staticMemory))
+        : this.resolveStoredMemory(staticMemory);
 
     // Scorers (Record): accumulate by merging objects from all matching variants
     const scorers = hasConditionalScorers
