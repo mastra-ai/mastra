@@ -18,6 +18,7 @@ import {
   legacyAgentChatLoader,
   legacyAgentSettingsLoader,
   paths,
+  workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -88,7 +89,6 @@ import { Workflow } from './pages/workflows/workflow';
 import WorkflowSchedules from './pages/workflows/workflow-schedules';
 import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
-import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { AuthLayout } from '@/components/auth-layout';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
@@ -418,7 +418,8 @@ export const routes: RouteObject[] = [
       { path: '/workspaces/:workspaceId', element: <Workspace /> },
       {
         path: '/workspaces/:workspaceId/skills/:skillName',
-        element: <WorkspaceSkillDetailPage />,
+        loader: ({ params, request }: LoaderFunctionArgs) =>
+          redirect(workspaceSkillFileLink(params.workspaceId, new URL(request.url).searchParams.get('path'))),
       },
 
       { path: '/workflows', element: <Workflows /> },

@@ -78,6 +78,23 @@ export const traceSpans: GetTraceResponse = {
   spans: [{ ...trace, parentSpanId: null }],
 };
 
+/** A trace whose child span carries a term only in its `input` payload, never in a name. */
+export const traceSpansWithPayload: GetTraceResponse = {
+  traceId: 'trace-a',
+  spans: [
+    { ...trace, parentSpanId: null },
+    {
+      ...trace,
+      spanId: 'span-tool',
+      parentSpanId: 'span-a',
+      name: 'weather tool',
+      spanType: SpanType.TOOL_CALL,
+      input: { city: 'zanzibar-payload-term' },
+    },
+    { ...trace, spanId: 'span-llm', parentSpanId: 'span-a', name: 'llm call', spanType: SpanType.MODEL_GENERATION },
+  ],
+};
+
 /** An agent trace that belongs to a memory thread: qualifies for the Messages column. */
 export const threadedTraceSpans: GetTraceResponse = {
   traceId: 'trace-a',

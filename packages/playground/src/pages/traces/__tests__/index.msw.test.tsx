@@ -31,6 +31,7 @@ import {
   metricsUnavailableSystemPackages,
   threadedTraceSpans,
   traceSpans,
+  traceSpansWithPayload,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
@@ -1454,6 +1455,26 @@ describe('Traces page sorting', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+    });
+  });
+});
+
+describe('Traces side panel span search', () => {
+  describe('when the opened trace has a span whose payload holds the searched term', () => {
+    it('keeps only the span matching the payload text', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpansWithPayload)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('llm call')).toBeTruthy();
+      fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value: 'zanzibar-payload-term' } });
+
+      await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
+      expect(screen.getByText('weather tool')).toBeTruthy();
     });
   });
 });
