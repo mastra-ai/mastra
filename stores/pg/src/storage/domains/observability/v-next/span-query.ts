@@ -85,9 +85,10 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   const table = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   // Completed records win; the greatest end time follows existing getSpan semantics.
   // Payload columns are read only after page selection, inside the same snapshot.
+  // A completed span ends at or after it starts, so the end-time bound only prunes partitions.
   const text = `WITH candidate_ids AS MATERIALIZED (
     SELECT DISTINCT ${identities} FROM ${table}
-    WHERE "startedAt" >= $1 AND "startedAt" < $2 AND NOT "isPending"
+    WHERE "startedAt" >= $1 AND "startedAt" < $2 AND "endedAt" >= $1 AND NOT "isPending"
       ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
   ), current_spans AS MATERIALIZED (
     SELECT DISTINCT ON (${identities})
@@ -98,7 +99,7 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
       CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
       error IS NOT NULL AS "hasError"
     FROM ${table} e
-    WHERE NOT "isPending" AND (
+    WHERE NOT "isPending" AND "endedAt" >= $1 AND (
       "organizationId" IS NULL, COALESCE("organizationId", ''), "resourceId" IS NULL, COALESCE("resourceId", ''), "traceId", "spanId"
     ) IN (
       SELECT "organizationId" IS NULL, COALESCE("organizationId", ''), "resourceId" IS NULL, COALESCE("resourceId", ''), "traceId", "spanId" FROM candidate_ids

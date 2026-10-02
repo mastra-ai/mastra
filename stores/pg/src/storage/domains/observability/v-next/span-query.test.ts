@@ -4,6 +4,7 @@ import { planSpanQuery } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { PoolAdapter } from '../../../client';
+import { compilePostgresSpanQuery } from './span-query';
 import { ObservabilityStoragePostgresVNext } from './index';
 
 const schemaName = `span_query_${randomUUID().replaceAll('-', '')}`;
@@ -47,4 +48,18 @@ it('returns fractional durations when PostgreSQL timestamps retain microseconds'
     endedAt: new Date(start.getTime() + 1000).toISOString(),
     durationMs: 1000.5,
   });
+});
+
+it('reads only partitions that can hold spans from the search window', async () => {
+  const from = new Date();
+  const query = compilePostgresSpanQuery(
+    schemaName,
+    planSpanQuery({ timeRange: { from: from.toISOString(), to: new Date(from.getTime() + 60_000).toISOString() } }),
+  );
+  const plan = await client.any<{ 'QUERY PLAN': string }>(`EXPLAIN ${query.text}`, query.values);
+  const partitions = plan.flatMap(row =>
+    [...row['QUERY PLAN'].matchAll(/mastra_span_events_p(\d{8})/g)].map(m => m[1]!),
+  );
+  expect(partitions.length).toBeGreaterThan(0);
+  expect(partitions.filter(day => day < from.toISOString().slice(0, 10).replaceAll('-', ''))).toEqual([]);
 });
