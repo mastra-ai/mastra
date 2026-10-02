@@ -718,7 +718,7 @@ export async function benchmark(run: RunVoiceBenchmarksOptions['run']) {
     measurement: 'simulation',
     startup: 'warm',
     versions: {
-      livekitAgents: '1.9.0',
+      livekitAgents: '1.7.1',
       fixture: '1',
       // Also record the tested @mastra/livekit version and adapter revision.
     },
@@ -789,7 +789,7 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 
 ## Upgrade to 0.5.0
 
-The 0.5.0 prerelease targets LiveKit Agents 1.9. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
+The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
 
 ### Install compatible packages
 
@@ -797,19 +797,19 @@ Use the same exact release for Agents and its plugins. The tested baseline is:
 
 | Package | Version |
 | - | - |
-| `@livekit/agents` | `1.9.0` |
-| `@livekit/agents-plugin-livekit` | `1.9.0` |
-| `@livekit/agents-plugin-silero` | `1.9.0` |
-| `@livekit/rtc-node` | `0.13.35` |
-| `livekit-server-sdk` | `2.19.1` |
+| `@livekit/agents` | `1.7.1` |
+| `@livekit/agents-plugin-livekit` | `1.7.1` |
+| `@livekit/agents-plugin-silero` | `1.7.1` |
+| `@livekit/rtc-node` | `0.13.34` |
+| `livekit-server-sdk` | `2.16.0` |
 
 For a local prerelease archive, install it with the matching LiveKit packages:
 
 ```bash npm2yarn
-npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.9.0 @livekit/agents-plugin-livekit@1.9.0 @livekit/agents-plugin-silero@1.9.0 @livekit/rtc-node@0.13.35
+npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/agents-plugin-livekit@1.7.1 @livekit/agents-plugin-silero@1.7.1 @livekit/rtc-node@0.13.34 livekit-server-sdk@2.16.0
 ```
 
-Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.9 and Silero 1.9 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
+Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
 
 Keep Node.js 22.13 or newer and use a Zod version accepted by Agents: `^3.25.76 || ^4.1.8`. Verify the installed dependency tree and initialize the worker's models:
 
@@ -838,7 +838,7 @@ export default createLiveKitWorker({
 
 The default still loads the Silero plugin during prewarm. The `'english'` and `'multilingual'` turn detection options still select their existing text models. LiveKit's newer `inference.VAD` and `inference.TurnDetector` APIs are available through the existing instance and resolver options; switching to them is a separate choice that can change endpointing, model downloads, and cloud usage.
 
-### Review custom LiveKit tools and speech providers
+### Review custom LiveKit tools
 
 Mastra tools continue to run through the Mastra agent. If you also implement LiveKit tools or a custom LiveKit plugin, account for the changes since Agents 1.4:
 
@@ -848,15 +848,9 @@ Mastra tools continue to run through the Mastra agent. If you also implement Liv
 
 See the [LiveKit tool API](https://github.com/livekit/agents-js/blob/main/agents/src/llm/tool_context.ts) for custom plugin migration details.
 
-ElevenLabs models no longer route through LiveKit Inference. Replace affected inference model strings with a supported provider or pass an instance from the standalone ElevenLabs plugin, configured with that provider's credentials. The standalone plugin remains available. See [LiveKit's provider change](https://github.com/livekit/agents-js/pull/2415).
+### Review shutdown
 
-### Review tokens, telemetry, and shutdown
-
-Server SDK 2.19.1 rejects signed tokens without an `exp` claim. Tokens from `liveKitConnectionRoute()` already include an expiry, with a default lifetime of 15 minutes. Update custom token issuers and webhook fixtures that omit expiry. Cloud server API calls also support automatic region failover, which can change request latency and the region handling a retry.
-
-Agents 1.8 added OpenTelemetry GenAI attributes for conversations and tool activity. Check exporter settings and any dashboards that read LiveKit attributes. To withhold conversational content from third-party exporters, set `LIVEKIT_TELEMETRY_ALLOW_PII=0`, or configure LiveKit's tracer provider with `allowPii: false`. Project redaction settings still apply. These controls don't configure Mastra's own exporters or room recordings. See [LiveKit's telemetry change](https://github.com/livekit/agents-js/pull/2411).
-
-The `onCallEnd` hook still uses LiveKit's job shutdown callbacks. Keep cleanup within the configured shutdown window, and verify that it completes when a caller disconnects or a worker receives a shutdown signal. LiveKit's newer `onSessionEnd` callback is a separate lifecycle hook; the integration doesn't switch to it automatically.
+The `onCallEnd` hook still uses LiveKit's job shutdown callbacks. Keep cleanup within the configured shutdown window, and verify that it completes when a caller disconnects or a worker receives a shutdown signal.
 
 ### Verify recordings and calls
 

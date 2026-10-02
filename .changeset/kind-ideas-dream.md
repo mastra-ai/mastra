@@ -15,7 +15,7 @@ const results = await runVoiceBenchmarks({
   mode: 'audio',
   measurement: 'server-playout',
   startup: 'warm',
-  versions: { livekitAgents: '1.9.0', adapter: '1' },
+  versions: { livekitAgents: '1.7.1', adapter: '1' },
   run: runScenario,
 });
 const summary = summarizeVoiceBenchmarks(results);

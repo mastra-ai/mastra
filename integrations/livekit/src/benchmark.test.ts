@@ -14,7 +14,7 @@ const base = {
   mode: 'ci',
   measurement: 'simulation',
   startup: 'warm',
-  versions: { livekit: '1.9.0', fixture: '1' },
+  versions: { livekit: '1.7.1', fixture: '1' },
 } as const;
 const config = () => ({
   ...base,

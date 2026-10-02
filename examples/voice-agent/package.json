@@ -21,9 +21,9 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
     "@aws-sdk/s3-request-presigner": "^3.1136.0",
-    "@livekit/agents": "^1.4.5",
-    "@livekit/agents-plugin-livekit": "^1.4.5",
-    "@livekit/agents-plugin-silero": "^1.4.5",
+    "@livekit/agents": "^1.7.1",
+    "@livekit/agents-plugin-livekit": "^1.7.1",
+    "@livekit/agents-plugin-silero": "^1.7.1",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/livekit": "link:../../integrations/livekit",
