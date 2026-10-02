@@ -1,5 +1,4 @@
 ---
-'@mastra/memory': patch
 '@mastra/core': patch
 ---
 
