@@ -520,6 +520,15 @@ describe('SignalsPubSub', () => {
       ]);
     });
 
+    it("keeps another resource's thread socket open, as before, when shared discovery is off", async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { rootDir: root });
+
+      await pubsub.publish(threadTopic(foreignResourceId, 'thread-b'), event);
+
+      expect(findSocket(`${root}/${foreignResourceId}/thread-b.sock`)?.closed).toBe(false);
+    });
+
     it('leaves thread-owner discovery in the shared directory only', async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
       const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
@@ -646,7 +655,7 @@ describe('SignalsPubSub', () => {
 
     it('rejects a foreign threadId that is not a safe file name and creates nothing', async () => {
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
-      const pubsub = createSignalsPubSub(resourceId, { rootDir: root });
+      const pubsub = createSignalsPubSub(resourceId, { sharedAgentDiscovery: true, rootDir: root });
 
       for (const threadId of ['../evil', 'a/b', 'a\\b', '..', 'x\u0001']) {
         await expect(pubsub.publish(threadTopic(foreignResourceId, threadId), event)).rejects.toThrow(

@@ -423,8 +423,8 @@ Mastra Code already routes a thread's messages and run leases to the socket dire
 
 Keep these limits in mind:
 
-- **Trust boundary:** Any local process running as your user can discover advertised threads, wake them, and persist signals into them. Only turn this on for machines and accounts you trust.
-- **Resource IDs:** A resource ID set with `/resource` or `MASTRA_RESOURCE_ID` must be usable as a directory name for other projects to reach it. IDs containing `/`, `\`, or control characters, IDs longer than 128 characters, and `.` or `..` stay reachable within their project only.
+- **Trust boundary:** With the setting on, any local process running as your user can list the threads your instances advertise. A process that already knows a thread's ID can message it across projects even without the setting. Only turn this on for machines and accounts you trust.
+- **Resource IDs:** A resource ID set with `/resource` or `MASTRA_RESOURCE_ID` must be usable as a directory name for other projects to reach it. IDs containing `/`, `\`, or control characters, IDs longer than 128 characters, and `.`, `..`, or `_shared` stay reachable within their project only.
 - **Low-priority signals:** Signals that are persisted instead of delivered are written to the sender's storage. Projects that share the default Mastra Code database see them. A project with its own storage doesn't.
 - **Many instances:** Every instance with the setting on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
 

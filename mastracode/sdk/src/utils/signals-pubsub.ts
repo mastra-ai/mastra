@@ -171,8 +171,9 @@ function socketKey(dir: string, topic: string): string {
  * subscription holds a reference, and the topic's socket is closed as soon as
  * the count drops to zero. Without this each request would keep a socket, a
  * file descriptor and (for the broker) a socket file for the process lifetime.
- * Another resource's thread topics are counted the same way, so a process that
- * signals many threads elsewhere does not keep a socket open for each.
+ * With `sharedAgentDiscovery`, another resource's thread topics are counted the
+ * same way, so a process that signals many threads elsewhere does not keep a
+ * socket open for each.
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
@@ -320,9 +321,13 @@ class SignalsPubSub extends PubSub {
     return [this.#dirFor(topic)];
   }
 
-  /** One-shot reply topics, and thread topics routed to another resource, close once unused. */
+  /**
+   * One-shot reply topics close once unused. With shared discovery, so do thread
+   * topics routed to another resource; without it, they behave as before.
+   */
   #isRefCounted(topic: string): boolean {
     if (isEphemeralTopic(topic)) return true;
+    if (!this.#sharedPeerDiscovery) return false;
     const decoded = decodeThreadTopic(topic);
     if (decoded === undefined) return false;
     const resourceId = resourceOfThreadKey(decoded);
@@ -479,9 +484,15 @@ class SignalsPubSub extends PubSub {
 
   async #socketPath(topic: string, scope: string): Promise<string> {
     let key = topicKey(topic);
-    // Another resource's threadId names a file in that resource's directory;
-    // never let it reach outside it.
-    if (scope !== this.#resourceId && decodeThreadTopic(topic) !== undefined && !isSafeFileName(key)) {
+    // With shared discovery, another project's threadIds reach this process
+    // through discovery; a threadId names a file in that resource's directory,
+    // so never let it reach outside it.
+    if (
+      this.#sharedPeerDiscovery &&
+      scope !== this.#resourceId &&
+      decodeThreadTopic(topic) !== undefined &&
+      !isSafeFileName(key)
+    ) {
       throw new Error('Cannot route an agent thread topic whose threadId is not a safe file name');
     }
     const dir = join(this.#rootDir, scope);
