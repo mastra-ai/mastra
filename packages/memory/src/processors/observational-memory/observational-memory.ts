@@ -3709,14 +3709,17 @@ ${formattedMessages}
     // Wait for an in-process buffer op that may still append a chunk: the swap below reads
     // then writes the buffered chunks, so a concurrent append could be dropped. Work the op
     // does after persisting its chunk (indexing, thread title) can't conflict.
+    // If the write is still pending after the wait, skip activation rather than risk it.
     // An op in another process can't be awaited; activate whatever chunks exist.
-    const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(
-      this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId)),
-    );
+    const obsBufferKey = this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId));
+    const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(obsBufferKey);
     if (pendingChunkWrite) {
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]);
       clearTimeout(timeoutId);
+      if (BufferingCoordinator.pendingChunkWrites.has(obsBufferKey)) {
+        return { activated: false, record };
+      }
     }
 
     // Re-fetch to get latest chunks after any completed buffering
