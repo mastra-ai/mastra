@@ -93,6 +93,13 @@ const durableToolCallInputSchema = z.object({
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  mappingError: z
+    .object({
+      name: z.string(),
+      message: z.string(),
+      stack: z.string().optional(),
+    })
+    .optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema.
@@ -1605,6 +1612,7 @@ export function createDurableToolCallStep() {
         }
         return bailed;
       };
+      let mappingFailure: { error: unknown } | undefined;
 
       try {
         const outcome = await executeToolCall({
@@ -1672,7 +1680,8 @@ export function createDurableToolCallStep() {
             }
           } catch (mappingError) {
             mappingSpan?.error({ error: mappingError as Error, endSpan: true });
-            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
+            mappingFailure = { error: mappingError };
+            throw mappingError;
           }
         }
 
@@ -1834,10 +1843,14 @@ export function createDurableToolCallStep() {
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
-        // Re-throw FGA authorization errors instead of swallowing them —
-        // an authorization denial must fail the run, not be serialized as a
-        // recoverable tool error for the LLM to retry (mirrors the
-        // non-durable tool-call step).
+        if (mappingFailure?.error === error) {
+          return {
+            ...typedInput,
+            mappingError: serializeError(error),
+          };
+        }
+        // An authorization denial must fail the run instead of being serialized
+        // as a recoverable tool error for the LLM to retry.
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }

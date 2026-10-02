@@ -16,6 +16,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 
 function createToolCallingModel(
@@ -83,7 +84,68 @@ describe('DurableAgent toModelOutput parity', () => {
     vi.restoreAllMocks();
   });
 
-  it('computes toModelOutput and merges into messageList providerMetadata', async () => {
+  it.each([
+    ['DurableAgent', (agent: Agent<any, any, any>) => createDurableAgent({ agent, pubsub })],
+    ['EventedAgent', (agent: Agent<any, any, any>) => createEventedAgent({ agent })],
+  ] as const)(
+    'fails the %s run when toModelOutput throws',
+    async (_agentType, createAgent) => {
+      const mappingError = new Error('tool output mapping failed');
+      const testTool = createTool({
+        id: 'throwing-mapper-tool',
+        description: 'A tool with a broken output mapper',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ data: z.string() }),
+        execute: async () => ({ data: 'tool result' }),
+        toModelOutput: () => {
+          throw mappingError;
+        },
+      });
+      const baseAgent = new Agent({
+        name: 'throwing-mapper-agent',
+        instructions: 'Use the tool.',
+        model: createToolCallingModel('throwing-mapper-tool', { query: 'test' }),
+        tools: { 'throwing-mapper-tool': testTool },
+      });
+      const agent = createAgent(baseAgent);
+
+      new Mastra({
+        agents: { 'throwing-mapper-agent': agent as any },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+
+      let receivedError: unknown;
+      let finished = false;
+      const { output, cleanup } = await agent.stream('Use the tool', {
+        onError: ({ error }) => {
+          receivedError = error;
+        },
+        onFinish: () => {
+          finished = true;
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const streamedError = chunks.find(chunk => chunk.type === 'error')?.payload?.error;
+      const surfacedError = receivedError ?? streamedError;
+      expect(surfacedError instanceof Error ? surfacedError.message : String(surfacedError)).toContain(
+        mappingError.message,
+      );
+      expect(finished).toBe(false);
+      cleanup();
+    },
+    30_000,
+  );
+
+  it.each([
+    ['DurableAgent', (agent: Agent<any, any, any>) => createDurableAgent({ agent, pubsub })],
+    ['EventedAgent', (agent: Agent<any, any, any>) => createEventedAgent({ agent })],
+  ] as const)('computes toModelOutput for %s', async (_agentType, createAgent) => {
     const toModelOutputSpy = vi.fn(result => ({
       type: 'content',
       value: [{ type: 'text', text: `Processed: ${result.data}` }],
@@ -107,14 +169,15 @@ describe('DurableAgent toModelOutput parity', () => {
       tools: { 'test-tool': testTool },
     });
 
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const agent = createAgent(baseAgent);
 
     new Mastra({
-      agents: { 'test-agent': durableAgent as any },
+      agents: { 'test-agent': agent as any },
+      logger: false,
       storage: new InMemoryStore(),
     });
 
-    const result = await durableAgent.stream('Use the test tool');
+    const result = await agent.stream('Use the test tool');
 
     // Consume the stream
     const chunks: any[] = [];
