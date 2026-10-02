@@ -15,6 +15,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
+import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
@@ -31,7 +32,7 @@ import type {
   IModelSpanTracker,
   AnySpan,
 } from '../../../../observability';
-import { EntityType } from '../../../../observability';
+import { EntityType, createObservabilityContext } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -76,6 +77,20 @@ function resolveTotalTimeoutAbort(signal: AbortSignal | undefined, error?: Error
   if (isMastraTimeoutError(reason) && reason.timeoutType === 'total') return reason;
   if (isMastraTimeoutError(error) && error.timeoutType === 'total') return error;
   return undefined;
+}
+
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
 }
 
 /**
@@ -1337,6 +1352,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   },
                 }
               : undefined;
+            const outputStreamWriter = pubsub
+              ? {
+                  custom: async (
+                    data: { type: string; data?: unknown; transient?: boolean },
+                    writerOptions?: { messageId?: string },
+                  ) => {
+                    persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
+                    try {
+                      await emitChunkEvent(pubsub, runId, data as any, true);
+                    } catch (error) {
+                      throw new DurableChunkPublishError(error);
+                    }
+                  },
+                }
+              : undefined;
 
             const releaseStreamActivity = markRunActive(runId);
             try {
@@ -1591,6 +1621,40 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
+                  } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                    try {
+                      await processAndEmitChunk(clientChunk, {
+                        runner: getToolResultRunner(),
+                        processorStates: registryEntry.processorStates,
+                        observabilityContext: createObservabilityContext(
+                          modelSpanTracker?.getTracingContext() ?? tracingContext,
+                        ),
+                        requestContext,
+                        messageList,
+                        streamWriter: outputStreamWriter,
+                        emitChunk: async chunk => {
+                          try {
+                            await emitChunkEvent(pubsub, runId, chunk, true);
+                          } catch (error) {
+                            throw new DurableChunkPublishError(error);
+                          }
+                        },
+                        onProcessorError: error => {
+                          if (error instanceof DurableChunkPublishError) {
+                            throw error.cause;
+                          }
+                          throw new DurableOutputProcessorError(error);
+                        },
+                      });
+                    } catch (error) {
+                      if (error instanceof DurableOutputProcessorError) {
+                        return emitFatalErrorBail(
+                          error.cause instanceof Error ? error.cause : error,
+                          currentModel.modelId,
+                        );
+                      }
+                      throw error;
+                    }
                   } else {
                     await emitChunkEvent(pubsub, runId, clientChunk);
                   }

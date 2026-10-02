@@ -74,22 +74,18 @@ describe('durable output processor errors', () => {
       });
 
       const chunks: any[] = [];
-      let error: unknown;
       const { output, cleanup } = await outputAgent.stream('Reveal the card number');
 
-      try {
-        for await (const chunk of output.fullStream) {
-          chunks.push(chunk);
-        }
-      } catch (streamError) {
-        error = streamError;
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
       }
 
       expect(JSON.stringify(chunks)).not.toContain(sensitiveText);
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain('redactor crashed');
-      await expect(output.text).rejects.toThrow('redactor crashed');
-      await expect(output.finishReason).rejects.toThrow('redactor crashed');
+      const errorChunks = chunks.filter(chunk => chunk.type === 'error');
+      expect(errorChunks).toHaveLength(1);
+      expect(errorChunks[0].payload.error.message).toContain('redactor crashed');
+      await expect(output.text).resolves.toBe('');
+      await expect(output.finishReason).resolves.toBe('error');
       cleanup();
     },
     15_000,

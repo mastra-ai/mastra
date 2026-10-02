@@ -4,7 +4,7 @@
 
 Fixed a leak where an output stream processor that throws let the original, unprocessed chunk through. For example, a redaction processor that crashed would still stream the text it was meant to redact.
 
-Now the run fails before that chunk is emitted. Previously the error was logged and the stream finished with `finishReason: 'stop'`; now the stream ends with the processor's error. This applies to regular, durable, and evented agents. `abort()` in a processor still blocks the chunk as before.
+Now regular, durable, and evented agents stop before emitting the failing chunk, emit an `error` chunk, and finish with `finishReason: 'error'`. Durable tool-chunk processor failures also fail their workflow step before the tool chunk is published. Previously the processor error was logged and the unprocessed chunk was emitted while the stream finished with `finishReason: 'stop'`. `abort()` in a processor still blocks the chunk as before.
 
 ```ts
 const result = await agent.stream('Reveal the card number');
