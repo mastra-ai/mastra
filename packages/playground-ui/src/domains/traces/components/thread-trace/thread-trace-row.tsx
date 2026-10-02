@@ -112,8 +112,7 @@ export function ThreadTraceRow({ traceId, className, children, ...props }: Threa
           data-slot="thread-trace-row"
           className={cn(
             // `overflow-visible` overrides the tabs root scroll box so the messages column stays sticky.
-            'group flex flex-col overflow-visible pb-4 transition-opacity hover:opacity-100',
-            isActive || isCurrent ? 'opacity-100' : 'opacity-50',
+            'group flex flex-col overflow-visible pb-4',
             className,
           )}
           data-trace-id={traceId}
