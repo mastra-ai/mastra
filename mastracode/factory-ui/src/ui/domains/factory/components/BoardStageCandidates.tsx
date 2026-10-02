@@ -20,10 +20,10 @@ export function BoardStageCandidates({
   factoryProjectId: string;
   onRun: (candidate: BoardCandidate, move: CardMove, prompt?: string) => void;
 }) {
-  if (candidates.length === 0) return null;
+  const showDivider = afterWorkItems && candidates.length > 0;
   return (
     <>
-      {afterWorkItems && (
+      {showDivider && (
         <div role="separator" aria-label="New candidates" className="flex items-center gap-2 py-1">
           <span aria-hidden className="bg-border h-px flex-1" />
           <Txt as="span" variant="meta" tone="muted">
