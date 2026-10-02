@@ -407,12 +407,7 @@ With cross-agent communication on, `agent_connections_list` lists Mastra Code in
 
 Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project, and finds a thread's owner through a shared `/tmp/mc/_shared` directory. Peer discovery, which lists the threads you can connect to, runs both in the project's own directory and in `/tmp/mc/_shared`. Instances running older versions still find instances in their own project.
 
-Keep these limits in mind:
-
-- **Trust boundary:** Any local process running as your user can list the threads your instances advertise and message them. Only turn on cross-agent communication for machines and accounts you trust.
-- **Resource IDs:** A resource ID set with `/resource` or `MASTRA_RESOURCE_ID` must be usable as a directory name for other projects to reach it. IDs containing `/`, `\`, or control characters, IDs longer than 128 characters, and `.`, `..`, or `_shared` stay reachable within their project only.
-- **Low-priority signals:** Signals that are persisted instead of delivered are written to the sender's storage. Projects that share the default Mastra Code database see them. A project with its own storage doesn't.
-- **Many instances:** Every instance with cross-agent communication on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
+Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
 
 To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
