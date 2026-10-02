@@ -490,9 +490,10 @@ describe('Agent.streamUntilIdle', () => {
     expect(creationWasAborted).toBe(true);
   });
 
-  it('does not read a continuation that resolves after the wrapper is aborted', async () => {
+  it('aborts a continuation created after the wrapper is aborted', async () => {
     const memory = new MockMemory();
-    const { model } = makeScriptedModel([textResponse('initial response')]);
+    const lateContinuation = abortableTextResponse('late continuation', 'late tail');
+    const { model, getCallCount } = makeScriptedModel([textResponse('initial response'), lateContinuation.response]);
     const agent = new Agent({
       id: 'late-pending-continuation',
       name: 'late-pending-continuation',
@@ -508,25 +509,32 @@ describe('Agent.streamUntilIdle', () => {
     const creationStarted = new Promise<void>(resolve => {
       markCreationStarted = resolve;
     });
-    let resolveContinuation!: (value: any) => void;
-    const continuation = new Promise<any>(resolve => {
-      resolveContinuation = resolve;
+    let releaseCreation!: () => void;
+    const creationGate = new Promise<void>(resolve => {
+      releaseCreation = resolve;
     });
-    let lateStreamWasRead = false;
-    const lateStream = {
-      getReader() {
-        lateStreamWasRead = true;
-        return {
-          read: async () => ({ done: true, value: undefined }),
-          releaseLock() {},
-        };
-      },
-    };
-    vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
+    let onAbortCalled = false;
+    let onFinishCalled = false;
+    let lateDrainPromise: Promise<any[]> | undefined;
+    vi.spyOn(agent, 'stream').mockImplementation(async (messages: any, options: any) => {
       streamCalls += 1;
       if (streamCalls === 1) return originalStream(messages, options) as any;
+
       markCreationStarted();
-      return continuation;
+      await creationGate;
+      const { abortSignal: _abortSignal, ...lateOptions } = options;
+      const inner = await originalStream(messages, {
+        ...lateOptions,
+        onAbort: () => {
+          onAbortCalled = true;
+        },
+        onFinish: () => {
+          onFinishCalled = true;
+        },
+      });
+      lateDrainPromise = drain(inner.fullStream as ReadableStream<any>);
+      await lateContinuation.started;
+      return inner as any;
     });
 
     const runId = 'late-pending-continuation-run';
@@ -563,10 +571,14 @@ describe('Agent.streamUntilIdle', () => {
 
     expect(agent.abortRunStream(runId)).toBe(true);
     await drainPromise;
-    resolveContinuation({ runId: 'late-inner-run', fullStream: lateStream });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    releaseCreation();
+    await lateContinuation.started;
+    await vi.waitFor(() => expect(lateContinuation.wasAborted()).toBe(true));
+    await lateDrainPromise;
 
-    expect(lateStreamWasRead).toBe(false);
+    expect(getCallCount()).toBe(2);
+    expect(onAbortCalled).toBe(true);
+    expect(onFinishCalled).toBe(false);
   });
 
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
