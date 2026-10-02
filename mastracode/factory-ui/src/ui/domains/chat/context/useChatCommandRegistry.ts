@@ -49,7 +49,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModeId } = useChatModes();
-  const { activeModelId, setModel } = useChatModels();
+  const { activeModelId, switchModel } = useChatModels();
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -104,7 +104,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Switch model',
       requiresSession: true,
       execute: async rawArguments => {
-        if (rawArguments) await setModel(rawArguments);
+        if (rawArguments) await switchModel({ modelId: rawArguments });
       },
     },
     {
@@ -199,7 +199,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           }
           if (action.kind === 'set') {
             await ensureSettings();
-            await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });
+            await switchModel({ thinkingLevel: action.level });
             pushNotice(`Thinking level set to ${action.level}.`);
             return;
           }

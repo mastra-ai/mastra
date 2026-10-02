@@ -12,6 +12,7 @@ import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useU
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
+import { planModelSwitch } from './modelSwitch';
 import { useChatConnection } from './useChatConnection';
 import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -50,29 +51,30 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
     activeModeId === 'build' || activeModeId === 'plan' || activeModeId === 'fast'
       ? activePack?.models[activeModeId]
       : undefined;
+  const activeModelId = draftModelId ?? packModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined;
+  const thinkingLevel = draftThinkingLevel ?? defaultThinkingLevel;
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? packModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
+    activeModelId,
     activeModelPackId,
     defaultModelPackId: modelPacksQuery.data?.activePackId ?? undefined,
     draftModelPackId,
     modelPacks: modelPacksQuery.data?.packs ?? [],
     isLoading: factoryProjectQuery.isPending || modelPacksQuery.isPending,
     error: factoryProjectQuery.error ?? undefined,
-    setModel: modelId => {
-      setDraftModelId(modelId);
+    switchModel: requested => {
+      const plan = planModelSwitch({ modelId: activeModelId, thinkingLevel }, requested);
+      if (plan.modelId) setDraftModelId(plan.modelId);
+      if (plan.thinkingLevel) setDraftThinkingLevel(plan.thinkingLevel);
       return Promise.resolve();
     },
+    switching: false,
     setModelPack: modelPackId => {
       setDraftModelPackId(modelPackId);
       setDraftModelId(undefined);
       return Promise.resolve();
     },
-    thinkingLevel: draftThinkingLevel ?? defaultThinkingLevel,
+    thinkingLevel,
     draftThinkingLevel,
-    setThinkingLevel: level => {
-      setDraftThinkingLevel(level);
-      return Promise.resolve();
-    },
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
@@ -90,28 +92,48 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  const { mutateAsync: switchSessionModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const settingsQuery = useAgentControllerSettings(mutationArgs);
   const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(mutationArgs);
   const defaultThinkingLevel = useDefaultThinkingLevel();
+  const [switching, setSwitching] = useState(false);
+  const activeModelId = state?.modelId;
+  const thinkingLevel = settingsQuery.data ? (settingsQuery.data.thinkingLevel ?? defaultThinkingLevel) : undefined;
   const value: ChatModelsApi = {
-    activeModelId: state?.modelId,
+    activeModelId,
     activeModelPackId: modelPacksQuery.data?.sessionPackId ?? modelPacksQuery.data?.activePackId ?? undefined,
     defaultModelPackId: modelPacksQuery.data?.activePackId ?? undefined,
     draftModelPackId: undefined,
     modelPacks: modelPacksQuery.data?.packs ?? [],
     isLoading: false,
     error: undefined,
-    setModel: modelId => switchModel(modelId),
+    switchModel: async requested => {
+      const plan = planModelSwitch({ modelId: activeModelId, thinkingLevel }, requested);
+      setSwitching(true);
+      try {
+        if (plan.modelId) await switchSessionModel(plan.modelId);
+        if (plan.thinkingLevel) await updateThinkingAfterModel(plan.thinkingLevel, plan.modelId);
+      } finally {
+        setSwitching(false);
+      }
+    },
+    switching,
     setModelPack: async modelPackId => {
       await activateModelPack.mutateAsync({ id: modelPackId, target: 'session' });
     },
-    thinkingLevel: settingsQuery.data ? (settingsQuery.data.thinkingLevel ?? defaultThinkingLevel) : undefined,
+    thinkingLevel,
     draftThinkingLevel: undefined,
-    setThinkingLevel: async level => {
-      await updateSettings({ thinkingLevel: level });
-    },
   };
+
+  async function updateThinkingAfterModel(level: ThinkingLevelSetting, switchedModelId: string | undefined) {
+    try {
+      await updateSettings({ thinkingLevel: level });
+    } catch (cause) {
+      if (!switchedModelId) throw cause;
+      const reason = cause instanceof Error ? cause.message : 'unknown error';
+      throw new Error(`Switched to ${switchedModelId}, but thinking stayed at ${thinkingLevel}: ${reason}`, { cause });
+    }
+  }
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
 }

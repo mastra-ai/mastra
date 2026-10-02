@@ -57,7 +57,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
-  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
+  const { activeModelId, isLoading: modelLoading, error: modelError, switching: modelSwitching } = useChatModels();
   const {
     commands,
     composerDraft: draft,
@@ -91,7 +91,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const modeSwitchPendingRef = useRef(false);
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const sendDisabled =
+    composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading || modelSwitching;
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending

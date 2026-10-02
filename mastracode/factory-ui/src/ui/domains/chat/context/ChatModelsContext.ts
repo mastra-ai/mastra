@@ -2,6 +2,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { createContext } from 'react';
 
 import type { ModelPackInfo } from '../../../../api/types';
+import type { ModelSwitch } from './modelSwitch';
 
 export interface ChatModelsApi {
   activeModelId: string | undefined;
@@ -12,12 +13,12 @@ export interface ChatModelsApi {
   modelPacks: ModelPackInfo[];
   isLoading: boolean;
   error: Error | undefined;
-  setModel: (modelId: string) => Promise<void>;
+  switchModel: (requested: ModelSwitch) => Promise<void>;
+  switching: boolean;
   setModelPack: (modelPackId: string) => Promise<void>;
   /** The session's own override, else the mode or global default; undefined while loading. */
   thinkingLevel: ThinkingLevelSetting | undefined;
   draftThinkingLevel: ThinkingLevelSetting | undefined;
-  setThinkingLevel: (level: ThinkingLevelSetting) => Promise<void>;
 }
 
 export const ChatModelsContext = createContext<ChatModelsApi | null>(null);

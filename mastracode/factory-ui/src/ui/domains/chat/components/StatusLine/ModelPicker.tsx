@@ -69,8 +69,16 @@ export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModeId } = useChatModes();
-  const { activeModelId, activeModelPackId, defaultModelPackId, modelPacks, setModel, setModelPack, isLoading, error } =
-    useChatModels();
+  const {
+    activeModelId,
+    activeModelPackId,
+    defaultModelPackId,
+    modelPacks,
+    switchModel,
+    setModelPack,
+    isLoading,
+    error,
+  } = useChatModels();
   const modelsQuery = useAvailableModelsQuery();
   const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
@@ -145,7 +153,7 @@ export function ModelPicker() {
     setOpen(false);
     if (modelId === activeModelId) return;
     setPendingModelId(modelId);
-    runAction(setModel(modelId), () => setPendingModelId(undefined), 'Failed to switch model');
+    runAction(switchModel({ modelId }), () => setPendingModelId(undefined), 'Failed to switch model');
   };
 
   const pickPack = (packId: string) => {

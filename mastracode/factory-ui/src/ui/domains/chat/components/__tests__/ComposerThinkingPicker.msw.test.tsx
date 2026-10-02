@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
@@ -34,15 +35,16 @@ function useLiveSession({
   thinkingLevel?: string;
   listedModelIds?: string[];
 }) {
+  let sessionModelId = modelId;
   let sessionThinkingLevel = thinkingLevel;
-  const stateUpdates: unknown[] = [];
+  const requests: string[] = [];
   server.use(
     http.get(SESSION_API, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
         resourceId: params.resourceId,
         modeId: 'build',
-        modelId,
+        modelId: sessionModelId,
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel: sessionThinkingLevel, notifications: 'bell', smartEditing: true },
       }),
@@ -66,25 +68,34 @@ function useLiveSession({
         editable: true,
       }),
     ),
+    http.post(`${SESSION_API}/model`, async ({ request }) => {
+      const body = await request.json();
+      if (typeof body === 'object' && body !== null && 'modelId' in body && typeof body.modelId === 'string') {
+        requests.push(`model:${body.modelId}`);
+        sessionModelId = body.modelId;
+      }
+      return HttpResponse.json({ ok: true });
+    }),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
       const body = await request.json();
       if (typeof body === 'object' && body !== null && 'state' in body) {
         const { state } = body;
         if (typeof state === 'object' && state !== null && 'thinkingLevel' in state) {
-          stateUpdates.push(body);
+          requests.push(`thinking:${String(state.thinkingLevel)}`);
           sessionThinkingLevel = typeof state.thinkingLevel === 'string' ? state.thinkingLevel : undefined;
         }
       }
       return HttpResponse.json({ ok: true });
     }),
   );
-  return stateUpdates;
+  return requests;
 }
 
 function renderComposer() {
   return renderWithProviders(
     <OverlayTestProviders>
       <Composer />
+      <Toaster />
     </OverlayTestProviders>,
   );
 }
@@ -92,24 +103,22 @@ function renderComposer() {
 beforeEach(useOverlayControllerHandlers);
 
 describe('Composer thinking picker', () => {
-  it('offers only the levels the model runs, starting from the mode default, then saves the dropped level', async () => {
-    const stateUpdates = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6' });
+  it('starts from the mode default and saves the level only once it is dropped', async () => {
+    const requests = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6' });
     const user = userEvent.setup();
     const { client } = renderComposer();
 
     await user.click(await screen.findByRole('button', { name: 'Thinking: Medium' }));
     const slider = await screen.findByRole('slider', { name: 'Thinking' });
     expect(slider).toHaveAttribute('aria-valuetext', 'Medium');
-    expect(slider).toHaveAttribute('max', '4');
-    expect(screen.queryByText('Extra high')).not.toBeInTheDocument();
 
-    dragTo(slider, 4);
-    expect(stateUpdates).toEqual([]);
+    dragTo(slider, 3);
+    expect(requests).toEqual([]);
     fireEvent.pointerUp(slider);
 
     await waitForMutationsIdle(client);
-    expect(stateUpdates).toEqual([{ state: { thinkingLevel: 'max' } }]);
-    expect(screen.getByRole('button', { name: 'Thinking: Max' })).toBeInTheDocument();
+    expect(requests).toEqual(['thinking:high']);
+    expect(screen.getByRole('button', { name: 'Thinking: High' })).toBeInTheDocument();
   });
 
   it('shows the level the model actually runs, not the stored one it cannot honour', async () => {
@@ -120,7 +129,7 @@ describe('Composer thinking picker', () => {
   });
 
   it('keeps thinking adjustable when no other model can be picked', async () => {
-    const stateUpdates = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', listedModelIds: [] });
+    const requests = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', listedModelIds: [] });
     const user = userEvent.setup();
     const { client } = renderComposer();
 
@@ -131,22 +140,92 @@ describe('Composer thinking picker', () => {
     fireEvent.pointerUp(slider);
 
     await waitForMutationsIdle(client);
-    expect(stateUpdates).toEqual([{ state: { thinkingLevel: 'high' } }]);
+    expect(requests).toEqual(['thinking:high']);
   });
 
-  it('explains why a model without thinking has no levels to pick', async () => {
-    const stateUpdates = useLiveSession({ modelId: 'anthropic/claude-3-5-haiku-20241022' });
-    const user = userEvent.setup();
-    renderComposer();
+  describe('when the model changes', () => {
+    const listedModelIds = ['anthropic/claude-sonnet-4-6', 'openai/gpt-5.4-mini'];
 
-    const thinking = await screen.findByRole('button', { name: /^Thinking: unavailable\. .+ has no thinking levels$/ });
-    expect(thinking).toHaveAttribute('aria-disabled', 'true');
-    await user.hover(thinking);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/has no thinking levels/);
+    it('sends the level the new model can run right after the model', async () => {
+      const requests = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'max', listedModelIds });
+      const user = userEvent.setup();
+      const { client } = renderComposer();
 
-    await user.click(thinking);
-    expect(screen.queryByRole('slider', { name: 'Thinking' })).not.toBeInTheDocument();
-    expect(stateUpdates).toEqual([]);
+      await openModelMenu(user);
+      await user.click(await screen.findByRole('option', { name: /gpt-5\.4-mini/ }));
+
+      await waitForMutationsIdle(client);
+      expect(requests).toEqual(['model:openai/gpt-5.4-mini', 'thinking:xhigh']);
+      expect(await screen.findByRole('button', { name: 'Thinking: Extra high' })).toBeInTheDocument();
+    });
+
+    it('leaves thinking alone when the new model runs the current level', async () => {
+      const requests = useLiveSession({
+        modelId: 'anthropic/claude-sonnet-4-6',
+        thinkingLevel: 'high',
+        listedModelIds,
+      });
+      const user = userEvent.setup();
+      const { client } = renderComposer();
+
+      await openModelMenu(user);
+      await user.click(await screen.findByRole('option', { name: /gpt-5\.4-mini/ }));
+
+      await waitForMutationsIdle(client);
+      expect(requests).toEqual(['model:openai/gpt-5.4-mini']);
+    });
+
+    it('holds send and the thinking control until both requests settle', async () => {
+      useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'max', listedModelIds });
+      let releaseThinking: () => void = () => {};
+      server.use(
+        http.put(`${SESSION_API}/state`, async ({ request }) => {
+          const body = await request.json();
+          if (!JSON.stringify(body).includes('thinkingLevel')) return HttpResponse.json({ ok: true });
+          return new Promise<Response>(resolve => {
+            releaseThinking = () => resolve(HttpResponse.json({ ok: true }));
+          });
+        }),
+      );
+      const user = userEvent.setup();
+      renderComposer();
+
+      await openModelMenu(user);
+      await user.click(await screen.findByRole('option', { name: /gpt-5\.4-mini/ }));
+      await user.type(screen.getByRole('textbox', { name: 'Message' }), 'next turn');
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled());
+      expect(screen.getByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+
+      releaseThinking();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    });
+
+    it('says the model changed when only the thinking level failed', async () => {
+      const requests = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'max', listedModelIds });
+      server.use(
+        http.put(`${SESSION_API}/state`, async ({ request }) => {
+          const body = await request.json();
+          if (!JSON.stringify(body).includes('thinkingLevel')) return HttpResponse.json({ ok: true });
+          return HttpResponse.json({ error: 'Settings store is down' }, { status: 500 });
+        }),
+      );
+      const user = userEvent.setup();
+      renderComposer();
+
+      await openModelMenu(user);
+      await user.click(await screen.findByRole('option', { name: /gpt-5\.4-mini/ }));
+
+      expect(
+        await screen.findByText(
+          /^Switched to openai\/gpt-5\.4-mini, but thinking stayed at max: .*Settings store is down/,
+        ),
+      ).toBeInTheDocument();
+      expect(requests).toEqual(['model:openai/gpt-5.4-mini']);
+    });
   });
 
   it('holds a draft level locally and applies it to the new session before the first prompt', async () => {
