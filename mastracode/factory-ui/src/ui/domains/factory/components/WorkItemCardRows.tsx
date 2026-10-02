@@ -18,8 +18,6 @@ import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-// The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
   item,
   columnStage,
@@ -40,12 +38,9 @@ export function WorkItemCardRows({
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
-  /** Bottom left, the likeliest first. */
   actions: CardAction[];
   beforeStart?: () => void;
-  /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
   controls: ReactNode;
-  /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
   const labels = metadataLabels(item.metadata);
@@ -76,13 +71,13 @@ export function WorkItemCardRows({
             </Txt>
           )}
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
+        <div className="flex min-w-0 items-center gap-1.5">
           {item.source === 'github-pr' ? (
             <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
           ) : (
             <SourceIcon source={item.source} />
           )}
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-[550]">
+          <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </Txt>
         </div>
@@ -136,7 +131,6 @@ export function WorkItemCardRows({
   );
 }
 
-/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
 export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
   const verdict = metadata.reviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;

@@ -20,10 +20,6 @@ const fonts = {
   mono: 'font-mono',
 };
 
-// One class per role, written out so Tailwind's scanner finds it: size, line height,
-// weight and tracking come from the `--text-*` tokens in theme/typography.css, so nothing
-// here can drift from a component that writes the same role by hand. Typed against
-// `TextRole`, so a role added to the token list has to land here too.
 const roles: Record<TextRole, string> = {
   display: 'text-display',
   title: 'text-title',
@@ -31,14 +27,15 @@ const roles: Record<TextRole, string> = {
   subheading: 'text-subheading',
   body: 'text-body',
   label: 'text-label',
+  'card-title': 'text-card-title',
+  'card-title-tight': 'text-card-title-tight',
+  'card-title-strong': 'text-card-title-strong',
   'body-sm': 'text-body-sm',
   column: 'text-column',
   caption: 'text-caption',
   meta: 'text-meta',
 };
 
-// Three inks, the same ladder every control uses. Omitting `tone` inherits — `body` is
-// already `--foreground`, so ink is written only to lift text back out of a muted block.
 const tones = {
   ink: 'text-foreground',
   muted: 'text-muted-foreground',

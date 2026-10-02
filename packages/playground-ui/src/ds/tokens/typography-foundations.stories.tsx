@@ -15,7 +15,15 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-const headingRoles: TextRole[] = ['display', 'title', 'heading', 'subheading'];
+const headingRoles: TextRole[] = [
+  'display',
+  'title',
+  'heading',
+  'subheading',
+  'card-title',
+  'card-title-tight',
+  'card-title-strong',
+];
 const textRoles: TextRole[] = ['body', 'label', 'body-sm', 'column', 'caption', 'meta'];
 const monoRoles: TextRole[] = ['body', 'body-sm', 'caption', 'meta'];
 
@@ -47,6 +55,9 @@ const samples: Record<TextRole, string> = {
   subheading: 'Configuration',
   body: 'Prose and descriptions carry the reading load.',
   label: 'Control label',
+  'card-title': 'Fix the deployment configuration',
+  'card-title-tight': 'Review the deployment configuration',
+  'card-title-strong': 'Investigate the deployment configuration',
   'body-sm': 'Table cells, menu items and field values',
   column: 'STATUS',
   caption: 'Secondary information and supporting copy',
@@ -60,9 +71,6 @@ const monoSamples: Partial<Record<TextRole, string>> = {
   meta: 'v2.1.0 · 3f9a2c1',
 };
 
-// The numbers are read off the rendered element rather than mirrored from a TypeScript
-// copy of the tokens: the row then reports what the browser actually applied, and cannot
-// drift from theme/typography.css.
 const RoleRow = ({ role, font = 'body' }: { role: TextRole; font?: 'body' | 'mono' }) => {
   const [applied, setApplied] = useState('');
 
@@ -126,7 +134,7 @@ export const TypographyFoundations: Story = {
       eyebrow={`Type / ${headingRoles.length + textRoles.length} roles · ${families.length} families`}
       title="Typography foundations"
       description="A role is one class carrying size, line height, weight and tracking. Components pick a role; they never assemble one out of a size plus a weight plus a leading."
-      note="500 is the weight ceiling — hierarchy comes from size and tone."
+      note="Card titles preserve their 550 or 600 weight; other roles use size and tone for hierarchy."
       noteAside="Txt applies a role through its variant prop; markup applies the same role as text-<role>."
     >
       <FoundationSection
@@ -140,7 +148,7 @@ export const TypographyFoundations: Story = {
         </div>
       </FoundationSection>
 
-      <FoundationSection label="Headings" description="Four roles for what a page, a panel and a section are called.">
+      <FoundationSection label="Headings" description="Roles for page, panel, section and card titles.">
         <div className="min-w-0">
           {headingRoles.map(role => (
             <RoleRow key={role} role={role} />

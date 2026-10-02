@@ -36,7 +36,6 @@ export function CandidateDetailsPanel({
   factoryProjectId: string;
   menu: ReactNode;
   defaultMove?: CardMove;
-  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
@@ -118,7 +117,7 @@ export function CandidateDetailsPanel({
       <ScrollArea className="flex min-h-0 grow flex-col">
         <ScrollAreaViewport className="min-h-0 grow">
           <div className="stream-landing flex flex-col gap-2 p-3">
-            <Txt as="h3" variant="label" tone="ink" className="m-0 font-[550] wrap-anywhere">
+            <Txt as="h3" variant="card-title" tone="ink" className="m-0 wrap-anywhere">
               {candidate.title}
             </Txt>
             <CardSourceDescription

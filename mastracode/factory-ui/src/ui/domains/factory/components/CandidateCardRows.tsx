@@ -8,8 +8,6 @@ import { externalLinkLabel, metadataLabelColors, metadataLabels } from '../board
 import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-// The card and its open copy draw these same rows, so opening moves nothing.
 export function CandidateCardRows({
   candidate,
   status,
@@ -20,9 +18,7 @@ export function CandidateCardRows({
   candidate: BoardCandidate;
   status: BoardCardStatus;
   titleId?: string;
-  /** Absolute in the corner: inline, its height would push every row down. */
   controls: ReactNode;
-  /** The copy's own row under the card's. */
   actions?: ReactNode;
 }) {
   return (
@@ -34,10 +30,9 @@ export function CandidateCardRows({
         </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-semibold">
+          <Txt as="span" variant="card-title-strong" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={candidate.source} title={candidate.title} id={titleId} />
           </Txt>
-          {/* Triage reads the source before deciding, so keep it one click away. */}
           <a
             href={candidate.url}
             target="_blank"
