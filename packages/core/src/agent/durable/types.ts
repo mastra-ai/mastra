@@ -186,9 +186,23 @@ export interface SerializableModelSettings {
 }
 
 /**
+ * JSON-safe snapshot of a call-time client tool. Client tools never execute on
+ * the server, so only the schema/metadata the model needs is persisted; the
+ * worker rebuilds the client tool from this when it runs in another process.
+ */
+export interface SerializableClientTool {
+  id?: string;
+  description?: string;
+  inputSchema: JSONSchema7;
+  requireApproval?: boolean;
+}
+
+/**
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
+  /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
+  clientTools?: Record<string, SerializableClientTool>;
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */

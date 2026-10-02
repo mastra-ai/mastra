@@ -411,6 +411,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/engy',
+          label: 'engy',
+        },
+        {
+          type: 'doc',
           id: 'providers/evroc',
           label: 'evroc',
         },

@@ -564,7 +564,8 @@ function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
 
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
- * assistant messages. Returns `undefined` if no changes were necessary.
+ * assistant messages, dropping any assistant message left with no content.
+ * Returns `undefined` if no changes were necessary.
  *
  * `skipIndex` excludes one message from stripping — used to protect the
  * trailing assistant message of an active tool-use continuation, which
@@ -583,16 +584,31 @@ function stripReasoningFromPrompt(
   skipIndex = -1,
 ): LanguageModelV2Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = prompt.map((message, index) => {
-    if (index === skipIndex) return message;
-    if (message.role !== 'assistant') return message;
-    if (typeof message.content === 'string') return message;
-    if (!Array.isArray(message.content)) return message;
+  const next: LanguageModelV2Prompt = [];
+  for (let index = 0; index < prompt.length; index++) {
+    const message = prompt[index]!;
+    if (
+      index === skipIndex ||
+      message.role !== 'assistant' ||
+      typeof message.content === 'string' ||
+      !Array.isArray(message.content)
+    ) {
+      next.push(message);
+      continue;
+    }
     const filtered = message.content.filter(part => part.type !== 'reasoning' || !shouldStrip(part as any));
-    if (filtered.length === message.content.length) return message;
+    if (filtered.length === message.content.length) {
+      next.push(message);
+      continue;
+    }
     mutated = true;
-    return { ...message, content: filtered };
-  });
+    // A reasoning-only turn is emptied by the strip. Processors run after
+    // conversion, so the empty-content filter in MessageList no longer
+    // applies — Anthropic rejects empty assistant content, so drop the
+    // message itself (same idiom as anthropicStripForeignSignedReasoning).
+    if (filtered.length === 0) continue;
+    next.push({ ...message, content: filtered });
+  }
   return mutated ? next : undefined;
 }
 

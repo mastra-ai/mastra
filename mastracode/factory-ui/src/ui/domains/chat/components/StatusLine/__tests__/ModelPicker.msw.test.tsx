@@ -448,7 +448,9 @@ describe('ModelPicker', () => {
       expect(screen.queryByRole('option', { name: 'Reset to default pack' })).not.toBeInTheDocument();
 
       await user.click(manage);
-      expect(await screen.findByTestId('elsewhere')).toHaveTextContent('/factories/fp-1/settings/models#model-packs');
+      expect(await screen.findByTestId('elsewhere')).toHaveTextContent(
+        '/factories/fp-1/settings/personal-models#model-packs',
+      );
     });
   });
 

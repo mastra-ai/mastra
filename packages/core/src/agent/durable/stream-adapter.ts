@@ -444,9 +444,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } else if (finishReason === 'error') {
             try {
               const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
-              // Preserve the producer's stack and name so the failure stays attributable and classifiable.
+              // Preserve the producer's stack, name, and provider fields so the failure stays attributable and classifiable.
               if (lastErrorStack) error.stack = lastErrorStack;
               if (lastErrorName) error.name = lastErrorName;
+              if (lastErrorCause && typeof lastErrorCause === 'object') {
+                for (const [key, value] of Object.entries(lastErrorCause)) {
+                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
+                    (error as unknown as Record<string, unknown>)[key] = value;
+                  }
+                }
+              }
               await onError?.({ error });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
