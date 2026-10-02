@@ -279,7 +279,7 @@ export const Thread = ({
               className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
             >
               {landingShown ? null : <ChatShell.ScrollButton />}
-              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+              <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
                 {landingShown ? (
                   <ThreadWelcome agentName={agentName} />
                 ) : (
