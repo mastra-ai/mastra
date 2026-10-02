@@ -146,8 +146,8 @@ describe('decideContinuation — delegation bail ordering (per-engine split)', (
   });
 });
 
-describe('decideContinuation — feedback on hook resurrection (per-engine split)', () => {
-  it('default: { continue: true, feedback } on a stopped run resurrects but silently DROPS the feedback (shipped wart, pinned)', async () => {
+describe('decideContinuation — feedback on hook resurrection', () => {
+  it('default: { continue: true, feedback } injects the feedback before resurrecting a stopped run', async () => {
     const injectFeedback = vi.fn();
     const decision = await decideContinuation(
       makeDeps({
@@ -156,10 +156,7 @@ describe('decideContinuation — feedback on hook resurrection (per-engine split
         onIterationComplete: async () => ({ continue: true, feedback: 'fix it' }),
       }),
     );
-    // Released contract: the feedback gate requires the LLM to already want
-    // to continue, so the resurrection branch never injects. Fixing the drop
-    // is a real data-loss fix but ships separately with a product decision.
-    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(injectFeedback).toHaveBeenCalledWith('fix it');
     expect(decision.isFinal).toBe(false);
     expect(decision.forceContinue).toBe(true);
   });
@@ -246,6 +243,36 @@ describe('decideContinuation — feedback force-continue requires a finite maxSt
     );
     expect(decision.forceContinue).toBe(true);
     expect(decision.isFinal).toBe(false);
+  });
+
+  it('default finite: feedback reopens a model-finished run and is injected', async () => {
+    const injectFeedback = vi.fn();
+    const decision = await decideContinuation(
+      makeDeps({
+        policy: { mode: 'default', hasFiniteMaxSteps: true },
+        llmWantsToContinue: false,
+        injectFeedback,
+        onIterationComplete: hook,
+      }),
+    );
+    expect(injectFeedback).toHaveBeenCalledWith('keep going');
+    expect(decision.forceContinue).toBe(true);
+    expect(decision.isFinal).toBe(false);
+  });
+
+  it('default unbounded: feedback does not reopen a model-finished run', async () => {
+    const injectFeedback = vi.fn();
+    const decision = await decideContinuation(
+      makeDeps({
+        policy: { mode: 'default', hasFiniteMaxSteps: false },
+        llmWantsToContinue: false,
+        injectFeedback,
+        onIterationComplete: hook,
+      }),
+    );
+    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(decision.forceContinue).toBe(false);
+    expect(decision.isFinal).toBe(true);
   });
 });
 

@@ -2550,7 +2550,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     expect(callCount).toBe(2);
   });
 
-  it('should add feedback to conversation when provided', async () => {
+  it('should run one more iteration with feedback when the model stops', async () => {
     const feedbackMessages: string[] = [];
     let callCount = 0;
 
@@ -2562,13 +2562,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doGenerate: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2594,13 +2597,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doStream: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2658,17 +2664,15 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       onIterationComplete: () => {
         iterationCount++;
         if (iterationCount === 1) {
-          // Add feedback after first iteration
-          return {
-            continue: true,
-            feedback: 'Please improve your response with more details.',
-          };
+          return { feedback: 'Please improve your response with more details.' };
         }
-        return { continue: false }; // Stop after second iteration
+        return { continue: false };
       },
     });
 
     expect(iterationCount).toBe(2);
+    expect(callCount).toBe(2);
+    expect(feedbackMessages).toEqual(['Please improve your response with more details.']);
   });
 
   it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
