@@ -1,4 +1,5 @@
 import { useMastraClient } from '@mastra/react';
+import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks';
 import { useQueries } from '@tanstack/react-query';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -10,7 +11,6 @@ import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skel
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { traceSpansQueryOptions, useTraceSpans } from '@/domains/traces/hooks/use-trace-spans';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
 import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
 import { Button } from '@/ds/components/Button';

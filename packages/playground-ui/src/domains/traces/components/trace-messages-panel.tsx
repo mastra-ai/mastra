@@ -1,6 +1,6 @@
+import { useThreadHasOtherTraces } from '@mastra/react/hooks';
 import { MessagesSquareIcon } from 'lucide-react';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
-import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 import { Button } from '@/ds/components/Button';
 import { cn } from '@/utils/cn';
 

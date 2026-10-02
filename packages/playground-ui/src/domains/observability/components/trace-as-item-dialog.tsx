@@ -3,10 +3,10 @@
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
+import { useSpanDetail } from '@mastra/react/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 import type { SpanRecord } from '@/domains/traces/types';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';

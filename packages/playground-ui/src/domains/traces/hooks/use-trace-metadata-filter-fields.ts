@@ -6,9 +6,9 @@ import type {
   MastraClient,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { DISCOVERY_STALE_TIME } from '@mastra/react/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { DISCOVERY_STALE_TIME } from './discovery-cache';
 import type { FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
 
 export type TraceQueryDiscoveryTimeRange = GetTraceQueryFieldsArgs['timeRange'];

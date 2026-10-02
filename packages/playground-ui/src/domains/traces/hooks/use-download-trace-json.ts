@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
+import { traceSpansQueryOptions } from '@mastra/react/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { traceSpansQueryOptions } from './use-trace-spans';
 import { downloadJson } from '@/lib/file';
 import { toast } from '@/lib/toast';
 

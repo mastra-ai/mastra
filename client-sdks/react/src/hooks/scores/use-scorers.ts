@@ -1,4 +1,5 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
+import type { UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
@@ -43,7 +44,13 @@ function selectFlatScores(data: { pages: ListScoresResponse[] }) {
   return scores;
 }
 
-export const useScoresByScorerId = ({ scorerId, entityId, entityType }: UseScoresByScorerIdProps) => {
+export const useScoresByScorerId = ({
+  scorerId,
+  entityId,
+  entityType,
+}: UseScoresByScorerIdProps): UseInfiniteQueryResult<ReturnType<typeof selectFlatScores>, Error> & {
+  setEndOfListElement: ReturnType<typeof useInView>['setRef'];
+} => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
