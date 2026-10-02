@@ -3230,7 +3230,13 @@ export class Workflow<
           perStep,
         });
       } else if (restartNested) {
-        res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
+        res = await run.restart({
+          requestContext,
+          actor,
+          ...observabilityContext,
+          outputWriter,
+          outputOptions: { includeState: true, includeResumeLabels: true },
+        });
       } else if (resumeNested) {
         res = await run.resume({
           resumeData,
@@ -4782,6 +4788,10 @@ export class Run<
       requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
       tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
       actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {},
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -5195,12 +5205,17 @@ export class Run<
     requestContext,
     outputWriter,
     tracingOptions,
+    outputOptions,
     actor,
     ...rest
   }: {
     requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -5313,6 +5328,7 @@ export class Run<
       actor,
       abortController: this.abortController,
       outputWriter,
+      outputOptions,
       workflowSpan,
     });
 
