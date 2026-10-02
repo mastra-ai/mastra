@@ -15,7 +15,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { resolveThinkingLevelForModel } from '../thinking.js';
+import { resolveOpenAIThinkingLevel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 export { supportsMaxReasoningEffort } from '../thinking.js';
 
@@ -56,7 +56,7 @@ const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 export function resolveCodexThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // The Codex endpoint rejects GPT-5.* requests without reasoning.
   if (level === 'off' && GPT5_MODEL_RE.test(modelId)) return 'low';
-  return resolveThinkingLevelForModel(modelId, level);
+  return resolveOpenAIThinkingLevel(modelId, level);
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.

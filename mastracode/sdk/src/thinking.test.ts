@@ -62,6 +62,7 @@ describe('thinking model capabilities', () => {
     expect(getAvailableThinkingLevelsForModel('google/gemini-2.0-flash')).toEqual(['off']);
     expect(getAvailableThinkingLevelsForModel('openai/gpt-4o-mini')).toEqual(['off']);
     expect(getAvailableThinkingLevelsForModel('openai/gpt-5-chat-latest')).toEqual(['off']);
+    expect(getAvailableThinkingLevelsForModel('openai/chatgpt-4o-latest')).toEqual(['off']);
   });
 
   it('passes levels through unchanged for unrecognised providers', () => {
@@ -73,6 +74,14 @@ describe('thinking model capabilities', () => {
       'xhigh',
       'max',
     ]);
+  });
+
+  it('follows the provider the request routes through, not the model name', () => {
+    const allLevels = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
+    expect(getAvailableThinkingLevelsForModel('my-local/gpt-oss-20b')).toEqual(allLevels);
+    expect(getAvailableThinkingLevelsForModel('openrouter/anthropic/claude-3-5-haiku')).toEqual(allLevels);
+    expect(getAvailableThinkingLevelsForModel('mastra/openai/gpt-5')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(getAvailableThinkingLevelsForModel('anthropic/claude-opus-4.7')).toEqual(allLevels);
   });
 });
 

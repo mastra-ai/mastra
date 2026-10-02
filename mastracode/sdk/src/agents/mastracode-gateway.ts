@@ -47,7 +47,7 @@ import {
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
-import { resolveThinkingLevelForModel } from '../thinking.js';
+import { resolveOpenAIThinkingLevel } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
@@ -165,7 +165,7 @@ function openaiApiKeyProvider(
     thinkingLevel && thinkingLevel !== 'off'
       ? createReasoningEffortMiddleware(
           'openai',
-          THINKING_LEVEL_TO_REASONING_EFFORT[resolveThinkingLevelForModel(modelId, thinkingLevel)],
+          THINKING_LEVEL_TO_REASONING_EFFORT[resolveOpenAIThinkingLevel(modelId, thinkingLevel)],
         )
       : undefined;
   return wrapLanguageModel({
