@@ -17,7 +17,7 @@ import { BOARD_SORT_LABELS, BoardSortControl } from './BoardSortControl';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
 
-function describeViewSettings(settings: BoardViewSettings) {
+function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
   return (
     <Txt as="span" variant="caption" tone="muted">
       {LAYOUT_LABELS[settings.layout]} · {BOARD_SORT_LABELS[settings.sort]}
@@ -25,11 +25,6 @@ function describeViewSettings(settings: BoardViewSettings) {
   );
 }
 
-/**
- * The sort and saved view tabs, with `aside` at the end of their row. Below them, the filters in
- * use: the board's own, or the open view's. Unsaved changes tint the row and bring their actions:
- * Save as view on the default view, Cancel and Save on a saved one.
- */
 export function BoardViewControls({
   kind,
   view,
@@ -53,25 +48,16 @@ export function BoardViewControls({
     currentUserId,
     teammateSelected: view.filters.participantIds.size > 0,
   });
-  const filters = (
-    <BoardFilters
-      kind={kind}
-      fields={fields}
-      filters={view.filters}
-      onFiltersChange={view.setFilters}
-      aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
-    />
-  );
-  const filtersSlot = <div className="min-w-0 flex-1">{filters}</div>;
-  const layoutToggle = (
-    <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
-      <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
-        <List aria-hidden />
-      </SegmentedControlItem>
-      <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
-        <Kanban aria-hidden />
-      </SegmentedControlItem>
-    </SegmentedControl>
+  const filtersSlot = (
+    <div className="max-w-full min-w-0">
+      <BoardFilters
+        kind={kind}
+        fields={fields}
+        filters={view.filters}
+        onFiltersChange={view.setFilters}
+        aria-label={savedViews.applied ? 'View filters' : 'Board filters'}
+      />
+    </div>
   );
   const saveAsView = () => savedViews.create(view.newViewSettings, boardFilterItems(view.filters, kind));
   const pageFiltersActive = !savedViews.applied && boardFiltersActive(view.filters, kind);
@@ -89,7 +75,7 @@ export function BoardViewControls({
             operators={BOARD_FILTER_OPERATORS}
             defaultLabel="All cards"
             newViewSettings={view.newViewSettings}
-            describeSettings={describeViewSettings}
+            describeSettings={settings => <ViewSettingsSummary settings={settings} />}
           />
         </div>
         {aside && <div className="ml-auto shrink-0">{aside}</div>}
@@ -105,7 +91,14 @@ export function BoardViewControls({
         {savedViews.draft ? (
           <SavedViewEditor views={savedViews} className="flex-1">
             {filtersSlot}
-            {layoutToggle}
+            <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
+              <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
+                <List aria-hidden />
+              </SegmentedControlItem>
+              <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
+                <Kanban aria-hidden />
+              </SegmentedControlItem>
+            </SegmentedControl>
           </SavedViewEditor>
         ) : (
           filtersSlot

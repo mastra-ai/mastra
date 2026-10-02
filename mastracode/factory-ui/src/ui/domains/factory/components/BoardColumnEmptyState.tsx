@@ -82,7 +82,7 @@ export function BoardColumnEmptyState({
   hasIntakeSource,
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
-  layout = 'board',
+  layout,
 }: {
   stage: BoardStageId;
   kind: BoardKind;
@@ -90,7 +90,7 @@ export function BoardColumnEmptyState({
   filtersExcludeAll?: boolean;
   /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
-  layout?: BoardLayout;
+  layout: BoardLayout;
 }) {
   const copy = filtersExcludeAll
     ? {
@@ -107,7 +107,7 @@ export function BoardColumnEmptyState({
     return (
       <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2">
         {copy.title}
-        <span className="text-placeholder"> · {copy.description}</span>
+        <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
       </Txt>
     );
   }

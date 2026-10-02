@@ -134,18 +134,20 @@ describe('SavedViews', () => {
     expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
   });
 
-  it('previews a view on hover and edits it from the preview', async () => {
+  it('previews another view on hover and opens the active view menu on click', async () => {
     render(<Page />);
     await createView('Errors');
 
+    fireEvent.click(tab('Errors'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
+    expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(tab('All'));
     fireEvent.mouseEnter(tab('Errors'));
     fireEvent.mouseMove(tab('Errors'));
-    const edit = await screen.findByRole('button', { name: 'Edit view' }, { timeout: 2000 });
-    expect(screen.getByText('Status')).toBeTruthy();
-    fireEvent.click(edit);
-
-    expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS] });
+    expect(await screen.findByText('Status', undefined, { timeout: 2000 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Edit view' })).toBeNull();
   });
 
   it('renames from the context menu and restores the name on Escape', async () => {

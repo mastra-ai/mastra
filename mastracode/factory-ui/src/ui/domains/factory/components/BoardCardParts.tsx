@@ -11,9 +11,17 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import type { BoardCardStatus } from '../boardCardStatus';
-import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
+import {
+  HIDDEN_CARD_LABELS,
+  SOURCE_LABELS,
+  metadataLabelColors,
+  metadataLabels,
+  pullRequestStatusForItem,
+} from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import type { WorkItemSource } from '../services/workItems';
+import type { WorkItem, WorkItemSource } from '../services/workItems';
+import { SourceIcon } from './BoardIcons';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -24,21 +32,21 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
   );
 }
 
+export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
+  if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
+  return <SourceIcon source={item.source} />;
+}
+
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
 export function BoardTooltipDelay({ children }: { children: ReactNode }) {
   return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
 
-/**
- * Card chrome a hover can reveal: the click affordance and the actions menu.
- * Gated on `pointer-fine` because a touch screen has no hover to reveal it
- * with, and stays up while its menu is open.
- */
+// Gated on `pointer-fine` because a touch screen has no hover to reveal it with; stays up while its menu is open.
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// Beside the card's menu, in the slot where the open copy puts Collapse. A mouse twin of the card's own
-// details button, which keeps the keyboard and screen-reader path.
+// A mouse twin of the card's own details button, which keeps the keyboard and screen-reader path.
 export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   return (
     <button
@@ -57,8 +65,7 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
 export function CardStatus({ status }: { status: BoardCardStatus }) {
   if (status.kind === 'idle') return null;
 
-  // A parked run is the one idle state the card cannot whisper: it needs the
-  // user, so it stays lit without a hover. Releasing it is the actions row's job.
+  // A parked run needs the user, so it stays lit without a hover.
   if (status.kind === 'waiting') {
     return (
       <Badge size="xs" variant="orange" icon={<Sparkles aria-hidden />} role="status" aria-live="polite">
@@ -132,15 +139,10 @@ function labelDotClass(label: string): string {
   return 'bg-muted-foreground';
 }
 
-export function CardLabels({
-  labels,
-  colors = {},
-}: {
-  labels: readonly string[];
-  colors?: Readonly<Record<string, string>>;
-}) {
-  const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
+  const displayLabels = metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
+  const colors = metadataLabelColors(metadata);
   return (
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">
@@ -208,7 +210,6 @@ function CardActionButton({
   const variant = pillVariant(action, main);
   // The lead action keeps its label whole; a narrow column eats into the ones behind it.
   const width = main ? 'shrink-0' : 'min-w-0';
-  // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
     return (
       <Button

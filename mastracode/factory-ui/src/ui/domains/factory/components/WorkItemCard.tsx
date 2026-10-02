@@ -62,7 +62,7 @@ export function WorkItemCard({
   onCreateSession,
   onMove,
   onRemove,
-  layout = 'board',
+  layout,
 }: {
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
@@ -95,7 +95,7 @@ export function WorkItemCard({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
-  layout?: BoardLayout;
+  layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph({ openFor: deepLinkCommentId });

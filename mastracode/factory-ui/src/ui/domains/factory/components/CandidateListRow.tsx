@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 import type { BoardCandidate } from '../boardCandidates';
 import type { BoardCardStatus } from '../boardCardStatus';
 import { candidatePayload } from '../boardDrag';
-import { externalLinkLabel, metadataLabelColors, metadataLabels, sourceCreatedAt, workItemKey } from '../boardItems';
+import { externalLinkLabel, sourceCreatedAt, workItemKey } from '../boardItems';
 import type { CardMorph } from '../hooks/useCardMorph';
-import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { BoardListRow } from './BoardListRow';
 
@@ -56,9 +56,7 @@ export function CandidateListRow({
             </a>
           </span>
         ),
-        labels: (
-          <CardLabels labels={metadataLabels(candidate.metadata)} colors={metadataLabelColors(candidate.metadata)} />
-        ),
+        labels: <MetadataLabels metadata={candidate.metadata} />,
         status: <CardStatus status={status} />,
         action: actions,
       }}

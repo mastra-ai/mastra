@@ -1,3 +1,4 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
@@ -14,7 +15,7 @@ import {
   Play,
   Search,
 } from 'lucide-react';
-import type { ComponentType, ReactElement, SVGProps } from 'react';
+import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
 import { boardStage, stageTone } from '../stages';
@@ -40,7 +41,6 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
-/** Icon for each known run-action label; `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
   Investigate: Search,
   Build: Hammer,
@@ -53,9 +53,11 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-type PhaseKind = 'resting' | 'working' | 'terminal';
-
-type StageArt = (props: { className: string }) => ReactElement;
+const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
+  resting: 'neutral',
+  working: 'info',
+  terminal: 'success',
+};
 
 const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
@@ -73,10 +75,7 @@ function MaskedArt({ source, className }: { source: string; className: string })
     <span
       aria-hidden
       style={{ maskImage: `url(${source})` }}
-      className={cn(
-        'size-4 shrink-0 bg-current [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain]',
-        className,
-      )}
+      className={cn('size-4 shrink-0 bg-current mask-center mask-no-repeat mask-contain', className)}
     />
   );
 }
@@ -101,36 +100,42 @@ function ProgressPieIcon({ progress, className }: { progress: number; className:
   );
 }
 
-const lucideArt =
-  (Icon: ComponentType<SVGProps<SVGSVGElement>>): StageArt =>
-  ({ className }) => <Icon width={16} height={16} aria-hidden className={cn('shrink-0', className)} />;
-
-const BUILTIN_STAGE_ART: Record<BuiltinStageId, StageArt> = {
-  intake: ({ className }) => <IntakeIcon className={cn('shrink-0', className)} />,
-  triage: ({ className }) => <MaskedArt source="/factory-stage-icons/triage.svg" className={className} />,
-  planning: ({ className }) => <ProgressPieIcon progress={0.25} className={className} />,
-  execute: ({ className }) => <ProgressPieIcon progress={0.5} className={className} />,
-  review: ({ className }) => <MaskedArt source="/factory-stage-icons/review.svg" className={className} />,
-  done: lucideArt(CheckCircle2),
-  canceled: lucideArt(CircleX),
-};
-
-const PHASE_KIND_STYLES: Record<PhaseKind, { art: StageArt; tone: StageTone }> = {
-  resting: { art: lucideArt(CircleDashed), tone: 'neutral' },
-  working: { art: ({ className }) => <ProgressPieIcon progress={0.5} className={className} />, tone: 'info' },
-  terminal: { art: lucideArt(CheckCircle2), tone: 'success' },
-};
-
 // Custom boards pass `kind` and may reuse a built-in id with another meaning, so `kind` wins over the id.
-function stageStyle(stage: string, kind?: PhaseKind): { art: StageArt; tone: StageTone } {
-  if (kind) return PHASE_KIND_STYLES[kind];
-  const builtin = boardStage(stage);
-  if (!builtin) return PHASE_KIND_STYLES.resting;
-  return { art: BUILTIN_STAGE_ART[builtin], tone: stageTone(builtin) };
+function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId | undefined {
+  return kind ? undefined : boardStage(stage);
 }
 
-export function stageTintClass(stage: string, kind?: PhaseKind): string {
-  return TONE_CLASSES[stageStyle(stage, kind).tone].tint;
+function stageToneFor(stage: string, kind?: BoardPhaseKind): StageTone {
+  const builtin = builtinStageFor(stage, kind);
+  return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
+}
+
+function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhaseKind; className: string }) {
+  const lucideClassName = cn('shrink-0', className);
+  switch (builtinStageFor(stage, kind) ?? kind ?? 'resting') {
+    case 'intake':
+      return <IntakeIcon className={lucideClassName} />;
+    case 'triage':
+      return <MaskedArt source="/factory-stage-icons/triage.svg" className={className} />;
+    case 'planning':
+      return <ProgressPieIcon progress={0.25} className={className} />;
+    case 'execute':
+    case 'working':
+      return <ProgressPieIcon progress={0.5} className={className} />;
+    case 'review':
+      return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
+    case 'done':
+    case 'terminal':
+      return <CheckCircle2 width={16} height={16} aria-hidden className={lucideClassName} />;
+    case 'canceled':
+      return <CircleX width={16} height={16} aria-hidden className={lucideClassName} />;
+    case 'resting':
+      return <CircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
+  }
+}
+
+export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].tint;
 }
 
 export function BoardStageIcon({
@@ -139,12 +144,11 @@ export function BoardStageIcon({
   decorative = false,
 }: {
   stage: string;
-  kind?: PhaseKind;
+  kind?: BoardPhaseKind;
   /** Beside text that already names the phase; a custom phase's icon otherwise announces its kind. */
   decorative?: boolean;
 }) {
-  const { art: Art, tone } = stageStyle(stage, kind);
-  const icon = <Art className={TONE_CLASSES[tone].icon} />;
+  const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;
   if (decorative || !kind) return icon;
   return (
     <span role="img" aria-label={`${kind} phase`} className="inline-flex shrink-0">

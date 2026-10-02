@@ -1,4 +1,6 @@
 import type { IntakeFeed } from '../boardCandidates';
+import { SKELETON_ROW_CLASS } from '../boardLayout';
+import type { BoardLayout } from '../boardLayout';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 
@@ -9,11 +11,11 @@ import { LoadMoreSentinel } from './LoadMoreSentinel';
 export function IntakeColumnExtras({
   feed,
   currentColumnLength,
-  skeletonRowClassName,
+  layout,
 }: {
   feed?: IntakeFeed;
   currentColumnLength: number;
-  skeletonRowClassName: string;
+  layout: BoardLayout;
 }) {
   if (!feed || feed.error) return null;
 
@@ -25,7 +27,7 @@ export function IntakeColumnExtras({
       label="Load more candidates"
       loadingIndicator={
         currentColumnLength > 0 ? (
-          <SkeletonRows label="Loading more candidates" rows={1} rowClassName={skeletonRowClassName} />
+          <SkeletonRows label="Loading more candidates" rows={1} rowClassName={SKELETON_ROW_CLASS[layout]} />
         ) : (
           <span role="status" className="sr-only">
             Loading more candidates

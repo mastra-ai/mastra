@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react';
 import { FilterBarFieldLabel, formatValue } from '@/ds/components/FilterBar/filter-bar-chip';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
-import { SavedViewScope } from './saved-view-scope';
 import { Txt } from '@/ds/components/Txt';
 
-export type SavedViewSummaryProps = {
+type SavedViewSummaryProps = {
   filters: readonly FilterBarItem[];
   fields: readonly FilterBarField[];
   operators: readonly FilterBarOperator[];
@@ -39,7 +38,6 @@ export function SavedViewSummary({ filters, fields, operators, settings }: Saved
         </ul>
       )}
       {settings}
-      <SavedViewScope className="border-border1 border-t pt-2" />
     </div>
   );
 }

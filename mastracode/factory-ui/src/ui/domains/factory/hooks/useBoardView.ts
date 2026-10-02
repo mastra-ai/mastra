@@ -9,6 +9,7 @@ import {
   boardFilterParams,
   boardFilterStateFromItems,
   boardFiltersFromParams,
+  clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
 import { DEFAULT_BOARD_LAYOUT } from '../boardLayout';
@@ -19,12 +20,6 @@ import type { BoardViewSettings } from '../boardSavedViews';
 import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardKind } from '../boardStages';
 import { restoreBoardView, saveBoardView } from '../services/boardViews';
-
-/** The open card and the comment it deep-links to are one selection: clear them together. */
-export function clearOpenCard(params: URLSearchParams) {
-  params.delete('item');
-  params.delete('comment');
-}
 
 export interface BoardView {
   /** The URL with any remembered board view filled in; read the open card from here. */
@@ -40,11 +35,7 @@ export interface BoardView {
   setLayout: (next: BoardLayout) => void;
 }
 
-/**
- * What the board shows and how: filters, sort and layout. Without a saved view, filters and sort
- * live in the URL and the layout is the board; with one, they come from the view (or its open
- * draft) and every change edits that draft.
- */
+/** With a saved view applied, every change edits its draft instead of the URL. */
 export function useBoardView({
   factoryProjectId,
   kind,

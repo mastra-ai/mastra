@@ -1,3 +1,4 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -65,7 +66,7 @@ export function BoardColumnHeader({
   label: string;
   taskCount: number;
   totalTaskCount: number;
-  phaseKind?: 'resting' | 'working' | 'terminal';
+  phaseKind?: BoardPhaseKind;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading: boolean;
   collapsed: boolean;
@@ -121,11 +122,8 @@ export function BoardColumnHeader({
         <Txt as="h2" variant="label" className="text-muted-foreground m-0 truncate font-semibold">
           {label}
         </Txt>
-        {loading ? (
-          <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-        ) : totalTaskCount > 0 ? (
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-        ) : null}
+        {loading && <Skeleton className="h-6 w-12 shrink-0 rounded-full" />}
+        {!loading && totalTaskCount > 0 && <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />}
       </div>
       {headerExtras || headerAction ? (
         <div className="flex h-8 shrink-0 items-center gap-1">

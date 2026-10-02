@@ -60,6 +60,12 @@ export function boardFilterParams(params: URLSearchParams, state: BoardFilterSta
   return next;
 }
 
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+export function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
+}
+
 /** Whether anything is narrowing the board — the one fact both the bar and the empty state read. */
 export function boardFiltersActive(state: BoardFilterState, kind: BoardKind): boolean {
   return (

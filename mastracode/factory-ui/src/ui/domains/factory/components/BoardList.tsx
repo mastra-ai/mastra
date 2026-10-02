@@ -1,3 +1,4 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -34,7 +35,7 @@ export function BoardListGroup({
 }: {
   stage: BoardStageId;
   label: string;
-  phaseKind?: 'resting' | 'working' | 'terminal';
+  phaseKind?: BoardPhaseKind;
   count: number;
   loading: boolean;
   action?: ReactNode;
@@ -52,9 +53,9 @@ export function BoardListGroup({
       className="relative col-span-full grid grid-cols-subgrid content-start gap-y-px pb-4 [&>:not(.data-list-row)]:col-span-full"
       {...dropZone.dropZoneProps}
     >
-      <DataList.Subheader
+      <div
         className={cn(
-          'mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
+          'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
           dropZone.dragOver ? 'bg-fill-hover' : stageTintClass(stage, phaseKind),
         )}
       >
@@ -73,7 +74,7 @@ export function BoardListGroup({
           {extras}
           {action}
         </div>
-      </DataList.Subheader>
+      </div>
       {children}
       {count > 0 && <BoardDropLine top={dropZone.dropLineTop} visible={dropZone.dragOver} />}
     </section>

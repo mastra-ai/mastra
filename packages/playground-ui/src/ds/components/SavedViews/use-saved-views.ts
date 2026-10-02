@@ -1,12 +1,10 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { parseSavedViews, savedViewNameSchema, serializeSavedViews } from './saved-view-schema';
 import type { SavedView, SavedViewSettingsSchema } from './saved-view-schema';
-import { readSavedViewsRaw, subscribeSavedViews, writeSavedViewsRaw } from './saved-views-storage';
+import { readSavedViewsRaw, savedViewsSubscriber, writeSavedViewsRaw } from './saved-views-storage';
 import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 
-export const NEW_SAVED_VIEW_NAME = 'Untitled view';
-
-export const SAVED_VIEW_SCOPE_LABEL = 'Only you, in this browser';
+const NEW_SAVED_VIEW_NAME = 'Untitled view';
 
 export type SavedViewContent<TSettings> = {
   filters: FilterBarItem[];
@@ -22,7 +20,6 @@ export type SavedViewDraftChange<TSettings> = Partial<Omit<SavedViewDraft<TSetti
 
 export type UseSavedViewsOptions<TSettings> = {
   storageKey: string;
-  // Keep it a module constant: a new schema re-parses every view.
   settingsSchema: SavedViewSettingsSchema<TSettings>;
   activeViewId: string | undefined;
   onActiveViewChange: (viewId: string | undefined) => void;
@@ -61,11 +58,11 @@ export function useSavedViews<TSettings>({
   onActiveViewChange,
 }: UseSavedViewsOptions<TSettings>): SavedViewsController<TSettings> {
   const raw = useSyncExternalStore(
-    useCallback(listener => subscribeSavedViews(storageKey, listener), [storageKey]),
+    savedViewsSubscriber(storageKey),
     () => readSavedViewsRaw(storageKey),
     () => null,
   );
-  const views = useMemo(() => parseSavedViews(raw, settingsSchema), [raw, settingsSchema]);
+  const views = parseSavedViews(raw, settingsSchema);
   const [pendingDraft, setDraft] = useState<SavedViewDraft<TSettings>>();
   // A draft of a view the page navigated away from no longer applies.
   const draft = pendingDraft?.viewId === undefined || pendingDraft.viewId === activeViewId ? pendingDraft : undefined;

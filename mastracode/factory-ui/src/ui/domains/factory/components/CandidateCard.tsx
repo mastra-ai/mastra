@@ -25,7 +25,7 @@ export function CandidateCard({
   projectRepositoryId,
   factoryProjectId,
   onRun,
-  layout = 'board',
+  layout,
 }: {
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
@@ -34,7 +34,7 @@ export function CandidateCard({
   factoryProjectId: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
-  layout?: BoardLayout;
+  layout: BoardLayout;
 }) {
   const detailsTitleId = useId();
   const morph = useCardMorph();

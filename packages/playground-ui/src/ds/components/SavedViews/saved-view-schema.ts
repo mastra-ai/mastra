@@ -3,11 +3,11 @@ import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 
 export const MAX_SAVED_VIEW_NAME_CHARS = 80;
 
-export const SAVED_VIEWS_STORAGE_VERSION = 1;
+const SAVED_VIEWS_STORAGE_VERSION = 1;
 
 const filterBarScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
 
-export const savedViewFilterSchema = z.object({
+const savedViewFilterSchema = z.object({
   id: z.string().min(1),
   fieldId: z.string().min(1),
   operatorId: z.string().min(1),
@@ -16,7 +16,7 @@ export const savedViewFilterSchema = z.object({
 
 export const savedViewNameSchema = z.string().trim().min(1).max(MAX_SAVED_VIEW_NAME_CHARS);
 
-export const storedSavedViewSchema = z.object({
+const storedSavedViewSchema = z.object({
   id: z.string().min(1),
   name: savedViewNameSchema,
   filters: z.array(savedViewFilterSchema),
@@ -24,7 +24,7 @@ export const storedSavedViewSchema = z.object({
 });
 
 // Views stay `unknown` so one malformed view is dropped on its own, not the whole list.
-export const savedViewsDocumentSchema = z.object({
+const savedViewsDocumentSchema = z.object({
   version: z.literal(SAVED_VIEWS_STORAGE_VERSION),
   views: z.array(z.unknown()),
 });

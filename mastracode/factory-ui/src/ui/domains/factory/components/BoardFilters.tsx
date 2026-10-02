@@ -17,7 +17,7 @@ export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
   { id: 'in', label: 'is any of', arity: 'many' },
 ];
 
-export interface BoardFilterFieldsOptions {
+interface BoardFilterFieldsOptions {
   kind: BoardKind;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
@@ -26,7 +26,6 @@ export interface BoardFilterFieldsOptions {
   teammateSelected: boolean;
 }
 
-/** The board's filter fields, shared by the filter bar and the saved view previews that read it back. */
 export function useBoardFilterFields({
   kind,
   participants,
@@ -72,10 +71,6 @@ export function useBoardFilterFields({
   );
 }
 
-/**
- * Board narrowing as one filter bar: typing goes straight to a text search, and teammates,
- * relevance and labels are chips built from the same input.
- */
 export function BoardFilters({
   kind,
   fields,
