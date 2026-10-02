@@ -119,6 +119,44 @@ describe('AgentController session preference persistence (thinkingLevel, notific
     expect((session.state.get() as any).notifications).toBe('both');
   });
 
+  it('does not carry a thinking level into a thread that never set one', async () => {
+    const stateSchema = z.object({
+      thinkingLevel: z.enum(['off', 'low', 'medium', 'high']).optional(),
+      notifications: z.enum(['off', 'both']).optional(),
+    });
+    const controller = createController(storage, {}, stateSchema);
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const threadWithoutLevel = await session.thread.create();
+    await session.state.set({ notifications: 'both' });
+    await session.thread.create();
+    await session.state.set({ thinkingLevel: 'high', notifications: 'off' });
+
+    await session.thread.switch({ threadId: threadWithoutLevel.id });
+
+    const restored: Record<string, unknown> = session.state.get();
+    expect(restored.thinkingLevel).toBeUndefined();
+    expect(restored.notifications).toBe('both');
+  });
+
+  it('keeps the thinking level a new thread started with after switching away and back', async () => {
+    const stateSchema = z.object({ thinkingLevel: z.enum(['off', 'low', 'medium', 'high']).optional() });
+    const controller = createController(storage, {}, stateSchema);
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const startingThread = await session.thread.create();
+    await session.state.set({ thinkingLevel: 'high' });
+    const newThread = await session.thread.create();
+    await session.thread.switch({ threadId: startingThread.id });
+    await session.state.set({ thinkingLevel: 'low' });
+    await session.thread.switch({ threadId: newThread.id });
+
+    const restored: Record<string, unknown> = session.state.get();
+    expect(restored.thinkingLevel).toBe('high');
+  });
+
   it('restores each valid preference even when the other stored value is invalid', async () => {
     const stateSchema = z.object({
       thinkingLevel: z.enum(['off', 'low', 'medium', 'high']).optional(),
