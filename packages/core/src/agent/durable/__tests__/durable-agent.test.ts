@@ -924,6 +924,7 @@ describe('createDurableAgentStream', () => {
 
     expect(chunks.map(chunk => chunk.type)).toEqual(['abort', 'finish']);
     await expect(output.text).resolves.toBe('');
+    expect(await output.finishReason).toBe('aborted');
     expect(onAbort).toHaveBeenCalledTimes(1);
     expect(onFinish).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();

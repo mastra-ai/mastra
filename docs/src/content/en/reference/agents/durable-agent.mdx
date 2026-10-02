@@ -782,7 +782,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 ]}
 />
 
-`resume()` and `observe()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onAbort`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
+`resume()`, `observe()`, and `recover()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onAbort`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
 
 ## DurableAgentStreamResult
 
