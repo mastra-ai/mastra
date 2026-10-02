@@ -777,7 +777,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['onIterationComplete']",
     isOptional: true,
     description:
-      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Observation-only on durable agents: returning `continue: false` or feedback does not influence the loop.',
+      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Return `continue: true` to request another iteration or `continue: false` to stop. Feedback is added as a synthetic assistant message when the loop runs another iteration. If the model has stopped, feedback alone or `continue: false` with feedback does not start another iteration. When the loop was already going to continue, `continue: false` with feedback runs one final feedback-guided iteration before stopping.',
   },
 ]}
 />
