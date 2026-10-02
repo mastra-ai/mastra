@@ -1,9 +1,12 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useActivateModelPack } from '../../../../hooks/use-model-packs';
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import {
+  useSetAgentControllerStateMutation,
   useSwitchAgentControllerModeMutation,
   useSwitchAgentControllerModelMutation,
 } from '../../../../hooks/useAgentControllerStateMutations';
@@ -17,17 +20,19 @@ interface PromptHandoff {
   handoffModeId?: string;
   handoffModelId?: string;
   handoffModelPackId?: string;
+  handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
 export function promptHandoffState(
   prompt: string,
-  config: { modeId: string; modelId?: string; modelPackId?: string },
+  config: { modeId: string; modelId?: string; modelPackId?: string; thinkingLevel?: ThinkingLevelSetting },
 ): PromptHandoff {
   return {
     handoffPrompt: prompt,
     handoffModeId: config.modeId,
     handoffModelId: config.modelId,
     handoffModelPackId: config.modelPackId,
+    handoffThinkingLevel: config.thinkingLevel,
   };
 }
 
@@ -83,6 +88,7 @@ export function useHandoffPrompt(): void {
   const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
   const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation(mutationArgs);
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  const { mutateAsync: setSessionState } = useSetAgentControllerStateMutation(mutationArgs);
   const { mutateAsync: activateModelPack } = useActivateModelPack(resourceId, projectPath);
   const handedOff = useRef(false);
   const recovered = useRef(false);
@@ -90,6 +96,8 @@ export function useHandoffPrompt(): void {
   const modeId = readHandoffField(location.state, 'handoffModeId');
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const modelPackId = readHandoffField(location.state, 'handoffModelPackId');
+  const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
+  const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
 
   useEffect(() => {
     if (!sessionEnabled) return;
@@ -131,6 +139,14 @@ export function useHandoffPrompt(): void {
           pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
         );
       }
+      if (thinkingLevel) {
+        await setSessionState({ thinkingLevel }).catch((error: unknown) =>
+          pushNotice(
+            error instanceof Error ? error.message : `Could not start with ${thinkingLevel} thinking.`,
+            'error',
+          ),
+        );
+      }
       await sendMessage(prompt);
       clearPendingHandoff(resourceId);
     })().catch(error => {
@@ -154,7 +170,9 @@ export function useHandoffPrompt(): void {
     resourceId,
     sendMessage,
     sessionEnabled,
+    setSessionState,
     switchMode,
     switchModel,
+    thinkingLevel,
   ]);
 }

@@ -1,15 +1,26 @@
+import { resolveDefaultThinkingLevel } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import { useActivateModelPack, useModelPacksQuery } from '../../../../hooks/use-model-packs';
+import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
+import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
+import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
 import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
+
+function useDefaultThinkingLevel(): ThinkingLevelSetting | undefined {
+  const { activeModeId } = useChatModes();
+  const { data: thinkingConfig } = useThinkingConfigQuery();
+  return thinkingConfig ? resolveDefaultThinkingLevel(thinkingConfig, activeModeId).level : undefined;
+}
 
 interface ChatModelsProviderProps {
   children: ReactNode;
@@ -31,6 +42,8 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   const modelPacksQuery = useModelPacksQuery();
   const [draftModelId, setDraftModelId] = useState<string>();
   const [draftModelPackId, setDraftModelPackId] = useState<string>();
+  const [draftThinkingLevel, setDraftThinkingLevel] = useState<ThinkingLevelSetting>();
+  const defaultThinkingLevel = useDefaultThinkingLevel();
   const activeModelPackId = draftModelPackId ?? modelPacksQuery.data?.activePackId ?? undefined;
   const activePack = modelPacksQuery.data?.packs.find(pack => pack.id === activeModelPackId);
   const packModelId =
@@ -54,6 +67,12 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
       setDraftModelId(undefined);
       return Promise.resolve();
     },
+    thinkingLevel: draftThinkingLevel ?? defaultThinkingLevel,
+    draftThinkingLevel,
+    setThinkingLevel: level => {
+      setDraftThinkingLevel(level);
+      return Promise.resolve();
+    },
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
@@ -64,13 +83,17 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const { state } = useChatConnection();
   const modelPacksQuery = useModelPacksQuery(resourceId, projectPath, kind === 'user' && resourceReady);
   const activateModelPack = useActivateModelPack(resourceId, projectPath);
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
+  const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
-  });
+  };
+  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
+  const settingsQuery = useAgentControllerSettings(mutationArgs);
+  const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(mutationArgs);
+  const defaultThinkingLevel = useDefaultThinkingLevel();
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
     activeModelPackId: modelPacksQuery.data?.sessionPackId ?? modelPacksQuery.data?.activePackId ?? undefined,
@@ -82,6 +105,11 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     setModel: modelId => switchModel(modelId),
     setModelPack: async modelPackId => {
       await activateModelPack.mutateAsync({ id: modelPackId, target: 'session' });
+    },
+    thinkingLevel: settingsQuery.data ? (settingsQuery.data.thinkingLevel ?? defaultThinkingLevel) : undefined,
+    draftThinkingLevel: undefined,
+    setThinkingLevel: async level => {
+      await updateSettings({ thinkingLevel: level });
     },
   };
 

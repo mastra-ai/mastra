@@ -14,7 +14,7 @@ import { promptHandoffState } from './useHandoffPrompt';
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModeId } = useChatModes();
-  const { activeModelId, draftModelPackId, modelPacks } = useChatModels();
+  const { activeModelId, draftModelPackId, draftThinkingLevel, modelPacks } = useChatModels();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -44,7 +44,16 @@ export function useCreateUserSessionFromDraft() {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, draftModelPackId };
+        return {
+          session,
+          prompt,
+          factoryId,
+          projectRepositoryId,
+          activeModeId,
+          handoffModelId,
+          draftModelPackId,
+          draftThinkingLevel,
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
@@ -58,6 +67,7 @@ export function useCreateUserSessionFromDraft() {
       activeModeId,
       handoffModelId,
       draftModelPackId,
+      draftThinkingLevel,
     }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, projectRepositoryId, session);
@@ -76,6 +86,7 @@ export function useCreateUserSessionFromDraft() {
           modeId: activeModeId,
           modelId: handoffModelId,
           modelPackId: draftModelPackId,
+          thinkingLevel: draftThinkingLevel,
         }),
       });
     },

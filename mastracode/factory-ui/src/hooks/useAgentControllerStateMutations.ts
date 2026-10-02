@@ -24,7 +24,7 @@ export function useSetAgentControllerStateMutation({
         queryClient.invalidateQueries({
           queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
         }),
-        'settings' in updates
+        'settings' in updates || 'thinkingLevel' in updates
           ? queryClient.invalidateQueries({
               queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
               exact: true,
