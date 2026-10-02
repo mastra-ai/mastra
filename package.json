@@ -45,7 +45,7 @@
     "build:packages": "pnpm turbo build --filter \"./packages/*\"",
     "build:combined-stores": "pnpm turbo build --filter \"./stores/*\"",
     "build:deployers": "pnpm turbo build --filter \"./deployers/*\"",
-    "build:speech": "pnpm turbo build --filter \"./speech/*\"",
+    "build:speech": "pnpm turbo build --filter \"./voice/*\"",
     "build:cli": "pnpm turbo build --filter ./packages/cli",
     "build:deployer": "pnpm turbo build --filter ./packages/deployer",
     "build:server": "pnpm turbo build --filter ./packages/server",
