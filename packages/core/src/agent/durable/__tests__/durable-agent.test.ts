@@ -801,6 +801,29 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should live-tail when cached history is unavailable', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    vi.spyOn(pubsub, 'supportsOffsets', 'get').mockReturnValue(true);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-cache-miss-resume',
+      messageId: 'msg-cache-miss',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 'latest',
+    });
+
+    await ready;
+
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-cache-miss-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
+    cleanup();
+  });
+
   it('should unsubscribe from pubsub even when cleanup is called before subscribe resolves', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
 
@@ -893,6 +916,104 @@ describe('createDurableAgentStream', () => {
 
     expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
     expect(onFinish).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('emits an abort chunk and calls only onAbort for an aborted FINISH event', async () => {
+    const { createDurableAgentStream, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-finish-abort';
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-abort',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+      onFinish,
+      onError,
+    });
+    await ready;
+
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'abort', warnings: [], isContinued: false },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.map(chunk => chunk.type)).toEqual(['abort', 'finish']);
+    await expect(output.text).resolves.toBe('');
+    expect(await output.finishReason).toBe('aborted');
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('calls only onError for a failed FINISH event', async () => {
+    const { createDurableAgentStream, emitChunkEvent, emitFinishEvent } = await import('../stream-adapter');
+
+    const runId = 'test-finish-error';
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-finish-error',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+      onFinish,
+      onError,
+    });
+    await ready;
+
+    await emitChunkEvent(pubsub, runId, {
+      type: 'error',
+      payload: { error: new Error('terminal failure') },
+    } as any);
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+      stepResult: { reason: 'error', warnings: [], isContinued: false },
+    });
+
+    for await (const _chunk of output.fullStream) {
+      // Drain the stream so terminal callbacks complete.
+    }
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0].error).toMatchObject({ message: 'terminal failure' });
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(onAbort).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('emits an abort chunk for a separate ABORT event', async () => {
+    const { createDurableAgentStream, emitAbortEvent } = await import('../stream-adapter');
+
+    const runId = 'test-abort-event';
+    const onAbort = vi.fn();
+    const { output, cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-abort-event',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onAbort,
+    });
+    await ready;
+
+    await emitAbortEvent(pubsub, runId, { steps: [], text: 'partial' });
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+
+    expect(chunks.map(chunk => chunk.type)).toEqual(['abort', 'finish']);
+    await expect(output.text).resolves.toBe('');
+    expect(onAbort).toHaveBeenCalledWith({ steps: [], text: 'partial' });
     cleanup();
   });
 });

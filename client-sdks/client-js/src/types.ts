@@ -889,6 +889,16 @@ export interface SerializedMemoryConfig {
 }
 
 /**
+ * Stored-agent memory: a reference to a Memory instance registered on Mastra
+ * (by registry key, falling back to the instance id), an explicitly tagged
+ * inline config, or a legacy untagged inline config.
+ */
+export type StoredMemoryRef =
+  | { type: 'id'; memoryId: string }
+  | { type: 'inline'; config: SerializedMemoryConfig }
+  | SerializedMemoryConfig;
+
+/**
  * Default options for agent execution (serializable subset of AgentExecutionOptionsBase)
  */
 export interface DefaultOptions {
@@ -1295,7 +1305,7 @@ export interface AgentVersionResponse {
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
+  memory?: ConditionalField<StoredMemoryRef>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];

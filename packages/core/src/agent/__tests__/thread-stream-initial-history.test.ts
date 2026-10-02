@@ -34,7 +34,8 @@ function setup(stored: () => MastraDBMessage[]) {
       getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
       recall: async (args: unknown) => {
         recalls.push(args);
-        return { messages: [...stored()].reverse(), hasMore: false };
+        // Like Memory.recall(): newest page, returned oldest first.
+        return { messages: stored(), hasMore: false };
       },
     }),
   } as unknown as Agent<any, any, any, any>;
@@ -74,7 +75,8 @@ describe('subscribeToThread withInitialHistory', () => {
       await run.part({ type: 'finish', payload: {} });
       await run.completed();
     }
-    stored = [assistantMessage('m1', new Date()), assistantMessage('m2', new Date())];
+    const now = Date.now();
+    stored = [assistantMessage('m1', new Date(now)), assistantMessage('m2', new Date(now + 1))];
 
     const { subscription, collected, consumed } = await subscribe();
     await nextTicks(10);
