@@ -122,6 +122,11 @@ export class MongoDBConnector {
     }
   }
 
+  /** Whether a completed {@link supportsTransactions} probe found transaction support. */
+  get transactionsSupported(): boolean {
+    return this.#supportsTransactions === true;
+  }
+
   /**
    * Runs `fn` inside a transaction when the deployment supports it, passing the
    * session so callers can scope each operation with `{ session }`. On a

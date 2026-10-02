@@ -4,12 +4,15 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  isRunFenceConflictError,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  resolveRunFence,
   safelyParseJSON,
   storageMessageMatchesMetadataFilter,
   validateStorageMetadataFilter,
+  TABLE_MEMORY_RUN_FENCES,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -47,11 +50,15 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  RunFence,
 } from '@mastra/core/storage';
+import type { ClientSession } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { getRunClaims, isDuplicateKeyError, withRunFence } from '../run-fencing';
+import type { RunFenceCheck } from '../run-fencing';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
@@ -64,7 +71,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
+  static readonly MANAGED_COLLECTIONS = [
+    TABLE_THREADS,
+    TABLE_MESSAGES,
+    TABLE_RESOURCES,
+    OM_TABLE,
+    TABLE_MEMORY_RUN_FENCES,
+  ] as const;
 
   /**
    * Retention-eligible collections. The observational-memory collection is
@@ -93,6 +106,53 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.#connector.supportsTransactions();
+  }
+
+  /** Fenced writes need multi-document transactions, so only replica sets and sharded clusters fence. */
+  override supportsRunFencing(): boolean {
+    return this.#connector.transactionsSupported;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const fences = await getRunClaims(this.#connector, TABLE_MEMORY_RUN_FENCES);
+      // The upsert raises an older fence or creates a missing one. A fence at
+      // least as new makes its insert fail on the duplicate _id; one raced in
+      // older than ours is raised on the next pass.
+      for (;;) {
+        try {
+          await fences.updateOne(
+            { _id: fence.runId, generation: { $lt: fence.generation } },
+            { $set: { generation: fence.generation, ownerId: fence.ownerId } },
+            { upsert: true },
+          );
+          return true;
+        } catch (error) {
+          if (!isDuplicateKeyError(error)) throw error;
+        }
+        const current = await fences.findOne({ _id: fence.runId });
+        if (current && current.generation >= fence.generation) {
+          return current.generation === fence.generation && current.ownerId === fence.ownerId;
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  /** The check a write must pass: its own fence, otherwise the one in scope. */
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claims: TABLE_MEMORY_RUN_FENCES, fence: resolved, operation };
   }
 
   /**
@@ -201,18 +261,21 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const [threadsCollection, messagesCollection, resourcesCollection, omCollection] = await Promise.all([
-      this.getCollection(TABLE_THREADS),
-      this.getCollection(TABLE_MESSAGES),
-      this.getCollection(TABLE_RESOURCES),
-      this.getCollection(OM_TABLE),
-    ]);
+    const [threadsCollection, messagesCollection, resourcesCollection, omCollection, fencesCollection] =
+      await Promise.all([
+        this.getCollection(TABLE_THREADS),
+        this.getCollection(TABLE_MESSAGES),
+        this.getCollection(TABLE_RESOURCES),
+        this.getCollection(OM_TABLE),
+        this.getCollection(TABLE_MEMORY_RUN_FENCES),
+      ]);
 
     await Promise.all([
       threadsCollection.deleteMany({}),
       messagesCollection.deleteMany({}),
       resourcesCollection.deleteMany({}),
       omCollection.deleteMany({}),
+      fencesCollection.deleteMany({}),
     ]);
   }
 
@@ -713,7 +776,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
 
     try {
@@ -768,16 +837,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // supported. Operations are sequential because a transaction session is not
       // concurrency-safe; on a standalone server this degrades to the same sequential
       // best-effort behavior.
-      await this.#connector.withTransaction(async session => {
+      const writeMessages = async (session?: ClientSession) => {
         await collection.bulkWrite(messagesToInsert, { session });
         for (const tid of allThreadIds) {
           await threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }, { session });
         }
-      });
+      };
+      const check = this.#runFenceCheck(fence, 'saveMessages');
+      if (check) await withRunFence(this.#connector, check, writeMessages);
+      else await this.#connector.withTransaction(writeMessages);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'SAVE_MESSAGES', 'FAILED'),
@@ -791,11 +864,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) {
       return [];
@@ -804,91 +879,95 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const messageIds = messages.map(m => m.id);
     const collection = await this.getCollection(TABLE_MESSAGES);
 
-    const existingMessages = await collection.find({ id: { $in: messageIds } }).toArray();
+    // Fenced, the read of the messages being merged runs inside the fence's transaction.
+    return withRunFence(this.#connector, this.#runFenceCheck(fence, 'updateMessages'), async session => {
+      const existingMessages = await collection.find({ id: { $in: messageIds } }, { session }).toArray();
 
-    const existingMessagesParsed: MastraDBMessage[] = existingMessages.map((msg: any) => this.parseRow(msg));
+      const existingMessagesParsed: MastraDBMessage[] = existingMessages.map((msg: any) => this.parseRow(msg));
 
-    if (existingMessagesParsed.length === 0) {
-      return [];
-    }
-
-    const threadIdsToUpdate = new Set<string>();
-    const bulkOps = [];
-
-    for (const existingMessage of existingMessagesParsed) {
-      const updatePayload = messages.find(m => m.id === existingMessage.id);
-      if (!updatePayload) continue;
-
-      const { id, ...fieldsToUpdate } = updatePayload;
-      if (Object.keys(fieldsToUpdate).length === 0) continue;
-
-      threadIdsToUpdate.add(existingMessage.threadId!);
-      if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
-        threadIdsToUpdate.add(updatePayload.threadId);
+      if (existingMessagesParsed.length === 0) {
+        return [];
       }
 
-      const updateDoc: any = {};
-      const updatableFields = { ...fieldsToUpdate };
+      const threadIdsToUpdate = new Set<string>();
+      const bulkOps = [];
 
-      // Special handling for content field to merge instead of overwrite
-      if (updatableFields.content) {
-        const newContent = {
-          ...existingMessage.content,
-          ...updatableFields.content,
-          // Deep merge metadata if it exists on both
-          ...(existingMessage.content?.metadata && updatableFields.content.metadata
-            ? {
-                metadata: {
-                  ...existingMessage.content.metadata,
-                  ...updatableFields.content.metadata,
-                },
-              }
-            : {}),
-        };
-        updateDoc.content = JSON.stringify(newContent);
-        delete updatableFields.content;
-      }
+      for (const existingMessage of existingMessagesParsed) {
+        const updatePayload = messages.find(m => m.id === existingMessage.id);
+        if (!updatePayload) continue;
 
-      // Handle other fields
-      for (const key in updatableFields) {
-        if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
-          const dbKey = key === 'threadId' ? 'thread_id' : key;
-          let value = updatableFields[key as keyof typeof updatableFields];
+        const { id, ...fieldsToUpdate } = updatePayload;
+        if (Object.keys(fieldsToUpdate).length === 0) continue;
 
-          if (typeof value === 'object' && value !== null) {
-            value = JSON.stringify(value);
+        threadIdsToUpdate.add(existingMessage.threadId!);
+        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+          threadIdsToUpdate.add(updatePayload.threadId);
+        }
+
+        const updateDoc: any = {};
+        const updatableFields = { ...fieldsToUpdate };
+
+        // Special handling for content field to merge instead of overwrite
+        if (updatableFields.content) {
+          const newContent = {
+            ...existingMessage.content,
+            ...updatableFields.content,
+            // Deep merge metadata if it exists on both
+            ...(existingMessage.content?.metadata && updatableFields.content.metadata
+              ? {
+                  metadata: {
+                    ...existingMessage.content.metadata,
+                    ...updatableFields.content.metadata,
+                  },
+                }
+              : {}),
+          };
+          updateDoc.content = JSON.stringify(newContent);
+          delete updatableFields.content;
+        }
+
+        // Handle other fields
+        for (const key in updatableFields) {
+          if (Object.prototype.hasOwnProperty.call(updatableFields, key)) {
+            const dbKey = key === 'threadId' ? 'thread_id' : key;
+            let value = updatableFields[key as keyof typeof updatableFields];
+
+            if (typeof value === 'object' && value !== null) {
+              value = JSON.stringify(value);
+            }
+            updateDoc[dbKey] = value;
           }
-          updateDoc[dbKey] = value;
+        }
+
+        if (Object.keys(updateDoc).length > 0) {
+          bulkOps.push({
+            updateOne: {
+              filter: { id },
+              update: { $set: updateDoc },
+            },
+          });
         }
       }
 
-      if (Object.keys(updateDoc).length > 0) {
-        bulkOps.push({
-          updateOne: {
-            filter: { id },
-            update: { $set: updateDoc },
-          },
-        });
+      if (bulkOps.length > 0) {
+        await collection.bulkWrite(bulkOps, { session });
       }
-    }
 
-    if (bulkOps.length > 0) {
-      await collection.bulkWrite(bulkOps);
-    }
+      // Update thread timestamps
+      if (threadIdsToUpdate.size > 0) {
+        const threadsCollection = await this.getCollection(TABLE_THREADS);
+        await threadsCollection.updateMany(
+          { id: { $in: Array.from(threadIdsToUpdate) } },
+          { $set: { updatedAt: new Date() } },
+          { session },
+        );
+      }
 
-    // Update thread timestamps
-    if (threadIdsToUpdate.size > 0) {
-      const threadsCollection = await this.getCollection(TABLE_THREADS);
-      await threadsCollection.updateMany(
-        { id: { $in: Array.from(threadIdsToUpdate) } },
-        { $set: { updatedAt: new Date() } },
-      );
-    }
+      // Re-fetch updated messages
+      const updatedMessages = await collection.find({ id: { $in: messageIds } }, { session }).toArray();
 
-    // Re-fetch updated messages
-    const updatedMessages = await collection.find({ id: { $in: messageIds } }).toArray();
-
-    return updatedMessages.map((row: any) => this.parseRow(row));
+      return updatedMessages.map((row: any) => this.parseRow(row));
+    });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
@@ -949,13 +1028,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     try {
+      const check = this.#runFenceCheck(fence, 'updateResource');
       const existingResource = await this.getResourceById({ resourceId });
+      const collection = await this.getCollection(TABLE_RESOURCES);
 
       if (!existingResource) {
         // Create new resource if it doesn't exist
@@ -966,7 +1049,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           createdAt: new Date(),
           updatedAt: new Date(),
         };
-        return this.saveResource({ resource: newResource });
+        await withRunFence(this.#connector, check, session =>
+          collection.updateOne({ id: resourceId }, { $set: { ...newResource } }, { upsert: true, session }),
+        );
+        return newResource;
       }
 
       const updatedResource = {
@@ -976,7 +1062,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updatedAt: new Date(),
       };
 
-      const collection = await this.getCollection(TABLE_RESOURCES);
       const updateDoc: any = { updatedAt: updatedResource.updatedAt };
 
       if (workingMemory !== undefined) {
@@ -987,10 +1072,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updateDoc.metadata = updatedResource.metadata;
       }
 
-      await collection.updateOne({ id: resourceId }, { $set: updateDoc });
+      await withRunFence(this.#connector, check, session =>
+        collection.updateOne({ id: resourceId }, { $set: updateDoc }, { session }),
+      );
 
       return updatedResource;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_RESOURCE', 'FAILED'),
@@ -1152,21 +1240,24 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
-      await collection.updateOne(
-        { id: thread.id },
-        {
-          $set: {
-            ...thread,
-            metadata: thread.metadata,
+      await withRunFence(this.#connector, this.#runFenceCheck(fence, 'saveThread'), session =>
+        collection.updateOne(
+          { id: thread.id },
+          {
+            $set: {
+              ...thread,
+              metadata: thread.metadata,
+            },
           },
-        },
-        { upsert: true },
+          { upsert: true, session },
+        ),
       );
       return thread;
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'SAVE_THREAD', 'FAILED'),
@@ -1183,11 +1274,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    const check = this.#runFenceCheck(fence, 'updateThread');
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
@@ -1212,17 +1306,21 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     try {
       const collection = await this.getCollection(TABLE_THREADS);
-      await collection.updateOne(
-        { id },
-        {
-          $set: {
-            title: updatedThread.title,
-            metadata: updatedThread.metadata,
-            updatedAt: now,
+      await withRunFence(this.#connector, check, session =>
+        collection.updateOne(
+          { id },
+          {
+            $set: {
+              title: updatedThread.title,
+              metadata: updatedThread.metadata,
+              updatedAt: now,
+            },
           },
-        },
+          { session },
+        ),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'FAILED'),
@@ -1265,25 +1363,32 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
     if (messageIds.length === 0) return;
 
     try {
       const messagesCollection = await this.getCollection(TABLE_MESSAGES);
       const threadsCollection = await this.getCollection(TABLE_THREADS);
 
-      // Get unique thread IDs from messages before deleting
-      const messagesToDelete = await messagesCollection.find({ id: { $in: messageIds } }).toArray();
-      const threadIds = [...new Set(messagesToDelete.map((m: any) => m.thread_id))];
+      await withRunFence(this.#connector, this.#runFenceCheck(options?.fence, 'deleteMessages'), async session => {
+        // Get unique thread IDs from messages before deleting
+        const messagesToDelete = await messagesCollection.find({ id: { $in: messageIds } }, { session }).toArray();
+        const threadIds = [...new Set(messagesToDelete.map((m: any) => m.thread_id))];
 
-      // Delete the messages
-      await messagesCollection.deleteMany({ id: { $in: messageIds } });
+        // Delete the messages
+        await messagesCollection.deleteMany({ id: { $in: messageIds } }, { session });
 
-      // Update thread timestamps for affected threads
-      if (threadIds.length > 0) {
-        await threadsCollection.updateMany({ id: { $in: threadIds } }, { $set: { updatedAt: new Date() } });
-      }
+        // Update thread timestamps for affected threads
+        if (threadIds.length > 0) {
+          await threadsCollection.updateMany(
+            { id: { $in: threadIds } },
+            { $set: { updatedAt: new Date() } },
+            { session },
+          );
+        }
+      });
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'DELETE_MESSAGES', 'FAILED'),
@@ -1754,12 +1859,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updatedAt: now,
       };
 
-      const result = await collection.updateOne(
-        { id: input.id },
-        {
-          $set: updateDoc,
-          $inc: { totalTokensObserved: safeTokenCount },
-        },
+      const result = await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'updateActiveObservations'),
+        session =>
+          collection.updateOne(
+            { id: input.id },
+            {
+              $set: updateDoc,
+              $inc: { totalTokensObserved: safeTokenCount },
+            },
+            { session },
+          ),
       );
 
       if (result.matchedCount === 0) {
@@ -1789,37 +1900,61 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = globalThis.crypto.randomUUID();
-      const now = new Date();
-      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+      return await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'createReflectionGeneration'),
+        session => this.#insertReflectionGeneration(input, session),
+      );
+    } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecord.id },
+        },
+        error,
+      );
+    }
+  }
 
-      const record: ObservationalMemoryRecord = {
-        id,
-        scope: input.currentRecord.scope,
-        threadId: input.currentRecord.threadId,
-        resourceId: input.currentRecord.resourceId,
-        createdAt: now,
-        updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
-        originType: 'reflection',
-        generationCount: input.currentRecord.generationCount + 1,
-        activeObservations: input.reflection,
-        totalTokensObserved: input.currentRecord.totalTokensObserved,
-        observationTokenCount: input.tokenCount,
-        pendingMessageTokens: 0,
-        isReflecting: false,
-        isObserving: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        config: input.currentRecord.config,
-        metadata: input.currentRecord.metadata,
-        observedTimezone: input.currentRecord.observedTimezone,
-      };
+  async #insertReflectionGeneration(
+    input: CreateReflectionGenerationInput,
+    session?: ClientSession,
+  ): Promise<ObservationalMemoryRecord> {
+    const id = globalThis.crypto.randomUUID();
+    const now = new Date();
+    const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
-      const collection = await this.getCollection(OM_TABLE);
-      await collection.insertOne({
+    const record: ObservationalMemoryRecord = {
+      id,
+      scope: input.currentRecord.scope,
+      threadId: input.currentRecord.threadId,
+      resourceId: input.currentRecord.resourceId,
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: input.currentRecord.lastObservedAt,
+      originType: 'reflection',
+      generationCount: input.currentRecord.generationCount + 1,
+      activeObservations: input.reflection,
+      totalTokensObserved: input.currentRecord.totalTokensObserved,
+      observationTokenCount: input.tokenCount,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      config: input.currentRecord.config,
+      metadata: input.currentRecord.metadata,
+      observedTimezone: input.currentRecord.observedTimezone,
+    };
+
+    const collection = await this.getCollection(OM_TABLE);
+    await collection.insertOne(
+      {
         id,
         lookupKey,
         scope: record.scope,
@@ -1845,20 +1980,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: now,
         updatedAt: now,
         metadata: record.metadata || null,
-      });
+      },
+      { session },
+    );
 
-      return record;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MONGODB', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { currentRecordId: input.currentRecord.id },
-        },
-        error,
-      );
-    }
+    return record;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
@@ -2131,7 +2257,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         setStage.lastBufferedAtTime = input.lastBufferedAtTime;
       }
 
-      const result = await collection.updateOne({ id: input.id }, [{ $set: setStage }]);
+      const result = await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'updateBufferedObservations'),
+        session => collection.updateOne({ id: input.id }, [{ $set: setStage }], { session }),
+      );
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -2289,21 +2419,27 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
       // Conditional update — only proceed if chunks haven't been swapped by a concurrent run
-      const updateResult = await collection.updateOne(
-        {
-          id: input.id,
-          bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
-        },
-        {
-          $set: {
-            activeObservations: newActive,
-            observationTokenCount: newTokenCount,
-            pendingMessageTokens: newPending,
-            bufferedObservationChunks: remainingChunks,
-            lastObservedAt,
-            updatedAt: new Date(),
-          },
-        },
+      const updateResult = await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'swapBufferedToActive'),
+        session =>
+          collection.updateOne(
+            {
+              id: input.id,
+              bufferedObservationChunks: { $exists: true, $ne: null, $not: { $size: 0 } },
+            },
+            {
+              $set: {
+                activeObservations: newActive,
+                observationTokenCount: newTokenCount,
+                pendingMessageTokens: newPending,
+                bufferedObservationChunks: remainingChunks,
+                lastObservedAt,
+                updatedAt: new Date(),
+              },
+            },
+            { session },
+          ),
       );
 
       if (updateResult.modifiedCount === 0) {
@@ -2379,17 +2515,23 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const newTokens = existingTokens + input.tokenCount;
       const newInputTokens = existingInputTokens + input.inputTokenCount;
 
-      const result = await collection.updateOne(
-        { id: input.id },
-        {
-          $set: {
-            bufferedReflection: newContent,
-            bufferedReflectionTokens: newTokens,
-            bufferedReflectionInputTokens: newInputTokens,
-            reflectedObservationLineCount: input.reflectedObservationLineCount,
-            updatedAt: new Date(),
-          },
-        },
+      const result = await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'updateBufferedReflection'),
+        session =>
+          collection.updateOne(
+            { id: input.id },
+            {
+              $set: {
+                bufferedReflection: newContent,
+                bufferedReflectionTokens: newTokens,
+                bufferedReflectionInputTokens: newInputTokens,
+                reflectedObservationLineCount: input.reflectedObservationLineCount,
+                updatedAt: new Date(),
+              },
+            },
+            { session },
+          ),
       );
 
       if (result.matchedCount === 0) {
@@ -2459,29 +2601,39 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ? `${bufferedReflection}\n\n${unreflectedContent}`
         : bufferedReflection;
 
-      // Create new generation with the merged content.
-      // tokenCount is computed by the processor using its token counter on the combined content.
-      const newRecord = await this.createReflectionGeneration({
-        currentRecord: input.currentRecord,
-        reflection: newObservations,
-        tokenCount: input.tokenCount,
-      });
+      return await withRunFence(
+        this.#connector,
+        this.#runFenceCheck(undefined, 'swapBufferedReflectionToActive'),
+        async session => {
+          // Create new generation with the merged content.
+          // tokenCount is computed by the processor using its token counter on the combined content.
+          const newRecord = await this.#insertReflectionGeneration(
+            {
+              currentRecord: input.currentRecord,
+              reflection: newObservations,
+              tokenCount: input.tokenCount,
+            },
+            session,
+          );
 
-      // Clear buffered state on old record
-      await collection.updateOne(
-        { id: input.currentRecord.id },
-        {
-          $set: {
-            bufferedReflection: null,
-            bufferedReflectionTokens: null,
-            bufferedReflectionInputTokens: null,
-            reflectedObservationLineCount: null,
-            updatedAt: new Date(),
-          },
+          // Clear buffered state on old record
+          await collection.updateOne(
+            { id: input.currentRecord.id },
+            {
+              $set: {
+                bufferedReflection: null,
+                bufferedReflectionTokens: null,
+                bufferedReflectionInputTokens: null,
+                reflectedObservationLineCount: null,
+                updatedAt: new Date(),
+              },
+            },
+            { session },
+          );
+
+          return newRecord;
         },
       );
-
-      return newRecord;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
