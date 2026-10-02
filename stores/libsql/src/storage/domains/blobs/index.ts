@@ -67,6 +67,7 @@ export class BlobsLibSQL extends BlobStore {
         mimeType: entry.mimeType ?? null,
         createdAt: (entry.createdAt ?? new Date()).toISOString(),
       })),
+      onConflict: 'ignore',
     });
   }
 

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { BlobStore } from '../../storage/domains/blobs/base';
 import type { SkillVersionTree } from '../../storage/types';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
@@ -13,6 +14,24 @@ function trimPathEdges(path: string): string {
   while (start < end && (path[start] === '.' || path[start] === '/' || path[start] === '\\')) start++;
   while (end > start && (path[end - 1] === '/' || path[end - 1] === '\\')) end--;
   return path.slice(start, end);
+}
+
+function hashBuffer(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function decodeCanonicalOrLegacyBlob(content: string, expectedHash: string): Buffer {
+  const decoded = Buffer.from(content, 'base64');
+  if (decoded.toString('base64') === content && hashBuffer(decoded) === expectedHash) {
+    return decoded;
+  }
+
+  const legacyText = Buffer.from(content, 'utf-8');
+  if (hashBuffer(legacyText) === expectedHash) {
+    return legacyText;
+  }
+
+  throw new Error(`Blob content does not match hash ${expectedHash}`);
 }
 
 /**
@@ -86,6 +105,7 @@ export class VersionedSkillSource implements SkillSource {
         createdAt: this.#versionCreatedAt,
         modifiedAt: this.#versionCreatedAt,
         mimeType: entry.mimeType,
+        encoding: entry.sourceEncoding ?? entry.encoding ?? 'utf-8',
       };
     }
 
@@ -116,12 +136,9 @@ export class VersionedSkillSource implements SkillSource {
       throw new Error(`Blob not found for hash ${entry.blobHash} (file: ${path})`);
     }
 
-    // Decode base64-encoded binary content back to Buffer
-    if (entry.encoding === 'base64') {
-      return Buffer.from(blob.content, 'base64');
-    }
-
-    return blob.content;
+    const content = decodeCanonicalOrLegacyBlob(blob.content, entry.blobHash);
+    const sourceEncoding = entry.sourceEncoding ?? entry.encoding ?? 'utf-8';
+    return sourceEncoding === 'base64' ? content : content.toString('utf-8');
   }
 
   async readdir(path: string): Promise<SkillSourceEntry[]> {

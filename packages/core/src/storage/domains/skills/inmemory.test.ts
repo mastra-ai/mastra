@@ -792,4 +792,225 @@ describe('InMemorySkillsStorage', () => {
       ).rejects.toThrow('already exists');
     });
   });
+
+  describe('publishVersion', () => {
+    const publishedSnapshot = {
+      name: 'Published Skill',
+      description: 'Published description',
+      instructions: '# Published',
+      files: [{ name: 'SKILL.md', type: 'file' as const, content: '# Published' }],
+      tree: {
+        entries: {
+          'SKILL.md': {
+            blobHash: 'published-hash',
+            size: 11,
+            mimeType: 'text/markdown',
+          },
+        },
+      },
+    };
+
+    it('creates and activates the exact caller-known version without changing the source version', async () => {
+      await storage.create({
+        skill: {
+          id: 'publish-skill',
+          name: 'Draft Skill',
+          description: 'Draft description',
+          instructions: '# Draft',
+          files: [{ name: 'SKILL.md', type: 'file', content: '# Draft' }],
+        },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-skill');
+
+      const published = await storage.publishVersion({
+        skillId: 'publish-skill',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'published-version-id',
+        snapshot: publishedSnapshot,
+      });
+
+      expect(published.id).toBe('published-version-id');
+      expect((await storage.getById('publish-skill'))?.activeVersionId).toBe('published-version-id');
+      expect((await storage.getById('publish-skill'))?.status).toBe('published');
+      expect(await storage.getVersion(sourceVersion!.id)).toMatchObject({
+        id: sourceVersion!.id,
+        name: 'Draft Skill',
+        instructions: '# Draft',
+      });
+      expect(await storage.getVersion('published-version-id')).toMatchObject({
+        ...publishedSnapshot,
+        id: 'published-version-id',
+      });
+    });
+
+    it('rejects a source version belonging to another skill', async () => {
+      await storage.create({
+        skill: { id: 'publish-owner', name: 'Owner', description: 'desc', instructions: 'owner' },
+      });
+      await storage.create({
+        skill: { id: 'publish-other', name: 'Other', description: 'desc', instructions: 'other' },
+      });
+      const otherVersion = await storage.getLatestVersion('publish-other');
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-owner',
+          sourceVersionId: otherVersion!.id,
+          versionId: 'must-not-exist',
+          snapshot: publishedSnapshot,
+        }),
+      ).rejects.toThrow(/version.*publish-other.*publish-owner/i);
+      expect(await storage.getVersion('must-not-exist')).toBeNull();
+    });
+
+    it('removes the inactive version and preserves the previous active version when activation fails', async () => {
+      await storage.create({
+        skill: { id: 'publish-failure', name: 'Draft', description: 'desc', instructions: 'draft' },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-failure');
+      await storage.update({ id: 'publish-failure', activeVersionId: sourceVersion!.id, status: 'published' });
+      vi.spyOn(storage, 'update').mockRejectedValueOnce(new Error('activation failed'));
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-failure',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'inactive-orphan',
+          snapshot: publishedSnapshot,
+        }),
+      ).rejects.toThrow('activation failed');
+
+      expect(await storage.getVersion('inactive-orphan')).toBeNull();
+      expect((await storage.getById('publish-failure'))?.activeVersionId).toBe(sourceVersion!.id);
+      expect((await storage.getById('publish-failure'))?.status).toBe('published');
+    });
+
+    it('serializes concurrent fallback publications for the same skill in invocation order', async () => {
+      await storage.create({
+        skill: { id: 'publish-race', name: 'Draft', description: 'desc', instructions: 'draft' },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-race');
+      const update = storage.update.bind(storage);
+      let firstActivationStarted!: () => void;
+      const firstActivation = new Promise<void>(resolve => {
+        firstActivationStarted = resolve;
+      });
+      let releaseFirstActivation!: () => void;
+      const firstActivationRelease = new Promise<void>(resolve => {
+        releaseFirstActivation = resolve;
+      });
+      const updateSpy = vi.spyOn(storage, 'update').mockImplementation(async input => {
+        if (input.activeVersionId === 'race-a') {
+          firstActivationStarted();
+          await firstActivationRelease;
+        }
+        return update(input);
+      });
+
+      const first = storage.publishVersion({
+        skillId: 'publish-race',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'race-a',
+        snapshot: { ...publishedSnapshot, instructions: 'A' },
+      });
+      await firstActivation;
+      const second = storage.publishVersion({
+        skillId: 'publish-race',
+        sourceVersionId: sourceVersion!.id,
+        versionId: 'race-b',
+        snapshot: { ...publishedSnapshot, instructions: 'B' },
+      });
+
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      const activationCallsBeforeRelease = updateSpy.mock.calls.length;
+      releaseFirstActivation();
+
+      await expect(Promise.all([first, second])).resolves.toMatchObject([
+        { id: 'race-a', versionNumber: 2 },
+        { id: 'race-b', versionNumber: 3 },
+      ]);
+      expect(activationCallsBeforeRelease).toBe(1);
+      expect((await storage.getById('publish-race'))?.activeVersionId).toBe('race-b');
+    });
+
+    it('does not serialize fallback publications for different skills', async () => {
+      await storage.create({
+        skill: { id: 'publish-one', name: 'One', description: 'desc', instructions: 'one' },
+      });
+      await storage.create({
+        skill: { id: 'publish-two', name: 'Two', description: 'desc', instructions: 'two' },
+      });
+      const firstSource = await storage.getLatestVersion('publish-one');
+      const secondSource = await storage.getLatestVersion('publish-two');
+      const update = storage.update.bind(storage);
+      let firstActivationStarted!: () => void;
+      const firstActivation = new Promise<void>(resolve => {
+        firstActivationStarted = resolve;
+      });
+      let releaseFirstActivation!: () => void;
+      const firstActivationRelease = new Promise<void>(resolve => {
+        releaseFirstActivation = resolve;
+      });
+      let secondActivated = false;
+      vi.spyOn(storage, 'update').mockImplementation(async input => {
+        if (input.activeVersionId === 'published-one') {
+          firstActivationStarted();
+          await firstActivationRelease;
+        } else if (input.activeVersionId === 'published-two') {
+          secondActivated = true;
+        }
+        return update(input);
+      });
+
+      const first = storage.publishVersion({
+        skillId: 'publish-one',
+        sourceVersionId: firstSource!.id,
+        versionId: 'published-one',
+        snapshot: publishedSnapshot,
+      });
+      await firstActivation;
+      const second = storage.publishVersion({
+        skillId: 'publish-two',
+        sourceVersionId: secondSource!.id,
+        versionId: 'published-two',
+        snapshot: publishedSnapshot,
+      });
+
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      const secondActivatedBeforeRelease = secondActivated;
+      releaseFirstActivation();
+
+      await Promise.all([first, second]);
+      expect(secondActivatedBeforeRelease).toBe(true);
+    });
+
+    it('continues the fallback queue after a publication fails', async () => {
+      await storage.create({
+        skill: { id: 'publish-retry', name: 'Draft', description: 'desc', instructions: 'draft' },
+      });
+      const sourceVersion = await storage.getLatestVersion('publish-retry');
+      const update = storage.update.bind(storage);
+      vi.spyOn(storage, 'update').mockRejectedValueOnce(new Error('activation failed')).mockImplementation(update);
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-retry',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'failed-publication',
+          snapshot: publishedSnapshot,
+        }),
+      ).rejects.toThrow('activation failed');
+
+      await expect(
+        storage.publishVersion({
+          skillId: 'publish-retry',
+          sourceVersionId: sourceVersion!.id,
+          versionId: 'successful-publication',
+          snapshot: publishedSnapshot,
+        }),
+      ).resolves.toMatchObject({ id: 'successful-publication' });
+      expect(await storage.getVersion('failed-publication')).toBeNull();
+      expect((await storage.getById('publish-retry'))?.activeVersionId).toBe('successful-publication');
+    });
+  });
 });
