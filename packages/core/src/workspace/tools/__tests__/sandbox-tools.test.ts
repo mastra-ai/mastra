@@ -800,6 +800,33 @@ describe('background processes killed by an aborted run', () => {
     }
   });
 
+  it('explains the exit of an aborted process that printed nothing', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start('sleep 30', controller.signal);
+
+      controller.abort();
+      await handle.wait();
+
+      expect(await read(pid)).toBe(`${abortNote}\nExit code: ${handle.exitCode}`);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('reports the exit code of a process that exited without printing anything', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('exit 4');
+      await handle.wait();
+
+      expect(await read(pid)).toBe('Exit code: 4');
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('does not explain an abort for a process that exited before the run was aborted', async () => {
     const { start, read, cleanup } = await setup();
     try {

@@ -107,7 +107,7 @@ Use this after starting a background command with execute_command (background: t
       const stdout = await truncateOutput(handle.stdout, tail, tokenLimit, 'sandwich');
       const stderr = await truncateOutput(handle.stderr, tail, tokenLimit, 'sandwich');
 
-      if (!stdout && !stderr) {
+      if (running && !stdout && !stderr) {
         span.end({ success: true }, { exitCode: handle.exitCode });
         return '(no output yet)';
       }
@@ -119,13 +119,17 @@ Use this after starting a background command with execute_command (background: t
         parts.push('stdout:', stdout, '', 'stderr:', stderr);
       } else if (stdout) {
         parts.push(stdout);
-      } else {
+      } else if (stderr) {
         parts.push('stderr:', stderr);
       }
 
       if (!running) {
         // The exit code of an aborted process is a provider-specific kill code, so say why it stopped.
-        parts.push('', ...(handle.killedByAbort ? [ABORTED_PROCESS_NOTE] : []), `Exit code: ${handle.exitCode}`);
+        const terminalLines = [
+          ...(handle.killedByAbort ? [ABORTED_PROCESS_NOTE] : []),
+          `Exit code: ${handle.exitCode}`,
+        ];
+        parts.push(...(parts.length > 0 ? [''] : []), ...terminalLines);
       }
 
       span.end({ success: true }, { exitCode: handle.exitCode });
