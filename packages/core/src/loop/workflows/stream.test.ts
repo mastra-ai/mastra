@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
+import { REPROCESS_PART_KEY } from '../../processors/stream-reprocess';
 import { ChunkFrom } from '../../stream/types';
 import type { ChunkType } from '../../stream/types';
 
@@ -94,6 +95,41 @@ describe('workflowLoopStream', () => {
     const dataChunk = chunks.find(c => c.type === 'data-moderation');
     expect(dataChunk).toBeDefined();
     expect(messageList.get.response.db().map(message => message.id)).toEqual(['rotated-msg']);
+  });
+
+  it('emits parts a processor stashed for reprocessing instead of leaking them to the next step (#25532)', async () => {
+    const stashed = { type: 'data-stashed', data: { n: 1 }, runId: 'run-1', from: ChunkFrom.AGENT } as ChunkType;
+
+    const processor: Processor = {
+      id: 'stasher',
+      name: 'Stasher',
+      processOutputStream: async ({ part, state }) => {
+        if (part.type === 'data-moderation') {
+          state[REPROCESS_PART_KEY] = stashed;
+        }
+        return part;
+      },
+    };
+
+    const stream = workflowLoopStream({
+      messageId: 'msg-3',
+      runId: 'run-1',
+      startTimestamp: Date.now(),
+      agentId: 'test-agent',
+      messageList: new MessageList({ threadId: 'test-thread' }),
+      models: [{ model: {} as any, toolChoice: undefined }],
+      outputProcessors: [processor],
+      _internal: {},
+      streamState: { serialize: () => ({}), deserialize: () => {} },
+      methodType: 'stream',
+    });
+
+    const chunks: ChunkType[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+
+    const types = chunks.map(chunk => chunk.type);
+    expect(types).toContain('data-stashed');
+    expect(types.indexOf('data-stashed')).toBe(types.indexOf('data-moderation') + 1);
   });
 
   it('should forward resourceId from _internal to createRun()', async () => {
