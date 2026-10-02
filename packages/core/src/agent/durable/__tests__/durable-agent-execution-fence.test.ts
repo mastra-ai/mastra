@@ -20,6 +20,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -29,7 +30,7 @@ import { InMemoryStore, RUN_FENCE_CONFLICT_ERROR_ID, resolveRunFence } from '../
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import {
@@ -45,7 +46,9 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
+import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent } from '../stream-adapter';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -280,6 +283,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       memory?: MockMemory;
       tools?: Record<string, any>;
       agents?: Record<string, Agent>;
+      cache?: InMemoryServerCache;
     }) {
       const durableAgent = createDurableAgent({
         agent: new Agent({
@@ -292,6 +296,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
           ...(args.agents ? { agents: args.agents } : {}),
         }),
         pubsub,
+        ...(args.cache ? { cache: args.cache } : {}),
       });
       new Mastra({
         agents: { 'fence-agent': durableAgent as any },
@@ -525,6 +530,87 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       expect(recovering.calls()).toBe(1);
       recovered.cleanup();
     });
+
+    it.skipIf(backend === 'lease')(
+      "recover({ force: true }) announces its claim on the run stream, and the run's readers drop what the superseded execution still publishes",
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        // Processes that hand a run to each other share the stream cache, as they share the bus.
+        const cache = new InMemoryServerCache();
+
+        const original = gatedModel('stale answer from the original execution');
+        const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        // The original caller keeps reading: it follows the run across the takeover.
+        const startedStream = collect(started.fullStream);
+        const events: Array<{ type: string; generation?: number }> = [];
+        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+          events.push({
+            type: event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type,
+            generation: event.generation,
+          });
+        });
+        await original.entered;
+        await waitForCheckpoint(storage, runId);
+
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+        expect(originalGeneration).toEqual(expect.any(Number));
+        // The original execution's events so far carry its claim.
+        expect(events.length).toBeGreaterThan(0);
+        expect(events.every(event => event.generation === originalGeneration)).toBe(true);
+
+        // ---- This process forgets it drives the run, as a restarted process would, and takes it over.
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const recovering = gatedModel('recovered answer');
+        const agentB = buildAgent({ model: recovering.model, storage, memory, cache });
+        const recovered = await agentB.recover(runId, { force: true });
+        const recoveredStream = collect(recovered.fullStream);
+        const recoveredGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+        expect(recoveredGeneration).toBeGreaterThan(originalGeneration);
+
+        // ---- The original execution publishes before it notices the takeover.
+        await runInRunFenceScope({ fenceFor: () => undefined, generationFor: () => originalGeneration }, () =>
+          emitChunkEvent(pubsub, runId, {
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'late stale chunk' },
+          } as any),
+        );
+        original.release();
+        recovering.release();
+
+        await vi.waitFor(() => expect(recoveredStream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+        await vi.waitFor(() => expect(startedStream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+
+        const textOf = (chunks: any[]) =>
+          chunks
+            .filter(chunk => chunk.type === 'text-delta')
+            .map(chunk => chunk.payload.text)
+            .join('');
+        expect(textOf(recoveredStream.chunks)).toBe('recovered answer');
+        expect(textOf(startedStream.chunks)).toBe('recovered answer');
+
+        // The claim is announced before the recovered execution publishes, and everything it publishes carries it.
+        const claimedAt = events.findIndex(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect(events[claimedAt]?.generation).toBe(recoveredGeneration);
+        const afterClaim = events.slice(claimedAt + 1);
+        expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
+          true,
+        );
+        expect(
+          afterClaim
+            .filter(event => event.generation !== recoveredGeneration)
+            .every(e => e.generation === originalGeneration),
+        ).toBe(true);
+        expect(events.slice(0, claimedAt).every(event => event.generation === originalGeneration)).toBe(true);
+
+        await startedStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
 
     it('shutdown() stops an execution still running at the drain deadline without writing, and releases the run so the next boot recovers it without force', async () => {
       const storage = createStorage(backend);

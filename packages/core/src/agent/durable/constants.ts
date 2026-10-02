@@ -60,6 +60,12 @@ export const AgentStreamEventTypes = {
   ABORT: 'abort',
   /** Single agentic-loop iteration completed (observability hook) */
   ITERATION_COMPLETE: 'iteration-complete',
+  /**
+   * A new execution claimed the run. Carries no chunk: consumers only raise
+   * their generation so events the superseded execution still publishes are
+   * dropped.
+   */
+  OWNERSHIP_CLAIMED: 'ownership-claimed',
 } as const;
 
 /**

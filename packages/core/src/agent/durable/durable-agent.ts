@@ -44,7 +44,13 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
-import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
+import {
+  createDurableAgentStream,
+  emitChunkEvent,
+  emitErrorEvent,
+  emitFinishEvent,
+  emitOwnershipClaimedEvent,
+} from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
   AgentStepFinishEventData,
@@ -911,6 +917,7 @@ export class DurableAgent<
       const stream = createDurableAgentStream<TOutput>({
         pubsub: this.pubsub,
         runId,
+        minGeneration: executionFence.generation,
         messageId: workflowInput.messageId ?? crypto.randomUUID(),
         model: {
           modelId: workflowInput.modelConfig?.modelId,
@@ -989,20 +996,20 @@ export class DurableAgent<
         globalRunRegistry.delete(runId);
       }
       if (settlement !== 'superseded') {
-        await this.#reportRecoveryFailure(runId, error);
+        await this.#reportRecoveryFailure(runId, error, executionFence.generation);
       }
       throw error;
     }
   }
 
-  async #reportRecoveryFailure(runId: string, error: unknown): Promise<boolean> {
+  async #reportRecoveryFailure(runId: string, error: unknown, generation: number | undefined): Promise<boolean> {
     const normalizedError = error instanceof Error ? error : new Error(String(error));
     if (normalizedError instanceof AgentThreadLeaseConflictError) {
       return false;
     }
 
     try {
-      await this.emitError(runId, normalizedError);
+      await this.emitError(runId, normalizedError, generation);
       return true;
     } catch (reportingError) {
       this.#mastra
@@ -1892,12 +1899,13 @@ export class DurableAgent<
    *
    * @param runId - The run ID
    * @param error - The error to emit
+   * @param generation - Claim generation of the execution reporting the error
    * @internal
    */
-  protected async emitError(runId: string, error: Error): Promise<void> {
+  protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
-    await runOutsideRunFenceScope(() => emitErrorEvent(this.pubsub, runId, error));
+    await runOutsideRunFenceScope(() => emitErrorEvent(this.pubsub, runId, error, generation));
   }
 
   /**
@@ -2020,7 +2028,7 @@ export class DurableAgent<
     const { status, error } = outcome;
     const reportError = async (reported: Error) => {
       try {
-        await this.emitError(runId, reported);
+        await this.emitError(runId, reported, fence?.generation);
       } catch (publishError) {
         this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError });
       }
@@ -2356,6 +2364,7 @@ export class DurableAgent<
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
+      minGeneration: executionFence.generation,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,
@@ -2821,6 +2830,7 @@ export class DurableAgent<
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
+      minGeneration: executionFence.generation,
       messageId: crypto.randomUUID(),
       model: {
         modelId: resumeModel?.modelId,
@@ -3133,6 +3143,16 @@ export class DurableAgent<
       throw error;
     }
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, registryEntry } = recoveryState;
+    if (executionFence.generation !== undefined) {
+      // Readers of the run's stream, including the superseded execution's own
+      // caller, drop what that execution still publishes from here on.
+      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation).catch(error => {
+        this.logger.warn(`[DurableAgent] recover(${runId}) failed to announce its claim on the run stream`, {
+          runId,
+          error,
+        });
+      });
+    }
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
 
@@ -3254,7 +3274,7 @@ export class DurableAgent<
             // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
             performCleanup();
-          } else if (!(await this.#reportRecoveryFailure(runId, error))) {
+          } else if (!(await this.#reportRecoveryFailure(runId, error, executionFence.generation))) {
             await threadRegistration?.rollback();
             performCleanup();
           }
@@ -3490,6 +3510,7 @@ export class DurableAgent<
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
+      minGeneration: executionFence.generation,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,

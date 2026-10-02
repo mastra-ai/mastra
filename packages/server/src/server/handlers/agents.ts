@@ -6,7 +6,7 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
@@ -2651,7 +2651,18 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           resetIdleTimer(controller);
 
+          let newestGeneration: number | undefined;
           handleEvent = (event: any) => {
+            // Another execution took the run over: drop what the superseded one
+            // still publishes. The takeover marker itself is not a stream event.
+            if (typeof event.generation === 'number') {
+              if (newestGeneration !== undefined && event.generation < newestGeneration) return;
+              newestGeneration = event.generation;
+            }
+            if (event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) {
+              resetIdleTimer(controller);
+              return;
+            }
             const isTerminal = event.type === 'finish' || event.type === 'error';
             try {
               controller.enqueue(event);

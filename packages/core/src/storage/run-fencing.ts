@@ -129,6 +129,11 @@ export interface RunFenceScope {
    * the parent covers the nested run too.
    */
   coverNestedRun?(parentRunId: string, nestedRunId: string): void;
+  /**
+   * The claim generation of the execution this scope belongs to when it
+   * covers `runId`. Tags the events the execution publishes for the run.
+   */
+  generationFor?(runId: string): number | undefined;
 }
 
 /** The async context that carries the current {@link RunFenceScope}. */

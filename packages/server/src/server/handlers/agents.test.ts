@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
@@ -48,6 +48,7 @@ import {
   ABORT_AGENT_THREAD_ROUTE,
   CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
+  OBSERVE_AGENT_STREAM_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -2142,6 +2143,50 @@ describe('Agent Routes Authorization', () => {
       });
 
       delete (mockAgent as any).recover;
+    });
+  });
+
+  describe('OBSERVE_AGENT_STREAM_ROUTE', () => {
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+      });
+      mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
+      mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+    });
+
+    it('drops what a superseded execution publishes after another execution claims the run, and does not forward the claim marker', async () => {
+      const runId = 'observe-takeover-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      await text('before takeover ', 1);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+      await text('stale', 1);
+      await publish({ type: 'finish', data: {}, generation: 1 });
+      await text('recovered', 2);
+      await publish({ type: 'finish', data: {}, generation: 2 });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
+        ['chunk', 'before takeover ', 1],
+        ['chunk', 'recovered', 2],
+        ['finish', undefined, 2],
+      ]);
     });
   });
 

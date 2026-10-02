@@ -627,6 +627,11 @@ export class ExecutionFence implements RunFenceScope {
     if (parentRunId === this.runId || this.#nestedRunIds.has(parentRunId)) this.#nestedRunIds.add(nestedRunId);
   }
 
+  /** {@link RunFenceScope.generationFor} */
+  generationFor(runId: string): number | undefined {
+    return runId === this.runId || this.#nestedRunIds.has(runId) ? this.generation : undefined;
+  }
+
   /**
    * {@link RunFenceScope.onConflict}: storage rejected one of this execution's
    * writes, even if the writer swallowed the error. Settlement still asks the

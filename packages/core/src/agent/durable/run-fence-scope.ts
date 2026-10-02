@@ -18,3 +18,8 @@ const runFenceContext = setRunFenceContext({
 export function runInRunFenceScope<T>(scope: RunFenceScope, fn: () => T): T {
   return runFenceContext.run(scope, fn);
 }
+
+/** The scope installed for the current async context, if any. */
+export function currentRunFenceScope(): RunFenceScope | undefined {
+  return runFenceContext.current();
+}

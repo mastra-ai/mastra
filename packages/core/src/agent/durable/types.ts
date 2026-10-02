@@ -546,7 +546,8 @@ export type AgentStreamEventType =
   | 'error'
   | 'suspended'
   | 'abort'
-  | 'iteration-complete';
+  | 'iteration-complete'
+  | 'ownership-claimed';
 
 /**
  * Event emitted via pubsub for agent streaming
@@ -560,6 +561,8 @@ export interface AgentStreamEvent<T = unknown> {
   data: T;
   /** Epoch ms at which a `chunk` event's chunk was produced. */
   producedAt?: number;
+  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
+  generation?: number;
   /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
