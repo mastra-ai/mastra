@@ -44,6 +44,17 @@ describe('Memory.mergeWorkingMemory', () => {
     expect(JSON.parse(resource!.workingMemory!)).toEqual({ name: 'A', city: 'Oslo' });
   });
 
+  it('replaces stored working memory that is not a JSON object', async () => {
+    const memory = createMemory();
+    const { store } = await enableAtomicMerge(memory);
+    await store.updateResource({ resourceId: 'r', workingMemory: '["stale"]' });
+
+    await memory.mergeWorkingMemory({ threadId: 't', resourceId: 'r', workingMemory: '{"city":"Oslo"}' });
+
+    const resource = await store.getResourceById({ resourceId: 'r' });
+    expect(JSON.parse(resource!.workingMemory!)).toEqual({ city: 'Oslo' });
+  });
+
   it('requires schema-based, resource-scoped working memory and an object patch', async () => {
     await expect(
       createMemory({ workingMemory: { enabled: true } }).mergeWorkingMemory({

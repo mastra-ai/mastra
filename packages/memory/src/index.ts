@@ -1328,8 +1328,11 @@ export class Memory extends MastraMemory {
     try {
       await memoryStore.mergeResourceWorkingMemory({
         resourceId,
-        merge: existing =>
-          JSON.stringify(deepMergeWorkingMemory(parseWorkingMemoryJson(existing), patch as Record<string, unknown>)),
+        merge: existing => {
+          const parsed = parseWorkingMemoryJson(existing);
+          const base = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+          return JSON.stringify(deepMergeWorkingMemory(base, patch as Record<string, unknown>));
+        },
       });
       span?.end({ output: { success: true } });
     } catch (error) {

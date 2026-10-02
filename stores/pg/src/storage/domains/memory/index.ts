@@ -1954,30 +1954,48 @@ export class MemoryPG extends MemoryStorage {
   }): Promise<StorageResourceType> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
 
-    return this.#db.client.tx(async t => {
-      const now = new Date().toISOString();
-      // Ensure the row exists so concurrent first writes both lock the same row.
-      await t.none(
-        `INSERT INTO ${tableName} (id, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+    const callbackError: { error?: unknown } = {};
+    try {
+      return await this.#db.client.tx(async t => {
+        const now = new Date().toISOString();
+        // Ensure the row exists so concurrent first writes both lock the same row.
+        await t.none(
+          `INSERT INTO ${tableName} (id, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING`,
-        [resourceId, toPgJson({}), now, now, now, now],
+          [resourceId, toPgJson({}), now, now, now, now],
+        );
+        await t.one(`SELECT id FROM ${tableName} WHERE id = $1 FOR UPDATE`, [resourceId]);
+
+        const existing = (await this.#getResourceById(t, resourceId))!;
+        let workingMemory: string;
+        try {
+          workingMemory = merge(existing.workingMemory ?? undefined);
+        } catch (error) {
+          callbackError.error = error;
+          throw error;
+        }
+        const updatedAt = new Date();
+        const updatedAtStr = updatedAt.toISOString();
+
+        await t.none(
+          `UPDATE ${tableName} SET "workingMemory" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
+          [workingMemory, updatedAtStr, updatedAtStr, resourceId],
+        );
+
+        return { ...existing, workingMemory, updatedAt };
+      });
+    } catch (error) {
+      if (error === callbackError.error || error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'MERGE_RESOURCE_WORKING_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
       );
-      await t.one(`SELECT id FROM ${tableName} WHERE id = $1 FOR UPDATE`, [resourceId]);
-
-      const existing = (await this.#getResourceById(t, resourceId))!;
-      const workingMemory = merge(existing.workingMemory ?? undefined);
-      const updatedAt = new Date();
-      const updatedAtStr = updatedAt.toISOString();
-
-      await t.none(`UPDATE ${tableName} SET "workingMemory" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`, [
-        workingMemory,
-        updatedAtStr,
-        updatedAtStr,
-        resourceId,
-      ]);
-
-      return { ...existing, workingMemory, updatedAt };
-    });
+    }
   }
 
   async updateResource({

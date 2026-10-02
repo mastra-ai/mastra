@@ -66,14 +66,15 @@ describe('PostgreSQL atomic working memory merge', () => {
     const resourceId = `resource-${randomUUID()}`;
     await memories[0]!.updateResource({ resourceId, workingMemory: '{"a":1}' });
 
+    const boom = new Error('boom');
     await expect(
       memories[0]!.mergeResourceWorkingMemory({
         resourceId,
         merge: () => {
-          throw new Error('boom');
+          throw boom;
         },
       }),
-    ).rejects.toThrow('boom');
+    ).rejects.toBe(boom);
 
     const resource = await memories[0]!.getResourceById({ resourceId });
     expect(resource!.workingMemory).toBe('{"a":1}');
