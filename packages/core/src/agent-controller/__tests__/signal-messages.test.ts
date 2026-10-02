@@ -62,7 +62,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -111,7 +111,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
 
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
@@ -161,7 +161,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -366,7 +366,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({
@@ -406,7 +406,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -439,7 +439,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -476,7 +476,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -508,7 +508,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -594,7 +594,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     const subscription = createSubscription(() => activeRunId);
 
     session.run.ensureAbortController();
@@ -643,7 +643,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({
@@ -672,7 +672,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({
@@ -743,6 +743,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.ensureId();
     session.run.setRunId({ runId: 'run-1' });
 
     let settled = false;
@@ -768,6 +769,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.ensureId();
     session.run.setRunId({ runId: 'run-1' });
     agent.queueMessage.mockReturnValueOnce({
       accepted: Promise.resolve({ action: 'wake', runId: 'run-1' }),
@@ -801,7 +803,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const threadId = session.thread.getId()!;
+    const threadId = await session.thread.ensureId();
     session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({

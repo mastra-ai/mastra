@@ -109,6 +109,7 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     const controller = createController();
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.ensureId();
     const firstContext = new RequestContext();
     firstContext.set('user', { id: 'first-user' });
     const secondContext = new RequestContext();

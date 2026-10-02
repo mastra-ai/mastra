@@ -98,7 +98,7 @@ describe('AgentController queryThreadMessages', () => {
     const controller = createTestController({ storage: store });
     await controller.init();
     const session = await controller.createSession({ resourceId: 'session-user' });
-    const threadId = session.thread.requireId();
+    const threadId = await session.thread.ensureId();
     const memory = await store.getStore('memory');
     await memory!.saveMessages({
       messages: ['first', 'second', 'third'].map((id, index) => ({

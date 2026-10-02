@@ -36,9 +36,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    expect(a.thread.getId()).toBeDefined();
-    expect(b.thread.getId()).toBeDefined();
-    expect(a.thread.getId()).not.toBe(b.thread.getId());
+    expect(await a.thread.ensureId()).not.toBe(await b.thread.ensureId());
   });
 
   it('isolates mode switches between sessions', async () => {
@@ -151,7 +149,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const oldController = createController(storage, { resourceId: 'old-resource', initialState: { projectPath } });
     await oldController.init();
     const oldSession = await oldController.createSession();
-    const oldThreadId = oldSession.thread.requireId();
+    const oldThreadId = await oldSession.thread.ensureId();
 
     const currentController = createController(storage, {
       resourceId: 'current-resource',
@@ -160,7 +158,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     await currentController.init();
     const currentSession = await currentController.createSession();
 
-    expect(currentSession.thread.requireId()).not.toBe(oldThreadId);
+    expect(currentSession.thread.getId()).toBeNull();
     await expect(currentSession.thread.switch({ threadId: oldThreadId })).rejects.toThrow(
       `Thread not found: ${oldThreadId}`,
     );
@@ -177,7 +175,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     await controller.init();
 
     const first = await controller.createSession();
-    const threadId = first.thread.requireId();
+    const threadId = await first.thread.ensureId();
 
     const restartedController = createController(storage, {
       resourceId: 'current-resource',
@@ -189,61 +187,11 @@ describe('AgentController.createSession — cross-session isolation', () => {
     expect(restarted.thread.requireId()).toBe(threadId);
   });
 
-  it('can defer thread creation when no thread matches', async () => {
-    const storage = new InMemoryStore();
-    const controller = createController(storage, {
-      resourceId: 'current-resource',
-      initialState: { projectPath: '/tmp/mastra-project' },
-    });
-    await controller.init();
-
-    const session = await controller.createSession({ createInitialThread: false });
-
-    expect(session.thread.getId()).toBeNull();
-    expect(await session.thread.list()).toEqual([]);
-  });
-
-  it('creates a thread when a cached threadless session later requests one', async () => {
-    const storage = new InMemoryStore();
-    const controller = createController(storage, {
-      resourceId: 'current-resource',
-      initialState: { projectPath: '/tmp/mastra-project' },
-    });
-    await controller.init();
-
-    const threadless = await controller.createSession({ createInitialThread: false });
-    const resumed = await controller.createSession();
-
-    expect(resumed).toBe(threadless);
-    expect(resumed.thread.getId()).not.toBeNull();
-    expect(await resumed.thread.list()).toHaveLength(1);
-  });
-
-  it('still resumes a matching thread when initial thread creation is deferred', async () => {
-    const storage = new InMemoryStore();
-    const projectPath = '/tmp/mastra-project';
-    const firstController = createController(storage, {
-      resourceId: 'current-resource',
-      initialState: { projectPath },
-    });
-    await firstController.init();
-    const first = await firstController.createSession();
-
-    const restartedController = createController(storage, {
-      resourceId: 'current-resource',
-      initialState: { projectPath },
-    });
-    await restartedController.init();
-    const restarted = await restartedController.createSession({ createInitialThread: false });
-
-    expect(restarted.thread.requireId()).toBe(first.thread.requireId());
-  });
-
   it('binds request-context thread setting writes to the originating thread', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
     const session = await controller.createSession({ resourceId: 'user-a' });
-    const originatingThreadId = session.thread.requireId();
+    const originatingThreadId = await session.thread.ensureId();
     const requestContext = await (controller as any).buildRequestContext(session, undefined, {
       threadId: originatingThreadId,
     });
@@ -270,8 +218,8 @@ describe('AgentController session — cross-resource thread ownership', () => {
     const a = await controller.createSession({ resourceId: 'user-a' });
     const b = await controller.createSession({ resourceId: 'user-b' });
 
-    const aThreadId = a.thread.requireId();
-    const bThreadBefore = b.thread.getId();
+    const aThreadId = await a.thread.ensureId();
+    const bThreadBefore = await b.thread.ensureId();
 
     await expect(b.thread.switch({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
     // b stays bound to its own thread; it never moved onto a's.
@@ -291,7 +239,7 @@ describe('AgentController session — cross-resource thread ownership', () => {
     const a = await controller.createSession({ resourceId: 'user-a' });
     const b = await controller.createSession({ resourceId: 'user-b' });
 
-    const aThreadId = a.thread.requireId();
+    const aThreadId = await a.thread.ensureId();
 
     await expect(b.thread.delete({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
     // a's thread still exists and is reachable by its owner.
@@ -305,7 +253,7 @@ describe('AgentController session — cross-resource thread ownership', () => {
     const a = await controller.createSession({ resourceId: 'user-a' });
     const b = await controller.createSession({ resourceId: 'user-b' });
 
-    const aThreadId = a.thread.requireId();
+    const aThreadId = await a.thread.ensureId();
 
     await expect(b.thread.listMessages({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
   });
@@ -317,7 +265,7 @@ describe('AgentController session — cross-resource thread ownership', () => {
     const a = await controller.createSession({ resourceId: 'user-a' });
     const b = await controller.createSession({ resourceId: 'user-b' });
 
-    const aThreadId = a.thread.requireId();
+    const aThreadId = await a.thread.ensureId();
 
     await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
   });
@@ -328,7 +276,7 @@ describe('AgentController session — cross-resource thread ownership', () => {
     const oldController = createController(storage, { resourceId: 'old-resource', initialState: { projectPath } });
     await oldController.init();
     const oldSession = await oldController.createSession();
-    const oldThreadId = oldSession.thread.requireId();
+    const oldThreadId = await oldSession.thread.ensureId();
 
     const currentController = createController(storage, {
       resourceId: 'current-resource',
@@ -375,7 +323,7 @@ describe('AgentController session — cross-resource thread ownership', () => {
     await controller.init();
 
     const a = await controller.createSession({ resourceId: 'user-a' });
-    const aThreadId = a.thread.requireId();
+    const aThreadId = await a.thread.ensureId();
 
     // Owner can read its own messages and switch to its own thread.
     await expect(a.thread.listMessages({ threadId: aThreadId })).resolves.toEqual([]);
@@ -442,7 +390,7 @@ describe('AgentController session registry', () => {
 
     expect(b).not.toBe(a);
     // Each scoped session has its own thread binding and mode/model state.
-    expect(a.thread.getId()).not.toBe(b.thread.getId());
+    expect(await a.thread.ensureId()).not.toBe(await b.thread.ensureId());
     await a.mode.switch({ modeId: 'plan' });
     expect(a.mode.get()).toBe('plan');
     expect(b.mode.get()).toBe('build');

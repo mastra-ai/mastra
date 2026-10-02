@@ -163,7 +163,7 @@ describe('AgentController exact thread id creation', () => {
   it('keeps the current thread binding when detaching its stream subscription', async () => {
     const controller = await createController(new InMemoryStore());
     const session = await controller.createSession({ id: 'session-1', ownerId: 'owner-1', resourceId: 'resource-1' });
-    const threadId = session.thread.requireId();
+    const threadId = await session.thread.ensureId();
 
     session.thread.detachFromCurrent();
 
@@ -175,8 +175,8 @@ describe('AgentController exact thread id creation', () => {
     const controller = await createController(new InMemoryStore());
     const session = await controller.createSession({ id: 'session-1', ownerId: 'owner-1', resourceId: 'resource-1' });
 
-    expect(session.thread.getId()).toBeTruthy();
-    expect(session.thread.getId()).not.toBe('session-1');
+    expect(session.thread.getId()).toBeNull();
+    expect(await session.thread.ensureId()).not.toBe('session-1');
     const secondThread = await session.thread.create({ title: 'second' });
     expect(secondThread.id).not.toBe('session-1');
     expect(await session.thread.list()).toHaveLength(2);

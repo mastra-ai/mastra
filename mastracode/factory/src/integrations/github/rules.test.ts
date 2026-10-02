@@ -803,6 +803,7 @@ describe('GithubRules', () => {
           getSetting: vi.fn(async () => undefined),
           setSetting: vi.fn(async () => {}),
           rename: vi.fn(async () => {}),
+          getId: vi.fn(() => threadId ?? null),
           requireId: vi.fn(() => {
             if (!threadId) throw new Error('Thread was not persisted before binding creation.');
             return threadId;
@@ -1918,6 +1919,7 @@ describe('GithubRules', () => {
         }),
         setSetting: vi.fn(async () => {}),
         rename: vi.fn(async () => {}),
+        getId: vi.fn(() => threadId ?? null),
         requireId: vi.fn(() => {
           if (!threadId) throw new Error('Thread was not persisted before binding creation.');
           return threadId;

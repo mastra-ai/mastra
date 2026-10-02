@@ -37,7 +37,7 @@ describe('AgentController.onSessionCreated', () => {
     const session = await controller.createSession({ resourceId: 'resource-1' });
 
     expect(created).toEqual([session]);
-    expect(session.thread.requireId()).toBeDefined();
+    expect(session.thread.getId()).toBeNull();
     expect(session.getWorkspace()).toBe(workspace);
     expect(session.identity.getResourceId()).toBe('resource-1');
   });
@@ -47,7 +47,7 @@ describe('AgentController.onSessionCreated', () => {
     const first = createController(storage);
     await first.controller.init();
     const firstSession = await first.controller.createSession({ resourceId: 'resource-1' });
-    const threadId = firstSession.thread.requireId();
+    const threadId = await firstSession.thread.ensureId();
 
     const restarted = createController(storage);
     await restarted.controller.init();

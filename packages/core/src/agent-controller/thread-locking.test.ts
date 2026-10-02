@@ -209,8 +209,7 @@ describe('AgentController thread locking', () => {
         ownerId: 'test-owner',
         resourceId: 'user-1',
       });
-      const existing = sessionA.thread.getId();
-      expect(existing).toBeDefined();
+      const existing = await sessionA.thread.ensureId();
 
       acquire.mockClear();
       release.mockClear();
@@ -228,7 +227,7 @@ describe('AgentController thread locking', () => {
       expect(acquire).toHaveBeenCalledWith(existing);
     });
 
-    it('creates a fresh thread for a different resourceId', async () => {
+    it('does not resume a thread owned by another resourceId', async () => {
       const store = new InMemoryStore();
 
       const controllerA = freshController(store);
@@ -238,7 +237,7 @@ describe('AgentController thread locking', () => {
         ownerId: 'test-owner',
         resourceId: 'user-1',
       });
-      const existing = sessionA.thread.getId();
+      await sessionA.thread.ensureId();
 
       acquire.mockClear();
 
@@ -251,18 +250,23 @@ describe('AgentController thread locking', () => {
         resourceId: 'user-2',
       });
 
-      expect(sessionB.thread.getId()).not.toBe(existing);
-      expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
+      expect(sessionB.thread.getId()).toBeNull();
+      expect(acquire).not.toHaveBeenCalled();
     });
 
-    it('acquires lock when creating a new thread (no existing threads)', async () => {
+    it('creates no thread until first use when none exist, then locks the one it creates', async () => {
       const store = new InMemoryStore();
       const controller = freshController(store);
       await controller.init();
 
       acquire.mockClear();
       const newSession = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-      expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
+      expect(newSession.thread.getId()).toBeNull();
+      expect(await newSession.thread.list()).toEqual([]);
+      expect(acquire).not.toHaveBeenCalled();
+
+      const threadId = await newSession.thread.ensureId();
+      expect(acquire).toHaveBeenCalledWith(threadId);
     });
 
     it('scopes initial thread selection to tags so worktrees stay isolated', async () => {
@@ -278,8 +282,7 @@ describe('AgentController thread locking', () => {
         resourceId: 'repo',
         tags: { projectPath: '/repo/worktree-a' },
       });
-      const threadA = sessionA.thread.getId();
-      expect(threadA).toBeDefined();
+      const threadA = await sessionA.thread.ensureId();
 
       const controllerB = freshController(store);
       await controllerB.init();
@@ -289,10 +292,8 @@ describe('AgentController thread locking', () => {
         resourceId: 'repo',
         tags: { projectPath: '/repo/worktree-b' },
       });
-      const threadB = sessionB.thread.getId();
-
       // worktree-b must NOT claim worktree-a's most-recent thread.
-      expect(threadB).not.toBe(threadA);
+      expect(sessionB.thread.getId()).toBeNull();
 
       // Reconnecting to worktree-a resumes its own thread, not worktree-b's.
       const controllerA2 = freshController(store);
@@ -323,7 +324,7 @@ describe('AgentController thread locking', () => {
         tags: { projectPath: '/repo/wt', branch: 'feat/x' },
       });
 
-      const threadId = session.thread.getId();
+      const threadId = await session.thread.ensureId();
       const threads = await session.thread.list();
       const created = threads.find(t => t.id === threadId);
       const metadata = (created?.metadata as Record<string, unknown> | undefined) ?? {};
