@@ -1,10 +1,10 @@
 /**
  * Integration tests for AgentBrowser with a real browser.
  *
- * These tests launch a headless Chromium via agent-browser and exercise
+ * These tests launch headless Chrome via the agent-browser CLI and exercise
  * actual browser methods against a local data: URI or public test page.
  *
- * Skip when Playwright/Chromium is not available (CI without browsers).
+ * Skip when no Chrome is available.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -32,7 +32,10 @@ try {
     errorMessage.includes("Executable doesn't exist") ||
     errorMessage.includes('browserType.launch') ||
     errorMessage.includes('Cannot find module') ||
-    errorMessage.includes('ENOENT');
+    errorMessage.includes('ENOENT') ||
+    errorMessage.includes('Chrome not found') ||
+    errorMessage.includes('No Chrome binary found') ||
+    errorMessage.includes('Failed to launch Chrome');
 
   if (isEnvironmentError) {
     canLaunchBrowser = false;
