@@ -127,9 +127,91 @@ describe('Factory board ordering', () => {
 
     const viewControls = await screen.findByRole('group', { name: 'Board view controls' });
     expect(within(viewControls).getByRole('group', { name: 'Board filters' })).toBeInTheDocument();
-    expect(within(viewControls).getByRole('combobox', { name: 'Sort filed cards' })).toBeInTheDocument();
+    expect(within(viewControls).getByRole('button', { name: 'Author is me' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(viewControls).getByRole('button', { name: 'Sort filed cards' })).toBeInTheDocument();
     expect(within(viewControls).queryByRole('switch', { name: 'Auto-start runs' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Auto-start runs' })).toBeInTheDocument();
+  });
+
+  it('toggles cards authored by the connected user while keeping search, labels and sort', async () => {
+    stubWorkBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem('mine', 'My card', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+              metadata: { labels: ['bug'] },
+            },
+            {
+              ...workItem('other', 'Other card', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+              createdBy: 'user-2',
+              // Worked on by me, but authored by somebody else.
+              metadata: { labels: ['bug'] },
+            },
+          ],
+        }),
+      ),
+    );
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work?q=card&label=bug&sort=created-newest`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+    const triage = await screen.findByTestId('board-column-triage');
+    await within(triage).findByText('Other card');
+    const user = userEvent.setup();
+    const preset = screen.getByRole('button', { name: 'Author is me' });
+    await user.click(preset);
+
+    await waitFor(() => expect(within(triage).queryByText('Other card')).not.toBeInTheDocument());
+    expect(within(triage).getByText('My card')).toBeInTheDocument();
+    expect(preset).toHaveAttribute('aria-pressed', 'true');
+    const active = new URLSearchParams(router.state.location.search);
+    expect(active.get('teammate')).toBe('factory:user-1');
+    expect(active.get('relevance')).toBe('authored');
+    expect(active.get('q')).toBe('card');
+    expect(active.getAll('label')).toEqual(['bug']);
+    expect(active.get('sort')).toBe('created-newest');
+
+    await user.click(preset);
+    await within(triage).findByText('Other card');
+    expect(preset).toHaveAttribute('aria-pressed', 'false');
+    const cleared = new URLSearchParams(router.state.location.search);
+    expect(cleared.get('teammate')).toBeNull();
+    expect(cleared.get('relevance')).toBeNull();
+    expect(cleared.get('q')).toBe('card');
+    expect(cleared.getAll('label')).toEqual(['bug']);
+    expect(cleared.get('sort')).toBe('created-newest');
+  });
+
+  it('reflects the author preset from the URL and clears its active state when the chip changes', async () => {
+    stubWorkBoard();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/work?teammate=factory%3Auser-1&relevance=authored`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+    const preset = await screen.findByRole('button', { name: 'Author is me' });
+    expect(preset).toHaveAttribute('aria-pressed', 'true');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Remove Relevant because filter' }));
+    await waitFor(() => expect(preset).toHaveAttribute('aria-pressed', 'false'));
+    expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('factory:user-1');
+  });
+
+  it('omits the author preset and personal sort when the session has no user identity', async () => {
+    stubWorkBoard();
+    server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json({ authenticated: true })));
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+    renderWithProviders(<RouterProvider router={router} />);
+    await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
+    expect(screen.queryByRole('button', { name: 'Author is me' })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Recently moved' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.queryByRole('menuitemradio', { name: 'Recently moved by me' })).not.toBeInTheDocument();
   });
 
   it('renders the card most recently moved into a column before a newer-created card', async () => {
@@ -157,8 +239,8 @@ describe('Factory board ordering', () => {
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Moved recently');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Sort filed cards' }));
-    await user.click(await screen.findByRole('option', { name: 'Newest on board' }));
+    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Newest on board' }));
 
     await waitFor(() => {
       const titles = within(triage)
@@ -168,8 +250,10 @@ describe('Factory board ordering', () => {
       expect(titles[1]).toContain('Moved recently');
     });
     expect(router.state.location.search).toBe('?sort=created-newest');
-    expect(screen.getByRole('combobox', { name: 'Sort filed cards' })).toHaveTextContent(
-      'Filed cards: Newest on board',
+    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Newest on board' })).toHaveAttribute(
+      'aria-checked',
+      'true',
     );
   });
 });
@@ -201,8 +285,8 @@ describe('Factory board view memory', () => {
 
     await searchBoard('Created');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Sort filed cards' }));
-    await user.click(await screen.findByRole('option', { name: 'Newest on board' }));
+    await user.click(screen.getByRole('button', { name: 'Sort filed cards' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Newest on board' }));
     await waitFor(() => expect(first.router.state.location.search).toBe('?q=Created&sort=created-newest'));
     first.view.unmount();
 

@@ -20,6 +20,8 @@ Cards on the **Work** and **Review** boards show the last person recorded in the
 
 Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
+The person icon beside the board filters toggles **Author is me** for the connected Factory user. It keeps the existing text and label filters, and the filter chips show the selected teammate and authored relation. The sort icon opens the filed-card ordering menu; its tooltip names the current order and the menu checks the selected option.
+
 ## Needs attention
 
 **Needs attention** is a project-member action center. The footer previews unresolved terminal automation failures and shows proposed runs as one approval-queue total rather than one notification per proposal. Failures are reconciled against canonical Factory state before they become queryable: an accepted transition is `succeeded`, obsolete work is `superseded`, and only unresolved `failed` decisions remain.

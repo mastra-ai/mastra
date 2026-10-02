@@ -1,7 +1,8 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
+import { ListFilter, Search, Tag, UserRound, UsersRound } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { BOARD_FILTER_FIELD, boardFilterItems, boardFilterStateFromItems } from '../boardFilters';
@@ -37,6 +38,11 @@ export function BoardFilters({
   onFiltersChange: (filters: BoardFilterState) => void;
 }) {
   const teammateSelected = filters.participantId !== undefined;
+  const authoredByMe =
+    Boolean(currentUserId) &&
+    filters.participantId === `factory:${currentUserId}` &&
+    filters.relevanceTypes.size === 1 &&
+    filters.relevanceTypes.has('authored');
   const fields = useMemo<FilterBarField[]>(
     () => [
       { id: BOARD_FILTER_FIELD.text, label: 'Text', icon: Search, search: true, operators: ['contains'] },
@@ -75,18 +81,40 @@ export function BoardFilters({
   );
 
   return (
-    <FilterBar
-      fields={fields}
-      operators={OPERATORS}
-      value={boardFilterItems(filters, kind)}
-      onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
-      // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
-      createItemId={fieldId => fieldId}
-      aria-label="Board filters"
-      className="w-full max-w-full sm:w-auto"
-    >
-      <FilterBar.Chips />
-      <FilterBar.Input placeholder="Filter cards…" />
-    </FilterBar>
+    <>
+      <FilterBar
+        fields={fields}
+        operators={OPERATORS}
+        value={boardFilterItems(filters, kind)}
+        onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
+        // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
+        createItemId={fieldId => fieldId}
+        aria-label="Board filters"
+        className="w-full max-w-full sm:w-auto"
+      >
+        <FilterBar.Chips />
+        <FilterBar.Input placeholder="Filter cards…" />
+      </FilterBar>
+      {currentUserId ? (
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={authoredByMe ? 'primary' : 'default'}
+          tooltip="Author is me"
+          aria-pressed={authoredByMe}
+          onClick={() =>
+            onFiltersChange({
+              ...filters,
+              participantId: authoredByMe ? undefined : `factory:${currentUserId}`,
+              relevanceTypes: new Set(
+                authoredByMe ? boardRelevanceOptions(kind).map(option => option.id) : ['authored'],
+              ),
+            })
+          }
+        >
+          <UserRound aria-hidden />
+        </Button>
+      ) : null}
+    </>
   );
 }
