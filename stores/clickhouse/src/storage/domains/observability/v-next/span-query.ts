@@ -162,6 +162,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
       page: page.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')])),
     },
   });
+  // Metrics can be emitted after the span search window; hydrate costs by selected identity, not that time range.
   const metricWhere = `${identitySetKey} IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String))}`;
   const metrics = await run<SpanQueryCostMetric>({
     query: `SELECT ${identities}, data.1 AS name, data.2 AS estimatedCost,

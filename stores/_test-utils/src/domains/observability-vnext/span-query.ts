@@ -186,6 +186,34 @@ export function createSpanQueryTests(
       expect(result.spans.map(row => [row.spanId, row.status])).toEqual([['failed', 'error']]);
     });
 
+    it('includes cost metrics after the span search window', async () => {
+      const completedAt = new Date(Date.parse(timeRange.to) + 24 * 60 * 60 * 1000);
+      await getStorage().batchCreateSpans({ records: [span('late-cost', { ...scope, endedAt: completedAt })] });
+      await getStorage().batchCreateMetrics({
+        metrics: [
+          {
+            ...scope,
+            metricId: 'late-cost',
+            traceId: 'trace-late-cost',
+            spanId: 'late-cost',
+            timestamp: completedAt,
+            name: 'mastra_model_total_input_tokens',
+            value: 10,
+            labels: {},
+            estimatedCost: 0.01,
+            costUnit: 'usd',
+            costMetadata: { allocation: 'query_total' },
+          },
+        ],
+      });
+      const result = await query({}, scope);
+      expect(result.spans).toHaveLength(1);
+      expect(result.spans[0]).toMatchObject({
+        spanId: 'late-cost',
+        cost: { state: 'available', amount: 0.01, currency: 'usd' },
+      });
+    });
+
     it('deduplicates retried metrics and does not double-count token details', async () => {
       await getStorage().batchCreateSpans({ records: [span('priced', scope), span('free'), span('unpriced')] });
       const metrics = [
