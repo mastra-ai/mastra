@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -9,9 +10,10 @@ import { useState, type ReactNode } from 'react';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { gitLabProjectRepository, openMastraPlatformIntegrations } from '../../factory/services/gitlab';
+import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import type { SourceControlRepository } from '../services/github';
-import { GitLabIcon, SearchIcon } from '../../../ui/icons';
+import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
+import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface VcsFactoryStepProps {
@@ -57,14 +59,31 @@ export function VcsFactoryStep({
       ) : selectedProvider === null ? (
         <ProviderChoice
           githubRedirecting={githubRedirecting}
+          githubUnavailable={
+            githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
+          }
+          gitlabConnected={gitlabConfigured}
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // tile here to keep it from starting a doomed Nango session.
+          gitlabUnavailable={!gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required'}
+          gitlabUnavailableReason={
+            !gitlabStatus.data?.enabled
+              ? 'missing_config'
+              : gitlabStatus.data.reason === 'organization_required'
+                ? 'organization_required'
+                : undefined
+          }
           onChooseGithub={() => {
             if (connected) setSelectedProvider('github');
-            else if (githubStatus.data?.enabled) onConnect();
-            else openMastraPlatformIntegrations();
+            else onConnect();
+          }}
+          onGitlabConnected={() => {
+            void gitlabStatus.refetch();
+            void gitlabProjects.refetch();
           }}
           onChooseGitlab={() => {
             if (gitlabConfigured) setSelectedProvider('gitlab');
-            else openMastraPlatformIntegrations();
           }}
         />
       ) : (
@@ -84,16 +103,12 @@ export function VcsFactoryStep({
               Choose another provider
             </button>
           </div>
-          <div className="border-border bg-sidebar flex items-center gap-2 rounded-lg border px-3 py-2">
-            <SearchIcon size={15} className="text-placeholder" />
-            <input
-              aria-label="Search repositories"
-              className="text-caption text-foreground placeholder:text-placeholder min-w-0 flex-1 bg-transparent focus:outline-none"
-              placeholder="Filter repositories…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </div>
+          <SearchInput
+            label="Search repositories"
+            placeholder="Filter repositories…"
+            value={query}
+            onValueChange={setQuery}
+          />
           {mutationError && <RepositoryError message={mutationError} />}
           {selectedProvider === 'github' ? (
             <>
@@ -107,7 +122,7 @@ export function VcsFactoryStep({
                 provider="github"
                 onSelectRepository={onSelectRepository}
               />
-              <Button variant="outline" size="sm" className="self-start" onClick={onManageConnection}>
+              <Button size="sm" className="self-start" onClick={onManageConnection}>
                 Manage GitHub connection
               </Button>
             </>
@@ -133,62 +148,101 @@ export function VcsFactoryStep({
 
 function ProviderChoice({
   githubRedirecting,
+  githubUnavailable,
+  gitlabConnected,
+  gitlabUnavailable,
+  gitlabUnavailableReason,
   onChooseGithub,
   onChooseGitlab,
+  onGitlabConnected,
 }: {
   githubRedirecting: boolean;
+  githubUnavailable: boolean;
+  gitlabConnected: boolean;
+  gitlabUnavailable: boolean;
+  gitlabUnavailableReason?: 'missing_config' | 'organization_required';
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
+  onGitlabConnected: () => void;
 }) {
+  const gitlabMessage = gitlabUnavailable
+    ? gitlabUnavailableReason === 'organization_required'
+      ? 'Join an organization to connect GitLab repositories.'
+      : 'GitLab is not available for this deployment.'
+    : 'Connect GitLab to choose a repository.';
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] items-stretch gap-5">
       <ProviderConnection
         provider="GitHub"
-        message="Connect GitHub to choose a repository."
-        icon={<GithubIcon className="size-10" />}
-        buttonIcon={<GithubIcon className="size-4" />}
-        isConnecting={githubRedirecting}
-        onConnect={onChooseGithub}
+        message={
+          githubUnavailable ? 'GitHub is not available for this deployment.' : 'Connect GitHub to choose a repository.'
+        }
+        icon={<GithubIcon />}
+        actionSlot={
+          <Button variant="primary" disabled={githubRedirecting || githubUnavailable} onClick={onChooseGithub}>
+            {githubRedirecting ? (
+              <Spinner size="sm" aria-label="Connecting to GitHub" />
+            ) : (
+              <GithubIcon className="size-4" />
+            )}
+            Connect GitHub
+          </Button>
+        }
+        title={githubUnavailable ? 'GitHub unavailable' : 'Connect GitHub'}
       />
       <div role="separator" aria-orientation="vertical" className="bg-border h-full min-h-36 w-px" />
       <ProviderConnection
         provider="GitLab"
-        message="Connect GitLab to choose a repository."
-        icon={<GitLabIcon className="size-10" />}
-        buttonIcon={<GitLabIcon className="size-4" />}
-        onConnect={onChooseGitlab}
+        message={gitlabMessage}
+        icon={<GitLabIcon />}
+        actionSlot={
+          gitlabUnavailable ? (
+            <Button variant="primary" disabled onClick={() => {}}>
+              <GitLabIcon className="size-4" />
+              Connect GitLab
+            </Button>
+          ) : gitlabConnected ? (
+            <Button variant="primary" onClick={onChooseGitlab}>
+              <GitLabIcon className="size-4" />
+              Choose GitLab repository
+            </Button>
+          ) : (
+            <ProviderConnectControl
+              provider="gitlab"
+              label="Connect GitLab"
+              variant="primary"
+              size="md"
+              icon={<GitLabIcon className="size-4" />}
+              onCompleted={onGitlabConnected}
+            />
+          )
+        }
+        title={gitlabUnavailable ? 'GitLab unavailable' : 'Connect GitLab'}
       />
     </div>
   );
 }
 
 function ProviderConnection({
-  provider,
+  provider: _provider,
   message,
   icon,
-  buttonIcon,
-  isConnecting = false,
-  onConnect,
+  title,
+  actionSlot,
 }: {
   provider: 'GitHub' | 'GitLab';
   message: string;
   icon: ReactNode;
-  buttonIcon: ReactNode;
-  isConnecting?: boolean;
-  onConnect: () => void;
+  title: string;
+  actionSlot: ReactNode;
 }) {
   return (
     <EmptyState
       className="min-w-0 py-8"
-      iconSlot={<span className="text-muted-foreground">{icon}</span>}
-      titleSlot={`Connect ${provider}`}
+      iconSlot={icon}
+      titleSlot={title}
       descriptionSlot={message}
-      actionSlot={
-        <Button variant="primary" disabled={isConnecting} onClick={onConnect}>
-          {isConnecting ? <Spinner size="sm" aria-label={`Connecting to ${provider}`} /> : buttonIcon}
-          Connect {provider}
-        </Button>
-      }
+      actionSlot={actionSlot}
     />
   );
 }
@@ -203,9 +257,9 @@ function ProviderHeading({ children }: { children: string }) {
 
 function RepositoryError({ message }: { message: string }) {
   return (
-    <p role="alert" className="text-caption text-notice-destructive-fg m-0">
+    <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
       {message}
-    </p>
+    </Txt>
   );
 }
 
@@ -256,17 +310,28 @@ function RepositoryRows({
               <GithubIcon className="text-muted-foreground size-4 shrink-0" />
             )}
             <span className="min-w-0 flex-1">
-              <span className="text-column text-foreground block truncate">{repo.fullName}</span>
-              <span className="text-meta text-muted-foreground block">
+              <Txt as="span" variant="column" tone="ink" className="block truncate">
+                {repo.fullName}
+              </Txt>
+              <Txt as="span" variant="meta" tone="muted" className="block">
                 {provider === 'gitlab' ? 'GitLab' : repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}
-              </span>
+              </Txt>
             </span>
             {isConnecting ? (
-              <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
+              <Spinner
+                size="sm"
+                aria-label={`Connecting ${repo.fullName}`}
+                className="text-badge-green-indicator shrink-0"
+              />
             ) : (
-              <span className="text-meta text-placeholder opacity-0 transition-opacity group-hover:opacity-100">
+              <Txt
+                as="span"
+                variant="meta"
+                tone="faint"
+                className="opacity-0 transition-opacity group-hover:opacity-100"
+              >
                 Select
-              </span>
+              </Txt>
             )}
           </button>
         );

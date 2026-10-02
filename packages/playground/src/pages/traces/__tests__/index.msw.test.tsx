@@ -8,6 +8,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
+  legacyTraceCapabilities,
+  noFeedbackCapabilities,
+  traceQueryCapabilities,
   traceQueryFieldsWithRegion,
   traceQueryFieldsWithNestedTenant,
   traceQueryPage,
@@ -28,6 +31,7 @@ import {
   metricsUnavailableSystemPackages,
   threadedTraceSpans,
   traceSpans,
+  traceSpansWithPayload,
   traceList,
   traceListWithTwoTraces,
   traceSpanScores,
@@ -60,6 +64,7 @@ function createMemoryStorage(): Storage {
 const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
@@ -143,7 +148,10 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage();
 
       await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(screen.getByText('Input tokens')).not.toBeNull();
     });
 
@@ -170,7 +178,10 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage();
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(screen.queryByText('Input tokens')).toBeNull();
       expect(onBreakdownRequest).not.toHaveBeenCalled();
     });
@@ -196,7 +207,10 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(onBreakdownRequest).not.toHaveBeenCalled();
       expect(screen.queryByText('Input tokens')).toBeNull();
       expect(screen.queryByText('Est. cost')).toBeNull();
@@ -223,7 +237,10 @@ describe('Traces page usage columns', () => {
       expect(await screen.findByTestId('messages-panel')).not.toBeNull();
       expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
     });
 
     describe('given the spanView query param is timeline', () => {
@@ -239,7 +256,10 @@ describe('Traces page usage columns', () => {
 
         await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('spanView='));
         expect(screen.queryByLabelText('Trace time axis')).toBeNull();
-        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        await waitFor(() => {
+          expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+          expect(queryClient.isFetching()).toBe(0);
+        });
       });
     });
 
@@ -279,27 +299,32 @@ describe('Traces page usage columns', () => {
         );
       };
 
-      it('when "Open full thread" is clicked, then the side panel shows every turn at the same wide size, and "Back to trace" restores the trace', async () => {
+      it('when "Open full thread" is clicked, then every turn opens in a drawer stacked above the trace, and "Back to trace" closes only that drawer', async () => {
         setMultiTurnThreadHandlers();
 
         const { queryClient } = renderPage('/traces?traceId=trace-a');
-        const dialog = () => screen.getByRole('dialog', { name: 'Trace details' });
+        const traceDialog = () => screen.getByRole('dialog', { name: 'Trace details', hidden: true });
 
         fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
 
-        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-        await waitFor(() => expect(dialog().querySelectorAll('[data-trace-id]')).toHaveLength(2));
-        expect(dialog().className).toContain('w-4/5');
-        expect(screen.queryByTestId('messages-panel')).toBeNull();
-        // The page did not navigate away from the traces list.
-        expect(screen.getByRole('button', { name: 'Back to trace' })).not.toBeNull();
+        const threadView = await screen.findByTestId('thread-view-by-trace');
+        const threadDialog = threadView.closest<HTMLElement>('[role="dialog"]');
+        expect(threadDialog).not.toBeNull();
+        expect(threadDialog).not.toBe(traceDialog());
+        expect(threadDialog?.getAttribute('data-depth')).toBe('2');
+        await waitFor(() => expect(threadView.querySelectorAll('[data-trace-id]')).toHaveLength(2));
+        // The trace stays open underneath.
+        expect(traceDialog().className).toContain('w-4/5');
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
 
-        expect(await screen.findByTestId('messages-panel')).not.toBeNull();
-        expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-        expect(dialog().className).toContain('w-4/5');
-        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+        await waitFor(() => expect(screen.queryByTestId('thread-view-by-trace')).toBeNull());
+        expect(screen.getByTestId('messages-panel')).not.toBeNull();
+        expect(traceDialog().className).toContain('w-4/5');
+        await waitFor(() => {
+          expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+          expect(queryClient.isFetching()).toBe(0);
+        });
       });
     });
 
@@ -309,7 +334,10 @@ describe('Traces page usage columns', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
     });
@@ -327,9 +355,94 @@ describe('Traces page usage columns', () => {
       );
       const { queryClient } = renderPage('/traces?listMode=branches');
       await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(branches).not.toHaveBeenCalled();
       expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
+    });
+  });
+});
+
+describe('Traces page list source', () => {
+  describe('when the server does not support trace query', () => {
+    it('lists traces through the light endpoint without calling trace query', async () => {
+      const onTraceQuery = vi.fn<() => void>();
+      const onLightList = vi.fn<() => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => {
+          onTraceQuery();
+          return HttpResponse.json(traceQueryPage);
+        }),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => {
+          onLightList();
+          return HttpResponse.json(traceList);
+        }),
+      );
+
+      renderPage();
+
+      await waitFor(() => expect(onLightList).toHaveBeenCalled());
+      expect(onTraceQuery).not.toHaveBeenCalled();
+    });
+
+    it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
+      const onFeedback = vi.fn<() => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: traceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => {
+          onFeedback();
+          return HttpResponse.json(emptyFeedback);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+      expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the server supports trace query but not feedback', () => {
+    it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
+      const onFeedback = vi.fn<() => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(noFeedbackCapabilities)),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: traceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(traceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => {
+          onFeedback();
+          return HttpResponse.json(emptyFeedback);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+      expect(onFeedback).not.toHaveBeenCalled();
     });
   });
 });
@@ -339,7 +452,10 @@ describe('Traces page auto refresh toggle', () => {
     setTracePageHandlers(metricsCapableSystemPackages);
 
     const { queryClient } = renderPage();
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
 
     // Auto-refetch is on by default.
     const toggle = screen.getByRole('checkbox', { name: 'Auto refresh' });
@@ -382,7 +498,10 @@ describe('Traces side panel header actions', () => {
         }),
       );
       const { queryClient } = renderPage('/traces?traceId=trace-a');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
       fireEvent.click(await screen.findByRole('combobox', { name: 'Select scorer' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Quality scorer' }));
@@ -405,7 +524,10 @@ describe('Traces side panel header actions', () => {
     );
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
 
     expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: 'Open trace actions' }));
@@ -429,7 +551,10 @@ describe('Traces side panel Scores view', () => {
     );
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
 
     await pickTraceSideView(/^scores/i);
     return queryClient;
@@ -494,7 +619,10 @@ describe('Traces side panel Scores view', () => {
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       await pickTraceSideView(/^scores/i);
 
@@ -565,7 +693,10 @@ describe('Traces page columns menu', () => {
       );
 
       const first = renderPage();
-      await waitFor(() => expect(first.queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(first.queryClient.isFetching()).toBe(0);
+      });
       expect(screen.queryByText('Environment')).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
@@ -574,10 +705,9 @@ describe('Traces page columns menu', () => {
       await waitFor(() => expect(screen.getByText('production')).toBeTruthy());
       first.unmount();
 
-      const second = renderPage();
-      await waitFor(() => expect(second.queryClient.isFetching()).toBe(0));
+      renderPage();
+      expect(await screen.findByText('production')).toBeTruthy();
       expect(screen.getByText('Environment')).toBeTruthy();
-      expect(screen.getByText('production')).toBeTruthy();
     });
   });
 
@@ -593,7 +723,10 @@ describe('Traces page columns menu', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Thread ID' }));
@@ -607,7 +740,10 @@ describe('Traces page columns menu', () => {
       expect(
         chips.some(chip => chip.textContent?.includes('Thread ID') && chip.textContent.includes('thread-42')),
       ).toBe(true);
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(JSON.stringify(requestBodies.at(-1))).toContain(
         JSON.stringify({ op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-42' } }),
       );
@@ -624,7 +760,10 @@ describe('Traces page columns menu', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
@@ -649,7 +788,10 @@ describe('Traces page columns menu', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Add metadata column' }));
@@ -667,7 +809,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       const chips = [...getFilterChips()];
       expect(chips).toHaveLength(1);
@@ -683,7 +828,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Value: Last 7 days' }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
@@ -698,7 +846,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       const chips = getFilterChips();
       expect(chips).toHaveLength(3);
@@ -713,7 +864,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
@@ -728,7 +882,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       // Tags cannot be filtered by the trace query API, so no chip advertises them.
       expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
@@ -743,7 +900,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage('/traces?status=error');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
       fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
@@ -769,7 +929,10 @@ describe('Traces page filter bar', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       focusFilterInput();
       typeInFilter('Environment');
@@ -793,7 +956,10 @@ describe('Traces page filter bar', () => {
     it('sends an eq predicate on environment in the trace query request', async () => {
       const { onQuery, queryClient } = await commitEnvironmentFilter();
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       const lastBody = onQuery.mock.calls.at(-1)?.[0];
       expect(JSON.stringify(lastBody)).toContain(
         JSON.stringify({ op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } }),
@@ -812,7 +978,10 @@ describe('Traces page filter bar', () => {
         }),
       );
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTraceId.op=isNot');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       return onQuery;
     };
 
@@ -841,7 +1010,10 @@ describe('Traces page filter bar', () => {
       }),
     );
     const { queryClient } = renderPage(entry);
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
     return onQuery;
   };
 
@@ -871,6 +1043,73 @@ describe('Traces page filter bar', () => {
     });
   });
 
+  describe('when the URL carries an advanced filterGroup', () => {
+    const group = {
+      id: 'g1',
+      logic: 'or',
+      nodes: [
+        { id: 'n1', fieldId: 'status', value: 'error' },
+        { id: 'n2', fieldId: 'spans.model', value: 'gpt-4o' },
+      ],
+    };
+    const entry = `/traces?filterTraceId=trace-a&filterGroup=${encodeURIComponent(JSON.stringify(group))}`;
+    const expectedOr = {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+        { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-4o' } } } },
+      ],
+    };
+
+    it('renders the flat chip and one "Advanced filter" chip', async () => {
+      await renderCapturingQuery(entry);
+
+      expect(getFilterChips()[1]?.textContent).toContain('trace-a');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+    });
+
+    it('sends the group as an or predicate next to the flat filter', async () => {
+      const onQuery = await renderCapturingQuery(entry);
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain(JSON.stringify({ op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-a' } }));
+    });
+
+    it('drops filterGroup from the URL when the advanced chip is removed', async () => {
+      await renderCapturingQuery(entry);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove advanced filter' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterGroup'));
+      expect(screen.getByTestId('location').textContent).toContain('filterTraceId=trace-a');
+    });
+
+    it('keeps the agent scope alongside the group on the agent traces page', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage(entry.replace('/traces', '/agents/agent-a/traces'), {
+        scopedEntityId: 'agent-a',
+        scopedEntityType: EntityType.AGENT,
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      const body = JSON.stringify(onQuery.mock.calls.at(-1)?.[0]);
+      expect(body).toContain(JSON.stringify(expectedOr));
+      expect(body).toContain('"literal":"agent-a"');
+      expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+    });
+  });
+
   describe('when the URL carries filterSpanDurationMs=1000 with the gt operator', () => {
     it('sends a numeric gt predicate inside spans.some', async () => {
       const onQuery = vi.fn<(body: unknown) => void>();
@@ -883,7 +1122,10 @@ describe('Traces page filter bar', () => {
       );
 
       const { queryClient } = renderPage('/traces?filterSpanDurationMs=1000&filterSpanDurationMs.op=gt');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
         JSON.stringify({ spans: { some: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } } } }),
@@ -902,7 +1144,10 @@ describe('Traces page filter bar', () => {
         }),
       );
       const { queryClient } = renderPage('/traces?filterSpanError=&filterSpanError.op=exists');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       return onQuery;
     };
 
@@ -928,7 +1173,10 @@ describe('Traces page filter bar', () => {
       setTracePageHandlers(metricsCapableSystemPackages);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('combobox', { name: 'Operator: is' }));
       fireEvent.click(await screen.findByRole('option', { name: 'is not' }));
@@ -950,7 +1198,10 @@ describe('Traces page filter bar', () => {
       );
 
       const { queryClient } = renderPage('/traces?filterSpanModel=');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
 
@@ -967,7 +1218,10 @@ describe('Traces page filter bar', () => {
         scopedEntityType: EntityType.AGENT,
       });
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
-      await waitFor(() => expect(result.queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(result.queryClient.isFetching()).toBe(0);
+      });
       return result;
     };
 
@@ -987,13 +1241,13 @@ describe('Traces page filter bar', () => {
       expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
     });
 
-    it('does not offer Primitive Name in the field step', async () => {
+    it('does not offer Primitive name in the field step', async () => {
       await renderScoped();
 
       focusFilterInput();
       await screen.findByRole('option', { name: 'Trace ID' });
-      expect(screen.queryByRole('option', { name: 'Primitive Name' })).toBeNull();
-      expect(screen.queryByRole('option', { name: 'Primitive Type' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
     });
   });
@@ -1022,7 +1276,10 @@ describe('Traces page metadata filter discovery', () => {
       releaseFields();
       await waitFor(() => expect(screen.queryByTestId('traces-page-skeleton')).toBeNull());
       expect(getFilterInput()).not.toBeNull();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
     });
   });
 
@@ -1042,7 +1299,10 @@ describe('Traces page metadata filter discovery', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
       focusFilterInput();
@@ -1073,7 +1333,10 @@ describe('Traces page metadata filter discovery', () => {
       );
 
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       focusFilterInput();
       typeInFilter('region');
@@ -1112,7 +1375,10 @@ describe('Traces page metadata filter discovery', () => {
     it('sends an eq predicate on metadata.region in the trace query request', async () => {
       const { onQuery, queryClient } = await commitRegionFilter();
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
         JSON.stringify({ op: 'eq', left: { path: 'metadata.region' }, right: { literal: 'eu-west' } }),
       );
@@ -1129,7 +1395,10 @@ describe('Traces page metadata filter discovery', () => {
       );
 
       const { queryClient } = renderPage('/traces?filterMetadata.region=eu-west');
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['regioniseu-west']);
     });
@@ -1156,7 +1425,10 @@ describe('Traces page sorting', () => {
       captureTraceQueries();
       const { queryClient } = renderPage();
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'desc' }]);
       expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).not.toBeNull();
     });
@@ -1164,7 +1436,10 @@ describe('Traces page sorting', () => {
     it('asks the server for oldest-first when toggled and writes it to the URL', async () => {
       captureTraceQueries();
       const { queryClient } = renderPage();
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' }));
 
@@ -1177,8 +1452,31 @@ describe('Traces page sorting', () => {
       captureTraceQueries();
       const { queryClient } = renderPage('/traces?sort=startedAt&dir=asc');
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+    });
+  });
+});
+
+describe('Traces side panel span search', () => {
+  describe('when the opened trace has a span whose payload holds the searched term', () => {
+    it('keeps only the span matching the payload text', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpansWithPayload)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+
+      renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByText('llm call')).toBeTruthy();
+      fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value: 'zanzibar-payload-term' } });
+
+      await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
+      expect(screen.getByText('weather tool')).toBeTruthy();
     });
   });
 });

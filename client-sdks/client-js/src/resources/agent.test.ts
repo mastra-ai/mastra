@@ -8,6 +8,7 @@ import type { Body } from '../route-types.generated';
 import type {
   AbortAgentThreadParams,
   ClientOptions,
+  CancelQueuedAgentMessagesParams,
   QueueAgentMessageParams,
   SendAgentMessageParams,
   SendAgentSignalParams,
@@ -496,6 +497,20 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('forwards withInitialHistory when requested', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response(new ReadableStream()));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.subscribeToThread({ threadId: 'thread-123', withInitialHistory: { perPage: 20 } });
+
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', withInitialHistory: { perPage: 20 } },
+      stream: true,
+    });
+  });
+
   it('only forwards thread coordinates in the subscribe request body', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const response = new Response(new ReadableStream());
@@ -510,7 +525,7 @@ describe('Agent signal routes', () => {
     expect(mockRequest.mock.calls[0][1].body).toEqual({ resourceId: 'resource-123', threadId: 'thread-123' });
   });
 
-  it('aborts active thread runs through the abort route', async () => {
+  it.each([undefined, false, true])('aborts thread runs with clearPendingSignals=%s', async clearPendingSignals => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue({ aborted: true });
     agent['request'] = mockRequest as (typeof agent)['request'];
@@ -518,6 +533,7 @@ describe('Agent signal routes', () => {
     const params = {
       resourceId: 'resource-123',
       threadId: 'thread-123',
+      ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
       expectedRunId: 'run-a',
     } satisfies AbortAgentThreadParams;
     const routeBody: Body<'POST /agents/:agentId/threads/abort'> = params;
@@ -525,6 +541,23 @@ describe('Agent signal routes', () => {
     await expect(agent.abortThread(params)).resolves.toEqual({ aborted: true });
 
     expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/abort', {
+      method: 'POST',
+      body: routeBody,
+    });
+  });
+
+  it('cancels selected pending signals through the thread route', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue({ cancelledSignalIds: ['first'] });
+    agent['request'] = mockRequest as (typeof agent)['request'];
+    const params = {
+      resourceId: 'resource-123',
+      threadId: 'thread-123',
+      signalIds: ['first', 'missing', 'first'],
+    } satisfies CancelQueuedAgentMessagesParams;
+    const routeBody: Body<'POST /agents/:agentId/threads/signals/cancel'> = params;
+    await expect(agent.cancelQueuedMessages(params)).resolves.toEqual({ cancelledSignalIds: ['first'] });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/signals/cancel', {
       method: 'POST',
       body: routeBody,
     });
@@ -555,27 +588,37 @@ describe('Agent signal routes', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps abort separate from unsubscribe on thread subscriptions', async () => {
-    const agent = new Agent(mockClientOptions, 'test-agent');
-    const response = new Response(new ReadableStream());
-    const mockRequest = vi.fn(async (path: string) => {
-      if (path.endsWith('/threads/subscribe')) return response;
-      if (path.endsWith('/threads/abort')) return { aborted: true };
-      throw new Error(`Unexpected request path: ${path}`);
-    });
-    agent['request'] = mockRequest as (typeof agent)['request'];
+  it.each([undefined, false, true])(
+    'keeps subscription abort separate from unsubscribe with clearPendingSignals=%s',
+    async clearPendingSignals => {
+      const agent = new Agent(mockClientOptions, 'test-agent');
+      const response = new Response(new ReadableStream());
+      const mockRequest = vi.fn(async (path: string) => {
+        if (path.endsWith('/threads/subscribe')) return response;
+        if (path.endsWith('/threads/abort')) return { aborted: true };
+        throw new Error(`Unexpected request path: ${path}`);
+      });
+      agent['request'] = mockRequest as (typeof agent)['request'];
 
-    const subscription = await agent.subscribeToThread({
-      resourceId: 'resource-123',
-      threadId: 'thread-123',
-    } as SubscribeAgentThreadParams);
+      const subscription = await agent.subscribeToThread({
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+      } as SubscribeAgentThreadParams);
 
-    await expect(subscription.abort()).resolves.toBe(true);
-    expect(mockRequest).toHaveBeenLastCalledWith('/agents/test-agent/threads/abort', {
-      method: 'POST',
-      body: { resourceId: 'resource-123', threadId: 'thread-123' },
-    });
-  });
+      await expect(
+        subscription.abort(clearPendingSignals === undefined ? undefined : { clearPendingSignals }),
+      ).resolves.toBe(true);
+      expect(mockRequest).toHaveBeenLastCalledWith('/agents/test-agent/threads/abort', {
+        method: 'POST',
+        body: {
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+        },
+      });
+      expect(response.body?.locked).toBe(false);
+    },
+  );
 
   it('executes clientTools after tool-calls finish and continues with tool-result messages', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');

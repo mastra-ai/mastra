@@ -7,7 +7,7 @@ import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -309,5 +309,65 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     });
 
     expect(result.output).toEqual({ text: 'final answer', usage, steps: accumulatedSteps });
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow bookkeeping (#24731)', () => {
+  it('configures both workflows to skip no-op durable bookkeeping', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-events-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    expect(workflow.options.emitStepEvents).toBe(false);
+    expect(iterationWorkflow.options.emitStepEvents).toBe(false);
+    expect(workflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+    expect(iterationWorkflow.options.evaluatePersistencePredicateBeforeDurableOperation).toBe(true);
+  });
+});
+
+describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
+  it('persists suspended and terminal snapshots so finished runs are not resumable', () => {
+    const inngest = new Inngest({ id: 'inngest-agentic-workflow-snapshot-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+    const iterationWorkflow = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+
+    for (const wf of [workflow, iterationWorkflow]) {
+      const persist = (workflowStatus: string) => wf.options.shouldPersistSnapshot({ workflowStatus, stepResults: {} });
+      for (const status of ['suspended', 'success', 'failed', 'canceled', 'bailed', 'tripwire']) {
+        expect(persist(status)).toBe(true);
+      }
+      for (const status of ['running', 'waiting', 'pending']) {
+        expect(persist(status)).toBe(false);
+      }
+    }
+  });
+});
+
+describe('Inngest per-step processor history (#25193)', () => {
+  it('forwards accumulated steps to the LLM execution step on later iterations', async () => {
+    const inngest = new Inngest({ id: 'inngest-processor-history-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const entry = findEntry(
+      (workflow as any).executionGraph.steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+    expect(entry).toBeDefined();
+
+    const priorStep = { text: 'read_context completed', toolCalls: [{ toolName: 'read_context' }] };
+    const inputData = {
+      runId: 'run-1',
+      agentId: 'agent-1',
+      messageId: 'msg-1',
+      messageListState: emptyMessageListState(),
+      toolsMetadata: [],
+      modelConfig: {},
+      options: {},
+      state: {},
+      stepIndex: 1,
+      accumulatedSteps: [priorStep],
+    };
+    const mapped = await entry.mapConfig({ inputData });
+    expect(mapped.stepIndex).toBe(1);
+    expect(mapped.accumulatedSteps).toEqual([priorStep]);
   });
 });

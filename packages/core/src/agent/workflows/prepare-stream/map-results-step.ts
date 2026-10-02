@@ -251,24 +251,36 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
-    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
-      ? typeof capabilities.llmRequestInputProcessors === 'function'
-        ? await capabilities.llmRequestInputProcessors({
-            requestContext: result.requestContext!,
-            overrides: options.inputProcessors,
-          })
-        : options.inputProcessors || capabilities.llmRequestInputProcessors
-      : effectiveInputProcessors;
-
-    // Resolve error processors
-    const effectiveErrorProcessors = capabilities.errorProcessors
+    // Resolve error processors once per run. The request lane below reuses this list, so a
+    // dynamic resolver runs a single time and both lanes share the same instances.
+    // `hasConfiguredErrorProcessors` reports whether the caller configured error processors
+    // themselves (constructor or call-time), excluding the framework's default stability
+    // processors. It gates the implicit retry-cap warning in resolveMaxProcessorRetries — the
+    // defaults self-limit, so warning about them is noise on every bare agent.
+    const { errorProcessors: effectiveErrorProcessors, hasConfiguredErrorProcessors } = capabilities.errorProcessors
       ? typeof capabilities.errorProcessors === 'function'
         ? await capabilities.errorProcessors({
             requestContext: result.requestContext!,
             overrides: options.errorProcessors,
           })
-        : options.errorProcessors || capabilities.errorProcessors
-      : options.errorProcessors || [];
+        : {
+            errorProcessors: options.errorProcessors || capabilities.errorProcessors,
+            hasConfiguredErrorProcessors: (options.errorProcessors || capabilities.errorProcessors).length > 0,
+          }
+      : {
+          errorProcessors: options.errorProcessors || [],
+          hasConfiguredErrorProcessors: !!options.errorProcessors?.length,
+        };
+
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+            errorOverrides: effectiveErrorProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
@@ -436,6 +448,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
+      hasConfiguredErrorProcessors,
       modelSettings: {
         ...(options.modelSettings || {}),
       },

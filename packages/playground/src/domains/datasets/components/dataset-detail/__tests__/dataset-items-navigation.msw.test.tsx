@@ -92,8 +92,8 @@ describe('dataset items navigation', () => {
       fireEvent.click(await screen.findByText('item-a'));
       await screen.findByRole('dialog');
 
-      // 'item-a' also appears inside the open panel; the first match is the list row.
-      fireEvent.click(screen.getAllByText('item-a')[0]);
+      // The id also appears in the breadcrumb, the sr-only page heading and the open panel; target the list row.
+      fireEvent.click(screen.getAllByText('item-a').find(el => !el.closest('nav, h1, [role="dialog"]'))!);
 
       await waitFor(() => {
         expect(router.state.location.pathname).toBe(`/datasets/${DATASET_ID}`);

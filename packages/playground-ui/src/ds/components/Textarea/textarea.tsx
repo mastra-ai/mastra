@@ -3,12 +3,15 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import {
+  deprecatedErrorAria,
+  fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -42,31 +45,24 @@ const textareaVariants = cva(
   },
 );
 
-export type TextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'> &
+export type TextareaProps = Omit<React.ComponentProps<'textarea'>, 'size'> &
   Omit<VariantProps<typeof textareaVariants>, 'variant'> & {
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof textareaVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
   };
 
-const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, size, testId, variant, error, ...props }, ref) => {
-    return (
-      <textarea
-        className={cn(
-          textareaVariants({ variant: resolveFieldVariant(variant), size }),
-          error && 'border-destructive focus-visible:border-destructive',
-          className,
-        )}
-        data-testid={testId}
-        ref={ref}
-        aria-invalid={error}
-        {...props}
-      />
-    );
-  },
-);
-Textarea.displayName = 'Textarea';
+function Textarea({ className, size, testId, variant, error, ...props }: TextareaProps) {
+  return (
+    <TextareaControl
+      className={cn(textareaVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
+      data-testid={testId}
+      {...deprecatedErrorAria(error)}
+      {...props}
+    />
+  );
+}
 
 export { Textarea };

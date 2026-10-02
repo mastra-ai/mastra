@@ -1,5 +1,341 @@
 # @mastra/inngest
 
+## 1.10.3-alpha.0
+
+### Patch Changes
+
+- Fixed sendToolApproval to preserve approval decisions when Inngest agents receive custom resume data. Approval-gated calls now reject custom resume data unless it is a non-null object that can carry the decision, and unresolved approval targets fail instead of resuming without the decision. ([#25632](https://github.com/mastra-ai/mastra/pull/25632))
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6)]:
+  - @mastra/core@1.75.0-alpha.0
+
+## 1.10.2
+
+### Patch Changes
+
+- Fixed `run.timeTravel()` rejecting array `inputData` when targeting a top-level `.foreach()` step. Each array element is now validated against the step's input schema, so Studio's "Run next step" works at foreach loops, including for Inngest workflows. ([#25626](https://github.com/mastra-ai/mastra/pull/25626))
+
+- Fixed Studio's Approve and Decline buttons for Inngest agents. `sendToolApproval()` now resumes the suspended run on Inngest instead of failing with "could not find a suspended run". ([#25557](https://github.com/mastra-ai/mastra/pull/25557))
+
+- Fixed nested Inngest workflow and durable agent failures losing their error message. Callers now receive the real cause (for example `step output size is greater than the limit`) instead of `{"stepId":"…","name":"Error"}`. ([#25598](https://github.com/mastra-ai/mastra/pull/25598))
+
+- Generate SDK, pubsub, and workflow identifiers with Web Crypto while preserving synchronous behavior. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0
+
+## 1.10.2-alpha.1
+
+### Patch Changes
+
+- Fixed `run.timeTravel()` rejecting array `inputData` when targeting a top-level `.foreach()` step. Each array element is now validated against the step's input schema, so Studio's "Run next step" works at foreach loops, including for Inngest workflows. ([#25626](https://github.com/mastra-ai/mastra/pull/25626))
+
+- Fixed Studio's Approve and Decline buttons for Inngest agents. `sendToolApproval()` now resumes the suspended run on Inngest instead of failing with "could not find a suspended run". ([#25557](https://github.com/mastra-ai/mastra/pull/25557))
+
+- Fixed nested Inngest workflow and durable agent failures losing their error message. Callers now receive the real cause (for example `step output size is greater than the limit`) instead of `{"stepId":"…","name":"Error"}`. ([#25598](https://github.com/mastra-ai/mastra/pull/25598))
+
+- Updated dependencies [[`bf8915a`](https://github.com/mastra-ai/mastra/commit/bf8915a00a4bc2cdacbbf94f6b9628cda5ad872c), [`2588009`](https://github.com/mastra-ai/mastra/commit/25880090300e3e5810057323ff22c743f090d315), [`4228a4e`](https://github.com/mastra-ai/mastra/commit/4228a4e13b18f09b2c6281ebeec6ea76dbd9ba4d), [`c4c5397`](https://github.com/mastra-ai/mastra/commit/c4c539745afe736a4be0304784e3ec5d1a41f39b), [`c1a0491`](https://github.com/mastra-ai/mastra/commit/c1a049108588b49eff57461c4f294c9459397933), [`8cf6a36`](https://github.com/mastra-ai/mastra/commit/8cf6a364f74ae7d2807689519735974dc7e527b6), [`dbeb617`](https://github.com/mastra-ai/mastra/commit/dbeb617af5e3f7150ab412ea03f85d6869d49537), [`2302827`](https://github.com/mastra-ai/mastra/commit/2302827442eb5eb7d7039c70b61165b85a401c3b), [`23da871`](https://github.com/mastra-ai/mastra/commit/23da871c62bee9a4628d64afe8f3a154b8c7322b), [`c3b3801`](https://github.com/mastra-ai/mastra/commit/c3b38019e60d41c4ef8cae328523e461dd45ea71), [`df91bae`](https://github.com/mastra-ai/mastra/commit/df91bae13d880242f755031cc4bcfbe2d3102c06), [`e8f60c7`](https://github.com/mastra-ai/mastra/commit/e8f60c762a8335071418aaf04db4363ac0120e3a), [`fab9ba1`](https://github.com/mastra-ai/mastra/commit/fab9ba1687199a8284ea51034d049fcd232fb7dd), [`8acf89f`](https://github.com/mastra-ai/mastra/commit/8acf89ff090ab4666de8fa1452239fbd4080b216), [`beb81b1`](https://github.com/mastra-ai/mastra/commit/beb81b1b01740c79895049187dc96008723dab92), [`961c668`](https://github.com/mastra-ai/mastra/commit/961c6684ae23bfe1e014d14b9def61e9518fcdf0), [`d7c35a2`](https://github.com/mastra-ai/mastra/commit/d7c35a2fc17d692c4397c59d34f7cdbe4398cc3f), [`cdaf888`](https://github.com/mastra-ai/mastra/commit/cdaf88896503e3fe04465754a8a0a469ceb9d360)]:
+  - @mastra/core@1.73.0-alpha.1
+
+## 1.10.2-alpha.0
+
+### Patch Changes
+
+- Generate SDK, pubsub, and workflow identifiers with Web Crypto while preserving synchronous behavior. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Updated dependencies [[`42b8761`](https://github.com/mastra-ai/mastra/commit/42b8761d917453cfe9b0b189c51442a5398fbf27), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9a30e77`](https://github.com/mastra-ai/mastra/commit/9a30e7768d3ac704e3940bae24b7aafc7eb6cf23), [`4e9f39b`](https://github.com/mastra-ai/mastra/commit/4e9f39b0be3b49e9df4586c08d4eec1b6ab5c37c), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f), [`279d4a7`](https://github.com/mastra-ai/mastra/commit/279d4a7acba086eac37f49471ed30734eecec490), [`bc826e8`](https://github.com/mastra-ai/mastra/commit/bc826e8fb1c0d0311b4675fcfcf5c4f6bc43efe6), [`3da569c`](https://github.com/mastra-ai/mastra/commit/3da569c2032b3ec32a818f47f942151926c8fd6a), [`c4b52a2`](https://github.com/mastra-ai/mastra/commit/c4b52a20b533b92cab1a0478e8bab66231cefb86), [`63b8630`](https://github.com/mastra-ai/mastra/commit/63b8630cf4f7f3b330c872a21ae0cfedf0b4978a), [`2f8cb4d`](https://github.com/mastra-ai/mastra/commit/2f8cb4d7237372a7dff899bf3b4cbf4060b007db), [`c260e42`](https://github.com/mastra-ai/mastra/commit/c260e429ff30cc19859555985cacd5b70cfd63d9), [`9d304f4`](https://github.com/mastra-ai/mastra/commit/9d304f452c761403a726a9a518d6678019af23ca), [`e9276f4`](https://github.com/mastra-ai/mastra/commit/e9276f45c6c1a222890334209d24e8917e4f6ad1), [`0b9e7bc`](https://github.com/mastra-ai/mastra/commit/0b9e7bc0839bcec59f9eaa014c759ae935454c45), [`270e05f`](https://github.com/mastra-ai/mastra/commit/270e05fec0ec934c564527e33d0f51768712ad79), [`ab42292`](https://github.com/mastra-ai/mastra/commit/ab42292369c62b847ae4039e4dcf07b0a1116966), [`5d8b27d`](https://github.com/mastra-ai/mastra/commit/5d8b27df7306759b7d065f8a968d4e250ceae7d4), [`9762b12`](https://github.com/mastra-ai/mastra/commit/9762b125c480ee8bdb887145f4044a69eb18e27f)]:
+  - @mastra/core@1.73.0-alpha.0
+
+## 1.10.1
+
+### Patch Changes
+
+- Fixed `streamUntilIdle()` and `resumeStreamUntilIdle()` on `createInngestAgent()` agents running in the Mastra server process instead of on Inngest. The `/stream-until-idle` and `/resume-stream-until-idle` routes now run durably, the same as `stream(messages, { untilIdle: true })`. Fixes #25159. ([#25190](https://github.com/mastra-ai/mastra/pull/25190))
+
+- Durable agents now honor the `awaited` background-task disposition by keeping the model turn open until the authoritative tool result is persisted. Replayed workflow steps adopt the matching persisted task, resume or restart it according to its status, and reconcile terminal results instead of dispatching the tool again. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Background tool results on the durable engine now apply configured transcript transforms, so payloads a user asked to redact are no longer persisted raw to thread history. They also use the configured Mastra `idGenerator` for appended message ids instead of falling back to random UUIDs. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Data chunks emitted by output processors via `writer.custom()` are now persisted to thread history on the durable engine, matching the regular agent loop (#19375). Transient chunks remain stream-only. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Provider-executed tool results that arrive in a later stream (tool call in one step, result in the next) are now committed to the transcript on the durable engine instead of staying stuck in the call state (ports #14282 to the durable agent loop). Configured transcript transforms also apply to these deferred results instead of being silently skipped. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed durable agents mishandling provider-executed tools (like Anthropic web search). Calls whose result had not arrived yet no longer fail with ToolNotFoundError, and results are no longer committed twice, which previously overwrote their provider metadata. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed durable agents looping until maxSteps when a model response ended with a terminal finish reason (content-filter refusal or length truncation) alongside a tool call. The loop now stops instead of re-sending the same request and re-triggering the same refusal (ports #17893 to the durable agent loop). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Output processors' `processToolResult` hooks now run on the durable engine. Previously they were skipped entirely, so a redaction processor had no effect on durable streams or transcripts. Processor mutations and tripwire blocks now apply to the emitted chunk and the persisted transcript, before the raw value can reach subscribers. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- The run-level `modelSettings.timeout.totalMs` budget is now enforced on durable agents (ports #21724 to the durable agent loop). Previously only the per-call budget applied, so a hanging provider or a long tool chain could run forever. The total budget now bounds the whole run, is re-armed with the original value on cold resume and recovery, and expiry surfaces as a run error rather than a silent stop. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Tool payload transforms now persist their state on the durable engine. Transcript-target transforms correctly redact stored args and results in thread history; previously only the streamed chunks were transformed and raw values were silently persisted. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Durable runs of stored agents now stay pinned to the agent version they started on. Both resuming a suspended run (#22128) and recovering a crashed run re-resolve the original pinned version instead of silently switching to the latest published version. If the pinned version no longer resolves, the run falls back to the current definition with a warning. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed recovery requests for agents created with `createInngestAgent()`. `POST /api/agents/:agentId/recover` now returns a clear 400 "not supported" error that points to `observe(runId)` for reconnecting to a running stream, instead of a 500. With `recovery.durableAgents: 'auto'`, startup recovery skips Inngest agents instead of logging an error for each one. Fixes [#25160](https://github.com/mastra-ai/mastra/issues/25160). ([#25186](https://github.com/mastra-ai/mastra/pull/25186))
+
+- Fixed delegation bail() taking one extra model turn on the evented engine. When an onDelegationComplete hook calls ctx.bail(), the supervisor loop now stops in the same iteration on every engine. Previously the bail signal was passed between workflow steps by mutating a shared request context, which only works when all steps run in one process — on the evented engine each step gets its own copy, so the loop made one more model request before stopping. The bail signal now travels on the tool call step's serialized output, which crosses process and event boundaries reliably. The Inngest agentic loop's continuation predicate now also honors this flag, so bail() stops Inngest-hosted supervisor loops in the same iteration too (previously it only stopped via maxSteps). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- EventedAgent tool-approval, tool-denial, and in-execution resume no longer fail with "Cannot read properties of undefined (reading 'messages')": the evented engine retains running conversation history in persisted agent-loop snapshots, since its storage-merged step results are live data (unlike the default engine's write-only snapshots) ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Removed the unused `executeDurableToolCalls` helper and its `ToolExecutionContext`/`ToolExecutionError` types from `@mastra/core/agent/durable`. This code was never wired into any agent loop; both the durable and regular loops execute tools through their own step implementations. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed Inngest durable agents reporting `[object Object]` when a run fails. The stream error, `generate()` rejection, HTTP 500 response, and workflow tracing span now carry the real failure message, such as Inngest's `step output size is greater than the limit` error. Fixes [#25161](https://github.com/mastra-ai/mastra/issues/25161). ([#25182](https://github.com/mastra-ai/mastra/pull/25182))
+
+- Fixed `InngestAgent.resume()` accepting runs that had already finished. Resuming a completed run now fails with a "not suspended" error instead of running the previously suspended tool again, so a declined tool approval can no longer be approved after the run ends. ([#25181](https://github.com/mastra-ai/mastra/pull/25181))
+
+- Pass prior agent steps to per-step processor hooks in Inngest workflows. ([#25217](https://github.com/mastra-ai/mastra/pull/25217))
+
+- Fixed resuming the second of several tool approvals from one agent turn by its `toolCallId` on Inngest durable agents. Approving the next pending tool call right after its approval request arrived used to fail with `no suspended tool call with id`. The resume now waits briefly for the new approval to be saved. Fixes [#25158](https://github.com/mastra-ai/mastra/issues/25158). ([#25173](https://github.com/mastra-ai/mastra/pull/25173))
+
+- Inngest durable agents now tell Mastra which workflow name their runs are stored under, so pending tool approvals can be listed, approved, and declined over the HTTP API. Fixes #25154. ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+- Evented workflows now persist the running step record and routing state before executing each step, so runs killed mid-step recover via restart() instead of failing with "Execution path is empty" ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed stopping an Inngest agent by thread or run id. Calling `abortThreadStream()` or `abortRunStream()` (including `POST /api/agents/:agentId/threads/abort` and the Studio stop button) now stops the run on the Inngest worker, and the stream ends with `finishReason: 'abort'`. Previously the call reported success while the run and its tools kept going. Fixes [#25156](https://github.com/mastra-ai/mastra/issues/25156). ([#25192](https://github.com/mastra-ai/mastra/pull/25192))
+
+- Fixed Inngest durable agents ignoring `structuredOutput`. `generate()` now returns the parsed `object` instead of only the JSON `text`, and `stream()`, `resume()`, `resumeGenerate()`, and `observe()` in the same process also expose it. Fixes [#25148](https://github.com/mastra-ai/mastra/issues/25148). ([#25170](https://github.com/mastra-ai/mastra/pull/25170))
+
+- Fixed durable agents looping until maxSteps when a provider ends the stream with finishReason 'other' and no output. The empty response now surfaces as a stream error after one attempt, and completion checkers no longer grade errored iterations (ports #22273 to the durable agent loop). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed evented agent streams hanging forever when a run fails before its first chunk. A workflow-level failure now surfaces as an error on the stream instead of leaving the consumer waiting. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Updated dependencies [[`9ce3444`](https://github.com/mastra-ai/mastra/commit/9ce3444d1a6b17e72b0a20c74603abaf252a843e), [`af4aed5`](https://github.com/mastra-ai/mastra/commit/af4aed50ad96b340d82a67c3f01cbf358b156ab2), [`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`e1c3193`](https://github.com/mastra-ai/mastra/commit/e1c3193b18ca68e5cca27f7dce9b0381a6e7b95d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`4601dfa`](https://github.com/mastra-ai/mastra/commit/4601dfac7c2bfdf04f041b1725c8ac4ae92a8d7d), [`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`3b77788`](https://github.com/mastra-ai/mastra/commit/3b77788a08df1e754282d39c42823e6e1c5f2742), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`63927e8`](https://github.com/mastra-ai/mastra/commit/63927e89c1b9db0fc87eef8503e3a03204f24b09), [`68cc668`](https://github.com/mastra-ai/mastra/commit/68cc66800e5ce6f5d62189fc7b5ef9d71cf80971), [`987257a`](https://github.com/mastra-ai/mastra/commit/987257a34cda8a153fe592c31d75fbb1dee55202), [`65a93a2`](https://github.com/mastra-ai/mastra/commit/65a93a2a3b1434d605a6a417cb83d2d58e16bfc0), [`fd92729`](https://github.com/mastra-ai/mastra/commit/fd92729380a29f2a0ec822e39f3c09eb9aaa5ac5), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`93fe2d6`](https://github.com/mastra-ai/mastra/commit/93fe2d6a9e47861d90cc0fd0080aefdb8cabb612), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`781762b`](https://github.com/mastra-ai/mastra/commit/781762b2dcd0c8cc7f9b8ab73824ec45a5225db7), [`4d187b7`](https://github.com/mastra-ai/mastra/commit/4d187b79d7ecce4d2f357f5fe385b414a532ff19), [`cc0da13`](https://github.com/mastra-ai/mastra/commit/cc0da13b826d5f74213c4d8c470acf8698542249), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`2a28888`](https://github.com/mastra-ai/mastra/commit/2a28888f7dfee74f84ec548c9c222cfd1aa7f393), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`ec005d5`](https://github.com/mastra-ai/mastra/commit/ec005d517ea10b7742e67f7e75bf89259d72c37e), [`f2c3f8c`](https://github.com/mastra-ai/mastra/commit/f2c3f8c74e1d7bc7baca5303b36320b0b361775c), [`ed67acc`](https://github.com/mastra-ai/mastra/commit/ed67acc3213d469ed69610c304c604693cfec383), [`0c23429`](https://github.com/mastra-ai/mastra/commit/0c23429515b5c307e8a5759f5be1ce20d09d2347), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`c64bf75`](https://github.com/mastra-ai/mastra/commit/c64bf752dec931f5f6c8b3d5afc91a8b9aa670d8), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`79c3b1f`](https://github.com/mastra-ai/mastra/commit/79c3b1fa4d470585a00558b317ed47db9b1decd4), [`4092ef2`](https://github.com/mastra-ai/mastra/commit/4092ef29aad09f2ba5f90c92a4d4d3bd444eae67), [`5f1efad`](https://github.com/mastra-ai/mastra/commit/5f1efad5c2230a4de715cad3f01859b4ff9d255b), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`4b5b212`](https://github.com/mastra-ai/mastra/commit/4b5b212f1c5caa40a2d02308806bbe610f194503), [`75c2ee1`](https://github.com/mastra-ai/mastra/commit/75c2ee1280a5441eb66c31f23a53a52b42244686), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`1fe1c2b`](https://github.com/mastra-ai/mastra/commit/1fe1c2b6f0b29481dca62a9199af751d594e3ea6), [`d3a7dba`](https://github.com/mastra-ai/mastra/commit/d3a7dbaeb0d027e1e47e4e4ddb2ede271a007e17), [`561e2a6`](https://github.com/mastra-ai/mastra/commit/561e2a6c8a44dbfd91eae390e14671462497cf85), [`64916c6`](https://github.com/mastra-ai/mastra/commit/64916c66e8d9dec107da2f81e7c1301471bf7bc3), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`9a35897`](https://github.com/mastra-ai/mastra/commit/9a3589783a40157759f939f5c63bba3c8aef1c1c), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`279a736`](https://github.com/mastra-ai/mastra/commit/279a736c62495cac0f247ab1402a8c80bccc892a), [`d3a22a7`](https://github.com/mastra-ai/mastra/commit/d3a22a78f12e094118ce80ec35b63987009644e2), [`56fef1c`](https://github.com/mastra-ai/mastra/commit/56fef1cdd92a671c3de2cc5e4a319c637f700cf4), [`8156816`](https://github.com/mastra-ai/mastra/commit/815681621dd88997608c5b7e8f0f87fe03cd1d18), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4d40bd9`](https://github.com/mastra-ai/mastra/commit/4d40bd91ccb00db163365a319b5d82bfb56a9ace), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`94ba70e`](https://github.com/mastra-ai/mastra/commit/94ba70ea6ba8a53f5e4010392bf3bbaecde7966d), [`d2f0cd7`](https://github.com/mastra-ai/mastra/commit/d2f0cd7c5d5f5f06cf5b65cf78a9f14ac052dbb1), [`6946c4d`](https://github.com/mastra-ai/mastra/commit/6946c4db91071cb43fb36514a42a1e4ce05c37ba), [`e4e0f90`](https://github.com/mastra-ai/mastra/commit/e4e0f9000d73396609ae2f2b6c31259ade43078c), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`c01f1ad`](https://github.com/mastra-ai/mastra/commit/c01f1ad358db0ab361fdb1b2f4f77c88540c2671), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`a7895fc`](https://github.com/mastra-ai/mastra/commit/a7895fce693e499c08c4784c57d4c4f46c0e1ccb), [`d8fcd39`](https://github.com/mastra-ai/mastra/commit/d8fcd397230a83f5fe9ef16e6b41237f057c2c29), [`5197f81`](https://github.com/mastra-ai/mastra/commit/5197f81d6a5641f80f0ee6596ac085653b38cca3), [`caf94f9`](https://github.com/mastra-ai/mastra/commit/caf94f9c1927f737370b6118264bd16c7210a765), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53), [`5036e61`](https://github.com/mastra-ai/mastra/commit/5036e6179bee4105ad8f1fc57d315f78024565f4), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`676fcbf`](https://github.com/mastra-ai/mastra/commit/676fcbfc5f770ee45560c7b558b17ad5ff25d9e7), [`6c9f7ab`](https://github.com/mastra-ai/mastra/commit/6c9f7abf9bdce0a52450398b31d497519465bb80), [`d9790fd`](https://github.com/mastra-ai/mastra/commit/d9790fd00d95063de288560f6a0d2bac8f57cc4d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`91196d5`](https://github.com/mastra-ai/mastra/commit/91196d5a6d582c0f494622d0378f33e22d881659), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0c2fe6c`](https://github.com/mastra-ai/mastra/commit/0c2fe6c00909795234270c8ea2c2c53882d63798), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`f36019c`](https://github.com/mastra-ai/mastra/commit/f36019c24193e0d29f920663851198bf45e3d12f), [`5026973`](https://github.com/mastra-ai/mastra/commit/50269736f432cee1170627b2b6f88ba1431e837f), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4edc93d`](https://github.com/mastra-ai/mastra/commit/4edc93dedadb89686aad75a4853cb0aa807d256e), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`dd01709`](https://github.com/mastra-ai/mastra/commit/dd01709f780562f9ff8c72d977f3da5ae265970e), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0
+
+## 1.10.1-alpha.4
+
+### Patch Changes
+
+- Pass prior agent steps to per-step processor hooks in Inngest workflows. ([#25217](https://github.com/mastra-ai/mastra/pull/25217))
+
+- Updated dependencies:
+  - @mastra/core@1.72.0-alpha.6
+
+## 1.10.1-alpha.3
+
+### Patch Changes
+
+- Fixed `streamUntilIdle()` and `resumeStreamUntilIdle()` on `createInngestAgent()` agents running in the Mastra server process instead of on Inngest. The `/stream-until-idle` and `/resume-stream-until-idle` routes now run durably, the same as `stream(messages, { untilIdle: true })`. Fixes #25159. ([#25190](https://github.com/mastra-ai/mastra/pull/25190))
+
+- Fixed recovery requests for agents created with `createInngestAgent()`. `POST /api/agents/:agentId/recover` now returns a clear 400 "not supported" error that points to `observe(runId)` for reconnecting to a running stream, instead of a 500. With `recovery.durableAgents: 'auto'`, startup recovery skips Inngest agents instead of logging an error for each one. Fixes [#25160](https://github.com/mastra-ai/mastra/issues/25160). ([#25186](https://github.com/mastra-ai/mastra/pull/25186))
+
+- Fixed Inngest durable agents reporting `[object Object]` when a run fails. The stream error, `generate()` rejection, HTTP 500 response, and workflow tracing span now carry the real failure message, such as Inngest's `step output size is greater than the limit` error. Fixes [#25161](https://github.com/mastra-ai/mastra/issues/25161). ([#25182](https://github.com/mastra-ai/mastra/pull/25182))
+
+- Fixed resuming the second of several tool approvals from one agent turn by its `toolCallId` on Inngest durable agents. Approving the next pending tool call right after its approval request arrived used to fail with `no suspended tool call with id`. The resume now waits briefly for the new approval to be saved. Fixes [#25158](https://github.com/mastra-ai/mastra/issues/25158). ([#25173](https://github.com/mastra-ai/mastra/pull/25173))
+
+- Fixed Inngest durable agents ignoring `structuredOutput`. `generate()` now returns the parsed `object` instead of only the JSON `text`, and `stream()`, `resume()`, `resumeGenerate()`, and `observe()` in the same process also expose it. Fixes [#25148](https://github.com/mastra-ai/mastra/issues/25148). ([#25170](https://github.com/mastra-ai/mastra/pull/25170))
+
+- Updated dependencies [[`43fbe75`](https://github.com/mastra-ai/mastra/commit/43fbe75535650345cf61dee00cf3e7b3f5efaf7f), [`ebd03fd`](https://github.com/mastra-ai/mastra/commit/ebd03fd3bc93fe3930747956724252f7c8834826), [`2c57ba8`](https://github.com/mastra-ai/mastra/commit/2c57ba896b04215fface2a8216b88fe59cfdd041), [`f6effda`](https://github.com/mastra-ai/mastra/commit/f6effdabafa9fc6388478b3e281ad4c457d4200b), [`7f4ce21`](https://github.com/mastra-ai/mastra/commit/7f4ce2190029710851d95f7b75a2fb724782483c), [`1ba1588`](https://github.com/mastra-ai/mastra/commit/1ba158873dadf3d290b111981c3bc7ef95ab1d1c), [`b537ab1`](https://github.com/mastra-ai/mastra/commit/b537ab14714870e058775530bc55b37c9115613f), [`d4e350a`](https://github.com/mastra-ai/mastra/commit/d4e350a5c1e29a7da5a22da52ed1f33431403012)]:
+  - @mastra/core@1.72.0-alpha.5
+
+## 1.10.1-alpha.2
+
+### Patch Changes
+
+- Fixed stopping an Inngest agent by thread or run id. Calling `abortThreadStream()` or `abortRunStream()` (including `POST /api/agents/:agentId/threads/abort` and the Studio stop button) now stops the run on the Inngest worker, and the stream ends with `finishReason: 'abort'`. Previously the call reported success while the run and its tools kept going. Fixes [#25156](https://github.com/mastra-ai/mastra/issues/25156). ([#25192](https://github.com/mastra-ai/mastra/pull/25192))
+
+- Updated dependencies [[`9773cb2`](https://github.com/mastra-ai/mastra/commit/9773cb2f22f307c8017f887af4a6728c4cb875c9)]:
+  - @mastra/core@1.72.0-alpha.4
+
+## 1.10.1-alpha.1
+
+### Patch Changes
+
+- Fixed `InngestAgent.resume()` accepting runs that had already finished. Resuming a completed run now fails with a "not suspended" error instead of running the previously suspended tool again, so a declined tool approval can no longer be approved after the run ends. ([#25181](https://github.com/mastra-ai/mastra/pull/25181))
+
+- Inngest durable agents now tell Mastra which workflow name their runs are stored under, so pending tool approvals can be listed, approved, and declined over the HTTP API. Fixes #25154. ([#25167](https://github.com/mastra-ai/mastra/pull/25167))
+
+- Updated dependencies [[`77c6f1c`](https://github.com/mastra-ai/mastra/commit/77c6f1cf14ba9ba47257829646a4569c4462d12f), [`3d25340`](https://github.com/mastra-ai/mastra/commit/3d2534080417711d1baf2ad947d1205ca95a34cd), [`afc53be`](https://github.com/mastra-ai/mastra/commit/afc53be4c95e83e8613f4e080b5a1926e63c5da6), [`b33985e`](https://github.com/mastra-ai/mastra/commit/b33985eac3e019f58d3785c48ef85eae48b4e068), [`32d71df`](https://github.com/mastra-ai/mastra/commit/32d71df2ce71573b40f9a62b8ac510ad6eadd859), [`444debd`](https://github.com/mastra-ai/mastra/commit/444debd7104ada74fa15d0e70703ee9be180fc75), [`9997948`](https://github.com/mastra-ai/mastra/commit/99979482956903a2cd685b31f53370dd33074799), [`7540eb1`](https://github.com/mastra-ai/mastra/commit/7540eb176c32ffbff45ccc64a8d8fce82ce42a94), [`9623397`](https://github.com/mastra-ai/mastra/commit/96233975b75135852c9b1616b91fd8cb54c77a53)]:
+  - @mastra/core@1.72.0-alpha.3
+
+## 1.10.1-alpha.0
+
+### Patch Changes
+
+- Durable agents now honor the `awaited` background-task disposition by keeping the model turn open until the authoritative tool result is persisted. Replayed workflow steps adopt the matching persisted task, resume or restart it according to its status, and reconcile terminal results instead of dispatching the tool again. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Background tool results on the durable engine now apply configured transcript transforms, so payloads a user asked to redact are no longer persisted raw to thread history. They also use the configured Mastra `idGenerator` for appended message ids instead of falling back to random UUIDs. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Data chunks emitted by output processors via `writer.custom()` are now persisted to thread history on the durable engine, matching the regular agent loop (#19375). Transient chunks remain stream-only. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Provider-executed tool results that arrive in a later stream (tool call in one step, result in the next) are now committed to the transcript on the durable engine instead of staying stuck in the call state (ports #14282 to the durable agent loop). Configured transcript transforms also apply to these deferred results instead of being silently skipped. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed durable agents mishandling provider-executed tools (like Anthropic web search). Calls whose result had not arrived yet no longer fail with ToolNotFoundError, and results are no longer committed twice, which previously overwrote their provider metadata. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed durable agents looping until maxSteps when a model response ended with a terminal finish reason (content-filter refusal or length truncation) alongside a tool call. The loop now stops instead of re-sending the same request and re-triggering the same refusal (ports #17893 to the durable agent loop). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Output processors' `processToolResult` hooks now run on the durable engine. Previously they were skipped entirely, so a redaction processor had no effect on durable streams or transcripts. Processor mutations and tripwire blocks now apply to the emitted chunk and the persisted transcript, before the raw value can reach subscribers. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- The run-level `modelSettings.timeout.totalMs` budget is now enforced on durable agents (ports #21724 to the durable agent loop). Previously only the per-call budget applied, so a hanging provider or a long tool chain could run forever. The total budget now bounds the whole run, is re-armed with the original value on cold resume and recovery, and expiry surfaces as a run error rather than a silent stop. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Tool payload transforms now persist their state on the durable engine. Transcript-target transforms correctly redact stored args and results in thread history; previously only the streamed chunks were transformed and raw values were silently persisted. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Durable runs of stored agents now stay pinned to the agent version they started on. Both resuming a suspended run (#22128) and recovering a crashed run re-resolve the original pinned version instead of silently switching to the latest published version. If the pinned version no longer resolves, the run falls back to the current definition with a warning. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed delegation bail() taking one extra model turn on the evented engine. When an onDelegationComplete hook calls ctx.bail(), the supervisor loop now stops in the same iteration on every engine. Previously the bail signal was passed between workflow steps by mutating a shared request context, which only works when all steps run in one process — on the evented engine each step gets its own copy, so the loop made one more model request before stopping. The bail signal now travels on the tool call step's serialized output, which crosses process and event boundaries reliably. The Inngest agentic loop's continuation predicate now also honors this flag, so bail() stops Inngest-hosted supervisor loops in the same iteration too (previously it only stopped via maxSteps). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- EventedAgent tool-approval, tool-denial, and in-execution resume no longer fail with "Cannot read properties of undefined (reading 'messages')": the evented engine retains running conversation history in persisted agent-loop snapshots, since its storage-merged step results are live data (unlike the default engine's write-only snapshots) ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Removed the unused `executeDurableToolCalls` helper and its `ToolExecutionContext`/`ToolExecutionError` types from `@mastra/core/agent/durable`. This code was never wired into any agent loop; both the durable and regular loops execute tools through their own step implementations. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Evented workflows now persist the running step record and routing state before executing each step, so runs killed mid-step recover via restart() instead of failing with "Execution path is empty" ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed durable agents looping until maxSteps when a provider ends the stream with finishReason 'other' and no output. The empty response now surfaces as a stream error after one attempt, and completion checkers no longer grade errored iterations (ports #22273 to the durable agent loop). ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Fixed evented agent streams hanging forever when a run fails before its first chunk. A workflow-level failure now surfaces as an error on the stream instead of leaving the consumer waiting. ([#24569](https://github.com/mastra-ai/mastra/pull/24569))
+
+- Updated dependencies [[`e1c3193`](https://github.com/mastra-ai/mastra/commit/e1c3193b18ca68e5cca27f7dce9b0381a6e7b95d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0c23429`](https://github.com/mastra-ai/mastra/commit/0c23429515b5c307e8a5759f5be1ce20d09d2347), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`4b5b212`](https://github.com/mastra-ai/mastra/commit/4b5b212f1c5caa40a2d02308806bbe610f194503), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`d3a7dba`](https://github.com/mastra-ai/mastra/commit/d3a7dbaeb0d027e1e47e4e4ddb2ede271a007e17), [`64916c6`](https://github.com/mastra-ai/mastra/commit/64916c66e8d9dec107da2f81e7c1301471bf7bc3), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`6946c4d`](https://github.com/mastra-ai/mastra/commit/6946c4db91071cb43fb36514a42a1e4ce05c37ba), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`5036e61`](https://github.com/mastra-ai/mastra/commit/5036e6179bee4105ad8f1fc57d315f78024565f4), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`d9790fd`](https://github.com/mastra-ai/mastra/commit/d9790fd00d95063de288560f6a0d2bac8f57cc4d), [`4375206`](https://github.com/mastra-ai/mastra/commit/4375206131ff701405a20326be660b2e8c3742f8), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`5e799d9`](https://github.com/mastra-ai/mastra/commit/5e799d9098c5c4d1078bf90647e95db699be11ea), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11), [`0be9960`](https://github.com/mastra-ai/mastra/commit/0be9960226ee1734e7ea0baecb5d13035f980b11)]:
+  - @mastra/core@1.72.0-alpha.0
+
+## 1.10.0
+
+### Minor Changes
+
+- Added a `closeOnSuspend` option to durable agent `stream()` and `resume()`, so callers can end the stream when a tool suspends. ([#24894](https://github.com/mastra-ai/mastra/pull/24894))
+
+  Previously, the stream returned by `DurableAgent.stream()` (and `createInngestAgent().stream()`) stayed open after a tool suspended for approval or user input, and there was no public way to change that. Loops over `fullStream` hung, so integrations like AG-UI could not emit `RUN_FINISHED`.
+
+  Pass `closeOnSuspend: true` to close the stream at the suspension boundary, matching non-durable `Agent.stream()`:
+
+  ```ts
+  const result = await durableAgent.stream('hi', { closeOnSuspend: true });
+  for await (const chunk of result.fullStream) {
+    // loop ends after the tool-call-suspended chunk
+  }
+  ```
+
+  The default is unchanged (`false`): the stream stays open across suspension.
+
+### Patch Changes
+
+- Fixed a type error where Inngest workflows created with init() rejected a first step that shares the workflow's input schema when that schema uses .default() or coercion. The workflow's .then() now compares the step against the parsed input type (defaults applied), while run.start() and cron inputs keep accepting the raw caller input where defaulted fields may be omitted. Fixes https://github.com/mastra-ai/mastra/issues/24409 ([#24732](https://github.com/mastra-ai/mastra/pull/24732))
+
+- Fixed durable step failures in the Inngest dashboard and logs showing only an internal `@mastra/inngest` stack frame. The reported error now keeps the original stack, including the error type and the line that threw, while custom error properties are still preserved. Fixes [#24748](https://github.com/mastra-ai/mastra/issues/24748). ([#24771](https://github.com/mastra-ai/mastra/pull/24771))
+
+- Fixed a crash when resuming a durable agent run immediately after a tool suspends. `InngestAgent.resume()` now waits for the run to finish suspending before resuming it, instead of failing with `Cannot read properties of undefined (reading 'threadId')`. Fixes #24749. ([#24770](https://github.com/mastra-ai/mastra/pull/24770))
+
+- Fixed durable agent streams to publish through configured transports without duplicating Inngest Realtime events. ([#24814](https://github.com/mastra-ai/mastra/pull/24814))
+
+- Fixed failing steps in Inngest workflows running extra times when `retries` is set. Inngest applied `retries` to every failing step on top of the step's own retries, so a step with no retries ran three times with `retries: 2`. Errors marked non-retryable were retried too. Failing steps now only use their own retry settings. `retries` still re-runs a workflow when a request to your app fails, such as during a process restart. ([#24842](https://github.com/mastra-ai/mastra/pull/24842))
+
+- Durable agent turns now use far fewer Inngest steps, including when observability is not configured. A 20-step agent turn previously used 133–158 Inngest steps. ([#24782](https://github.com/mastra-ai/mastra/pull/24782))
+
+- Fixed resumed Inngest agents returning chunks from the original suspended run. ([#24813](https://github.com/mastra-ai/mastra/pull/24813))
+
+- Fixed serve and connect registration for Inngest durable agents and corrected the required @mastra/core version. ([#24812](https://github.com/mastra-ai/mastra/pull/24812))
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`04233fd`](https://github.com/mastra-ai/mastra/commit/04233fdc197e1d9a4b13e9d182447df283ea1850), [`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`e33a488`](https://github.com/mastra-ai/mastra/commit/e33a488ec308b7742e2bf66528873767f802c957), [`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9544a15`](https://github.com/mastra-ai/mastra/commit/9544a158e9bf110b3873b74b2c368616015244ee), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`68fece5`](https://github.com/mastra-ai/mastra/commit/68fece5b724be17ab9bbfaa132468c5afa866b39), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`8adceb5`](https://github.com/mastra-ai/mastra/commit/8adceb53a48bb1b628ba839665e736b062b0d58f), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`7465c16`](https://github.com/mastra-ai/mastra/commit/7465c166894c5a0628634f564c62a26322654f9e), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`4cb2f12`](https://github.com/mastra-ai/mastra/commit/4cb2f12d05b0de71a22127a76a16c1732bb674ec), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0
+
+## 1.10.0-alpha.2
+
+### Minor Changes
+
+- Added a `closeOnSuspend` option to durable agent `stream()` and `resume()`, so callers can end the stream when a tool suspends. ([#24894](https://github.com/mastra-ai/mastra/pull/24894))
+
+  Previously, the stream returned by `DurableAgent.stream()` (and `createInngestAgent().stream()`) stayed open after a tool suspended for approval or user input, and there was no public way to change that. Loops over `fullStream` hung, so integrations like AG-UI could not emit `RUN_FINISHED`.
+
+  Pass `closeOnSuspend: true` to close the stream at the suspension boundary, matching non-durable `Agent.stream()`:
+
+  ```ts
+  const result = await durableAgent.stream('hi', { closeOnSuspend: true });
+  for await (const chunk of result.fullStream) {
+    // loop ends after the tool-call-suspended chunk
+  }
+  ```
+
+  The default is unchanged (`false`): the stream stays open across suspension.
+
+### Patch Changes
+
+- Fixed a type error where Inngest workflows created with init() rejected a first step that shares the workflow's input schema when that schema uses .default() or coercion. The workflow's .then() now compares the step against the parsed input type (defaults applied), while run.start() and cron inputs keep accepting the raw caller input where defaulted fields may be omitted. Fixes https://github.com/mastra-ai/mastra/issues/24409 ([#24732](https://github.com/mastra-ai/mastra/pull/24732))
+
+- Fixed durable agent streams to publish through configured transports without duplicating Inngest Realtime events. ([#24814](https://github.com/mastra-ai/mastra/pull/24814))
+
+- Updated dependencies [[`fc0ee2b`](https://github.com/mastra-ai/mastra/commit/fc0ee2b7d6d33bd5dd80f7338a5a90ec615b1235), [`9f349e3`](https://github.com/mastra-ai/mastra/commit/9f349e34a1bc6e1011c471ad305068d95966ae35), [`2d73b0f`](https://github.com/mastra-ai/mastra/commit/2d73b0f52801be76691bab1204f133de1d631208)]:
+  - @mastra/core@1.70.0-alpha.2
+
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Fixed failing steps in Inngest workflows running extra times when `retries` is set. Inngest applied `retries` to every failing step on top of the step's own retries, so a step with no retries ran three times with `retries: 2`. Errors marked non-retryable were retried too. Failing steps now only use their own retry settings. `retries` still re-runs a workflow when a request to your app fails, such as during a process restart. ([#24842](https://github.com/mastra-ai/mastra/pull/24842))
+
+- Updated dependencies [[`574a55c`](https://github.com/mastra-ai/mastra/commit/574a55cd26cc2171f61906e0f090c817032c9603), [`22ed0d9`](https://github.com/mastra-ai/mastra/commit/22ed0d9f0f399ca29cf66e847795784018e6b79c), [`e7d378f`](https://github.com/mastra-ai/mastra/commit/e7d378f16e68b9ec1268a71960ecf102f86cd437), [`e675e83`](https://github.com/mastra-ai/mastra/commit/e675e83c29d1c69ee334985725c5ce78ac5dcd6f), [`5e4edbe`](https://github.com/mastra-ai/mastra/commit/5e4edbe212a714cc659203964f60e44988c7171f), [`3601e57`](https://github.com/mastra-ai/mastra/commit/3601e57cd8a4d2ca6f68d460c527c472a19f612d), [`ac426a0`](https://github.com/mastra-ai/mastra/commit/ac426a0f015e0d234f1394505c0b0795dc03ebed), [`c35feed`](https://github.com/mastra-ai/mastra/commit/c35feedf99a55ad404657a1cebf0c298f36ab82e), [`9a2db9a`](https://github.com/mastra-ai/mastra/commit/9a2db9ac12c7b5e24a44841d47a7f7ff17d3f504), [`ff6487e`](https://github.com/mastra-ai/mastra/commit/ff6487e163c4e4fcde950352e6598961b037dd1a)]:
+  - @mastra/core@1.70.0-alpha.1
+
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Fixed durable step failures in the Inngest dashboard and logs showing only an internal `@mastra/inngest` stack frame. The reported error now keeps the original stack, including the error type and the line that threw, while custom error properties are still preserved. Fixes [#24748](https://github.com/mastra-ai/mastra/issues/24748). ([#24771](https://github.com/mastra-ai/mastra/pull/24771))
+
+- Fixed a crash when resuming a durable agent run immediately after a tool suspends. `InngestAgent.resume()` now waits for the run to finish suspending before resuming it, instead of failing with `Cannot read properties of undefined (reading 'threadId')`. Fixes #24749. ([#24770](https://github.com/mastra-ai/mastra/pull/24770))
+
+- Durable agent turns now use far fewer Inngest steps, including when observability is not configured. A 20-step agent turn previously used 133–158 Inngest steps. ([#24782](https://github.com/mastra-ai/mastra/pull/24782))
+
+- Fixed resumed Inngest agents returning chunks from the original suspended run. ([#24813](https://github.com/mastra-ai/mastra/pull/24813))
+
+- Fixed serve and connect registration for Inngest durable agents and corrected the required @mastra/core version. ([#24812](https://github.com/mastra-ai/mastra/pull/24812))
+
+- Updated dependencies [[`bfde500`](https://github.com/mastra-ai/mastra/commit/bfde5009d1d9bdbce241132b3df9e638ad805fab), [`f9ffd28`](https://github.com/mastra-ai/mastra/commit/f9ffd2825c3cb21145b361f06c96f3c35c07bce2), [`c593409`](https://github.com/mastra-ai/mastra/commit/c59340998206b7273747d5b5281a09ab26535f81), [`cf98812`](https://github.com/mastra-ai/mastra/commit/cf98812b7e9b511bc45a8641047ad7b91fee6abf), [`68695fd`](https://github.com/mastra-ai/mastra/commit/68695fdc4b92cdf67c7fcf36603fa3c59e1bc10e)]:
+  - @mastra/core@1.70.0-alpha.0
+
+## 1.9.1
+
+### Patch Changes
+
+- Fixed InngestAgent losing durable execution in two cases (#24736). ([#24758](https://github.com/mastra-ai/mastra/pull/24758))
+
+  - **Editor overrides**: `__fork()` now returns an Inngest-backed agent, so agents with published editor overrides keep running on Inngest instead of silently running in-process.
+  - **Resuming suspended runs**: `resumeStream()`, `approveToolCall()`, `declineToolCall()`, `approveToolCallGenerate()` and `declineToolCallGenerate()` now resume the suspended Inngest run. Previously they threw `AGENT_RESUME_NO_SNAPSHOT_FOUND`, which broke `chatRoute` tool approval.
+
+- Inngest workflows and durable agents now accept a `retries` option, so a run can survive a process restart or redeploy. Before this change, every Inngest function was created with `retries: 0` and there was no way to change it. If a call to the application failed (for example, the process restarted mid-run), the whole run failed straight away. ([#24741](https://github.com/mastra-ai/mastra/pull/24741))
+
+  `retries` is passed to Inngest as its function-level retry count. When set, Inngest calls the function again after a failed request, skips the steps that already finished, and continues the run. Errors thrown by your own step code are still retried per step through `retryConfig` or `step.retries`, and are never retried again at the function level. The default is still `0`.
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    retries: 3,
+  });
+
+  const durableAgent = createInngestAgent({ agent, inngest, retries: 3 });
+  ```
+
+- Updated dependencies [[`7fefefd`](https://github.com/mastra-ai/mastra/commit/7fefefdcb91e15f8bf60b5b2148ef27cf1352faf), [`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`e0fd937`](https://github.com/mastra-ai/mastra/commit/e0fd937e84fa6dd7e82b7b55b039a4191e61aa5c), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`f9ea7b2`](https://github.com/mastra-ai/mastra/commit/f9ea7b2d2f1e925b357fd71fe18ab26d3b00feae), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`26ed7ad`](https://github.com/mastra-ai/mastra/commit/26ed7ad111927211231a995346b9b561d4baa8e2), [`ecc642d`](https://github.com/mastra-ai/mastra/commit/ecc642d0a6ca2e938f92129726a4278471924124), [`1ed77dd`](https://github.com/mastra-ai/mastra/commit/1ed77dd7176e2f41ea2bf74f5ab0e4d1899c38e5), [`18863ae`](https://github.com/mastra-ai/mastra/commit/18863ae95c87218b8163e28d9826883cf4edf02b), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`725d46b`](https://github.com/mastra-ai/mastra/commit/725d46b4b7eaf5a3f3ef2f3fbbe8ee8909cb2c9b), [`6e21835`](https://github.com/mastra-ai/mastra/commit/6e2183502250ee5325fc834d80f4d0584916f54e), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe), [`70cd0d8`](https://github.com/mastra-ai/mastra/commit/70cd0d80373346b4d04ebf913851ade37aa807ed), [`3802d6f`](https://github.com/mastra-ai/mastra/commit/3802d6f7dbf8c27b1f84b48c6c7c2efa6c4f0d03), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c), [`fc3ee16`](https://github.com/mastra-ai/mastra/commit/fc3ee1604c0ec0a98e5051585e3d201b5699abbe)]:
+  - @mastra/core@1.69.0
+
+## 1.9.1-alpha.0
+
+### Patch Changes
+
+- Fixed InngestAgent losing durable execution in two cases (#24736). ([#24758](https://github.com/mastra-ai/mastra/pull/24758))
+
+  - **Editor overrides**: `__fork()` now returns an Inngest-backed agent, so agents with published editor overrides keep running on Inngest instead of silently running in-process.
+  - **Resuming suspended runs**: `resumeStream()`, `approveToolCall()`, `declineToolCall()`, `approveToolCallGenerate()` and `declineToolCallGenerate()` now resume the suspended Inngest run. Previously they threw `AGENT_RESUME_NO_SNAPSHOT_FOUND`, which broke `chatRoute` tool approval.
+
+- Inngest workflows and durable agents now accept a `retries` option, so a run can survive a process restart or redeploy. Before this change, every Inngest function was created with `retries: 0` and there was no way to change it. If a call to the application failed (for example, the process restarted mid-run), the whole run failed straight away. ([#24741](https://github.com/mastra-ai/mastra/pull/24741))
+
+  `retries` is passed to Inngest as its function-level retry count. When set, Inngest calls the function again after a failed request, skips the steps that already finished, and continues the run. Errors thrown by your own step code are still retried per step through `retryConfig` or `step.retries`, and are never retried again at the function level. The default is still `0`.
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    retries: 3,
+  });
+
+  const durableAgent = createInngestAgent({ agent, inngest, retries: 3 });
+  ```
+
+- Updated dependencies [[`251eb56`](https://github.com/mastra-ai/mastra/commit/251eb5674e8e32855af6925d7fd1cd337aa5ea7d), [`f7180bd`](https://github.com/mastra-ai/mastra/commit/f7180bdd52b4ffaa9f053b8495c6c8b8c530de2a), [`c61d52c`](https://github.com/mastra-ai/mastra/commit/c61d52c338dbd77f3e8f0e7487f44b1f0a0d1350), [`32a9682`](https://github.com/mastra-ai/mastra/commit/32a96824a9ff31c3596fdb1a2789b946eba152cc), [`9ce6bc9`](https://github.com/mastra-ai/mastra/commit/9ce6bc9107b5fe81dffe8a155dded9b0471013b5), [`2a83258`](https://github.com/mastra-ai/mastra/commit/2a832580e3cf3efcdb4be3355eaa9a02929b3a2c)]:
+  - @mastra/core@1.69.0-alpha.3
+
 ## 1.9.0
 
 ### Minor Changes

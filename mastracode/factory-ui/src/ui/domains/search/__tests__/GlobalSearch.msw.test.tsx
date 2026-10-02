@@ -11,6 +11,7 @@ import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import { listWorkItems } from '../../factory/services/workItems';
+import type { WorkItem } from '../../factory/services/workItems';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -52,6 +53,7 @@ interface StubSearchOptions {
   secondRepositoryGate?: Promise<void>;
   onSecondRepositoryAbort?: () => void;
   running?: boolean;
+  workItems?: WorkItem[];
 }
 
 function resourceIdFromRequestBody(body: unknown): string {
@@ -101,7 +103,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       const factoryProjectId = String(params.factoryProjectId);
       return HttpResponse.json({
-        workItems: factoryProjectId === ACTIVE_FACTORY_ID ? workItems.map(toWireWorkItem) : [],
+        workItems: factoryProjectId === ACTIVE_FACTORY_ID ? (options.workItems ?? workItems).map(toWireWorkItem) : [],
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
@@ -288,8 +290,8 @@ async function warmFirstRepositoryAndWorkItems(client: ReturnType<typeof createQ
 }
 
 async function openFromSidebar() {
-  const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ }, { timeout: 5_000 });
-  const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+  const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+  const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
   await userEvent.click(trigger);
   return screen.findByRole('dialog', { name: 'Global search' }, { timeout: 5_000 });
 }
@@ -317,8 +319,9 @@ describe('Global search', () => {
     renderSearchRoute();
 
     await screen.findByRole('heading', { name: 'Preferences' });
-    const navigation = await screen.findByRole('navigation', { name: /Settings sections|Main/ });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    await screen.findByRole('navigation', { name: 'Settings sections' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     await screen.findByRole('dialog', { name: 'Global search' });
 
@@ -371,7 +374,10 @@ describe('Global search', () => {
       'Connections',
       'Repositories',
       'Work Intake',
-      'Models',
+      'Factory models',
+      'Your models',
+      'Factory memory',
+      'Your memory',
       'Behavior',
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
@@ -454,6 +460,40 @@ describe('Global search', () => {
     expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
     expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
     expect(requests.workItemRequests).toBe(1);
+  });
+
+  it('keeps search open while choosing a repository for an unattributed work item', async () => {
+    const item = {
+      ...workItems[3]!,
+      board: 'custom',
+      metadata: { number: 777 },
+    };
+    const requests = stubSearchApi({ workItems: [item] });
+    const patches: unknown[] = [];
+    const starts: unknown[] = [];
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({ workItem: toWireWorkItem(item) });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const search = await openFromSidebar();
+    await user.click(await within(search).findByText(item.title));
+
+    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    expect(search).toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
+    expect(patches).toHaveLength(0);
+    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
+    await waitFor(() => expect(patches).toEqual([{ metadata: { number: 777, repository: 'mastra-ai/docs' } }]));
+    await waitFor(() => expect(starts).toHaveLength(1));
+    await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
   it('keeps successful results when one repository fails and retries only the failed source', async () => {
@@ -580,6 +620,7 @@ describe('Global search', () => {
     expect(requests.created).toEqual([
       expect.objectContaining({
         title: 'Search GitLab MR',
+        board: 'review',
         stages: ['intake'],
         externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
       }),
@@ -693,7 +734,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', stages: ['intake'] }),
+      expect.objectContaining({ title: 'Harden the review board drop target', board: 'review', stages: ['intake'] }),
     ]);
     expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
@@ -830,8 +871,8 @@ describe('Global search', () => {
     // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
     await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 
-    const navigation = screen.getByRole('navigation', { name: 'Main' });
-    const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
+    const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
 

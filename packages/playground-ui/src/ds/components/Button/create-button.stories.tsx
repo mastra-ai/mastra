@@ -56,7 +56,7 @@ export const ShortcutDisabled: Story = {
 export const WithInput: Story = {
   render: args => (
     <div className="flex items-center gap-4">
-      <input className={`${raisedSurfaceStyle} text-foreground rounded-md px-2 py-1`} placeholder="Type c here" />
+      <input className={`${raisedSurfaceStyle} rounded-md px-2 py-1 text-foreground`} placeholder="Type c here" />
       <CreateButton {...args} />
     </div>
   ),

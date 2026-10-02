@@ -4,6 +4,7 @@ import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
@@ -36,7 +37,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell className="text-body-sm text-muted-foreground flex min-w-0 items-center gap-2">
+    <DataListCell className="flex min-w-0 items-center gap-2 text-body-sm text-muted-foreground">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -98,8 +99,10 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
     <DataListCell className="flex min-w-0 items-center gap-2">
       {display ? (
         <>
-          <display.Icon className="text-placeholder size-3.5 shrink-0" aria-hidden />
-          <span className="text-body-sm min-w-0 truncate">{display.label}</span>
+          <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
+          <Txt as="span" variant="body-sm" className="min-w-0 truncate">
+            {display.label}
+          </Txt>
         </>
       ) : (
         '-'
@@ -115,10 +118,10 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
 const UNSET_STATUS_CONFIG: { label: string; variant: BadgeVariant } = { label: '-', variant: 'neutral' };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
-  completed: { label: 'OK', variant: 'green' },
-  ok: { label: 'OK', variant: 'green' },
-  success: { label: 'OK', variant: 'green' },
-  error: { label: 'ERR', variant: 'red' },
+  completed: { label: 'OK', variant: 'success' },
+  ok: { label: 'OK', variant: 'success' },
+  success: { label: 'OK', variant: 'success' },
+  error: { label: 'ERR', variant: 'destructive' },
   running: { label: 'RUN', variant: 'neutral' },
   unset: UNSET_STATUS_CONFIG,
 };

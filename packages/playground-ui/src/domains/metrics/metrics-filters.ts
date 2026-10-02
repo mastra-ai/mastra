@@ -21,7 +21,6 @@ export const METRICS_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
  *  equivalent dimensions into metrics). */
 export const METRICS_PROPERTY_FILTER_PARAM_BY_FIELD = {
   tags: 'filterTags',
-  entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
@@ -110,7 +109,7 @@ export function createMetricsPropertyFilterFields({
   const fields: PropertyFilterField[] = [
     {
       id: 'rootEntityType',
-      label: 'Primitive Type',
+      label: 'Primitive type',
       kind: 'pick-multi',
       searchable: false,
       options: METRICS_ROOT_ENTITY_TYPE_OPTIONS.map(o => ({ label: o.label, value: o.entityType })),
@@ -119,14 +118,13 @@ export function createMetricsPropertyFilterFields({
     },
     {
       id: 'entityName',
-      label: 'Primitive Name',
+      label: 'Primitive name',
       kind: 'pick-multi',
       options: availableEntityNames.map(name => ({ label: name, value: name })),
       placeholder: 'Choose entity names',
       emptyText: 'No entity names found.',
       isLoading: loading?.entityNames,
     },
-    { id: 'entityId', label: 'Primitive ID', kind: 'text' },
     {
       id: 'tags',
       label: 'Tags',
@@ -274,7 +272,6 @@ export function applyMetricsPropertyFilterTokens(params: URLSearchParams, tokens
 export type MetricsDimensionalFilter = {
   rootEntityType?: EntityType;
   entityName?: string;
-  entityId?: string;
   tags?: string[];
   serviceName?: string;
   environment?: string;

@@ -55,13 +55,15 @@ jobs:
           node --input-type=module -e '
             import fs from "node:fs";
             import { qualityAssuranceInputs } from "./.github/scripts/ci-routing.cjs";
-            import { discoverPackages } from "./.github/scripts/check-package-readmes.mjs";
+            import { discoverPackages, findPackagesMissingDocs } from "./.github/scripts/check-package-readmes.mjs";
             const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
             const packageReadmePaths = discoverPackages(process.cwd()).map(pkg => `${pkg.relativeDirectory}/README.md`);
-            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons } = qualityAssuranceInputs(changedFiles, packageReadmePaths);
+            const packagesMissingDocs = findPackagesMissingDocs(process.cwd());
+            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons, missingPackageDocs } = qualityAssuranceInputs(changedFiles, packageReadmePaths, packagesMissingDocs);
             const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
+            const formatMissingDocs = packages => packages.length === 0 ? "none" : packages.map(pkg => `\`${pkg.relativeDirectory}\` (missing ${pkg.missing.join(", ")})`).join(", ");
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\nhas_readme_inputs=${hasReadmeInputs}\n`);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}; packages missing docs: ${formatMissingDocs(missingPackageDocs)}\n`);
           '
 
   changeset-check:
@@ -89,8 +91,17 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
+      # The automated Changesets release PR only rewrites package.json versions,
+      # changelogs and .changeset/pre.json: the changesets it consumes are already
+      # in the merge base, so `--since origin/main` never sees a new changeset and
+      # the status check fails on every regeneration of that PR. Skip it — its
+      # changesets were validated on the PRs that introduced them. The branch name
+      # alone is not a trusted signal, since a fork can pick any name, so the skip
+      # also requires the head to live in this repository.
+      #
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
         run: pnpm changeset-cli status --since origin/main
 
   lint:

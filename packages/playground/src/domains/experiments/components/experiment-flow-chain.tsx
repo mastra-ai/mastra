@@ -1,16 +1,17 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDataset } from '@mastra/playground-ui/domains/datasets';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
 import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentFlowChainProps {
   experiment: DatasetExperiment;
@@ -43,7 +44,7 @@ function Stage({
           <TooltipTrigger
             render={
               <span
-                className="text-muted-foreground flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5"
+                className="flex size-5 shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-3.5"
                 role="img"
                 aria-label={typeLabel}
               />
@@ -53,11 +54,13 @@ function Stage({
           </TooltipTrigger>
           <TooltipContent>{typeLabel}</TooltipContent>
         </Tooltip>
-        {!isLast && <span aria-hidden className="bg-border mt-1 w-px flex-1" />}
+        {!isLast && <span aria-hidden className="mt-1 w-px flex-1 bg-border" />}
       </div>
       <div className="grid min-w-0 gap-0.5">
-        <div className="text-caption text-foreground flex min-h-5 items-center">{subject}</div>
-        <p className="text-meta text-placeholder">{description}</p>
+        <div className="flex min-h-5 items-center text-caption text-foreground">{subject}</div>
+        <Txt variant="meta" tone="faint">
+          {description}
+        </Txt>
       </div>
     </li>
   );
@@ -111,7 +114,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
                 {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
               </span>
               {experiment.datasetVersion != null && (
-                <span className="text-muted-foreground shrink-0">(v{experiment.datasetVersion})</span>
+                <span className="shrink-0 text-muted-foreground">(v{experiment.datasetVersion})</span>
               )}
             </LinkComponent>
           ) : (
@@ -130,7 +133,7 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
               <span className="truncate">{targetName}</span>
             </LinkComponent>
           ) : (
-            <span className="text-muted-foreground truncate">{targetName}</span>
+            <span className="truncate text-muted-foreground">{targetName}</span>
           )
         }
       />

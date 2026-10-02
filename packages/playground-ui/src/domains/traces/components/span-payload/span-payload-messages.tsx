@@ -3,35 +3,32 @@ import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
-import { Reasoning } from '@/domains/chat/messages/reasoning';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Message } from '@/ds/components/Message';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function MessageText({ text, plain }: { text: string; plain: boolean }) {
-  return plain ? (
-    <div className="mastra-markdown">
-      <p>{text.trim()}</p>
-    </div>
-  ) : (
-    <SpanPayloadMarkdown>{text}</SpanPayloadMarkdown>
-  );
+/** Strips the indentation shared by every line so indented prompts are not rendered as code blocks. */
+function dedent(text: string): string {
+  const lines = text.split('\n');
+  const indent = Math.min(...lines.filter(line => line.trim()).map(line => line.length - line.trimStart().length));
+  return (Number.isFinite(indent) ? lines.map(line => line.slice(indent)).join('\n') : text).trim();
 }
 
-function MessagePart({ part, plain = false }: { part: unknown; plain?: boolean }) {
-  if (typeof part === 'string') return <MessageText text={part} plain={plain} />;
+function MessageText({ text }: { text: string }) {
+  return <SpanPayloadMarkdown>{dedent(text)}</SpanPayloadMarkdown>;
+}
+
+function MessagePart({ part }: { part: unknown }) {
+  if (typeof part === 'string') return <MessageText text={part} />;
   if (!isRecord(part)) return <SpanPayloadJson value={part} />;
 
   switch (part.type) {
     case 'text':
-      return typeof part.text === 'string' ? (
-        <MessageText text={part.text} plain={plain} />
-      ) : (
-        <SpanPayloadJson value={part} />
-      );
+      return typeof part.text === 'string' ? <MessageText text={part.text} /> : <SpanPayloadJson value={part} />;
     case 'reasoning':
-      return typeof part.text === 'string' ? <Reasoning text={part.text} /> : <SpanPayloadJson value={part} />;
+      return typeof part.text === 'string' ? <ReasoningActivity text={part.text} /> : <SpanPayloadJson value={part} />;
     case 'tool-call':
     case 'tool-invocation':
     case 'dynamic-tool':
@@ -57,11 +54,11 @@ function messageParts(message: Record<string, unknown>): unknown[] {
   return [];
 }
 
-function MessageBody({ parts, plain }: { parts: unknown[]; plain: boolean }) {
+function MessageBody({ parts }: { parts: unknown[] }) {
   return (
     <div className="flex flex-col gap-3">
       {parts.map((part, index) => (
-        <MessagePart key={index} part={part} plain={plain} />
+        <MessagePart key={index} part={part} />
       ))}
     </div>
   );
@@ -75,7 +72,7 @@ function SpanMessage({ message }: { message: unknown }) {
       <Message from="user" data-role="user">
         <div className="flex flex-col gap-2">
           <SpanPayloadLabel>user</SpanPayloadLabel>
-          <SpanPayloadMarkdown>{message}</SpanPayloadMarkdown>
+          <MessageText text={message} />
         </div>
       </Message>
     );
@@ -84,8 +81,7 @@ function SpanMessage({ message }: { message: unknown }) {
 
   const role = typeof message.role === 'string' ? message.role : 'unknown';
   const parts = messageParts(message);
-  const body =
-    parts.length > 0 ? <MessageBody parts={parts} plain={role === 'system'} /> : <SpanPayloadJson value={message} />;
+  const body = parts.length > 0 ? <MessageBody parts={parts} /> : <SpanPayloadJson value={message} />;
 
   if (role === 'user' || role === 'assistant') {
     return (

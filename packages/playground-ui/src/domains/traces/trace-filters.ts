@@ -34,22 +34,40 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
+  isTraceFilterGroup,
   isTraceFilterOperatorId,
   TRACE_QUERY_NUMERIC_FIELD_IDS,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from './trace-query-filters';
-import type { TraceFilterOperatorId, TraceFilterToken, TraceQueryRelatedScope } from './trace-query-filters';
-import type { TraceDatePreset } from './types';
 import type {
+  TraceFilterGroup,
+  TraceFilterNode,
+  TraceFilterOperatorId,
+  TraceFilterToken,
+  TraceQueryRelatedScope,
+} from './trace-query-filters';
+import type { TraceDatePreset } from './types';
+import { isFilterBarGroup } from '@/ds/components/FilterBar/types';
+import type {
+  FilterBarExpression,
   FilterBarField,
+  FilterBarGroup,
   FilterBarItem,
   FilterBarOperator,
   FilterBarSuggestionsResolver,
 } from '@/ds/components/FilterBar/types';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
-export type { TraceFilterOperatorId, TraceFilterToken, TraceQueryRelatedScope } from './trace-query-filters';
-import { stringToThemedColor, themedHueColor } from '@/lib/colors';
+export type {
+  TraceFilterGroup,
+  TraceFilterLogic,
+  TraceFilterNode,
+  TraceFilterOperatorId,
+  TraceFilterToken,
+  TraceQueryRelatedScope,
+} from './trace-query-filters';
+export { isTraceFilterGroup } from './trace-query-filters';
+import { hueAccentColor, hueForName } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -193,6 +211,10 @@ export function saveTraceFiltersToStorage(
   const serialized = getPreservedTraceFilterParams(params);
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
   if (preset && preset !== 'custom') serialized.set(TRACE_DATE_PRESET_PARAM, preset);
+  // An empty group is editor state (popover still open), not a filter worth restoring.
+  const groups = getTraceFilterGroups(serialized).filter(group => group.nodes.length > 0);
+  serialized.delete(TRACE_FILTER_GROUP_PARAM);
+  for (const group of groups) serialized.append(TRACE_FILTER_GROUP_PARAM, serializeTraceFilterGroup(group));
 
   if (!serialized.toString()) {
     clearSavedTraceFilters(storageKey);
@@ -241,6 +263,7 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   if (params.has(TRACE_ROOT_ENTITY_TYPE_PARAM)) return true;
   if (params.has(TRACE_STATUS_PARAM)) return true;
   if (params.has(TRACE_LIST_MODE_PARAM)) return true;
+  if (params.has(TRACE_FILTER_GROUP_PARAM)) return true;
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
   }
@@ -280,10 +303,12 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 /** Synthetic fields live in a single dedicated URL param, so they cannot carry an operator. */
 const TRACE_SYNTHETIC_OPERATORS: TraceFilterOperatorId[] = ['is', 'in'];
+// The legacy list endpoint only matches by equality.
+const TRACE_LEGACY_OPERATORS: TraceFilterOperatorId[] = ['is'];
 
 const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
-  rootEntityType: 'Primitive Type',
-  entityName: 'Primitive Name',
+  rootEntityType: 'Primitive type',
+  entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
   tags: 'Tags',
@@ -311,45 +336,42 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'feedback.comment': 'Feedback comment',
 };
 
-/** Icon and hue for each known trace filter key. Hues are spread by hand — hashing
- *  the ids clusters them (e.g. `environment`/`entityName`/`timeRange` all land on green). */
-const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; hue: number }> = {
-  timeRange: { icon: ClockIcon, hue: 30 },
-  rootEntityType: { icon: BoxIcon, hue: 265 },
-  entityName: { icon: TagIcon, hue: 290 },
-  entityId: { icon: FingerprintIcon, hue: 315 },
-  status: { icon: ActivityIcon, hue: 0 },
-  tags: { icon: TagsIcon, hue: 340 },
-  serviceName: { icon: ServerIcon, hue: 175 },
-  environment: { icon: GlobeIcon, hue: 145 },
-  traceId: { icon: WaypointsIcon, hue: 215 },
-  runId: { icon: PlayIcon, hue: 195 },
-  threadId: { icon: MessageSquareIcon, hue: 235 },
-  sessionId: { icon: LayersIcon, hue: 100 },
-  requestId: { icon: RadioIcon, hue: 55 },
-  resourceId: { icon: HashIcon, hue: 80 },
-  userId: { icon: UserIcon, hue: 20 },
-  organizationId: { icon: BuildingIcon, hue: 120 },
-  experimentId: { icon: FlaskConicalIcon, hue: 160 },
-  'spans.name': { icon: GitBranchIcon, hue: 250 },
-  'spans.spanType': { icon: ShapesIcon, hue: 275 },
-  'spans.model': { icon: CpuIcon, hue: 300 },
-  'spans.provider': { icon: CloudIcon, hue: 205 },
-  'spans.durationMs': { icon: TimerIcon, hue: 40 },
-  'spans.error': { icon: TriangleAlertIcon, hue: 10 },
-  'scores.scorerId': { icon: GaugeIcon, hue: 130 },
-  'scores.score': { icon: PercentIcon, hue: 110 },
-  'feedback.feedbackType': { icon: ThumbsUpIcon, hue: 185 },
-  'feedback.value': { icon: StarIcon, hue: 45 },
-  'feedback.comment': { icon: MessageCircleIcon, hue: 225 },
+const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: string }> = {
+  timeRange: { icon: ClockIcon, color: hueAccentColor('amber') },
+  rootEntityType: { icon: BoxIcon, color: hueAccentColor('purple') },
+  entityName: { icon: TagIcon, color: hueAccentColor('cyan') },
+  entityId: { icon: FingerprintIcon, color: hueAccentColor('pink') },
+  status: { icon: ActivityIcon, color: hueAccentColor('orange') },
+  tags: { icon: TagsIcon, color: hueAccentColor('pink') },
+  serviceName: { icon: ServerIcon, color: hueAccentColor('cyan') },
+  environment: { icon: GlobeIcon, color: hueAccentColor('green') },
+  traceId: { icon: WaypointsIcon, color: hueAccentColor('blue') },
+  runId: { icon: PlayIcon, color: hueAccentColor('purple') },
+  threadId: { icon: MessageSquareIcon, color: hueAccentColor('blue') },
+  sessionId: { icon: LayersIcon, color: hueAccentColor('orange') },
+  requestId: { icon: RadioIcon, color: hueAccentColor('amber') },
+  resourceId: { icon: HashIcon, color: hueAccentColor('green') },
+  userId: { icon: UserIcon, color: hueAccentColor('orange') },
+  organizationId: { icon: BuildingIcon, color: hueAccentColor('cyan') },
+  experimentId: { icon: FlaskConicalIcon, color: hueAccentColor('pink') },
+  'spans.name': { icon: GitBranchIcon, color: hueAccentColor('blue') },
+  'spans.spanType': { icon: ShapesIcon, color: hueAccentColor('purple') },
+  'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
+  'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
+  'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
+  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-foreground)' },
+  'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
+  'scores.score': { icon: PercentIcon, color: hueAccentColor('amber') },
+  'feedback.feedbackType': { icon: ThumbsUpIcon, color: hueAccentColor('purple') },
+  'feedback.value': { icon: StarIcon, color: hueAccentColor('amber') },
+  'feedback.comment': { icon: MessageCircleIcon, color: hueAccentColor('blue') },
 };
 
 export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
 
 /** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
 export const traceFilterFieldColor = (fieldId: string) => {
-  const hue = TRACE_FILTER_BAR_FIELD_META[fieldId]?.hue;
-  return hue === undefined ? stringToThemedColor(fieldId) : themedHueColor(hue);
+  return TRACE_FILTER_BAR_FIELD_META[fieldId]?.color ?? hueAccentColor(hueForName(fieldId));
 };
 
 const traceFieldBase = (id: string) => ({
@@ -402,6 +424,7 @@ export function createTraceFilterBarFields({
   hiddenFieldIds = [],
   metadataFields = [],
   valueSuggestions,
+  withQueryTrace = true,
 }: {
   availableRootEntityNames: string[];
   availableEnvironments: string[];
@@ -410,6 +433,11 @@ export function createTraceFilterBarFields({
   metadataFields?: readonly TraceMetadataFilterField[];
   /** Builds a lazy value resolver for a related-scope field (`spans.model`, …). Absent → free text. */
   valueSuggestions?: (scope: TraceQueryRelatedScope, path: string) => FilterBarSuggestionsResolver;
+  /**
+   * When false, only fields the legacy list endpoint (`buildTraceListFilters`) can express are offered, each with
+   * the `is` operator only: no related-scope (`spans.*`, `scores.*`, `feedback.*`) or metadata fields.
+   */
+  withQueryTrace?: boolean;
 }): FilterBarField[] {
   const pick = (
     id: string,
@@ -478,12 +506,19 @@ export function createTraceFilterBarFields({
       id: path,
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
       icon: BracesIcon,
-      color: stringToThemedColor(path),
+      color: hueAccentColor(hueForName(path)),
       operators: TRACE_STRING_OPERATORS,
       suggestions,
     }));
 
   const hidden = new Set(hiddenFieldIds);
+  if (!withQueryTrace) {
+    return [...pickFields.sort(byLabel), ...textFields.sort(byLabel)].map(field => ({
+      ...field,
+      operators: TRACE_LEGACY_OPERATORS,
+      ...(hidden.has(field.id) ? { hidden: true } : {}),
+    }));
+  }
   return [
     ...pickFields.sort(byLabel),
     ...textFields.sort(byLabel),
@@ -508,17 +543,65 @@ export function traceTokensToFilterBarItems(tokens: TraceFilterToken[]): FilterB
 }
 
 export function filterBarItemsToTraceTokens(items: FilterBarItem[]): TraceFilterToken[] {
-  return items.map(item => {
-    const token: TraceFilterToken = {
-      fieldId: item.fieldId,
-      value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
-    };
-    // Only carry a non-default operator so tokens stay minimal (and URLs stay short).
-    if (isTraceFilterOperatorId(item.operatorId) && item.operatorId !== traceFilterTokenOperator(token)) {
-      token.operatorId = item.operatorId;
-    }
-    return token;
-  });
+  return items.map(filterBarItemToTraceToken);
+}
+
+function filterBarItemToTraceToken(item: FilterBarItem): TraceFilterToken {
+  const token: TraceFilterToken = {
+    fieldId: item.fieldId,
+    value: Array.isArray(item.value) ? item.value.map(String) : String(item.value),
+  };
+  // Only carry a non-default operator so tokens stay minimal (and URLs stay short).
+  if (isTraceFilterOperatorId(item.operatorId) && item.operatorId !== traceFilterTokenOperator(token)) {
+    token.operatorId = item.operatorId;
+  }
+  return token;
+}
+
+/** Expression-mode value for the FilterBar: root tokens as items, then one
+ *  group node per advanced filter. Ids inside groups are carried as-is. */
+export function traceFiltersToFilterBarExpression(
+  tokens: TraceFilterToken[],
+  groups: TraceFilterGroup[],
+): FilterBarExpression {
+  return { logic: 'and', nodes: [...traceTokensToFilterBarItems(tokens), ...groups.map(traceGroupToFilterBarGroup)] };
+}
+
+function traceGroupToFilterBarGroup(group: TraceFilterGroup): FilterBarGroup {
+  return {
+    id: group.id,
+    kind: 'group',
+    logic: group.logic,
+    nodes: group.nodes.map(node =>
+      isTraceFilterGroup(node)
+        ? traceGroupToFilterBarGroup(node)
+        : {
+            id: node.id ?? node.fieldId,
+            fieldId: node.fieldId,
+            operatorId: traceFilterTokenOperator(node),
+            value: node.value === 'Any' ? '' : node.value,
+          },
+    ),
+  };
+}
+
+export function filterBarExpressionToTraceFilters(expression: FilterBarExpression): {
+  tokens: TraceFilterToken[];
+  groups: TraceFilterGroup[];
+} {
+  const items = expression.nodes.filter((node): node is FilterBarItem => !isFilterBarGroup(node));
+  const groups = expression.nodes.filter(isFilterBarGroup).map(filterBarGroupToTraceGroup);
+  return { tokens: filterBarItemsToTraceTokens(items), groups };
+}
+
+function filterBarGroupToTraceGroup(group: FilterBarGroup): TraceFilterGroup {
+  const nodes = group.nodes.map(
+    (node): TraceFilterNode =>
+      isFilterBarGroup(node) ? filterBarGroupToTraceGroup(node) : { id: node.id, ...filterBarItemToTraceToken(node) },
+  );
+  // Empty groups are kept: "Advanced filter…" emits one and opens its editor, and the
+  // FilterBar prunes it itself when the popover closes without any condition.
+  return { id: group.id, logic: group.logic, nodes };
 }
 
 /**
@@ -605,6 +688,10 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
     preserve(param);
   }
 
+  for (const group of getTraceFilterGroups(searchParams)) {
+    next.append(TRACE_FILTER_GROUP_PARAM, serializeTraceFilterGroup(group));
+  }
+
   return next;
 }
 
@@ -614,9 +701,14 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
  * creation order of filters. Handles the generic `filterX` params plus the
  * dedicated synthetic params (rootEntityType, status).
  */
-export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: TraceFilterToken[]) {
+export function applyTracePropertyFilterTokens(
+  params: URLSearchParams,
+  tokens: TraceFilterToken[],
+  groups: TraceFilterGroup[] = [],
+) {
   params.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
   params.delete(TRACE_STATUS_PARAM);
+  params.delete(TRACE_FILTER_GROUP_PARAM);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];
     params.delete(param);
@@ -664,6 +756,57 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
     const implicit = token.fieldId === 'tags' ? 'in' : 'is';
     if (operatorId !== implicit) params.set(traceFilterOperatorParam(param), operatorId);
   }
+
+  for (const group of groups) {
+    params.append(TRACE_FILTER_GROUP_PARAM, serializeTraceFilterGroup(group));
+  }
+}
+
+/** Root-level advanced filter groups live in a repeatable `filterGroup` param,
+ *  one compact JSON subtree each. Node ids are part of the payload so the
+ *  FilterBar keeps chip identity across URL round-trips. */
+export const TRACE_FILTER_GROUP_PARAM = 'filterGroup';
+
+export const serializeTraceFilterGroup = (group: TraceFilterGroup): string => JSON.stringify(group);
+
+export function getTraceFilterGroups(searchParams: URLSearchParams): TraceFilterGroup[] {
+  return searchParams
+    .getAll(TRACE_FILTER_GROUP_PARAM)
+    .map(parseTraceFilterGroupParam)
+    .filter((group): group is TraceFilterGroup => group !== undefined);
+}
+
+export function parseTraceFilterGroupParam(raw: string): TraceFilterGroup | undefined {
+  try {
+    return parseTraceFilterGroup(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(entry => typeof entry === 'string');
+
+function parseTraceFilterGroup(input: unknown): TraceFilterGroup | undefined {
+  if (!isRecord(input) || typeof input.id !== 'string') return undefined;
+  if (input.logic !== 'and' && input.logic !== 'or') return undefined;
+  if (!Array.isArray(input.nodes)) return undefined;
+  const nodes = input.nodes.map(parseTraceFilterNode).filter((node): node is TraceFilterNode => node !== undefined);
+  return { id: input.id, logic: input.logic, nodes };
+}
+
+function parseTraceFilterNode(input: unknown): TraceFilterNode | undefined {
+  if (!isRecord(input)) return undefined;
+  if ('nodes' in input) return parseTraceFilterGroup(input);
+  if (typeof input.id !== 'string' || typeof input.fieldId !== 'string') return undefined;
+  if (typeof input.value !== 'string' && !isStringArray(input.value)) return undefined;
+  const token: TraceFilterToken = { id: input.id, fieldId: input.fieldId, value: input.value };
+  if (typeof input.operatorId === 'string' && isTraceFilterOperatorId(input.operatorId)) {
+    token.operatorId = input.operatorId;
+  }
+  return token;
 }
 
 export function buildTraceListFilters({

@@ -1,10 +1,11 @@
 import type { IMastraLogger } from '../../../logger';
+import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
-import { normalizeModelOutput } from '../../durable/workflows/steps/normalize-model-output';
 import type { MessageList, MessageListInput } from '../../message-list';
+import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
-type ToolResult = ToolCall & { output: unknown };
+type ToolResult = ToolCall & { output: unknown; skip?: true };
 
 function getMessages(messages: MessageListInput): unknown[] {
   return Array.isArray(messages) ? messages : [messages];
@@ -36,33 +37,18 @@ function getToolCall(part: unknown): ToolCall | undefined {
   }
 }
 
-/**
- * Unwrap the AI SDK v5 `{ type, value }` tool-output envelope.
- *
- * Only unwraps that exact 2-key wrapper shape; a client result that merely
- * happens to contain a `value` key passes through untouched. Error variants
- * come back as `{ skip: true }` — both `onOutput` and `toModelOutput` are
- * success-only.
- */
-function unwrapToolOutput(value: unknown): { skip: true } | { skip: false; output: unknown } {
-  const isV5Wrapper =
-    typeof value === 'object' &&
-    value !== null &&
-    'type' in value &&
-    'value' in value &&
-    Object.keys(value).length === 2;
-  if (isV5Wrapper && (value.type === 'error-text' || value.type === 'error-json')) return { skip: true };
-  return { skip: false, output: isV5Wrapper ? value.value : value };
-}
-
 function getToolResult(part: unknown): ToolResult | undefined {
   if (!part || typeof part !== 'object') return;
   const record = part as Record<string, unknown>;
   if (record.type === 'tool-result' && typeof record.toolCallId === 'string' && typeof record.toolName === 'string') {
     const value = 'result' in record ? record.result : record.output;
-    const unwrapped = unwrapToolOutput(value);
-    if (unwrapped.skip) return;
-    return { toolCallId: record.toolCallId, toolName: record.toolName, output: unwrapped.output };
+    const normalized = normalizeToolOutput(value);
+    return {
+      toolCallId: record.toolCallId,
+      toolName: record.toolName,
+      output: normalized.output,
+      ...(normalized.isError ? { skip: true as const } : {}),
+    };
   }
 
   if (record.type !== 'tool-invocation' || !record.toolInvocation || typeof record.toolInvocation !== 'object') return;
@@ -72,7 +58,13 @@ function getToolResult(part: unknown): ToolResult | undefined {
     typeof invocation.toolCallId === 'string' &&
     typeof invocation.toolName === 'string'
   ) {
-    return { toolCallId: invocation.toolCallId, toolName: invocation.toolName, output: invocation.result };
+    const normalized = normalizeToolOutput(invocation.result);
+    return {
+      toolCallId: invocation.toolCallId,
+      toolName: invocation.toolName,
+      output: normalized.output,
+      ...(normalized.isError ? { skip: true as const } : {}),
+    };
   }
 }
 
@@ -116,7 +108,7 @@ export async function fireClientToolOutputHooks({
   for (let i = lastAssistantIdx + 1; i < inputMessages.length; i++) {
     for (const part of getParts(inputMessages[i])) {
       const result = getToolResult(part);
-      if (!result || issuedCalls.get(result.toolCallId) !== result.toolName) continue;
+      if (!result || result.skip || issuedCalls.get(result.toolCallId) !== result.toolName) continue;
 
       const tool = tools[result.toolName];
       if (!tool || tool.execute || typeof tool.onOutput !== 'function') continue;
@@ -193,15 +185,15 @@ export async function applyClientToolModelOutput({
       // mapped by the provider round trip, not by us.
       if (!tool || !isClientMappedTool(tool)) continue;
 
-      // Live ingestion pre-unwraps the v5 `{ type, value }` envelope, so an
-      // error variant sent by the client usually arrives here as a plain value
-      // and is NOT distinguishable from a success — this skip only catches
-      // stored shapes that still carry the envelope.
-      const unwrapped = unwrapToolOutput(part.toolInvocation.result);
-      if (unwrapped.skip) continue;
+      // Live ingestion pre-normalizes documented AI SDK wrappers, so an error
+      // variant sent by the client usually arrives here as a plain value and is
+      // NOT distinguishable from a success. This skip catches stored shapes
+      // that still carry the wrapper.
+      const normalized = normalizeToolOutput(part.toolInvocation.result);
+      if (normalized.isError) continue;
 
       try {
-        const modelOutput = normalizeModelOutput(await tool.toModelOutput(unwrapped.output));
+        const modelOutput = normalizeModelOutput(await tool.toModelOutput(normalized.output));
         const nextMastra: Record<string, unknown> = {
           ...(typeof mastraMetadata === 'object' ? mastraMetadata : undefined),
           modelOutputComputed: true,

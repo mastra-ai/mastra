@@ -120,6 +120,11 @@ export class ObservabilitySpanner extends ObservabilityStorage {
     );
   }
 
+  override getFeatures() {
+    // Metrics are opt-in (`disableMetrics: false`); while disabled every metric method throws.
+    return this.disableMetrics ? ([] as const) : (['metrics', 'metric-discovery'] as const);
+  }
+
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const descriptor: RetentionTablesDescriptor = this.disableMetrics
       ? { spans: { table: TABLE_SPANS, column: 'startedAt', indexed: false } }

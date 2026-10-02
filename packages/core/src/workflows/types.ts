@@ -54,6 +54,7 @@ export type RestartExecutionParams = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
   stepExecutionPath?: string[];
+  isPreFirstStepRestart?: boolean;
   isParallelOrConditionalRestarted?: boolean;
 };
 
@@ -540,6 +541,14 @@ export interface WorkflowOptions {
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Evaluates `shouldPersistSnapshot` before entering the durable operation so a
+   * false verdict does not consume a durable step.
+   *
+   * @internal Only enable this for framework-owned predicates that depend solely
+   * on serialized workflow state and are guaranteed deterministic across replay.
+   */
+  evaluatePersistencePredicateBeforeDurableOperation?: boolean;
 
   /**
    * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated
@@ -653,10 +662,24 @@ export type StepFlowEntryOptions = {
  * (`any`) because the public type-safety for these entries is enforced by the
  * `Workflow` builder method overloads, not by this internal union.
  */
+export type SerializableClassifierStepOptions = {
+  maxRetries?: number;
+  providerOptions?: Record<string, Record<string, unknown>>;
+  retries?: number;
+  metadata?: StepMetadata;
+};
+
 export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
+  | {
+      type: 'classifier';
+      id: string;
+      classifierId: string;
+      classifier?: any;
+      options?: SerializableClassifierStepOptions;
+    }
   | {
       type: 'mapping';
       id: string;
@@ -671,6 +694,8 @@ export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
 export type AgentStepEntry = Extract<SingleStepEntry, { type: 'agent' }>;
 /** The `{ type: 'tool' }` variant of {@link SingleStepEntry}. */
 export type ToolStepEntry = Extract<SingleStepEntry, { type: 'tool' }>;
+/** The `{ type: 'classifier' }` variant of {@link SingleStepEntry}. */
+export type ClassifierStepEntry = Extract<SingleStepEntry, { type: 'classifier' }>;
 /** The `{ type: 'mapping' }` variant of {@link SingleStepEntry}. */
 export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
   SingleStepEntry<TEngineType>,
@@ -822,6 +847,12 @@ export type SerializedSingleStepEntry =
       // No outputSchema: a tool's output shape lives on the tool itself and is
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
+    }
+  | {
+      type: 'classifier';
+      id: string;
+      classifierId: string;
+      options?: SerializableClassifierStepOptions;
     }
   | { type: 'mapping'; id: string; description?: string; metadata?: StepMetadata; mapConfig: string }
   /**
@@ -1174,9 +1205,10 @@ export type WorkflowConfig<
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
   /**
-   * Optional cron schedule configuration. When set, the Mastra scheduler will
-   * publish a `workflow.start` event on the cron schedule.
-   * Only supported on the evented engine.
+   * Optional cron schedule configuration. When set, the Mastra scheduler
+   * starts a run on the cron schedule. Supported on the default and evented
+   * engines; other engines (Inngest, Temporal) ignore it and use their own
+   * scheduling.
    *
    * Accepts either a single schedule object or an array of schedule objects.
    * Array entries must each specify a unique stable `id`. The `inputData`,

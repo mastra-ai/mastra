@@ -1,5 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import {
+  Dialog,
+  DialogAction,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -19,7 +28,11 @@ import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWo
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
-import { EMPTY_USER_SESSION_FILTERS, filterUserSessions } from '../services/sessionFilters';
+import {
+  activeUserSessionFilterCount,
+  defaultUserSessionFilters,
+  filterUserSessions,
+} from '../services/sessionFilters';
 import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
@@ -34,7 +47,7 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  const [filters, setFilters] = useState<UserSessionFiltersState>(EMPTY_USER_SESSION_FILTERS);
+  const [filterChanges, setFilterChanges] = useState<Partial<UserSessionFiltersState>>({});
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
@@ -42,8 +55,8 @@ export function UserSessionsSection() {
   const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
   const auth = useFactoryAuth();
   const viewerUserId = auth.data?.user?.userId;
-  // Pinned rows stay on top; within each pin group the viewer's own sessions
-  // sort before sessions started by other org members.
+  const defaultFilters = defaultUserSessionFilters(viewerUserId);
+  const filters: UserSessionFiltersState = { ...defaultFilters, ...filterChanges };
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
   const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
     (a, b) =>
@@ -75,9 +88,6 @@ export function UserSessionsSection() {
 
   const deleteSession = useMutation({
     mutationFn: async (session: FactoryUserSession) => {
-      // The thread is deliberately left behind: its transcript is the record of
-      // what was worked on here, and a new session always gets a fresh id, so it
-      // can never be re-attached to a later session.
       await deleteUserSession(baseUrl, session.sessionId);
       return session;
     },
@@ -97,7 +107,6 @@ export function UserSessionsSection() {
     },
   });
 
-  // Pending is per session: the mutation itself only remembers the last row asked for.
   const [regenerating, setRegenerating] = useState<ReadonlySet<string>>(new Set());
   const regenerateTitle = useMutation({
     mutationFn: (session: FactoryUserSession) => regenerateSessionTitle(baseUrl, session.sessionId),
@@ -128,8 +137,8 @@ export function UserSessionsSection() {
               filters={filters}
               owners={owners}
               viewerUserId={viewerUserId}
-              onChange={setFilters}
-              onClear={() => setFilters(EMPTY_USER_SESSION_FILTERS)}
+              onChange={changes => setFilterChanges(current => ({ ...current, ...changes }))}
+              onReset={() => setFilterChanges({})}
             />
             <Button
               variant="ghost"
@@ -175,10 +184,6 @@ export function UserSessionsSection() {
                 pinned={pinnedSessions.has(session.sessionId)}
                 onSelect={() => void navigate(url)}
                 onPinChange={pinned => setPinned(session.sessionId, pinned)}
-                // The DELETE route is owner-only and 404s for non-owners, which
-                // deleteUserSession treats as an idempotent success; offering
-                // delete on a known non-owned row would fake-succeed and the
-                // row would reappear. Unknown viewer (auth disabled) keeps it.
                 onDelete={viewerUserId && !isOwn(session) ? undefined : () => setConfirmDelete(session)}
                 onRegenerateTitle={viewerUserId && !isOwn(session) ? undefined : () => regenerateTitle.mutate(session)}
                 regeneratingTitle={regenerating.has(session.sessionId)}
@@ -188,7 +193,7 @@ export function UserSessionsSection() {
         </MainSidebar.NavList>
         {sessionsQuery.isError && (
           <div className="flex items-center gap-2 px-2 py-1">
-            <Txt as="p" variant="meta" className="text-error m-0">
+            <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
               Couldn’t load sessions
             </Txt>
             <Button variant="ghost" size="sm" onClick={() => void sessionsQuery.refetch()}>
@@ -197,37 +202,37 @@ export function UserSessionsSection() {
           </div>
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
-          <Txt as="p" variant="meta" className="text-muted-foreground m-0 px-2 py-1">
-            {allSessions.length === 0 ? 'No sessions yet' : 'No sessions match these filters'}
+          <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
+            {allSessions.length === 0
+              ? 'No sessions yet'
+              : activeUserSessionFilterCount(filters, defaultFilters) === 0 && viewerUserId
+                ? 'No sessions of your own.'
+                : 'No sessions match these filters'}
           </Txt>
         )}
       </div>
 
       {confirmDelete && (
-        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
-          <DialogContent className="w-full max-w-sm" aria-label="Delete user session">
-            <DialogHeader className="px-5 pt-4 pb-2">
+        <Dialog
+          open
+          onOpenChange={open => !open && setConfirmDelete(null)}
+          intent="destructive"
+          pending={deleteSession.isPending}
+        >
+          <DialogContent size="sm" aria-label="Delete user session">
+            <DialogHeader>
               <DialogTitle>Delete session?</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="caption" className="text-muted-foreground m-0">
+              <DialogDescription>
                 This deletes the <span className="text-foreground">{getUserSessionLabel(confirmDelete)}</span> session
                 and its checkout with any uncommitted changes. This can’t be undone. Its conversation is kept.
-              </Txt>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteSession.isPending}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  className="bg-red-600 text-white hover:bg-red-500"
-                  onClick={() => deleteSession.mutate(confirmDelete)}
-                  disabled={deleteSession.isPending}
-                >
-                  {deleteSession.isPending ? 'Deleting…' : 'Delete'}
-                </Button>
-              </div>
-            </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={() => deleteSession.mutate(confirmDelete)}>
+                {deleteSession.isPending ? 'Deleting…' : 'Delete'}
+              </DialogAction>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

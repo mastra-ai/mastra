@@ -31,8 +31,8 @@ export function LiveKitRecordingReview({ traceId, spans }: { traceId: string; sp
         <AudioLinesIcon />
         Review Audio
       </Button>
-      <Dialog variant="new" open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Review Audio</DialogTitle>
             <DialogDescription>Listen to the call associated with this trace.</DialogDescription>

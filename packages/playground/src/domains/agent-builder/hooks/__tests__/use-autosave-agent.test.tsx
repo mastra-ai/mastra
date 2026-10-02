@@ -1,4 +1,3 @@
-import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -75,7 +74,6 @@ const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
 
 describe('useAutosaveAgent', () => {
   beforeEach(() => {
-    usePlaygroundStore.setState({ requestContext: {} });
     // The hook resolves a default visibility via the real auth-capabilities
     // query; drive it through MSW instead of mocking the hook.
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledCapabilities)));

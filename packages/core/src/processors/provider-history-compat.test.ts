@@ -2,8 +2,10 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import {
   anthropicStripEmptySignedReasoningContent,
+  anthropicToolIdFormat,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
@@ -772,6 +774,33 @@ describe('trailing assistant message protection', () => {
 
     expect(result).toBeDefined();
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
+  });
+
+  it('omits assistant messages that become empty after stripping foreign reasoning', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'foreign thinking only',
+            providerOptions: { openai: { itemId: 'rs_123' } },
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'what is 2+2?' }] },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.length).toBe(2);
+    expect(result![0].role).toBe('user');
+    expect(result![1].role).toBe('user');
   });
 });
 
@@ -1941,5 +1970,416 @@ describe('openaiOrphanItemId', () => {
       expect(namespace).not.toHaveProperty('itemId');
       expect(namespace).not.toHaveProperty('resultItemId');
     }
+  });
+});
+
+describe('anthropicOrphanedThinkingStep', () => {
+  /** The real Anthropic 400 from #22798. */
+  function createThinkingModifiedError() {
+    const message =
+      'messages.1.content.1: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.';
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
+      isRetryable: false,
+    });
+  }
+
+  const reasoning = (signature: string) => ({
+    type: 'reasoning' as const,
+    reasoning: '',
+    details: [{ type: 'text' as const, text: `thinking ${signature}`, signature }],
+    providerMetadata: { anthropic: { signature } },
+  });
+  const toolInvocation = (toolCallId: string, toolName: string) => ({
+    type: 'tool-invocation' as const,
+    toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: 'ok' },
+  });
+  const assistant = (id: string, parts: MastraDBMessage['content']['parts'], toolNames: string[] = []) => ({
+    id,
+    role: 'assistant' as const,
+    createdAt: new Date(),
+    content: {
+      format: 2 as const,
+      parts,
+      toolInvocations: toolNames.map((toolName, i) => toolInvocation(`call-${i}`, toolName).toolInvocation),
+    },
+  });
+
+  /** Stored by older @mastra/memory: the updateWorkingMemory call was stripped, its thinking kept. */
+  const corruptedAssistant = () =>
+    assistant(
+      'msg-corrupted',
+      [
+        { type: 'step-start' },
+        reasoning('SIG_A'),
+        { type: 'step-start' },
+        reasoning('SIG_B'),
+        { type: 'text', text: 'Done' },
+        toolInvocation('call-1', 'lookupWeather'),
+      ],
+      ['updateWorkingMemory', 'lookupWeather'],
+    );
+
+  function argsFor(build: (list: MessageList) => void, overrides: Partial<ProcessAPIErrorArgs> = {}) {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    build(messageList);
+    return {
+      error: createThinkingModifiedError(),
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('abort');
+      }) as any,
+      ...overrides,
+    } satisfies ProcessAPIErrorArgs;
+  }
+
+  const assistantPromptShapes = (list: MessageList) =>
+    list.get.all.aiV5
+      .prompt()
+      .flatMap(message =>
+        message.role === 'assistant' && Array.isArray(message.content)
+          ? [
+              message.content.map(part =>
+                part.type === 'reasoning'
+                  ? `reasoning:${(part.providerOptions?.anthropic as any)?.signature}`
+                  : part.type,
+              ),
+            ]
+          : [],
+      );
+
+  it('drops the orphaned thinking step and retries so the replay no longer merges it into the next step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([corruptedAssistant()], 'memory');
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text', 'tool-call'],
+    ]);
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text', 'tool-call']]);
+  });
+
+  it('treats whitespace-only text as empty when finding an orphaned thinking step', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            { type: 'text', text: '\n\n' },
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([['reasoning:SIG_B', 'text']]);
+  });
+
+  it('finds the orphaned thinking step after a tool part when its step-start marker is missing', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-a', [
+            reasoning('SIG_0'),
+            toolInvocation('call-0', 'lookupWeather'),
+            reasoning('SIG_A'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_A'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(assistantPromptShapes(args.messageList)).toEqual([
+      ['reasoning:SIG_0', 'tool-call'],
+      ['reasoning:SIG_B', 'text'],
+    ]);
+  });
+
+  it('drops a trailing thinking-only step when the next stored message is also from the assistant', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add(
+        [assistant('msg-b', [{ type: 'step-start' }, reasoning('SIG_B'), { type: 'text', text: 'Done' }])],
+        'memory',
+      );
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toEqual({ retry: true });
+    expect(JSON.stringify(args.messageList.get.all.aiV5.prompt())).not.toContain('SIG_A');
+  });
+
+  it('leaves healthy thinking steps alone and does not retry', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add(
+        [
+          assistant('msg-healthy', [
+            { type: 'step-start' },
+            reasoning('SIG_A'),
+            toolInvocation('call-0', 'lookupWeather'),
+            { type: 'step-start' },
+            reasoning('SIG_B'),
+            { type: 'text', text: 'Done' },
+          ]),
+        ],
+        'memory',
+      );
+      list.add([createUserMessage('thanks')], 'input');
+    });
+    const before = JSON.stringify(args.messageList.get.all.db());
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toBe(before);
+  });
+
+  it('keeps a thinking-only step at the end of the conversation', async () => {
+    const args = argsFor(list => {
+      list.add([createUserMessage('weather?')], 'input');
+      list.add([assistant('msg-a', [{ type: 'step-start' }, reasoning('SIG_A')])], 'memory');
+      list.add([createUserMessage('still there?')], 'input');
+    });
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+  });
+
+  it('does not fire on other errors', async () => {
+    const args = argsFor(
+      list => {
+        list.add([createUserMessage('weather?')], 'input');
+        list.add([corruptedAssistant()], 'memory');
+      },
+      { error: createRateLimitError() },
+    );
+
+    expect(await new ProviderHistoryCompat().processAPIError(args)).toBeUndefined();
+    expect(JSON.stringify(args.messageList.get.all.db())).toContain('SIG_A');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropicToolIdFormat — preemptive (prompt-scoped) tool-ID repair
+// ---------------------------------------------------------------------------
+
+describe('anthropicToolIdFormat.applyToPrompt', () => {
+  const ANTHROPIC_MODEL = { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' };
+
+  function promptWithToolPair(ids: { call: string; result?: string }): LanguageModelV2Prompt {
+    return [
+      { role: 'user', content: [{ type: 'text', text: 'search for this' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Searching.' },
+          { type: 'tool-call', toolCallId: ids.call, toolName: 'search', input: { query: 'Mastra' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: ids.result ?? ids.call,
+            toolName: 'search',
+            output: { type: 'text', value: 'result' },
+          },
+        ],
+      },
+    ];
+  }
+
+  const idsIn = (prompt: LanguageModelV2Prompt) =>
+    prompt
+      .flatMap(message => (message.content as any[]).map(part => (part as { toolCallId?: string }).toolCallId))
+      .filter((id): id is string => typeof id === 'string');
+
+  it('rewrites an invalid tool-call id for an Anthropic model and leaves valid ids alone', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeDefined();
+    expect(idsIn(result!)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('preserves call/result pairing when rewriting', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    const [callId, resultId] = idsIn(result!);
+    expect(callId).toBe(resultId);
+    expect(callId).toMatch(/^[a-zA-Z0-9_-]+$/);
+  });
+
+  it('returns undefined for a non-Anthropic model', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call.abc:1' }),
+      model: 'openai/gpt-5',
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when every id is already valid', () => {
+    const result = anthropicToolIdFormat.applyToPrompt!({
+      prompt: promptWithToolPair({ call: 'call_abc_1' }),
+      model: ANTHROPIC_MODEL,
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not mutate the prompt it receives', () => {
+    const prompt = promptWithToolPair({ call: 'call.abc:1' });
+    const before = structuredClone(prompt);
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).not.toBe(prompt);
+    expect(prompt).toEqual(before);
+  });
+
+  it('resolves collisions against ids already present, deterministically', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'a.b', toolName: 'one', input: {} },
+          { type: 'tool-call', toolCallId: 'a_b', toolName: 'two', input: {} },
+        ],
+      },
+    ];
+
+    const first = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+    const second = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    const ids = idsIn(first!);
+    // `a.b` sanitizes to `a_b`, which the prompt already claims, so it gets a suffix.
+    expect(ids).toEqual(['a_b_2', 'a_b']);
+    expect(new Set(ids).size).toBe(2);
+    for (const id of ids) expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    // Same input, same output — no dependence on Set/Map iteration timing.
+    expect(idsIn(second!)).toEqual(ids);
+  });
+
+  it('assigns distinct replacements when two calls share one invalid original id', () => {
+    const prompt: LanguageModelV2Prompt = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'one', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'one', output: { type: 'text', value: 'first' } },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'dup.id', toolName: 'two', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'dup.id', toolName: 'two', output: { type: 'text', value: 'second' } },
+        ],
+      },
+    ];
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: ANTHROPIC_MODEL });
+
+    expect(result).toBeDefined();
+    const [firstCall, firstResult, secondCall, secondResult] = idsIn(result!);
+    // Every outbound tool_use.id is unique — Anthropic rejects duplicates.
+    expect(new Set([firstCall, secondCall]).size).toBe(2);
+    // Pairing is preserved: each result keeps the id of its call, in order.
+    expect(firstResult).toBe(firstCall);
+    expect(secondResult).toBe(secondCall);
+    for (const id of [firstCall, firstResult, secondCall, secondResult]) {
+      expect(id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    }
+  });
+
+  it('is reached through ProviderHistoryCompat.processLLMRequest', async () => {
+    const handler = new ProviderHistoryCompat();
+
+    const result = await handler.processLLMRequest(
+      makeRequestArgs(promptWithToolPair({ call: 'call.abc:1' }), ANTHROPIC_MODEL),
+    );
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+    expect(idsIn((result as { prompt: LanguageModelV2Prompt }).prompt)).toEqual(['call_abc_1', 'call_abc_1']);
+  });
+
+  it('keeps the reactive fix working for direct callers', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createAssistantMessageWithToolCall('call:abc.123', 'searchTool', { query: 'test' })], 'response');
+
+    const changed = anthropicToolIdFormat.fix!(messageList.get.all.db());
+
+    expect(changed).toBe(true);
+    const ids = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(ids).toEqual(['call_abc_123']);
+  });
+});
+
+describe('anthropicToolIdFormat is prompt-scoped, not persisted', () => {
+  it('leaves the ids in the message list untouched', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('search for this')], 'input');
+    messageList.add([createAssistantMessageWithToolCall('call.abc:1', 'search', { query: 'Mastra' })], 'response');
+    messageList.add([createUserMessage('thanks')], 'input');
+
+    const result = await handler.processLLMRequest({
+      ...makeRequestArgs(messageList.get.all.aiV5.prompt(), { provider: 'anthropic.messages' }),
+      messageList,
+    });
+
+    expect(result).toEqual({ prompt: expect.any(Array) });
+
+    const persistedIds = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => (part as any).toolInvocation.toolCallId);
+    expect(persistedIds).toEqual(['call.abc:1']);
   });
 });

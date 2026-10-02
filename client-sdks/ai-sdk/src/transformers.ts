@@ -26,6 +26,7 @@ import {
   isWorkflowExecutionDataChunkType,
   safeParseErrorObject,
   isMastraTextStreamChunk,
+  toUIDataChunk,
 } from './utils';
 
 type LanguageModelV2Usage = {
@@ -70,11 +71,7 @@ export type WorkflowDataPart = {
     status: WorkflowRunStatus;
     steps: Record<string, StepResult>;
     output: {
-      usage: {
-        inputTokens: number;
-        outputTokens: number;
-        totalTokens: number;
-      };
+      usage: LanguageModelV2Usage;
     } | null;
   };
 };
@@ -1291,8 +1288,7 @@ export function transformWorkflow<OUTPUT>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
           );
         }
-        const { type, data, id } = output;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(output);
       }
       return null;
     }
@@ -1304,13 +1300,7 @@ export function transformWorkflow<OUTPUT>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data, id } = payload;
-
-        return {
-          type,
-          data,
-          ...(id !== undefined && { id }),
-        };
+        return toUIDataChunk(payload);
       }
       return null;
     }
@@ -1660,8 +1650,7 @@ export function transformNetwork(
           );
         }
 
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload.payload);
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -1669,8 +1658,7 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload.payload);
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
@@ -1771,8 +1759,7 @@ export function transformNetwork(
           );
         }
 
-        const { type, data, id } = payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return toUIDataChunk(payload);
       }
       return null;
     }

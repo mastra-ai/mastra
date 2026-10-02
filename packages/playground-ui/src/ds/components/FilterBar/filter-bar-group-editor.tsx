@@ -9,6 +9,7 @@ import type { FilterBarGroup, FilterBarLogic } from './types';
 import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
@@ -51,7 +52,7 @@ function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: Filt
     <div
       role="radiogroup"
       aria-label="Group logic"
-      className="h-control-sm border-border bg-fill-subtle flex items-center gap-0.5 rounded-md border p-0.5"
+      className="flex h-control-sm items-center gap-0.5 rounded-md border border-border bg-fill-subtle p-0.5"
     >
       {(['and', 'or'] as const).map(value => (
         <button
@@ -198,7 +199,7 @@ export function FilterBarGroupEditor({
             variant="ghost"
             size="sm"
             icon={<Trash2Icon />}
-            className="text-muted-foreground ml-auto"
+            className="ml-auto text-muted-foreground"
             aria-label={removeLabel}
             onClick={onRemove}
           >
@@ -228,12 +229,14 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
         leaving && 'pointer-events-none',
       )}
     >
-      <div className="border-border flex items-center gap-2 border-b px-2 py-1">
-        <FolderIcon className="text-muted-foreground size-3.5" />
-        <span className="text-label text-foreground">Group</span>
-        <span className="text-label text-muted-foreground">
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+        <FolderIcon className="size-3.5 text-muted-foreground" />
+        <Txt as="span" variant="label" tone="ink">
+          Group
+        </Txt>
+        <Txt as="span" variant="label" tone="muted">
           · {count} {count === 1 ? 'condition' : 'conditions'}
-        </span>
+        </Txt>
         <div className="ml-auto flex items-center gap-1">
           <FilterBarLogicSwitch groupId={group.id} logic={group.logic} />
           <Button

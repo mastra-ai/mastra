@@ -11,7 +11,8 @@ import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
-import type { ChannelProvider } from '../channels';
+import type { ChannelProvider, ChannelsResolver } from '../channels';
+import type { Classifier, ClassifierQuestions } from '../classifier';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -123,6 +124,7 @@ function createUndefinedPrimitiveError(
     | 'processor'
     | 'vector'
     | 'scorer'
+    | 'classifier'
     | 'workflow'
     | 'mcp-server'
     | 'gateway'
@@ -143,12 +145,22 @@ function createUndefinedPrimitiveError(
 }
 
 /**
- * Reads the declarative schedule configs off a workflow. Supports both the
- * new `getScheduleConfigs(): WorkflowScheduleConfig[]` accessor on the evented
- * engine and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
+ * Whether the Mastra scheduler fires this workflow's declared schedules.
+ * Only the default and evented engines are dispatched by it; other engines
+ * (Inngest, Temporal) own their scheduling natively.
+ */
+function runsOnMastraScheduler(workflow: unknown): boolean {
+  const engineType = (workflow as { engineType?: string }).engineType;
+  return engineType === 'default' || engineType === 'evented';
+}
+
+/**
+ * Reads the declarative schedule configs off a workflow, regardless of its
+ * engine. Supports both the `getScheduleConfigs(): WorkflowScheduleConfig[]`
+ * accessor and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
  * fallback used in tests that inject a fake getter.
  */
-function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+function readWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
   const w = workflow as {
     getScheduleConfigs?: () => WorkflowScheduleConfig[] | undefined;
     getScheduleConfig?: () => WorkflowScheduleConfig | WorkflowScheduleConfig[] | undefined;
@@ -162,6 +174,14 @@ function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConf
     return Array.isArray(cfg) ? cfg : [cfg];
   }
   return [];
+}
+
+/**
+ * The declarative schedule configs the Mastra scheduler should register for a
+ * workflow. Empty for engines the scheduler does not dispatch.
+ */
+function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+  return runsOnMastraScheduler(workflow) ? readWorkflowScheduleConfigs(workflow) : [];
 }
 
 /**
@@ -267,6 +287,7 @@ export interface Config<
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
+  TClassifiers extends Record<string, Classifier<any>> = Record<string, Classifier<any>>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -448,6 +469,12 @@ export interface Config<
   scorers?: TScorers;
 
   /**
+   * Classifiers return typed fixed-option decisions from evaluation models.
+   * Registered classifiers can be retrieved with getClassifier() or getClassifierById().
+   */
+  classifiers?: TClassifiers;
+
+  /**
    * Tools are reusable functions that agents can use to interact with external systems.
    */
   tools?: TTools;
@@ -552,10 +579,18 @@ export interface Config<
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
+   * Accepts either a static provider record or a {@link ChannelsResolver} —
+   * a callable that returns the current provider map. With a resolver, routes
+   * for every possible channel are mounted up front (via
+   * `resolver.getRoutes()`) and the live provider set is re-resolved at
+   * runtime, so channels added or removed in an external system of record
+   * (e.g. the Mastra platform) take effect without redeploying.
+   *
    * @example
    * ```typescript
    * import { SlackProvider } from '@mastra/slack';
    *
+   * // Static record
    * new Mastra({
    *   channels: {
    *     slack: new SlackProvider({
@@ -564,9 +599,16 @@ export interface Config<
    *     }),
    *   },
    * });
+   *
+   * // Live resolver (platform-managed connections)
+   * import { channels } from '@mastra/connect';
+   *
+   * new Mastra({
+   *   channels: await channels({ projectId }),
+   * });
    * ```
    */
-  channels?: TChannels;
+  channels?: TChannels | ChannelsResolver<TChannels>;
 
   /**
    * Deployment environment name (e.g. `'production'`, `'staging'`, `'development'`).
@@ -764,6 +806,7 @@ export class Mastra<
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
+  TClassifiers extends Record<string, Classifier<any>> = Record<string, Classifier<any>>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -790,6 +833,7 @@ export class Mastra<
   #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
+  #classifiers?: TClassifiers;
   #tools?: TTools;
   #processors?: TProcessors;
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
@@ -838,6 +882,12 @@ export class Mastra<
   #fsScheduleSyncRerun = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
+  /** Live channel-provider source; when set, `#channels` holds the latest resolved snapshot. */
+  #channelsResolver?: ChannelsResolver<TChannels>;
+  /** In-flight resolver invocation, shared so concurrent `resolveChannels()` calls coalesce. */
+  #channelsResolvePromise?: Promise<TChannels>;
+  /** Providers already attached/initialized, so resolver refreshes touch each instance once. */
+  #attachedChannelProviders = new WeakSet<ChannelProvider>();
   #schedules?: Schedules;
   #schedulesConfig?: SchedulesConfig<Mastra>;
   #environment?: string;
@@ -1154,9 +1204,58 @@ export class Mastra<
 
   /**
    * Gets all registered channel providers.
+   *
+   * When channels were configured with a {@link ChannelsResolver}, this
+   * returns the latest resolved snapshot (possibly `undefined` before the
+   * first resolution completes). Use {@link resolveChannels} to get the
+   * current provider map.
    */
   public getChannelProviders(): Record<string, ChannelProvider> | undefined {
     return this.#channels;
+  }
+
+  /**
+   * Resolves the current channel provider map.
+   *
+   * For a static `channels` record this returns it directly. For a
+   * {@link ChannelsResolver} it invokes the resolver (the resolver owns
+   * freshness via its own cache/TTL), attaches and initializes any providers
+   * not seen before, and updates the synchronous snapshot served by
+   * {@link getChannelProviders} / {@link channels}.
+   *
+   * Server handlers that act on channels (webhooks, connect/disconnect,
+   * listings) should await this instead of reading the snapshot so
+   * connections added after boot are picked up.
+   */
+  public async resolveChannels(): Promise<Record<string, ChannelProvider>> {
+    const resolver = this.#channelsResolver;
+    if (!resolver) {
+      return this.#channels ?? {};
+    }
+    if (this.#channelsResolvePromise) {
+      return this.#channelsResolvePromise;
+    }
+    const promise = (async () => {
+      const resolved = await resolver({ mastra: this as unknown as Mastra });
+      for (const [key, provider] of Object.entries<ChannelProvider>(resolved)) {
+        if (provider == null || this.#attachedChannelProviders.has(provider)) continue;
+        this.#attachedChannelProviders.add(provider);
+        provider.__attach?.(this as unknown as Mastra);
+        if (provider.initialize) {
+          // Fire-and-forget, matching the static-config init path: resolution
+          // consumers shouldn't block on installation restores.
+          void provider.initialize().catch(err => {
+            this.#logger?.error(`[Mastra] Failed to initialize channel "${key}":`, err);
+          });
+        }
+      }
+      this.#channels = resolved;
+      return resolved;
+    })().finally(() => {
+      this.#channelsResolvePromise = undefined;
+    });
+    this.#channelsResolvePromise = promise;
+    return promise;
   }
 
   /**
@@ -1422,7 +1521,8 @@ export class Mastra<
       TTools,
       TProcessors,
       TMemory,
-      TChannels
+      TChannels,
+      TClassifiers
     >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
@@ -1674,6 +1774,7 @@ export class Mastra<
     this.#tts = {} as TTTS;
     this.#agents = {} as TAgents;
     this.#scorers = {} as TScorers;
+    this.#classifiers = {} as TClassifiers;
     this.#tools = {} as TTools;
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
@@ -1696,6 +1797,14 @@ export class Mastra<
       Object.entries(config.processors).forEach(([key, processor]) => {
         if (processor != null) {
           this.addProcessor(processor, key);
+        }
+      });
+    }
+
+    if (config?.classifiers) {
+      Object.entries(config.classifiers).forEach(([key, classifier]) => {
+        if (classifier != null) {
+          this.addClassifier(classifier, key);
         }
       });
     }
@@ -1798,20 +1907,30 @@ export class Mastra<
 
     // Register channels and merge their routes into server config
     if (config?.channels) {
-      this.#channels = config.channels;
       const channelRoutes: ApiRoute[] = [];
 
-      for (const [, channel] of Object.entries(config.channels)) {
-        if (channel == null) continue;
+      if (typeof config.channels === 'function') {
+        // Live resolver (e.g. `channels()` from @mastra/connect): routes for
+        // every possible channel mount up front; provider instances late-bind
+        // via `resolveChannels()` so connections added or removed at runtime
+        // take effect without a restart.
+        this.#channelsResolver = config.channels;
+        channelRoutes.push(...config.channels.getRoutes());
+      } else {
+        this.#channels = config.channels;
 
-        // Attach the channel to this Mastra instance
-        if (channel.__attach) {
-          channel.__attach(this);
+        for (const [, channel] of Object.entries<ChannelProvider>(config.channels)) {
+          if (channel == null) continue;
+
+          // Attach the channel to this Mastra instance
+          if (channel.__attach) {
+            channel.__attach(this);
+          }
+
+          // Collect routes from the channel
+          const routes = channel.getRoutes();
+          channelRoutes.push(...routes);
         }
-
-        // Collect routes from the channel
-        const routes = channel.getRoutes();
-        channelRoutes.push(...routes);
       }
 
       // Merge channel routes into server config
@@ -1880,6 +1999,15 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+
+    // Warm the first channels resolution so webhook routes have live
+    // providers before the first inbound request. Non-fatal: any
+    // resolveChannels() call retries.
+    if (this.#channelsResolver) {
+      void this.resolveChannels().catch(err => {
+        this.#logger?.warn(`[Mastra] Initial channels resolution failed (will retry on next access):`, err);
+      });
+    }
 
     // Initialize channels asynchronously (auto-provision apps, etc.)
     // This runs after all agents are registered so configs are available
@@ -4270,6 +4398,113 @@ export class Mastra<
   }
 
   // =========================================================================
+  // Classifiers
+  // =========================================================================
+
+  /**
+   * Returns all registered classifiers keyed by their registration key.
+   */
+  public listClassifiers() {
+    return this.#classifiers;
+  }
+
+  /**
+   * Adds a classifier to the Mastra instance.
+   *
+   * If a classifier with the same key already exists, this method leaves the existing
+   * classifier registered and returns.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra();
+   * mastra.addClassifier(new Classifier({ id: 'safety', model })); // Uses classifier.id as key
+   * mastra.addClassifier(new Classifier({ id: 'safety', model }), 'customKey');
+   * ```
+   */
+  public addClassifier<C extends Classifier<any>>(classifier: C, key?: string): void {
+    if (!classifier) {
+      throw createUndefinedPrimitiveError('classifier', classifier, key);
+    }
+    const classifierKey = key || classifier.id;
+    const classifiers = this.#classifiers as Record<string, Classifier<any>>;
+    if (classifiers[classifierKey]) {
+      return;
+    }
+
+    classifier.__registerMastra(this);
+    classifiers[classifierKey] = classifier;
+  }
+
+  /**
+   * Retrieves a registered classifier by its registration key.
+   *
+   * @throws {MastraError} When the classifier with the specified key is not found
+   */
+  public getClassifier<TClassifierKey extends keyof TClassifiers>(key: TClassifierKey): TClassifiers[TClassifierKey] {
+    const classifier = this.#classifiers?.[key];
+    if (!classifier) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_CLASSIFIER_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Classifier with ${String(key)} not found`,
+        details: { status: 404 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return classifier;
+  }
+
+  /**
+   * Retrieves a registered classifier by its `id`, falling back to the registration key.
+   *
+   * @throws {MastraError} When no classifier is found with the specified id
+   */
+  public getClassifierById<TClassifierKey extends keyof TClassifiers>(
+    id: TClassifiers[TClassifierKey]['id'],
+  ): TClassifiers[TClassifierKey] {
+    for (const [key, value] of Object.entries(this.#classifiers ?? {})) {
+      if (value.id === id || key === id) {
+        return value as TClassifiers[TClassifierKey];
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_CLASSIFIER_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Classifier with id ${String(id)} not found`,
+      details: { status: 404 },
+    });
+    this.#logger?.trackException(error);
+    throw error;
+  }
+
+  /**
+   * Removes a classifier from the Mastra instance by its key or id.
+   *
+   * @returns true if a classifier was removed, false if no classifier was found
+   */
+  public removeClassifier(keyOrId: string): boolean {
+    const classifiers = this.#classifiers as Record<string, Classifier<any>> | undefined;
+    if (!classifiers) return false;
+
+    if (classifiers[keyOrId]) {
+      delete classifiers[keyOrId];
+      return true;
+    }
+
+    const key = Object.keys(classifiers).find(k => classifiers[k]?.id === keyOrId);
+    if (key) {
+      delete classifiers[key];
+      return true;
+    }
+
+    return false;
+  }
+
+  // =========================================================================
   // Prompt Blocks
   // =========================================================================
 
@@ -4670,15 +4905,15 @@ export class Mastra<
     if (!processor) {
       throw createUndefinedPrimitiveError('processor', processor, key);
     }
+    // Register Mastra with every processor instance, even when another processor already uses its key.
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
+    }
+
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
       return;
-    }
-
-    // Register Mastra with the processor if it supports it
-    if (typeof processor.__registerMastra === 'function') {
-      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
@@ -4994,13 +5229,16 @@ export class Mastra<
       return;
     }
 
-    // Note on schedules: a workflow declaring a `schedule` is auto-promoted to
-    // the evented engine by the `createWorkflow` factory. We don't reject default-
-    // engine workflows that happen to carry schedule configs — those would only
-    // exist if a user constructed `Workflow` directly, in which case they've
-    // explicitly opted out of the factory's promotion behavior and we trust them.
-    const scheduleConfigs = collectWorkflowScheduleConfigs(workflow);
-    const hasSchedule = scheduleConfigs.length > 0;
+    // The Mastra scheduler only dispatches default and evented workflows. A
+    // `schedule` on any other engine is ignored so it can't double-fire next
+    // to that engine's own scheduling.
+    const hasSchedule = collectWorkflowScheduleConfigs(workflow).length > 0;
+    if (!runsOnMastraScheduler(workflow) && readWorkflowScheduleConfigs(workflow).length > 0) {
+      this.#logger?.warn(
+        `Workflow "${workflow.id}" declares \`schedule\` but runs on the ${workflow.engineType} engine; the Mastra scheduler only fires default and evented workflows. Use the engine's native scheduling (Inngest \`cron\`).`,
+        { workflowId: workflow.id, engineType: workflow.engineType },
+      );
+    }
 
     // Initialize the workflow with Mastra and primitives
     workflow.__registerMastra(this);
@@ -5082,6 +5320,83 @@ export class Mastra<
       tools[key] = schemas;
       tools[tool.id] = schemas;
     }
+    const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
+      const questions = classifier.questions
+        ? Object.fromEntries(
+            Object.entries(classifier.questions as ClassifierQuestions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? { type: 'choice' as const, choices: Object.keys(question.criteria) }
+                : question.type === 'score'
+                  ? { type: 'score' as const, min: 0, max: question.criteria.length - 1 }
+                  : { type: 'boolean' as const },
+            ]),
+          )
+        : undefined;
+      const answerProperties = questions
+        ? Object.fromEntries(
+            Object.entries(questions).map(([questionId, question]) => [
+              questionId,
+              question.type === 'choice'
+                ? {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['choice'] },
+                      choice: { type: 'string', enum: question.choices },
+                      probabilities: {
+                        type: 'object',
+                        properties: Object.fromEntries(question.choices.map(choice => [choice, { type: 'number' }])),
+                        additionalProperties: false,
+                      },
+                    },
+                    required: ['type', 'choice'],
+                  }
+                : question.type === 'score'
+                  ? {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['score'] },
+                        score: { type: 'number', minimum: question.min, maximum: question.max },
+                        probabilities: {
+                          type: 'object',
+                          properties: Object.fromEntries(
+                            Array.from({ length: question.max - question.min + 1 }, (_, index) => [
+                              String(question.min + index),
+                              { type: 'number' },
+                            ]),
+                          ),
+                          additionalProperties: false,
+                        },
+                      },
+                      required: ['type', 'score'],
+                    }
+                  : {
+                      type: 'object',
+                      properties: {
+                        type: { type: 'string', enum: ['boolean'] },
+                        probability: { type: 'number', minimum: 0, maximum: 1 },
+                      },
+                      required: ['type', 'probability'],
+                    },
+            ]),
+          )
+        : {};
+      const schemas = {
+        inputSchema: {},
+        outputSchema: {
+          type: 'object',
+          properties: {
+            answers: { type: 'object', properties: answerProperties, required: Object.keys(answerProperties) },
+            usage: { type: 'object' },
+          },
+          required: ['answers', 'usage'],
+        },
+        questions,
+      };
+      classifiers[key] = schemas;
+      classifiers[classifier.id] = schemas;
+    }
     const workflows: Record<string, WorkflowRegistrySchemas> = {};
     for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
       const schemas: WorkflowRegistrySchemas = {
@@ -5091,7 +5406,7 @@ export class Mastra<
       workflows[key] = schemas;
       workflows[workflow.id] = schemas;
     }
-    return { agents, tools, workflows };
+    return { agents, tools, classifiers, workflows };
   }
 
   /**

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment } from 'react';
 import { Button } from '../Button/Button';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -14,7 +15,7 @@ const meta: Meta<typeof Input> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'unstyled'],
+      options: ['default', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
@@ -134,20 +135,26 @@ export const Error: Story = {
   args: {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
-    error: true,
   },
+  render: args => (
+    <Field invalid className="w-50">
+      <FieldLabel>Email</FieldLabel>
+      <Input {...args} />
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
+  ),
 };
 
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-[calc(100vw-2rem)] max-w-96 flex-col gap-4">
-      <div className="border-border bg-sidebar rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
         <Input aria-label="Search agents on the sidebar" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-background rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
@@ -159,7 +166,7 @@ export const OnDifferentSurfaces: Story = {
         </Txt>
         <Input aria-label="Search agents on a card" placeholder="Search agents..." />
       </div>
-      <div className="border-border bg-popover rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>

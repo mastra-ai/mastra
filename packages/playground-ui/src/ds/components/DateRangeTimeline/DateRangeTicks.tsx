@@ -49,7 +49,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
   return (
     <div role="group" className="relative h-10" aria-label={timelineLabel}>
       <div className="absolute top-0 left-0 flex flex-col items-start">
-        <span className="bg-border-strong mb-1 h-1.5 w-px" aria-hidden="true" />
+        <span className="mb-1 h-1.5 w-px bg-border-strong" aria-hidden="true" />
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
         <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap">
           {startLabel}
@@ -63,7 +63,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
           style={{ left: `${tick.position}%` }}
           aria-hidden="true"
         >
-          <span className="bg-border-strong mb-1 h-1.5 w-px" />
+          <span className="mb-1 h-1.5 w-px bg-border-strong" />
           {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
           <Txt as="span" variant="meta" tone="muted" className="whitespace-nowrap">
             {tick.label}
@@ -72,7 +72,7 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
       ))}
 
       <div className="absolute top-0 right-0 flex flex-col items-end">
-        <span className="bg-border-strong mb-1 h-1.5 w-px" aria-hidden="true" />
+        <span className="mb-1 h-1.5 w-px bg-border-strong" aria-hidden="true" />
         {/* TODO(ds): Txt needs a muted timeline-axis variant. */}
         <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap">
           {endLabel}

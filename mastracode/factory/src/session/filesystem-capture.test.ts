@@ -107,17 +107,11 @@ function createDependencies(): FilesystemCaptureDependencies {
 }
 
 describe('parseFilesystemCaptureFiles', () => {
-  it('keeps current on-disk paths and omits deleted paths', () => {
-    expect(
-      parseFilesystemCaptureFiles(
-        ' M src/app.ts\0?? notes/todo.md\0R  src/renamed.ts\0src/old.ts\0C  copy.ts\0source.ts\0 D removed.ts\0DD gone.ts\0UU conflict.ts\0',
-      ),
-    ).toEqual([
-      { path: 'conflict.ts' },
-      { path: 'copy.ts' },
+  it('treats command output as plain paths and normalizes a leading dot segment', () => {
+    expect(parseFilesystemCaptureFiles('src/app.ts\0./notes/todo.md\0ab file.ts\0src/app.ts\0')).toEqual([
+      { path: 'ab file.ts' },
       { path: 'notes/todo.md' },
       { path: 'src/app.ts' },
-      { path: 'src/renamed.ts' },
     ]);
   });
 });
@@ -159,7 +153,7 @@ describe('captureSessionFilesystem', () => {
 
   it('captures Git changes and ignored workspace artifacts', async () => {
     const { session, executeCommand } = createSession([
-      commandResult({ stdout: ' M src/app.ts\0?? new.txt\0' }),
+      commandResult({ stdout: 'src/app.ts\0new.txt\0' }),
       commandResult({ stdout: './.artifacts/hello-world.md\0' }),
     ]);
     const dependencies = createDependencies();
@@ -168,8 +162,14 @@ describe('captureSessionFilesystem', () => {
 
     expect(executeCommand).toHaveBeenNthCalledWith(
       1,
-      'git',
-      ['-C', '/sessions/s1/worktree', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      'sh',
+      [
+        '-c',
+        expect.stringContaining('diff --name-only -z --find-renames'),
+        'mastracode-changed-files',
+        '/sessions/s1/worktree',
+        'main',
+      ],
       { timeout: 30_000 },
     );
     expect(executeCommand).toHaveBeenNthCalledWith(
@@ -215,7 +215,7 @@ describe('captureSessionFilesystem', () => {
 
     expect(failedDependencies.filesystem.replaceFiles).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith(
-      '[Factory filesystem capture] Unable to inspect Git status.',
+      '[Factory filesystem capture] Unable to inspect Git changes.',
       'not a repository',
     );
     error.mockRestore();
@@ -303,6 +303,31 @@ describe('observeSessionFilesystem', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a queued capture after the session thread is cleared by deleteSession', async () => {
+    // Regression for #24893: deleteSession clears the thread before the
+    // queued capture runs; the capture must use the thread read at schedule time.
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-deleted-thread');
+    let threadId: string | null = 'thread-1';
+    session.thread.requireId = () => {
+      if (!threadId) throw new Error('No active thread on this session');
+      return threadId;
+    };
+    const dependencies = createDependencies();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    threadId = null;
+    await waitForPendingFilesystemCapture('resource-deleted-thread');
+
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'resource-deleted-thread', threadId: 'thread-1' }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('does not gate the agent-end listener on slow capture execs', async () => {
@@ -480,6 +505,50 @@ describe('waitForPendingFilesystemCapture', () => {
     await wait;
     // The persist happened before the reader's wait resolved.
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps waiting for a capture chained by a turn that ends during the wait', async () => {
+    const { session, listeners, touchWorkspace } = createSession(undefined, 'resource-wait-successor');
+    let releaseFirst: (() => void) | undefined;
+    const firstGate = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let releaseSecond: (() => void) | undefined;
+    const secondGate = new Promise<void>(resolve => {
+      releaseSecond = resolve;
+    });
+    const dependencies = createDependencies();
+    // Execs of the first capture wait on firstGate; once it has persisted,
+    // the successor capture's execs wait on secondGate.
+    const executeCommand = vi.fn(async () => {
+      const firstPersisted = vi.mocked(dependencies.filesystem.replaceFiles).mock.calls.length > 0;
+      await (firstPersisted ? secondGate : firstGate);
+      return commandResult();
+    });
+    session.getWorkspace = () => ({ sandbox: { executeCommand } as any });
+    observeSessionFilesystem(session, dependencies);
+
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+    await vi.waitFor(() => expect(executeCommand).toHaveBeenCalledTimes(1));
+
+    let waitSettled = false;
+    const wait = waitForPendingFilesystemCapture('resource-wait-successor').then(() => {
+      waitSettled = true;
+    });
+
+    // Another turn ends while the first capture is still running.
+    touchWorkspace();
+    listeners[0]!({ type: 'agent_end', reason: 'complete' });
+
+    releaseFirst?.();
+    await vi.waitFor(() => expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(waitSettled).toBe(false);
+
+    releaseSecond?.();
+    await wait;
+    expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledTimes(2);
   });
 
   it('bounds the wait so a stuck capture cannot block readers', async () => {

@@ -1,12 +1,20 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ActivityItem, ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+import {
+  hasToolArguments,
+  presentTool,
+  stringifyToolValue,
+  ToolCallArguments,
+  ToolCallOutput,
+} from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { ReasoningStreamingLine } from '@mastra/playground-ui/domains/chat/messages/reasoning-streaming-line';
 import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
 import {
   WarningStatusRenderer,
@@ -19,6 +27,7 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -30,7 +39,6 @@ import {
   AlertTriangle,
   AlignLeft,
   Check,
-  ChevronRight,
   FileText,
   Globe,
   Loader2,
@@ -59,7 +67,6 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { ProviderLogo } from '@/domains/llm';
 
 interface MessageRowProps {
   message: MastraDBMessage;
@@ -83,9 +90,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-muted border-transparent">
+    <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
       <Txt variant="caption" tone="ink" className="pb-2" as="div">
-        Approval required for <span className="text-foreground font-mono">{toolName}</span>
+        Approval required for <InlineCode>{toolName}</InlineCode>
       </Txt>
       <div className="flex items-center gap-2">
         <Button
@@ -221,7 +228,7 @@ export const MessageRow = ({ message }: MessageRowProps) => {
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <ReasoningStreamingLine text="Reasoning..." />;
+      return <ReasoningActivity text="" streaming />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -297,12 +304,12 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="border-accent6/40 bg-accent6/5 flex max-w-[80%] flex-col gap-3 p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-warning-edge bg-warning-subtle p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt variant="subheading" tone="ink" as="div">
             Something went wrong while building the agent.
@@ -345,7 +352,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-muted-foreground bg-sidebar text-caption max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
+              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -386,66 +393,26 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-const safeStringify = (value: unknown): string => {
-  if (value === undefined) return '';
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
 const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
-  const inputJson = safeStringify(input);
-  const outputJson = safeStringify(output);
-  const hasOutput = outputJson.length > 0;
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, input);
+  const outputText = output === undefined ? undefined : stringifyToolValue(output);
+  const hasBody = hasToolArguments({ toolName, args: input }) || Boolean(outputText);
 
   return (
-    <ToolCard testId="agent-builder-chat-generic-tool">
-      <Collapsible>
-        <CollapsibleTrigger
-          className="group flex w-full items-center gap-2 text-left"
-          data-testid="agent-builder-chat-generic-tool-trigger"
-        >
-          <span className="border-border/60 bg-sidebar inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
-            <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-            <Txt variant="caption" tone="ink" as="span">
-              Executing <span className="text-foreground font-mono">{toolName}</span>
-            </Txt>
-          </span>
-          <ChevronRight
-            className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
-            aria-hidden
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
-              <div className="border-border/60 border-b px-2 py-1">
-                <Txt variant="caption" tone="muted" as="div">
-                  Input
-                </Txt>
-              </div>
-              <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
-                {inputJson || '{}'}
-              </pre>
-            </div>
-            {hasOutput ? (
-              <div className="border-border/60 bg-sidebar overflow-hidden rounded-md border">
-                <div className="border-border/60 border-b px-2 py-1">
-                  <Txt variant="caption" tone="muted" as="div">
-                    Output
-                  </Txt>
-                </div>
-                <pre className="text-foreground text-caption m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
-                  {outputJson}
-                </pre>
-              </div>
-            ) : null}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </ToolCard>
+    <ActivityItem
+      data-testid="agent-builder-chat-generic-tool"
+      icon={<ToolIcon aria-hidden />}
+      label={label}
+      detail={detail}
+      aria-label={label}
+    >
+      {hasBody && (
+        <>
+          <ToolCallArguments toolName={toolName} args={input} />
+          {outputText && <ToolCallOutput text={outputText} />}
+        </>
+      )}
+    </ActivityItem>
   );
 };
 
@@ -461,7 +428,7 @@ export const ToolCard = ({
   <Card
     data-testid={testId}
     className={cn(
-      'max-w-[80%] p-3 bg-background/60 border-border/60 animate-in fade-in slide-in-from-left-2 duration-300',
+      'max-w-[80%] animate-in border-border/60 bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2',
       className,
     )}
   >
@@ -470,12 +437,12 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="animate-in fade-in slide-in-from-right-4 flex max-w-full min-w-0 items-start gap-2 duration-500 ease-out">
+  <div className="flex max-w-full min-w-0 animate-in items-start gap-2 duration-500 ease-out fade-in slide-in-from-right-4">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
     <Txt variant="body" tone="muted" className="min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="text-foreground font-medium">{value}</strong>
+      {label} <strong className="font-medium text-foreground">{value}</strong>
     </Txt>
   </div>
 );

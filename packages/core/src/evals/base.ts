@@ -121,9 +121,14 @@ export interface ScorerJudgeConfig {
    */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
+   * Set to `false` to run only the judge's configured `errorProcessors`, with none
+   * of the agent's shared stability defaults added. See `AgentConfig.errorProcessorDefaults`.
+   */
+  errorProcessorDefaults?: boolean;
+  /**
    * Maximum number of times error processors can retry one V2+ judge generation.
    * When errorProcessors are configured and this is omitted, the runtime cap is
-   * 10. Set this explicitly to bound the coordinated retry budget.
+   * 3. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
   /**
@@ -281,6 +286,7 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
+  mastra?: Mastra;
 };
 
 // Simplified AccumulatedResults - don't try to resolve Promise types here.
@@ -1250,7 +1256,9 @@ class MastraScorer<
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
-          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
+            mastra: this.#mastra,
+          });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
             currentSpan?.type === SpanType.SCORER_RUN
@@ -1411,13 +1419,14 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'mastra'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      return { run, results: accumulatedResults, score };
+      return { run, results: accumulatedResults, score, ...executionContext };
     }
 
-    return { run, results: accumulatedResults };
+    return { run, results: accumulatedResults, ...executionContext };
   }
 
   private async executeFunctionStep(scorerStep: ScorerStepDefinition, context: any) {
@@ -1455,6 +1464,8 @@ class MastraScorer<
     const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const errorProcessorDefaults =
+      originalStep.judge?.errorProcessorDefaults ?? this.config.judge?.errorProcessorDefaults;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
     const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
@@ -1657,6 +1668,7 @@ class MastraScorer<
       ...(inputProcessors ? { inputProcessors } : {}),
       ...(outputProcessors ? { outputProcessors } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
+      ...(errorProcessorDefaults !== undefined ? { errorProcessorDefaults } : {}),
       ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
     if (this.#mastra) {
@@ -2257,7 +2269,7 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
   });
 }
 
-// Export types and interfaces for use in test files
-export type { ScorerConfig, ScorerRun, PromptObject };
+// Export types and interfaces for adapters and test files
+export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };

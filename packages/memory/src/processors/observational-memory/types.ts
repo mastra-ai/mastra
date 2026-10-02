@@ -57,8 +57,29 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | 'auto' | false;
+export type ActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs, e.g. `{ default: 'auto', anthropic: '1h' }`.
+ * Keys match the actor model's provider before the first `.`, case-insensitively.
+ */
+export type ActivationTTLByProvider = {
+  default?: ActivationTTLValue;
+  [provider: string]: ActivationTTLValue | undefined;
+};
+
+export type ActivationTTL = ActivationTTLValue | ActivationTTLByProvider;
 export type ResolvedActivationTTL = number | 'auto';
+
+/**
+ * Parsed form of {@link ActivationTTLByProvider}. Provider keys are lowercased.
+ * A provider value of `false` disables idle activation for that provider.
+ * @internal
+ */
+export interface ParsedActivationTTLMap {
+  default?: ResolvedActivationTTL;
+  providers: Record<string, ResolvedActivationTTL | false>;
+}
 
 /**
  * Configuration for the observation step (Observer agent).
@@ -102,6 +123,12 @@ export interface ObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModel;
+
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -304,6 +331,12 @@ export interface ReflectionConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModel;
+
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of observations that triggers reflection.
@@ -555,6 +588,12 @@ export interface DataOmObservationFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
     /** The OM record ID */
     recordId: string;
 
@@ -737,6 +776,12 @@ export interface DataOmBufferingFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
     /** The OM record ID */
     recordId: string;
 
@@ -893,6 +938,7 @@ export interface ObservationDebugEvent {
     | 'observation_complete'
     | 'reflection_triggered'
     | 'reflection_complete'
+    | 'reflection_failed'
     | 'tokens_accumulated'
     | 'step_progress';
   timestamp: Date;
@@ -915,6 +961,10 @@ export interface ObservationDebugEvent {
   observations?: string;
   /** Previous observations (before this event) */
   previousObservations?: string;
+  /** Failure metadata for failed observation or reflection events */
+  failurePolicy?: 'abort' | 'continue';
+  failureKind?: 'observer-model' | 'reflector-model';
+  error?: string;
   /** Observer's raw output */
   rawObserverOutput?: string;
   /** LLM usage from Observer/Reflector calls */
@@ -984,6 +1034,7 @@ export interface ObservationalMemoryConfig {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
 
   /**
@@ -1009,6 +1060,12 @@ export interface ObservationalMemoryConfig {
    * Memory scope for observations.
    * - 'resource': Observations span all threads for a resource (cross-thread memory)
    * - 'thread': Observations are per-thread (default)
+   *
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1080,7 +1137,8 @@ export interface ObservationalMemoryConfig {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`, `"auto"`,
+   * or an object of per-provider TTLs like `{ default: 'auto', anthropic: '1h' }`.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached.
@@ -1113,6 +1171,8 @@ export interface ObservationalMemoryConfig {
  */
 export interface ResolvedObservationConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1128,7 +1188,7 @@ export interface ResolvedObservationConfig {
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -1147,6 +1207,8 @@ export interface ResolvedObservationConfig {
 
 export interface ResolvedReflectionConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1157,7 +1219,7 @@ export interface ResolvedReflectionConfig {
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */

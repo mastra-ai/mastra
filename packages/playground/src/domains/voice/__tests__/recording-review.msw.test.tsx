@@ -6,7 +6,11 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LiveKitRecordingReview } from '../components/livekit-recording-review';
 import { recordedTrace, recordingEnabledPackages, readyRecording, unavailableRecording } from './fixtures/recording';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { emptyScorers } from '@/pages/traces/__tests__/fixtures/traces';
+import { TestLinkProvider } from '@/test/link-provider';
 import { defaultSystemPackages, server } from '@/test/msw-server';
+import { renderWithProviders } from '@/test/render';
 
 const BASE_URL = 'http://localhost:4111';
 const renderReview = (traceId = recordedTrace.traceId, spans = recordedTrace.spans) => {
@@ -25,6 +29,34 @@ const renderReview = (traceId = recordedTrace.traceId, spans = recordedTrace.spa
 afterEach(cleanup);
 
 describe('LiveKitRecordingReview', () => {
+  describe('when displayed in the shared trace panel', () => {
+    it('opens the call recording from the trace header', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)),
+        http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
+        http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(readyRecording)),
+      );
+      renderWithProviders(
+        <TestLinkProvider>
+          <TraceSpanPanel
+            traceId={recordedTrace.traceId}
+            spans={recordedTrace.spans}
+            isLoadingSpans={false}
+            selectedSpanId={null}
+            onSpanSelect={() => {}}
+            onClose={() => {}}
+            withQueryTrace={false}
+            withFeedback={false}
+            onOpenScore={() => {}}
+          />
+        </TestLinkProvider>,
+        { router: true },
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
+      expect((await screen.findByLabelText<HTMLAudioElement>('Call recording')).src).toBe(readyRecording.url);
+    });
+  });
+
   describe('when the recording route is configured for a voice call trace', () => {
     it('loads the recording only after Review Audio is clicked, using the trace ID and Studio authentication', async () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)));
@@ -54,7 +86,7 @@ describe('LiveKitRecordingReview', () => {
       renderReview();
       fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
       await screen.findByLabelText('Call recording');
-      fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       await waitFor(() => expect(screen.queryByLabelText('Call recording')).toBeNull());
     });
 
@@ -70,7 +102,7 @@ describe('LiveKitRecordingReview', () => {
       renderReview();
       fireEvent.click(await screen.findByRole('button', { name: 'Review Audio' }));
       await screen.findByLabelText('Call recording');
-      fireEvent.click(screen.getByRole('button', { name: 'Close dialog' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close', exact: true }));
       await waitFor(() => expect(screen.queryByLabelText('Call recording')).toBeNull());
       fireEvent.click(screen.getByRole('button', { name: 'Review Audio' }));
       await screen.findByLabelText('Call recording');

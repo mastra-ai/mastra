@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
@@ -41,12 +42,14 @@ export function EntityAccordionItem({
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   return (
-    <div className="border-border overflow-hidden rounded-md border">
-      <div className="bg-background flex flex-col gap-2 p-3">
+    <div className="overflow-hidden rounded-md border border-border">
+      <div className="flex flex-col gap-2 bg-background p-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="xs">{icon}</Icon>
-            <span className="text-foreground text-column">{name}</span>
+            <Txt as="span" variant="column" tone="ink">
+              {name}
+            </Txt>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,14 +63,14 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-card text-caption min-h-[40px] border-dashed px-2 py-1"
+          className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
           size="sm"
           disabled={isReadOnly}
         />
       </div>
 
       {showRulesSection && (
-        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-border bg-background border-t">
+        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border bg-background">
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
             <Icon>
               <ChevronRight
@@ -77,13 +80,15 @@ export function EntityAccordionItem({
               />
             </Icon>
             <Icon>
-              <Ruler className="text-accent6" />
+              <Ruler className="text-warning-foreground" />
             </Icon>
-            <span className="text-foreground text-caption">Display Conditions</span>
+            <Txt as="span" variant="caption" tone="ink">
+              Display Conditions
+            </Txt>
             {ruleCount > 0 && (
-              <span className="text-muted-foreground text-caption">
+              <Txt as="span" variant="caption" tone="muted">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
-              </span>
+              </Txt>
             )}
           </CollapsibleTrigger>
           <CollapsibleContent>

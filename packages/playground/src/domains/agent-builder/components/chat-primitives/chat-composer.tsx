@@ -43,7 +43,7 @@ export const ChatComposer = ({
     () => ({
       viewTransitionName: 'chat-composer',
       ['--agent-color-fg' as string]: agentColor.foreground,
-      ['--agent-color-bg' as string]: agentColor.background,
+      ['--agent-color-bg' as string]: agentColor.tint,
     }),
     [agentColor],
   );
@@ -51,7 +51,7 @@ export const ChatComposer = ({
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="border-border bg-background rounded-3xl border px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
+        className="rounded-3xl border border-border bg-background px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
         style={containerStyle}
         data-testid={containerTestId}
       >

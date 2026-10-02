@@ -1,8 +1,12 @@
 import type { DatasetExperiment, ExperimentTargetType } from '@mastra/client-js';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -11,28 +15,27 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import { CheckCircle, CircleSlashIcon, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon, Check, X } from 'lucide-react';
+import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
-import { useLinkComponent } from '@/lib/framework';
 
 const REVIEW_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
@@ -64,6 +67,10 @@ export interface ReviewListFilters {
 }
 
 export interface DatasetReviewProps {
+  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
+  withQueryTrace: boolean;
+  /** Shows the Feedback tabs on the result and trace drawers. */
+  withFeedback: boolean;
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
   datasetId?: string;
   /** When set, scopes the review (and completed) lists to items produced by this experiment; otherwise project-wide. */
@@ -91,6 +98,7 @@ export interface DatasetReviewProps {
   renderFilters?: (filters: ReviewListFilters) => ReactNode;
   /** Rendered at the end of the toolbar, after the bulk actions. */
   toolbarEnd?: ReactNode;
+  breadcrumbs?: ReactNode;
   /** When set, shows a "Create Scorer" action fed with the visible review items (input/output). */
   onCreateScorer?: (items: Array<{ input: unknown; output: unknown }>) => void;
 }
@@ -107,6 +115,9 @@ export function DatasetReview({
   renderFilters,
   toolbarEnd,
   onCreateScorer,
+  breadcrumbs,
+  withQueryTrace,
+  withFeedback,
 }: DatasetReviewProps) {
   const client = useMastraClient();
   const { paths } = useLinkComponent();
@@ -127,12 +138,8 @@ export function DatasetReview({
   });
   const { updateExperimentResult } = useDatasetMutations();
 
-  // Local state
   const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
 
-  // Respond to external "feature this item" requests from the parent (e.g. clicking
-  // a "Review" button on an experiment result). The parent passes the same id again
-  // by clearing to null in between so a repeat request still re-fires this effect.
   useEffect(() => {
     if (featuredItemIdRequest !== undefined) setFeaturedItemId(featuredItemIdRequest);
   }, [featuredItemIdRequest]);
@@ -142,13 +149,11 @@ export function DatasetReview({
   const [showCompleted, setShowCompleted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Analyze dialog
   const [showAnalyzeDialog, setShowAnalyzeDialog] = useState(false);
   const [analyzePrompt, setAnalyzePrompt] = useState('');
   const [analyzeProvider, setAnalyzeProvider] = useState('');
   const [analyzeModel, setAnalyzeModel] = useState('');
 
-  // Proposal dialog
   const [proposedAssignments, setProposedAssignments] = useState<
     Array<{ itemId: string; tags: string[]; reason: string; accepted: boolean }>
   >([]);
@@ -156,7 +161,6 @@ export function DatasetReview({
 
   const items = useMemo(() => reviewItems ?? [], [reviewItems]);
 
-  // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
     const tags = new Set<string>();
     if (dataset?.tags) {
@@ -173,19 +177,16 @@ export function DatasetReview({
       if (!dataset || !datasetId) return;
       const currentTags = dataset.tags ?? [];
       if (currentTags.includes(tag)) return;
-      // We don't have updateDataset tags directly — tags are synced via item updates
     },
     [dataset, datasetId],
   );
 
-  // Filtered items
   const filteredItems = useMemo(() => {
     if (!activeTagFilter) return items;
     if (activeTagFilter === UNTAGGED) return items.filter(i => i.tags.length === 0);
     return items.filter(i => i.tags.includes(activeTagFilter));
   }, [items, activeTagFilter]);
 
-  // Tag filter options: most used first, plus "Untagged" when some items have no tag.
   const tagOptions = useMemo(() => {
     const counts = new Map<string, number>();
     let untagged = 0;
@@ -211,7 +212,6 @@ export function DatasetReview({
     setFeaturedItemId(null);
   }, []);
 
-  // Item actions
   const setItemTags = useCallback(
     (itemId: string, tags: string[]) => {
       const item = items.find(i => i.id === itemId);
@@ -269,7 +269,6 @@ export function DatasetReview({
     [items, updateExperimentResult, featuredItemId],
   );
 
-  // Display items with tag filtering applied to both views
   const displayItems = useMemo(() => {
     const base = showCompleted ? (completedItems ?? []) : filteredItems;
     if (!showCompleted || !activeTagFilter) return base;
@@ -284,7 +283,6 @@ export function DatasetReview({
   );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
 
-  // Bulk selection
   const toggleSelect = useCallback((itemId: string) => {
     setSelectedItemIds(prev => {
       const next = new Set(prev);
@@ -343,7 +341,6 @@ export function DatasetReview({
     setSelectedItemIds(new Set());
   }, [selectedItemIds, removeItem]);
 
-  // Analyze
   const openAnalyzeDialog = useCallback(() => {
     setAnalyzePrompt('');
     setShowAnalyzeDialog(true);
@@ -400,19 +397,16 @@ export function DatasetReview({
     setShowProposalDialog(false);
   }, [proposedAssignments, items, setItemTags]);
 
-  // Row click handler
   const handleRowClick = useCallback((itemId: string) => {
     setFeaturedItemId(prev => (prev === itemId ? null : itemId));
   }, []);
 
-  // Featured item
   const featuredItem = useMemo(() => {
     if (!featuredItemId) return null;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
   const { data: featuredScoresByItemId } = useScoresByExperimentId(featuredItem?.experimentId ?? '');
 
-  // Navigation — undefined at the edges so the prev/next buttons disable.
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
   const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
   const toNextItem =
@@ -430,55 +424,68 @@ export function DatasetReview({
   };
 
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      {renderFilters ? (
-        <>
-          {toolbarStart}
-          {renderFilters({
-            status,
-            onStatusChange,
-            tag: activeTagFilter,
-            onTagChange: setActiveTagFilter,
-            tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
-          })}
-        </>
-      ) : (
-        <div className="flex items-center gap-2">
-          {toolbarStart}
-          <SelectFieldBlock
-            label="Status"
-            labelIsHidden
-            name="filter-status"
-            options={STATUS_OPTIONS}
-            value={status}
-            onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
-            className="whitespace-nowrap"
-          />
-          {tagOptions.length > 1 && (
-            <SelectFieldBlock
-              label="Tags"
-              labelIsHidden
-              name="filter-tags"
-              options={tagOptions}
-              value={activeTagFilter ?? ALL_TAGS}
-              onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
-              className="whitespace-nowrap"
-            />
-          )}
-          {hasActiveFilters && (
-            <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
-              Reset
-            </Button>
-          )}
-        </div>
-      )}
+    <ActionRow>
+      <ActionRow.Start>
+        {renderFilters ? (
+          <>
+            {toolbarStart}
+            {renderFilters({
+              status,
+              onStatusChange,
+              tag: activeTagFilter,
+              onTagChange: setActiveTagFilter,
+              tagOptions: tagOptions.filter(option => option.value !== ALL_TAGS),
+            })}
+          </>
+        ) : (
+          <>
+            {toolbarStart}
+            <Select
+              value={status}
+              onValueChange={value => onStatusChange(value === 'completed' ? 'completed' : 'review')}
+            >
+              <SelectTrigger aria-label="Status" size="md" className="whitespace-nowrap">
+                <SelectValue placeholder="Select an option" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {tagOptions.length > 1 && (
+              <Select
+                value={activeTagFilter ?? ALL_TAGS}
+                onValueChange={value => setActiveTagFilter(value === ALL_TAGS ? null : value)}
+              >
+                <SelectTrigger aria-label="Tags" size="md" className="whitespace-nowrap">
+                  <SelectValue placeholder="Select an option" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tagOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {hasActiveFilters && (
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+                Reset
+              </Button>
+            )}
+          </>
+        )}
+      </ActionRow.Start>
 
       {(hasSelection || toolbarEnd || showCreateScorer) && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <ActionRow.End>
           {toolbarEnd}
           {showCreateScorer && (
             <Button
-              variant="outline"
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
@@ -503,7 +510,7 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="outline" disabled={isAnalyzing} aria-label="More actions">
+                  <Button disabled={isAnalyzing} aria-label="More actions">
                     {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
                   </Button>
                 </DropdownMenu.Trigger>
@@ -525,24 +532,24 @@ export function DatasetReview({
               </DropdownMenu>
             </>
           )}
-        </div>
+        </ActionRow.End>
       )}
-    </div>
+    </ActionRow>
   );
 
   if (isLoadingReview) {
     return (
-      <>
-        <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-        <PageLayout.MainArea isCentered>
-          <Spinner className="h-6 w-6" />
-        </PageLayout.MainArea>
-      </>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+        <h1 className="sr-only">Review Queue</h1>
+        <Spinner fill />
+      </PageLayout>
     );
   }
 
   const detailPanel = (
     <ExperimentResultDetail
+      withQueryTrace={withQueryTrace}
+      withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
       scores={featuredItem ? featuredScoresByItemId?.[featuredItem.itemId] : undefined}
@@ -572,67 +579,61 @@ export function DatasetReview({
   );
 
   return (
-    <>
-      <PageLayout.TopArea>{toolbar}</PageLayout.TopArea>
-
-      {/* Analyze config dialog */}
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <h1 className="sr-only">Review Queue</h1>
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Analyze Items</DialogTitle>
             <DialogDescription>Use an LLM to automatically suggest tags for the selected items.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <DialogBody>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="mb-1 block">Provider</Label>
+              <Field className="gap-1">
+                <FieldLabel>Provider</FieldLabel>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
-              </div>
-              <div>
-                <Label className="mb-1 block">Model</Label>
+              </Field>
+              <Field className="gap-1">
+                <FieldLabel>Model</FieldLabel>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
-              </div>
+              </Field>
             </div>
             <Txt variant="meta" tone="muted">
               {selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''} will be analyzed
             </Txt>
-            <div>
-              <Label>Instructions (optional)</Label>
+            <Field className="gap-1">
+              <FieldLabel>Instructions (optional)</FieldLabel>
               <Textarea
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-caption mt-1"
+                className="text-caption"
               />
-            </div>
-          </div>
+            </Field>
+          </DialogBody>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowAnalyzeDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
-              {isAnalyzing ? <Spinner className="mr-1 h-4 w-4" /> : null}
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction onConfirm={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
               Analyze
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Proposal confirmation dialog */}
       <Dialog open={showProposalDialog} onOpenChange={setShowProposalDialog}>
-        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>Review Proposed Tags</DialogTitle>
             <DialogDescription>
               {proposedAssignments.filter(p => p.accepted).length} of {proposedAssignments.length} proposals selected
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <DialogBody>
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -680,41 +681,33 @@ export function DatasetReview({
                 </div>
               );
             })}
-          </div>
+          </DialogBody>
           <DialogFooter>
-            <Button icon={<X />} variant="outline" onClick={() => setShowProposalDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              icon={<Check />}
-              onClick={handleAcceptProposals}
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction
+              onConfirm={handleAcceptProposals}
               disabled={proposedAssignments.filter(p => p.accepted).length === 0}
             >
               Accept {proposedAssignments.filter(p => p.accepted).length} proposals
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: list; the detail opens as a drawer. */}
-      <PageLayout.MainArea className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
-            <div className="flex h-full items-center justify-center">
-              <Spinner className="h-6 w-6" />
-            </div>
+            <Spinner fill />
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-8">
-              <EmptyState
-                iconSlot={<CircleSlashIcon className="text-muted-foreground h-8 w-8" />}
-                titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
-                descriptionSlot={
-                  showCompleted
-                    ? 'Items marked as complete will appear here for auditing.'
-                    : 'When experiment results are flagged for review, they will appear here.'
-                }
-              />
-            </div>
+            <EmptyState
+              titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
+              descriptionSlot={
+                showCompleted
+                  ? 'Items marked as complete will appear here for auditing.'
+                  : 'When experiment results are flagged for review, they will appear here.'
+              }
+              variant="fill"
+            />
           ) : (
             <ExperimentResultsList
               results={displayItems}
@@ -730,7 +723,7 @@ export function DatasetReview({
         </div>
 
         {detailPanel}
-      </PageLayout.MainArea>
-    </>
+      </div>
+    </PageLayout>
   );
 }

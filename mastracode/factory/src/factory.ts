@@ -53,6 +53,8 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
+import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
@@ -60,6 +62,7 @@ import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integr
 import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
+import { prepareSessionRunContext } from './integrations/subscription-session.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -70,9 +73,11 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
+import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -549,7 +554,7 @@ export class MastraFactory {
       if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
         throw new Error(
           `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId })\n` +
+            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
             `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
         );
       }
@@ -817,7 +822,15 @@ export class MastraFactory {
           }
         : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
-      ...(workItemsReady ? { workItems: workItemsStorage } : {}),
+      ...(workItemsReady
+        ? {
+            workItems: workItemsStorage,
+            controller: {
+              getSessionByResource: async (resourceId: string) =>
+                this.#prepared?.base.controller.getSessionByResource(resourceId),
+            },
+          }
+        : {}),
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -917,14 +930,56 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // A wake (notification or peer signal) has no signed-in request, so
+        // tenant credential resolution would fail closed. Run it as the Factory
+        // session's owner in its org; Factory sessions are keyed by resourceId.
+        prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
+          if (!storage.isDomainReady('source-control')) return;
+          await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
+        },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
-        hostInstructions: ({ requestContext }) => {
+        hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
             | AgentControllerRequestContext<MastraCodeState>
             | undefined;
-          return parseSupervisorResourceId(context?.resourceId) ? SUPERVISOR_INSTRUCTIONS : undefined;
+          if (parseSupervisorResourceId(context?.resourceId)) return SUPERVISOR_INSTRUCTIONS;
+          // The SDK resolves this callback before it loads repository
+          // AGENTS.md/CLAUDE.md. A controller recreated after restart has
+          // only initialState, and a partially persisted one can keep
+          // `factoryProjectId` while `untrustedCheckout` is gone, so the
+          // presence of the project id alone proves nothing. Heal whenever any
+          // trust field the recovery writes is missing, now, not later when
+          // the agent's tools are assembled. Unbound sessions never gain these
+          // fields and pay one binding lookup per prompt.
+          if (context?.threadId && context.resourceId) {
+            const current = context.getState();
+            const trustStateComplete =
+              Boolean(current.factoryProjectId) &&
+              Boolean(current.factoryOrgId) &&
+              typeof current.untrustedCheckout === 'boolean';
+            if (!trustStateComplete) {
+              const recovered = await resolveFactorySessionAddress({
+                requestContext,
+                storage: workItemsStorage,
+                forceBindingLookup: true,
+                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+              });
+              if (recovered?.binding) {
+                const state = context.getState();
+                if (
+                  state.factoryProjectId !== recovered.binding.factoryProjectId ||
+                  (recovered.binding.role === 'review' && state.untrustedCheckout !== true)
+                ) {
+                  throw new Error(
+                    'Factory review session security state could not be restored before prompt creation.',
+                  );
+                }
+              }
+            }
+          }
+          return undefined;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
@@ -994,6 +1049,35 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
+                  // Review-role sessions get `factory_review_source` so the
+                  // published review can carry the session URL that produced it
+                  // — the affordance that lets a suspicious review (e.g. one
+                  // that lands on the wrong PR) be traced back to its run.
+                  //
+                  // The session URL is browser-facing (a human opens it from a
+                  // GitHub/GitLab review comment), so it needs the UI host —
+                  // the same origin Slack session deep-links resolve against
+                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
+                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+                  // mirror Slack's behavior: when it is unset, pass `null` so
+                  // the tool is omitted from the toolset rather than fall back
+                  // to the API/localhost origin and publish that URL into a
+                  // public review body. The skill's tool-not-available branch
+                  // handles the absence as stop-don't-publish. Blank counts as
+                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+                  // empty/whitespace value must not register the tool with a
+                  // hostless `sessionUrl`.
+                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
+                  mergeTools(
+                    'factory-review-source',
+                    await createReviewSourceTool({
+                      requestContext,
+                      storage: workItemsStorage,
+                      uiOrigin: reviewSourceUiOrigin,
+                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+                    }),
+                  );
                   // The supervisor session has no seat, so it never gets the
                   // transition tool above; it gets the read surface instead,
                   // and only once the caller's org is shown to own the project.
@@ -1026,6 +1110,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
+                          boards: this.#boards,
                           audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
@@ -1155,6 +1240,23 @@ export class MastraFactory {
                     memorySettings: memorySettingsStorage,
                   }),
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
+                ...(githubIntegration
+                  ? {
+                      dismissStaleReviews: async decision => {
+                        await dismissStaleFactoryReviews(
+                          githubIntegration.versionControl,
+                          decision,
+                          login => isFactoryGithubLogin(githubIntegration, login),
+                          login =>
+                            trustedCollaborator(githubIntegration, {
+                              installationId: decision.installationId,
+                              repository: decision.repository,
+                              login,
+                            }),
+                        );
+                      },
+                    }
+                  : {}),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;

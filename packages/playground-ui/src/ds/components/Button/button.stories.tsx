@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
+import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
 import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'outline', 'ghost'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -193,6 +195,31 @@ export const VariantSizeMatrix: Story = {
           </Button>
         </Fragment>
       ))}
+    </div>
+  ),
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex w-[calc(100vw-2rem)] max-w-120 flex-col gap-4">
+      <div className="rounded-lg border border-border bg-background p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Main canvas
+        </Txt>
+        <div className="flex gap-2">
+          <Input aria-label="Agent name on the main canvas" placeholder="Agent name" />
+          <Button>Rename</Button>
+        </div>
+      </div>
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Card
+        </Txt>
+        <div className="flex gap-2">
+          <Input aria-label="Agent name on a card" placeholder="Agent name" />
+          <Button>Rename</Button>
+        </div>
+      </div>
     </div>
   ),
 };

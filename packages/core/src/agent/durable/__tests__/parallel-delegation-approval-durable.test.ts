@@ -133,9 +133,9 @@ function makeSupervisorModel() {
 
 /**
  * Drain a stream until `stopWhen` returns true or the stream ends. Durable
- * streams intentionally stay open while the run is suspended (so a later
- * resume can keep streaming), so mid-flow legs stop at a condition instead of
- * waiting for closure. Returns collected chunk types/approvals/text.
+ * streams close at the suspension boundary by default (parity with non-durable
+ * `Agent.stream()`), so mid-flow legs stop at a condition rather than relying
+ * on the exact close point. Returns collected chunk types/approvals/text.
  */
 async function drainUntil(stream: AsyncIterable<any>, stopWhen: (state: { types: string[] }) => boolean, ms = 15000) {
   const types: string[] = [];
@@ -232,6 +232,9 @@ describe('durable parallel delegation approvals', () => {
     memory: { thread: string; resource: string },
     storage: InMemoryStore,
   ) => {
+    // Two parallel delegations each emit their own SUSPENDED as they park, so
+    // surfacing BOTH approvals on one reader relies on the default of keeping
+    // the stream open across suspension.
     const result = await durableAgent.stream('Do alpha and beta', { memory, maxSteps: 5 });
     const leg1 = await drainUntil(
       result.fullStream,
@@ -277,8 +280,8 @@ describe('durable parallel delegation approvals', () => {
     toolCallId: string,
     memory: { thread: string; resource: string },
   ) => {
-    // The run re-suspends afterwards (the sibling is still parked), so the
-    // stream stays open by design — stop at the delegation's tool-result.
+    // The run re-suspends afterwards (the sibling is still parked). Stop at the
+    // delegation's tool-result, which arrives before that re-suspension.
     const resumed = await durableAgent.approveToolCall({ runId, toolCallId, memory });
     const leg = await drainUntil(resumed.fullStream, ({ types }) => types.includes('tool-result'));
     expect(leg.timedOut, `approving ${toolCallId} should produce a tool-result; got: ${leg.types.join(', ')}`).toBe(
@@ -360,5 +363,113 @@ describe('durable parallel delegation approvals', () => {
 
     await approveAndDrainFinalLeg(durableAgent, runId, 'sup-tc-A', memory);
     expect(executions.sort()).toEqual(['alpha', 'beta']);
+  }, 60000);
+
+  // A single agent whose one tool requires approval suspends exactly once —
+  // the scenario from issue #24389. This isolates the `closeOnSuspend` option
+  // from the multi-leg parallel case above.
+  const setupSingle = () => {
+    const storage = new InMemoryStore();
+    const mockMemory = new MockMemory();
+
+    const gatedTool = createTool({
+      id: 'gatedTool',
+      description: 'Approval-gated tool',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      execute: async (input: { query: string }) => ({ result: `${input.query} done` }),
+    });
+
+    const soloAgent = new Agent({
+      id: 'solo',
+      name: 'Solo',
+      instructions: 'Use your tool.',
+      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV2,
+      tools: { gatedTool },
+      memory: mockMemory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: soloAgent, pubsub });
+    new Mastra({ agents: { durableAgent }, storage, logger: false });
+    return { storage, durableAgent };
+  };
+
+  it('closes the caller stream on suspension with closeOnSuspend: true (issue #24389)', async () => {
+    const { storage, durableAgent } = setupSingle();
+    const memory = { thread: 'solo-close-optin-thread', resource: 'solo-close-optin-resource' };
+
+    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
+    // No stopWhen: drain to the natural end. With `closeOnSuspend: true` the
+    // stream must end at the suspension boundary instead of hanging.
+    const drained = await drainUntil(result.fullStream, () => false, 20000);
+
+    expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
+    expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: result.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+    });
+  }, 60000);
+
+  it('closes the caller stream on suspension via new Agent({ durable: true }) with closeOnSuspend: true', async () => {
+    const storage = new InMemoryStore();
+    const gatedTool = createTool({
+      id: 'gatedTool',
+      description: 'Approval-gated tool',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      execute: async (input: { query: string }) => ({ result: `${input.query} done` }),
+    });
+    const agent = new Agent({
+      id: 'solo-public',
+      name: 'SoloPublic',
+      instructions: 'Use your tool.',
+      model: makeSubAgentModel('solo', 'solo done') as LanguageModelV2,
+      tools: { gatedTool },
+      memory: new MockMemory(),
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, storage, logger: false });
+    const memory = { thread: 'solo-public-thread', resource: 'solo-public-resource' };
+
+    const result = await mastra.getAgent('agent').stream('Do the thing', { memory, maxSteps: 5, closeOnSuspend: true });
+    try {
+      const drained = await drainUntil(result.fullStream, () => false, 20000);
+
+      expect(drained.timedOut, `stream should close on suspension; chunks: ${drained.types.join(', ')}`).toBe(false);
+      expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+
+      const workflows = (await storage.getStore('workflows'))!;
+      await vi.waitFor(async () => {
+        const persisted = await workflows.getWorkflowRunById({
+          runId: result.runId,
+          workflowName: DurableStepIds.AGENTIC_LOOP,
+        });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot?.status).toBe('suspended');
+      });
+    } finally {
+      (result as { cleanup?: () => void }).cleanup?.();
+    }
+  }, 60000);
+
+  it('keeps the caller stream open on suspension by default', async () => {
+    const { durableAgent } = setupSingle();
+    const memory = { thread: 'solo-open-default-thread', resource: 'solo-open-default-resource' };
+
+    const result = await durableAgent.stream('Do the thing', { memory, maxSteps: 5 });
+    // By default the stream stays open after suspension, so draining to
+    // the (never-reached) end times out. Short budget keeps the test fast.
+    const drained = await drainUntil(result.fullStream, () => false, 2000);
+
+    expect(drained.timedOut, `stream should stay open by default`).toBe(true);
+    expect(drained.approvals.map(a => a?.toolCallId)).toEqual(['inner-solo']);
+    result.cleanup?.();
   }, 60000);
 });

@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { overlaySurfaceStyle, raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
@@ -58,7 +59,7 @@ export function BrowserViewPanel() {
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-5',
         'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
-        isModal ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        isModal ? 'opacity-100' : 'pointer-events-none opacity-0',
       )}
       onClick={handleBackdropClick}
       aria-hidden={!isModal}
@@ -70,7 +71,7 @@ export function BrowserViewPanel() {
         aria-label="Browser view"
         tabIndex={-1}
         className={cn(
-          'flex flex-col w-full max-w-5xl max-h-full',
+          'flex max-h-full w-full max-w-5xl flex-col',
           overlaySurfaceStyle,
           'overflow-hidden rounded-xl',
           'transition-transform duration-200 outline-none',
@@ -78,17 +79,16 @@ export function BrowserViewPanel() {
         )}
         onClick={e => e.stopPropagation()}
       >
-        <div className="border-border flex shrink-0 items-center gap-3 border-b px-4 py-3">
-          <Globe className="text-muted-foreground h-4 w-4 shrink-0" />
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+          <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className={cn(raisedSurfaceStyle, 'min-w-0 flex-1 rounded-md px-3 py-1.5')}>
-            <span
-              className={cn(
-                'text-body truncate block',
-                currentUrl ? 'text-foreground' : 'text-muted-foreground italic',
-              )}
+            <Txt
+              as="span"
+              tone={currentUrl ? 'ink' : 'muted'}
+              className={cn('block truncate', !currentUrl && 'italic')}
             >
               {currentUrl || 'No URL'}
-            </span>
+            </Txt>
           </div>
           <Badge variant={statusBadge.variant} size="sm" indicator={statusBadge.indicator}>
             {statusBadge.label}

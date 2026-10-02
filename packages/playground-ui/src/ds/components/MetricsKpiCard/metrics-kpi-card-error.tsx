@@ -1,3 +1,4 @@
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export function MetricsKpiCardError({
@@ -7,5 +8,9 @@ export function MetricsKpiCardError({
   message?: string;
   className?: string;
 }) {
-  return <span className={cn('text-caption text-accent2', className)}>{message}</span>;
+  return (
+    <Txt as="span" variant="meta" className={cn('text-destructive-foreground', className)}>
+      {message}
+    </Txt>
+  );
 }

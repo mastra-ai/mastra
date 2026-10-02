@@ -29,24 +29,15 @@ describe('PageHeader', () => {
     expect(markup).toContain('Edit');
   });
 
-  it('renders the legacy prop API', () => {
+  it('renders the title before beside metadata regardless of child order', () => {
     const markup = renderToStaticMarkup(
-      <PageHeader title="Legacy title" description="Legacy description" icon="Legacy icon" />,
+      <PageHeader>
+        <PageHeader.Meta beside>Live</PageHeader.Meta>
+        <PageHeader.Title>Production</PageHeader.Title>
+      </PageHeader>,
     );
 
-    expect(markup).toContain('Legacy title');
-    expect(markup).toContain('Legacy description');
-    expect(markup).toContain('Legacy icon');
-  });
-
-  it('hides legacy content while loading', () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader title="Legacy title" description="Legacy description" icon="Legacy icon" isLoading />,
-    );
-
-    expect(markup).not.toContain('Legacy title');
-    expect(markup).not.toContain('Legacy description');
-    expect(markup).not.toContain('Legacy icon');
+    expect(markup.indexOf('Production')).toBeLessThan(markup.indexOf('Live'));
   });
 
   it('supports beside metadata', () => {
@@ -57,6 +48,19 @@ describe('PageHeader', () => {
 
   it('renders an empty header', () => {
     expect(renderToStaticMarkup(<PageHeader />)).toContain('<header');
+  });
+
+  it('renders the action outside the title column, aligned to the top', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Environment</PageHeader.Title>
+        <PageHeader.Action>Edit</PageHeader.Action>
+      </PageHeader>,
+    );
+
+    expect(markup).toMatch(
+      /<\/h1><\/div><\/div><div data-slot="page-header-action" class="[^"]*self-start[^"]*">Edit<\/div><\/div><\/header>$/,
+    );
   });
 
   it('keeps the title anchored to the top of the row regardless of action height', () => {
@@ -81,6 +85,21 @@ describe('PageHeader', () => {
 
     expect(tallActionTitleClass).toBeDefined();
     expect(tallActionTitleClass).toEqual(noActionTitleClass);
-    expect(tallActionTitleClass).toContain('self-start');
+  });
+
+  it('renders the eyebrow above the title row, outside the title column', () => {
+    const markup = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Eyebrow>
+          <a href="/alerts">Back to alerts</a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Action>Save</PageHeader.Action>
+      </PageHeader>,
+    );
+
+    expect(markup).toMatch(
+      /^<header[^>]*><div [^>]*data-slot="page-header-eyebrow"[^>]*><a href="\/alerts">Back to alerts<\/a><\/div>/,
+    );
   });
 });

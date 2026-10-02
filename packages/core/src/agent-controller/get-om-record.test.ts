@@ -144,6 +144,9 @@ describe('AgentController.getObservationalMemoryRecord', () => {
     session.subscribe(event => events.push(event));
 
     await session.thread.switch({ threadId: threadA.id });
+    await controller.loadOMProgress(session, () => false);
+    expect(events.find(event => event.type === 'om_status')).toBeUndefined();
+
     await controller.loadOMProgress(session);
 
     expect(listMessagesSpy).not.toHaveBeenCalled();

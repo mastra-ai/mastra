@@ -17,6 +17,7 @@ import { CardActions, CardLabels, CardStatus, SourceTitle } from './BoardCardPar
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { WorkItemActivity } from './WorkItemActivity';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 // The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
@@ -51,48 +52,65 @@ export function WorkItemCardRows({
   const labelColors = metadataLabelColors(item.metadata);
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const external = knownExternalAuthor(item);
+  const verdict = columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
 
   return (
     <>
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
-          <span className="text-meta text-placeholder min-w-0 truncate">{workItemMeta(item)}</span>
+          <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
+            {workItemMeta(item)}
+          </Txt>
           {relatedLinks}
           {item.commentCount > 0 && (
-            <span
-              className="text-meta text-placeholder flex shrink-0 items-center gap-1"
+            <Txt
+              as="span"
+              variant="meta"
+              tone="faint"
+              className="flex shrink-0 items-center gap-1"
               aria-label={`${item.commentCount} ${item.commentCount === 1 ? 'comment' : 'comments'}`}
             >
               <MessageSquare size={11} aria-hidden />
               {item.commentCount}
-            </span>
+            </Txt>
           )}
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
+        <div className="flex min-w-0 items-center gap-1.5">
           {item.source === 'github-pr' ? (
             <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />
           ) : (
             <SourceIcon source={item.source} />
           )}
-          <span className="text-label text-foreground min-w-0 flex-1 truncate font-[550]">
+          <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
-          </span>
+          </Txt>
         </div>
       </div>
       <CardLabels labels={labels} colors={labelColors} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
-            <span key={stage} className="border-border text-meta text-muted-foreground rounded-full border px-2 py-0.5">
+            <Txt
+              as="span"
+              variant="meta"
+              tone="muted"
+              key={stage}
+              className="border-border rounded-full border px-2 py-0.5"
+            >
               {itemStageLabel(item, stage)}
-            </span>
+            </Txt>
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external) && (
+      {(status.kind !== 'idle' || external || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
+          {verdict && (
+            <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
+              {verdict.label}
+            </Badge>
+          )}
           {external && (
             <Tooltip>
               <TooltipTrigger
@@ -116,4 +134,14 @@ export function WorkItemCardRows({
       />
     </>
   );
+}
+
+/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
+export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
+  const verdict = metadata.reviewVerdict;
+  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
+  const sha = typeof metadata.reviewedHeadSha === 'string' ? ` · ${metadata.reviewedHeadSha.slice(0, 7)}` : '';
+  return verdict === 'approve'
+    ? { approved: true, label: `Approved${sha}` }
+    : { approved: false, label: `Changes requested${sha}` };
 }

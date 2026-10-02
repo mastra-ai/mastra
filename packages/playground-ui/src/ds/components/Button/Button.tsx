@@ -3,15 +3,15 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon, iconSizeClasses, type IconSize } from '@/ds/icons/Icon';
+import { Icon } from '@/ds/icons/Icon';
+import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
-  disabledFilledSurfaceStyle,
-  disabledOutlineSurfaceStyle,
+  raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label and larger radius.
@@ -48,36 +48,38 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // The raised card material, the same one a field wears: a neutral filled control is
+        // one material system-wide. No border of its own — the material's rim is its edge,
+        // and focus repaints that rim. Inside a ButtonsGroup the group flattens the rim and
+        // hands every segment the same 1px border instead (see `buttons-group.css`).
         default: cn(
-          'border border-border bg-fill text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill-active',
+          'border-0',
+          raisedControlSurfaceStyle,
           NEUTRAL_ICON_STATE,
-          disabledFilledSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-fill-subtle',
+          'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
         // layered on the surface, so a state that thinned it would let whatever the button
         // covers read through the hover it is meant to answer.
         primary: cn(
           'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-fill-destructive text-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
-          'disabled:bg-fill-destructive-disabled disabled:text-destructive-foreground/75 aria-disabled:bg-fill-destructive-disabled aria-disabled:text-destructive-foreground/75',
+          'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          focusRingOffset,
+          'focus-visible:border-transparent',
+          'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-disabled-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-disabled-foreground',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive not-disabled:hover:bg-destructive/20 not-disabled:hover:text-destructive not-disabled:active:bg-destructive/30',
-          'disabled:bg-transparent disabled:text-destructive/50 aria-disabled:bg-transparent aria-disabled:text-destructive/50',
+          'border border-transparent bg-transparent text-destructive-foreground not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
+          'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
-        ),
-        outline: cn(
-          'border border-border-strong bg-transparent text-foreground not-disabled:hover:border-border-hover not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill',
-          NEUTRAL_ICON_STATE,
-          disabledOutlineSurfaceStyle,
-          'aria-disabled:border-border aria-disabled:bg-transparent',
         ),
       },
       size: {
@@ -236,8 +238,11 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       'aria-label': ariaLabel,
       // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
       // (filled buttons have an opaque background that hides a border seam, so the group
-      // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+      // paints their divider as an inset box-shadow instead — see buttons-group.css).
       'data-variant': variant,
+      // Icon-mode is a square: a group that overrides the rung has to move the width with
+      // the height or the circle turns into a pill (see buttons-group.css).
+      'data-shape': iconMode ? 'icon' : undefined,
       className: cn(buttonVariants({ variant, size: resolvedSize }), className),
       ...props,
     };

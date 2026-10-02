@@ -730,6 +730,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect((result as any).validationErrors).toBeDefined();
   });
 
+  it('validates schemas that declare an unsupported dialect such as 2019-09 as 2020-12', async () => {
+    const sdkClient = (client as any).client as Client;
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { $schema, type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            $schema,
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2 }) }],
+      structuredContent: { result: 2 },
+      isError: false,
+    });
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual({ result: 2 });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'nope' }],
+      structuredContent: { result: 'not-a-number' },
+      isError: false,
+    });
+    const invalid = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(invalid).toMatchObject({ error: true });
+    expect((invalid as any).message).toContain('Tool output validation failed for calculate');
+  });
+
   it('passes valid structuredContent through unchanged with content metadata intact', async () => {
     const sdkClient = (client as any).client as Client;
 
@@ -3076,6 +3116,40 @@ describe('MastraMCPClient - requireToolApproval', () => {
     // Tool without annotations should not have `annotations` populated
     const greetTool = tools.greet as any;
     expect(greetTool.mcp?.annotations).toBeUndefined();
+  });
+
+  it('should expose the MCP tool title and fall back to annotations.title', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.registerTool(
+      'titled_tool',
+      {
+        title: 'Titled Tool',
+        description: 'Has a title and an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Title' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+    testServer.mcpServer.registerTool(
+      'annotated_only',
+      {
+        description: 'Has only an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Only' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'title-precedence-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.titled_tool.title).toBe('Titled Tool');
+    expect(tools.annotated_only.title).toBe('Annotation Only');
+    expect(tools.greet.title).toBeUndefined();
   });
 
   it('should support async approval functions', async () => {

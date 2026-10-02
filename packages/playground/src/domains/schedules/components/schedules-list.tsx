@@ -1,13 +1,14 @@
 import type { ScheduleResponse } from '@mastra/client-js';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
+import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { useMemo } from 'react';
-import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
-import { useLinkComponent } from '@/lib/framework';
 
 export type SchedulesSortKey = 'target' | 'status' | 'nextFireAt' | 'lastFireAt';
 export type SchedulesSort = ListSort<SchedulesSortKey>;
@@ -79,36 +80,38 @@ export function SchedulesList({ schedules, isLoading, search = '', sort, onSortC
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link} {...getRowProps(index)}>
           <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell className="min-w-0">
-            <span className="text-body-sm text-muted-foreground block truncate font-mono" title={s.id}>
+            <Txt as="span" variant="body-sm" tone="muted" font="mono" className="block truncate" title={s.id}>
               {s.id}
-            </span>
+            </Txt>
           </DataList.Cell>
           <DataList.Cell>
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
-              <code className="text-caption font-mono">{s.cron}</code>
-              {s.timezone ? <span className="text-muted-foreground text-meta">{s.timezone}</span> : null}
+              <Txt as="span" variant="caption" font="mono">
+                {s.cron}
+              </Txt>
+              {s.timezone ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {s.timezone}
+                </Txt>
+              ) : null}
             </span>
           </DataList.Cell>
           <DataList.Cell>
             <ScheduleStatusText status={s.status} />
           </DataList.Cell>
-          <DataList.Cell>
-            <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.nextFireAt)}>
-              {formatRelativeTime(s.nextFireAt)}
-            </span>
-          </DataList.Cell>
+          <DataList.Cell>{s.nextFireAt ? <RelativeTimestamp value={s.nextFireAt} /> : '—'}</DataList.Cell>
           <DataList.Cell>
             {s.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <WorkflowRunStatusInline status={s.lastRun.status} />
-                <span className="text-muted-foreground text-caption" title={formatScheduleTimestamp(s.lastFireAt)}>
-                  {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
-                </span>
+                {s.lastFireAt ? (
+                  <Txt as="span" variant="caption" tone="muted">
+                    <RelativeTimestamp value={s.lastFireAt} />
+                  </Txt>
+                ) : null}
               </span>
             ) : s.lastFireAt ? (
-              <span className="whitespace-nowrap" title={formatScheduleTimestamp(s.lastFireAt)}>
-                {formatRelativeTime(s.lastFireAt)}
-              </span>
+              <RelativeTimestamp value={s.lastFireAt} />
             ) : (
               <span className="text-muted-foreground">Never</span>
             )}

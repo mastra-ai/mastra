@@ -14,6 +14,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/ds/components/Drawer';
+import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -69,7 +70,7 @@ export function NoiseDetailPanel({
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border border-b">
+        <DrawerHeader className="border-b border-border">
           <DrawerTitle>Noise</DrawerTitle>
           <DrawerDescription className="sr-only">Noise details for the {signalName} trace signal</DrawerDescription>
         </DrawerHeader>
@@ -80,41 +81,63 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <h2
+                <Txt
+                  as="h2"
+                  variant="caption"
+                  tone="muted"
+                  font="mono"
                   id="noise-summary-heading"
-                  className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
+                  className="tracking-wider uppercase"
                 >
                   Summary
-                </h2>
-                <p className="text-foreground text-body mt-3">
+                </Txt>
+                <Txt tone="ink" className="mt-3">
                   Noise contains trace signal summaries that did not consistently match a recurring theme in this
                   snapshot.
-                </p>
-                {noiseQuery.isPending && <p className="text-muted-foreground text-body mt-4">Loading noise details…</p>}
-                {noiseQuery.isError && <p className="text-body mt-4 text-red-500">Unable to load noise details.</p>}
+                </Txt>
+                {noiseQuery.isPending && (
+                  <Txt tone="muted" className="mt-4">
+                    Loading noise details…
+                  </Txt>
+                )}
+                {noiseQuery.isError && (
+                  <Txt className="mt-4 text-destructive-foreground">Unable to load noise details.</Txt>
+                )}
                 {noiseQuery.data && (
-                  <p className="text-foreground text-body mt-4 font-mono tabular-nums">
+                  <Txt tone="ink" font="mono" className="mt-4 tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
                     )}
-                  </p>
+                  </Txt>
                 )}
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <h2
+                <Txt
+                  as="h2"
+                  variant="caption"
+                  tone="muted"
+                  font="mono"
                   id="noise-examples-heading"
-                  className="text-muted-foreground text-caption font-mono tracking-wider uppercase"
+                  className="tracking-wider uppercase"
                 >
                   Example summaries
-                </h2>
-                {examplesQuery.isPending && <p className="text-muted-foreground text-body mt-3">Loading examples…</p>}
-                {examplesQuery.isError && <p className="text-body mt-3 text-red-500">Unable to load examples.</p>}
+                </Txt>
+                {examplesQuery.isPending && (
+                  <Txt tone="muted" className="mt-3">
+                    Loading examples…
+                  </Txt>
+                )}
+                {examplesQuery.isError && (
+                  <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
+                )}
                 {examplesQuery.data && (
                   <>
                     {examplesQuery.data.examples.length === 0 ? (
-                      <p className="text-muted-foreground text-body mt-3">No noise examples in this snapshot.</p>
+                      <Txt tone="muted" className="mt-3">
+                        No noise examples in this snapshot.
+                      </Txt>
                     ) : (
                       <ul className="mt-3 space-y-3">
                         {examplesQuery.data.examples.map(example => (
@@ -124,7 +147,7 @@ export function NoiseDetailPanel({
                               aria-label={`View trace insight for ${example.signalText}`}
                               className={cn(
                                 raisedSurfaceStyle,
-                                'state-layer text-foreground text-body w-full cursor-pointer rounded-md p-3 text-left',
+                                'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
                               )}
                               onClick={() => setInsightTraceId(example.traceId)}
                             >

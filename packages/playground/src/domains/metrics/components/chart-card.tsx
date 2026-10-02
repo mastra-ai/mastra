@@ -1,4 +1,5 @@
 import { ChartTooltip } from '@mastra/playground-ui/components/ChartTooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
 export function ChartCard({
@@ -17,16 +18,28 @@ export function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`border-border bg-background flex flex-col rounded-lg border ${className}`}>
+    <div className={`flex flex-col rounded-lg border border-border bg-background ${className}`}>
       <div className="flex shrink-0 items-start justify-between px-4 py-3">
         <div>
-          <h3 className="text-foreground text-subheading">{title}</h3>
-          {description && <p className="text-placeholder text-caption mt-0.5">{description}</p>}
+          <Txt as="h3" variant="subheading" tone="ink">
+            {title}
+          </Txt>
+          {description && (
+            <Txt variant="caption" tone="faint" className="mt-0.5">
+              {description}
+            </Txt>
+          )}
         </div>
         {summary && (
           <div className="text-right">
-            <span className="text-foreground text-subheading font-mono">{summary}</span>
-            {summaryLabel && <p className="text-placeholder text-caption">{summaryLabel}</p>}
+            <Txt as="span" variant="subheading" tone="ink" className="tabular-nums">
+              {summary}
+            </Txt>
+            {summaryLabel && (
+              <Txt variant="caption" tone="faint">
+                {summaryLabel}
+              </Txt>
+            )}
           </div>
         )}
       </div>
@@ -49,12 +62,12 @@ export function CustomTooltip({
   if (!active || !payload?.length) return null;
   return (
     <ChartTooltip>
-      <p className="text-foreground mb-1 font-medium">{label}</p>
+      <p className="mb-1 font-medium text-foreground">{label}</p>
       {payload.map(entry => (
         <p key={entry.name} className="text-placeholder">
           <span className="mr-2 inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
           {entry.name}:{' '}
-          <span className="font-mono">
+          <span className="tabular-nums">
             {entry.value}
             {suffix}
           </span>

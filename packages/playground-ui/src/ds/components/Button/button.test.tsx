@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Form } from '../Form';
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
 
@@ -27,8 +28,8 @@ describe('Button', () => {
   // A filled variant covers what is behind it — card text, a list row, the pill it is
   // stacked over. Answering a state by dropping its own alpha (`bg-foreground/75`) turns
   // the button into a window exactly when the pointer arrives, so every state resolves to
-  // an opaque rung instead. Translucent variants are excluded on purpose: `ghost` and
-  // `outline` have no fill of their own and are state layers by design.
+  // an opaque rung instead. Translucent variants are excluded on purpose: `ghost` has
+  // no fill of its own and is a state layer by design.
   it.each(['primary', 'destructive'] as const)('keeps the %s fill opaque in every state', variant => {
     const alphaModified = buttonVariants({ variant })
       .split(' ')
@@ -197,9 +198,9 @@ describe('Button', () => {
     it('submits its form when no type is set, as a native button does', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button>Save</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -208,9 +209,9 @@ describe('Button', () => {
     it('does not submit when the caller opts out with type="button"', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button type="button">Cancel</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onSubmit).not.toHaveBeenCalled();

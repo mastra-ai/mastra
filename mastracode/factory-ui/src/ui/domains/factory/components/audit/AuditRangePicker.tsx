@@ -1,3 +1,4 @@
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Fragment,
@@ -19,6 +20,7 @@ import {
   type AuditBoundary,
 } from '../../auditRuler';
 import { AuditRangePresets } from './AuditRangePresets';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const MINOR_TICKS = 110;
 const DAY = 86_400_000;
@@ -133,19 +135,25 @@ export function AuditRangePicker({
             return (
               <Fragment key={at}>
                 {opensADay(at, majorTicks[index - 1]) ? (
-                  <span
-                    className="text-meta text-muted-foreground absolute top-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
+                  <Txt
+                    as="span"
+                    variant="meta"
+                    tone="muted"
+                    className="absolute top-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                     style={{ left: `${position}%` }}
                   >
                     {dayLabel(at)}
-                  </span>
+                  </Txt>
                 ) : null}
-                <span
-                  className="text-meta text-muted-foreground absolute bottom-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
+                <Txt
+                  as="span"
+                  variant="meta"
+                  tone="muted"
+                  className="absolute bottom-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                   style={{ left: `${position}%` }}
                 >
                   {majorStep < DAY ? timeLabel(at) : weekdayLabel(at)}
-                </span>
+                </Txt>
               </Fragment>
             );
           })}
@@ -167,18 +175,24 @@ export function AuditRangePicker({
         {BOUNDARIES.map(boundary =>
           boundary === 'to' && !showEndLabels ? null : (
             <Fragment key={boundary}>
-              <span
-                className="text-meta text-foreground pointer-events-none absolute top-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+              <Txt
+                as="span"
+                variant="meta"
+                tone="ink"
+                className="pointer-events-none absolute top-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {dayLabel(selection[boundary])}
-              </span>
-              <span
-                className="text-meta text-foreground pointer-events-none absolute bottom-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+              </Txt>
+              <Txt
+                as="span"
+                variant="meta"
+                tone="ink"
+                className="pointer-events-none absolute bottom-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {timeLabel(selection[boundary])}
-              </span>
+              </Txt>
             </Fragment>
           ),
         )}
@@ -206,7 +220,10 @@ export function AuditRangePicker({
               aria-valuemax={bounds.to}
               aria-valuenow={selection[boundary]}
               aria-valuetext={`${dayLabel(selection[boundary])} ${timeLabel(selection[boundary])}`}
-              className="focus-visible:ring-border-focus group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+              className={cn(
+                'group flex w-3.5 shrink-0 cursor-ew-resize items-center justify-center rounded-lg',
+                focusRing,
+              )}
               onPointerDown={startDrag(boundary)}
               onKeyDown={nudge(boundary)}
             >

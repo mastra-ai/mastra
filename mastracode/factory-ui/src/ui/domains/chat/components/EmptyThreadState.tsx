@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
@@ -33,45 +35,40 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="empty-thread-title" className="text-display text-foreground mt-7 tracking-tight text-balance">
+      <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 tracking-tight text-balance">
         What can I help you build?
-      </h1>
-      <p className="text-body text-muted-foreground mt-2 max-w-lg leading-relaxed text-pretty">
+      </Txt>
+      <Txt tone="muted" className="mt-2 max-w-lg leading-relaxed text-pretty">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
-      </p>
+      </Txt>
 
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
         <Button
           type="button"
-          variant="outline"
           size="md"
           onClick={() => prefillComposer('Help me understand how this codebase is structured.')}
         >
           Explore this codebase
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="md"
-          onClick={() => prefillComposer('Help me plan a new feature.')}
-        >
+        <Button type="button" size="md" onClick={() => prefillComposer('Help me plan a new feature.')}>
           Plan a feature
         </Button>
         <Button
           type="button"
-          variant="outline"
           size="md"
           onClick={() => prefillComposer('Review the recent changes and suggest improvements.')}
         >
           Review recent changes
         </Button>
-        <Button type="button" variant="outline" size="md" onClick={() => prefillComposer('Help me debug an issue.')}>
+        <Button type="button" size="md" onClick={() => prefillComposer('Help me debug an issue.')}>
           Debug an issue
         </Button>
       </div>
 
       <details className="group text-caption text-muted-foreground mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-foreground focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+        <summary
+          className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
+        >
           <span>
             Working in <span className="text-foreground font-medium">{activeFactory.name}</span>
           </span>

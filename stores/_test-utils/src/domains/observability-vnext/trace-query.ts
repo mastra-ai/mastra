@@ -4,6 +4,7 @@ import {
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
+  isTraceAggregateCanonicalDimension,
   TraceQueryCursorError,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
@@ -11,6 +12,7 @@ import {
   planTraceQuery,
   type NormalizedQueryThreadsInput,
   type NormalizedTraceQueryRequest,
+  type TraceAggregateDimension,
   type QueryThreadsInput,
   type QueryThreadsResult,
   type TraceQueryGroupResponse,
@@ -26,6 +28,7 @@ import {
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
+  type TraceQueryTenantScope,
 } from '@mastra/core/storage';
 
 export interface RawTraceQuerySpan {
@@ -50,6 +53,14 @@ export interface RawTraceQuerySpan {
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
   environment: string | null;
+  organizationId: string | null;
+  runId: string | null;
+  tags: string[] | null;
+  serviceName?: string | null;
+  executionSource?: string | null;
+  userId?: string | null;
+  sessionId?: string | null;
+  experimentId?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -65,6 +76,8 @@ export interface RawTraceQueryScore {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
 }
 
 export interface RawTraceQueryFeedback {
@@ -81,6 +94,8 @@ export interface RawTraceQueryFeedback {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
 }
 
 export interface TraceQueryFixtureData {
@@ -116,8 +131,18 @@ const span = (
   parentEntityVersionId: null,
   rootEntityVersionId: null,
   environment: 'production',
+  organizationId: null,
+  runId: null,
+  tags: null,
+  serviceName: null,
+  executionSource: null,
+  userId: null,
+  sessionId: null,
+  experimentId: null,
   ...overrides,
 });
+
+export { span as makeTraceQuerySpan };
 
 const scoreRecord = (
   cursorId: number,
@@ -649,6 +674,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: 'resource-old',
       startedAt: '2026-08-01T10:00:00.000Z',
       endedAt: '2026-08-01T10:00:01.000Z',
+      tags: ['superseded'],
     }),
     span(10, 'trace-a', 'root-a', {
       threadId: 'thread-1',
@@ -656,6 +682,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-05T10:00:00.000Z',
       endedAt: '2026-08-05T10:00:02.000Z',
       entityName: 'support-agent',
+      tags: ['manual-review', 'production'],
       metadata: {
         messageId: 'message-a',
         parentMessageId: 'message-parent',
@@ -711,8 +738,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       threadId: 'thread-1',
       resourceId: 'resource-2',
       startedAt: '2026-08-05T10:00:00.000Z',
-      endedAt: '2026-08-05T10:00:03.000Z',
+      endedAt: '2026-08-05T10:00:06.000Z',
       environment: 'staging',
+      tags: [],
     }),
     span(21, 'trace-b', 'span-b-tool', {
       parentSpanId: 'root-b',
@@ -759,6 +787,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: null,
       startedAt: '2026-08-08T10:00:00.000Z',
       endedAt: '2026-08-08T10:00:02.000Z',
+      tags: ['production'],
     }),
     span(50, 'trace-running', 'root-running-old', {
       threadId: 'thread-3',
@@ -782,6 +811,51 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       spanType: 'tool_call',
       attributes: { model: 'uncorrelated-model', provider: 'uncorrelated-provider' },
       error: { message: 'must not correlate' },
+    }),
+    // Tenant-scoped roots live in September so the unscoped August cases stay untouched.
+    span(70, 'trace-org-a', 'root-org-a', {
+      threadId: 'thread-org-a',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      sessionId: 'session-123',
+      userId: 'user-1',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      endedAt: '2026-09-02T10:00:01.000Z',
+    }),
+    span(71, 'trace-org-a', 'span-org-a-tool', {
+      parentSpanId: 'root-org-a',
+      name: 'scoped-tool',
+      spanType: 'tool_call',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+      runId: 'run-42',
+      sessionId: 'session-123',
+      userId: 'user-1',
+      startedAt: '2026-09-02T10:00:00.100Z',
+      endedAt: '2026-09-02T10:00:00.500Z',
+    }),
+    // Same traceId, other tenant: must never qualify trace-org-a under scope org-a.
+    span(72, 'trace-org-a', 'span-leaked', {
+      parentSpanId: 'root-org-a',
+      name: 'leaked-span',
+      spanType: 'tool_call',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      startedAt: '2026-09-02T10:00:00.200Z',
+      endedAt: '2026-09-02T10:00:00.600Z',
+    }),
+    span(80, 'trace-org-b', 'root-org-b', {
+      threadId: 'thread-org-b',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+      sessionId: 'session-123',
+      userId: 'user-2',
+      startedAt: '2026-09-03T10:00:00.000Z',
+      endedAt: '2026-09-03T10:00:01.000Z',
+    }),
+    span(90, 'trace-org-none', 'root-org-none', {
+      startedAt: '2026-09-04T10:00:00.000Z',
+      endedAt: '2026-09-04T10:00:01.000Z',
     }),
   ],
   scores: [
@@ -839,6 +913,16 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       scorerVersion: 'v2',
       scoreSource: 'automated',
     }),
+    scoreRecord(70, 'score-org-a-quality', 'trace-org-a', 'scoped-quality', 0.8, {
+      timestamp: '2026-09-02T10:00:02.000Z',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    }),
+    scoreRecord(71, 'score-leaked', 'trace-org-a', 'leaked', 0.1, {
+      timestamp: '2026-09-02T10:00:03.000Z',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+    }),
   ],
   feedback: [
     feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'superseded-patient', -1, {
@@ -874,6 +958,16 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
     feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
     feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
+    feedbackRecord(70, 'feedback-org-a', 'trace-org-a', 'scoped-thumbs', 'user', 'up', {
+      timestamp: '2026-09-02T10:00:04.000Z',
+      organizationId: 'org-a',
+      resourceId: 'project-1',
+    }),
+    feedbackRecord(71, 'feedback-leaked', 'trace-org-a', 'leaked', 'user', 'down', {
+      timestamp: '2026-09-02T10:00:05.000Z',
+      organizationId: 'org-b',
+      resourceId: 'project-9',
+    }),
   ],
 };
 
@@ -1021,6 +1115,9 @@ const fullRange = {
   from: '2026-08-01T00:00:00Z',
   to: '2026-09-01T00:00:00Z',
 };
+/** Window holding only the tenant-scoped fixture roots. */
+const scopedRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+const orgA: TraceQueryTenantScope = { organizationId: 'org-a' };
 
 const lowFactualityTracePredicate: TraceQueryPredicate = {
   scores: {
@@ -1068,6 +1165,7 @@ const clinicalReviewPredicate = {
 export interface ThreadQueryConformanceCase {
   name: string;
   request: QueryThreadsInput;
+  scope?: TraceQueryTenantScope;
   expected: Array<{ threadId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
@@ -1278,12 +1376,52 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     },
     expected: [{ threadId: 'thread-2' }],
   },
+  {
+    name: 'scoped thread queries only qualify tenant traces',
+    request: {
+      traces: { timeRange: scopedRange },
+      where: {
+        traces: { some: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'scoped-tool' } } } } },
+      },
+    },
+    scope: orgA,
+    expected: [{ threadId: 'thread-org-a' }],
+  },
+  {
+    name: 'scoped thread queries ignore leaked related rows',
+    request: {
+      traces: { timeRange: scopedRange },
+      where: {
+        traces: { some: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'leaked-span' } } } } },
+      },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'unscoped thread queries read every tenant',
+    request: { traces: { timeRange: scopedRange } },
+    expected: [{ threadId: 'thread-org-a' }, { threadId: 'thread-org-b' }],
+  },
+  {
+    name: 'thread queries qualify threads through context identifiers',
+    request: {
+      traces: {
+        timeRange: scopedRange,
+        where: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+      },
+      where: { traces: { some: { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-2' } } } },
+    },
+    expected: [{ threadId: 'thread-org-b' }],
+  },
 ];
 
 export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
-  expected: Array<{ traceId: string } | { threadId: string }>;
+  /** Trusted tenant scope supplied to the planner, never part of the request document. */
+  scope?: TraceQueryTenantScope;
+  expected: Array<{ traceId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
 }
 
@@ -1396,6 +1534,30 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'filters by the current root duration without matching long child spans',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'uses exact millisecond boundaries for root duration',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'gte', left: { path: 'durationMs' }, right: { literal: 6000 } },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not expose incomplete roots through missing duration predicates',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'notExists', path: 'durationMs' },
+    },
+    expected: [],
   },
   {
     name: 'evaluates recursive trace predicates',
@@ -2084,20 +2246,323 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-a' }],
   },
   {
-    name: 'returns distinct non-null thread groups',
-    request: { timeRange: fullRange, group: { by: ['threadId'] } },
-    expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
+    name: 'unscoped queries still read every tenant',
+    request: { timeRange: scopedRange },
+    expected: [{ traceId: 'trace-org-none' }, { traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries return only the tenant roots',
+    request: { timeRange: scopedRange },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries narrow to the resource when it is set',
+    request: { timeRange: scopedRange },
+    scope: { organizationId: 'org-a', resourceId: 'project-1' },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries exclude other resources of the same tenant',
+    request: { timeRange: scopedRange },
+    scope: { organizationId: 'org-a', resourceId: 'project-2' },
+    expected: [],
+  },
+  {
+    name: 'scoped queries never match roots without a tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-org-none' } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries cannot widen through caller predicates',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'trace-org-b' } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries see related spans of the tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'scoped-tool' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries ignore related spans from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'leaked-span' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries see related scores of the tenant',
+    request: {
+      timeRange: scopedRange,
+      where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'scoped-quality' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped queries ignore related scores from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries ignore related feedback from another tenant on the same trace',
+    request: {
+      timeRange: scopedRange,
+      where: { feedback: { some: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'scoped queries apply to related-record absence checks',
+    request: {
+      timeRange: scopedRange,
+      where: { feedback: { none: { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'leaked' } } } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'filters roots by organization and session with a span from one run',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+          { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+          { spans: { some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'matches context identifiers through membership and inequality',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'in', value: { path: 'sessionId' }, set: ['session-123', 'session-999'] },
+          { op: 'ne', left: { path: 'userId' }, right: { literal: 'user-1' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-org-b' }],
+  },
+  {
+    name: 'context identifier presence checks match roots that never recorded them',
+    request: { timeRange: scopedRange, where: { op: 'notExists', path: 'userId' } },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'run predicates find a run recorded only on a child span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'exists', path: 'runId' } } },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifiers bind to one related span',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
+              { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+              { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'span context identifier absence excludes traces with one matching span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { none: { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } } } },
+    },
+    expected: [{ traceId: 'trace-org-none' }],
+  },
+  {
+    name: 'unscoped span organization predicates see leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    expected: [{ traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'scoped span organization predicates cannot reach leaked spans on a shared trace',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } } } },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'organization predicates narrow inside the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-a' } },
+    },
+    scope: orgA,
+    expected: [{ traceId: 'trace-org-a' }],
+  },
+  {
+    name: 'organization predicates cannot widen the trusted scope',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-b' } },
+          { op: 'notExists', path: 'organizationId' },
+        ],
+      },
+    },
+    scope: orgA,
+    expected: [],
+  },
+  {
+    name: 'includes matches traces whose current root carries the tag',
+    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'includes ignores tags on superseded roots',
+    request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'superseded' } },
+    expected: [],
+  },
+  {
+    name: 'includes compares whole tags exactly and case-sensitively',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'includes', path: 'tags', value: 'manual' },
+          { op: 'includes', path: 'tags', value: 'Manual-Review' },
+        ],
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'notIncludes requires at least one other tag',
+    request: { timeRange: fullRange, where: { op: 'notIncludes', path: 'tags', value: 'manual-review' } },
+    expected: [{ traceId: 'trace-d' }],
+  },
+  {
+    name: 'negated includes also matches traces without tags',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'includes', path: 'tags', value: 'manual-review' } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'exists on tags requires at least one tag',
+    request: { timeRange: fullRange, where: { op: 'exists', path: 'tags' } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'notExists on tags treats missing and empty tag lists alike',
+    request: { timeRange: fullRange, where: { op: 'notExists', path: 'tags' } },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'composes tag predicates with other trace predicates',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'includes', path: 'tags', value: 'production' },
+          { op: 'exists', path: 'threadId' },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'composes tag predicates with or',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'or',
+        args: [
+          { op: 'includes', path: 'tags', value: 'manual-review' },
+          { op: 'notExists', path: 'tags' },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
 ];
 
-export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
-  const spans = currentSpans(data.spans);
-  const scores = currentScores(data.scores);
-  const feedback = currentFeedback(data.feedback);
-  const roots = currentRoots(data.spans)
+/** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
+function matchesScope(
+  record: { organizationId?: string | null; resourceId?: string | null },
+  scope: TraceQueryTenantScope | undefined,
+): boolean {
+  if (!scope) return true;
+  if (record.organizationId !== scope.organizationId) return false;
+  return scope.resourceId === undefined || record.resourceId === scope.resourceId;
+}
+
+export interface TraceQueryRootSelection {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryPredicate;
+  scope?: TraceQueryTenantScope;
+}
+
+/**
+ * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
+ */
+export function selectTraceQueryRoots(
+  data: TraceQueryFixtureData,
+  selection: TraceQueryRootSelection,
+): RawTraceQuerySpan[] {
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, selection.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, selection.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, selection.scope));
+  return currentRoots(data.spans)
+    .filter(root => matchesScope(root, selection.scope))
     .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
+    .filter(root => root.startedAt >= selection.timeRange.from && root.startedAt < selection.timeRange.to)
+    .filter(root => !selection.where || evaluateTracePredicate(selection.where, root, spans, scores, feedback));
+}
+
+export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
+  const roots = selectTraceQueryRoots(data, plan);
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -2165,13 +2630,14 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
 }
 
 export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedThreadQueryPlan): QueryThreadsResult {
-  const spans = currentSpans(data.spans);
-  const scores = currentScores(data.scores);
-  const feedback = currentFeedback(data.feedback);
-  const eligibleRoots = currentRoots(data.spans)
-    .filter(root => !root.isPending && root.endedAt !== null)
-    .filter(root => root.startedAt >= plan.traces.timeRange.from && root.startedAt < plan.traces.timeRange.to)
-    .filter(root => !plan.traces.where || evaluateTracePredicate(plan.traces.where, root, spans, scores, feedback));
+  const spans = currentSpans(data.spans).filter(span => matchesScope(span, plan.scope));
+  const scores = currentScores(data.scores).filter(score => matchesScope(score, plan.scope));
+  const feedback = currentFeedback(data.feedback).filter(record => matchesScope(record, plan.scope));
+  const eligibleRoots = selectTraceQueryRoots(data, {
+    timeRange: plan.traces.timeRange,
+    where: plan.traces.where,
+    scope: plan.scope,
+  });
 
   const rootsByThread = new Map<string, RawTraceQuerySpan[]>();
   for (const root of eligibleRoots) {
@@ -2199,8 +2665,9 @@ export function evaluateThreadQuery(data: TraceQueryFixtureData, plan: TrustedTh
 export function evaluateThreadQueryRequest(
   data: TraceQueryFixtureData,
   request: QueryThreadsInput,
+  scope?: TraceQueryTenantScope,
 ): QueryThreadsResult {
-  return evaluateThreadQuery(data, planThreadQuery(parseQueryThreadsInput(request)));
+  return evaluateThreadQuery(data, planThreadQuery(parseQueryThreadsInput(request), { scope }));
 }
 
 export async function collectThreadQueryPages(
@@ -2221,8 +2688,12 @@ export async function collectThreadQueryPages(
   return results;
 }
 
-export function evaluateTraceQueryRequest(data: TraceQueryFixtureData, request: TraceQueryRequest): TraceQueryResponse {
-  return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request)));
+export function evaluateTraceQueryRequest(
+  data: TraceQueryFixtureData,
+  request: TraceQueryRequest,
+  scope?: TraceQueryTenantScope,
+): TraceQueryResponse {
+  return evaluateTraceQuery(data, planTraceQuery(parseTraceQueryRequest(request), { scope }));
 }
 
 export function normalizeTraceQueryResponse(
@@ -2377,6 +2848,13 @@ function evaluateScalarPredicate(
   }
   if (predicate.type === 'not') return !evaluateScalarPredicate(predicate.arg, record);
   const value = record[predicate.field as keyof typeof record] as unknown;
+  if (predicate.type === 'collection') {
+    // Missing and empty collections are indistinguishable: both mean "no members".
+    const members = Array.isArray(value) ? value : [];
+    if (!('value' in predicate)) return predicate.operator === 'empty' ? members.length === 0 : members.length > 0;
+    const included = members.includes(predicate.value);
+    return predicate.operator === 'includes' ? included : members.length > 0 && !included;
+  }
   const missing = value === null || value === undefined;
   if (predicate.type === 'presence') return predicate.operator === 'exists' ? !missing : missing;
   if (predicate.type === 'membership') {
@@ -2402,6 +2880,10 @@ function evaluateScalarPredicate(
   }
 }
 
+function durationMsBetween(startedAt: string, endedAt: string | null): number | null {
+  return endedAt === null ? null : new Date(endedAt).getTime() - new Date(startedAt).getTime();
+}
+
 function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   const model = typeof span.attributes?.model === 'string' ? span.attributes.model : null;
   const provider = typeof span.attributes?.provider === 'string' ? span.attributes.provider : null;
@@ -2412,7 +2894,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     provider,
     startedAt: span.startedAt,
     endedAt: span.endedAt,
-    durationMs: span.endedAt === null ? null : new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime(),
+    durationMs: durationMsBetween(span.startedAt, span.endedAt),
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -2421,26 +2903,77 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     entityVersionId: span.entityVersionId,
     parentEntityVersionId: span.parentEntityVersionId,
     rootEntityVersionId: span.rootEntityVersionId,
+    runId: span.runId,
+    sessionId: span.sessionId,
+    userId: span.userId,
+    organizationId: span.organizationId,
   };
+}
+
+/**
+ * The value a trace root exposes for one groupable dimension. Shared by `where` evaluation
+ * (`traceValues`) and the aggregate evaluator so filtering and grouping on the same field can
+ * never disagree: `status` derives from the root error, and `metadata.<key>` is the trimmed
+ * string value or `null` when missing, blank, or not a string.
+ */
+export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: TraceAggregateDimension): string | null {
+  if (!isTraceAggregateCanonicalDimension(dimension)) {
+    const value = root.metadata?.[dimension.slice('metadata.'.length)];
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  switch (dimension) {
+    case 'status':
+      return root.error === null ? 'success' : 'error';
+    case 'entityType':
+      return root.entityType;
+    case 'entityName':
+      return root.entityName;
+    case 'environment':
+      return root.environment;
+    case 'threadId':
+      return root.threadId;
+    case 'resourceId':
+      return root.resourceId;
+    case 'organizationId':
+      return root.organizationId;
+    case 'serviceName':
+      return root.serviceName ?? null;
+    case 'executionSource':
+      return root.executionSource ?? null;
+    case 'userId':
+      return root.userId ?? null;
+    case 'sessionId':
+      return root.sessionId ?? null;
+    case 'experimentId':
+      return root.experimentId ?? null;
+  }
 }
 
 function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
   const metadata = Object.fromEntries(
-    Object.entries(root.metadata ?? {}).flatMap(([key, value]) => {
-      if (typeof value !== 'string' || value.trim() === '') return [];
-      return [[`metadata.${key}`, value.trim()]];
+    Object.keys(root.metadata ?? {}).flatMap(key => {
+      const value = traceQueryDimensionValue(root, `metadata.${key}`);
+      return value === null ? [] : [[`metadata.${key}`, value]];
     }),
   );
   return {
     traceId: root.traceId,
-    threadId: root.threadId,
-    resourceId: root.resourceId,
+    threadId: traceQueryDimensionValue(root, 'threadId'),
+    resourceId: traceQueryDimensionValue(root, 'resourceId'),
+    runId: root.runId,
+    sessionId: root.sessionId,
+    userId: root.userId,
+    organizationId: root.organizationId,
     startedAt: root.startedAt,
     endedAt: root.endedAt,
-    entityName: root.entityName,
-    entityType: root.entityType,
-    environment: root.environment,
-    status: root.error === null ? 'success' : 'error',
+    durationMs: durationMsBetween(root.startedAt, root.endedAt),
+    entityName: traceQueryDimensionValue(root, 'entityName'),
+    entityType: traceQueryDimensionValue(root, 'entityType'),
+    environment: traceQueryDimensionValue(root, 'environment'),
+    status: traceQueryDimensionValue(root, 'status'),
+    tags: root.tags,
     ...metadata,
   };
 }

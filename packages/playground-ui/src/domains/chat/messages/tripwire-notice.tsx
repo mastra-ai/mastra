@@ -26,19 +26,19 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-caption flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
+              className="flex w-fit items-center gap-1.5 text-caption opacity-70 transition-opacity hover:opacity-100"
             >
               {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
               <span>Details</span>
             </button>
 
             {isExpanded && (
-              <div className="text-caption flex flex-col gap-2">
+              <div className="flex flex-col gap-2 text-caption">
                 {tripwire.retry !== undefined && (
                   <div className="flex items-center gap-2">
                     <RefreshCw className="size-3.5 shrink-0 opacity-70" />
                     <span>Retry</span>
-                    <Badge size="xs" variant={tripwire.retry ? 'green' : 'red'}>
+                    <Badge size="xs" variant={tripwire.retry ? 'success' : 'destructive'}>
                       {tripwire.retry ? 'Allowed' : 'Not allowed'}
                     </Badge>
                   </div>
@@ -48,7 +48,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                   <div className="flex items-center gap-2">
                     <Tag className="size-3.5 shrink-0 opacity-70" />
                     <span>Processor</span>
-                    <Badge size="xs" variant="yellow">
+                    <Badge size="xs" variant="warning">
                       {tripwire.processorId}
                     </Badge>
                   </div>
@@ -57,7 +57,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                 {tripwire.metadata !== undefined && tripwire.metadata !== null && (
                   <div className="flex flex-col gap-1.5">
                     <span className="opacity-70">Metadata</span>
-                    <pre className="overflow-x-auto rounded-lg bg-current/10 p-2 font-mono">
+                    <pre className="overflow-x-auto rounded-lg bg-current/10 p-2">
                       {JSON.stringify(tripwire.metadata, null, 2)}
                     </pre>
                   </div>

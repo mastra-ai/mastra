@@ -48,7 +48,7 @@ const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
 
 ## Listing traces for a list view
 
-`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt.
+`listTracesLight()` returns the same rows as a trace list, without the `input`, `output` and `attributes` payloads. Each row carries a short `inputPreview` string instead, so a list can render a preview column without transferring the whole prompt, plus `threadId` and `resourceId` for the memory context columns.
 
 Prefer it whenever you are rendering many traces at once, and fetch the full record only when a row is opened:
 
@@ -232,7 +232,7 @@ const result = await mastraClient.deleteTraces({
 console.log(result.success)
 ```
 
-Each request accepts up to 1,000 trace IDs. Signals that aren't linked to a trace are preserved. Deletion also includes traces created by experiments.
+Each request accepts up to 1,000 trace IDs and no tenant scope fields. Signals that aren't linked to a trace are preserved. Traces created by experiments are deleted like any other trace.
 
 ## Scoring traces
 

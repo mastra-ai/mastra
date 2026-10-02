@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Textarea } from './textarea';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
@@ -11,16 +12,13 @@ const meta: Meta<typeof Textarea> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'outline', 'unstyled'],
+      options: ['default', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
       options: ['sm', 'md', 'lg'],
     },
     disabled: {
-      control: { type: 'boolean' },
-    },
-    error: {
       control: { type: 'boolean' },
     },
   },
@@ -58,9 +56,14 @@ export const Sizes: Story = {
 export const Error: Story = {
   args: {
     placeholder: 'Invalid input...',
-    error: true,
-    className: 'w-75',
   },
+  render: args => (
+    <Field invalid className="w-75">
+      <FieldLabel>Description</FieldLabel>
+      <Textarea {...args} />
+      <FieldError>Enter a description.</FieldError>
+    </Field>
+  ),
 };
 
 export const Disabled: Story = {
@@ -74,16 +77,16 @@ export const Disabled: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="border-border bg-sidebar rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-sidebar p-4">
         <Textarea placeholder="On bg-sidebar" />
       </div>
-      <div className="border-border bg-background rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-background p-4">
         <Textarea placeholder="On bg-background" />
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Textarea placeholder="On bg-card" />
       </div>
-      <div className="border-border bg-muted rounded-lg border p-4">
+      <div className="rounded-lg border border-border bg-muted p-4">
         <Textarea placeholder="On bg-muted" />
       </div>
     </div>

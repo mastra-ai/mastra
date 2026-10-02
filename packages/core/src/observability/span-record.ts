@@ -1,5 +1,7 @@
 import type { MessageListItem } from '../agent/message-list/types';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
+import { describeProcessorInput, describeProcessorOutput, describeProcessorPhase } from './processor-span-record';
+import type { ProcessorSpanPayload } from './processor-span-record';
 import type {
   AgentRunResult,
   AgentRunResumeInput,
@@ -7,9 +9,14 @@ import type {
   ModelGenerationResult,
   ModelStepMessage,
   ModelStepResult,
+  ProcessorRunInputByPhase,
+  ProcessorRunOutputByPhase,
   SpanErrorInfo,
 } from './types';
 import { SpanType } from './types';
+
+export { describeProcessorPhase, describeProcessorPipeline } from './processor-span-record';
+export type { ProcessorPipelineDescription, ProcessorSpanPayload } from './processor-span-record';
 
 /**
  * Narrows a stored span record to one or more span types, typing its
@@ -19,9 +26,8 @@ import { SpanType } from './types';
  * trusts that the producer for that span type wrote the shape core declares,
  * the same trust `SpanTypeMap` already places in `attributes`.
  *
- * This module imports only the `SpanType` enum at runtime, so browser bundles
- * that need these helpers do not pull in the rest of the observability
- * utilities.
+ * This module uses only the `SpanType` enum and browser-safe payload helpers
+ * at runtime, without pulling in the rest of the observability utilities.
  *
  * @example
  * if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
@@ -47,6 +53,7 @@ export type SpanInputDescription =
   | { type: 'text'; value: string }
   | { type: 'messages'; value: SpanInputMessage[] }
   | { type: 'agent-run-resume'; value: AgentRunResumeInput }
+  | { type: 'processor'; value: ProcessorSpanPayload<ProcessorRunInputByPhase> }
   | { type: 'json'; value: unknown };
 
 /** A span's `output`, tagged by what it holds so a renderer can switch on `type`. */
@@ -55,6 +62,7 @@ export type SpanOutputDescription =
   | { type: 'agent-run-result'; value: AgentRunResult }
   | { type: 'model-generation-result'; value: ModelGenerationResult }
   | { type: 'model-step-result'; value: ModelStepResult }
+  | { type: 'processor'; value: ProcessorSpanPayload<ProcessorRunOutputByPhase> }
   | { type: 'text'; value: string }
   | { type: 'json'; value: unknown };
 
@@ -79,6 +87,7 @@ const MESSAGE_LIST_INPUT_SPANS: readonly SpanType[] = [
  * - `messages`: a message list, unwrapped from the `{ messages }` envelope
  *   model generation spans and legacy agent spans record
  * - `agent-run-resume`: the resume data of a resumed agent run, whatever shape it has
+ * - `processor`: a processor payload, tagged with the pipeline phase that recorded it
  * - `json`: anything else, such as tool arguments or workflow step data
  */
 export function describeSpanInput(span: SpanRecord): SpanInputDescription | undefined {
@@ -91,6 +100,11 @@ export function describeSpanInput(span: SpanRecord): SpanInputDescription | unde
   if (span.spanType === SpanType.AGENT_RUN && span.metadata?.resumed === true) {
     const value = isRecord(input) ? input : { resumeData: input };
     return { type: 'agent-run-resume', value: value as AgentRunResumeInput };
+  }
+
+  if (describeProcessorPhase(span)) {
+    const processor = isRecord(input) ? describeProcessorInput(span, input) : undefined;
+    return processor ? { type: 'processor', value: processor } : { type: 'json', value: input };
   }
 
   if (typeof input === 'string') return { type: 'text', value: input };
@@ -124,12 +138,17 @@ export function describeSpanInput(span: SpanRecord): SpanInputDescription | unde
  * - `interrupted`: the run suspended or was aborted before the span's result existed
  * - `agent-run-result`, `model-generation-result`, `model-step-result`: the
  *   result of the span type that recorded it
+ * - `processor`: a processor payload, tagged with the pipeline phase that recorded it
  * - `text`: a plain string
  * - `json`: anything else, such as a tool result or workflow step output
  */
 export function describeSpanOutput(span: SpanRecord): SpanOutputDescription | undefined {
   const output: unknown = span.output;
   if (output == null) return undefined;
+  if (describeProcessorPhase(span)) {
+    const processor = isRecord(output) ? describeProcessorOutput(span, output) : undefined;
+    return processor ? { type: 'processor', value: processor } : { type: 'json', value: output };
+  }
   if (typeof output === 'string') return { type: 'text', value: output };
   if (!isRecord(output)) return { type: 'json', value: output };
 

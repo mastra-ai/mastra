@@ -6,9 +6,11 @@ import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
+import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
@@ -344,6 +346,13 @@ export interface AgentControllerConfig<TState = {}> {
   subagents?: AgentControllerSubagent[];
 
   /**
+   * Resolves a subagent's model id for the run that spawned it. Without it the
+   * bare id resolves through {@link gateways}; provide it when model resolution
+   * depends on the request (tenant credentials, request-scoped custom providers).
+   */
+  resolveSubagentModel?: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
+
+  /**
    * Model gateways registered on AgentController' internal Mastra instance.
    * The AgentController resolves every model — mode agents, Observational Memory,
    * subagents — and builds the `listAvailableModels()` catalog through these
@@ -617,6 +626,7 @@ export interface ActiveSubagentState {
   toolCalls: Array<{ name: string; isError: boolean }>;
   textDelta: string;
   status: 'running' | 'completed' | 'error';
+  startedAt?: number;
   durationMs?: number;
   result?: string;
 }
@@ -662,12 +672,22 @@ export interface AgentControllerDisplayState {
   toolInputBuffers: Map<string, { text: string; toolName: string }>;
 
   // ── Tool approval ────────────────────────────────────────────────────
-  /** A tool awaiting user approval (null when no approval pending) */
-  pendingApproval: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  } | null;
+  /**
+   * Tools awaiting user approval, keyed by toolCallId. Each entry carries the
+   * thread that produced the call, so an approval parked on one thread can never
+   * shadow another thread's. More than one can be parked at once (e.g. a
+   * foreground run and a background/sub-agent run on a detached thread).
+   */
+  pendingApprovals: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      /** Thread that produced the gated call, when the producer knew it. */
+      threadId?: string;
+    }
+  >;
 
   // ── Tool suspension ─────────────────────────────────────────────────
   /**
@@ -723,7 +743,7 @@ export function defaultDisplayState(): AgentControllerDisplayState {
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
-    pendingApproval: null,
+    pendingApprovals: new Map(),
     pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
@@ -800,7 +820,7 @@ export type AgentControllerEvent =
     }
   | { type: 'message_end'; id: string }
   | ({ threadId?: string } & (
-      | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
+      | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown; title?: string }
       | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
       | {
           type: 'tool_suspended';
@@ -827,9 +847,28 @@ export type AgentControllerEvent =
           denied?: boolean;
           providerMetadata?: Record<string, unknown>;
         }
-      | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-      | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
-      | { type: 'tool_input_end'; toolCallId: string }
+      | {
+          type: 'tool_input_start';
+          toolCallId: string;
+          toolName: string;
+          title?: string;
+          /**
+           * Assistant message the tool call belongs to, so consumers can attribute
+           * streamed arguments to the model step that produced them. Tool-call chunks
+           * can precede this step's `message_start`, so the id is the only way to tell
+           * one step's arguments from the next step's.
+           */
+          messageId?: string;
+        }
+      | {
+          type: 'tool_input_delta';
+          toolCallId: string;
+          argsTextDelta: unknown;
+          toolName?: string;
+          /** Assistant message the tool call belongs to; see `tool_input_start.messageId`. */
+          messageId?: string;
+        }
+      | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
       | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
     ))
@@ -838,6 +877,8 @@ export type AgentControllerEvent =
   | {
       type: 'error';
       error: Error;
+      /** Provider finish reason when a response ended without normal completion. */
+      finishReason?: string;
       errorType?: string;
       retryable?: boolean;
       retryDelay?: number;

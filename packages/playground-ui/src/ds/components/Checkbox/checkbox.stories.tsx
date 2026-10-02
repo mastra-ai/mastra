@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Label } from '../Label';
+import { Field, FieldLabel } from '../Field';
 import { Checkbox } from './checkbox';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
@@ -11,8 +11,8 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border rounded-2xl border p-5 ${className}`}>
-      <p className="text-meta text-muted-foreground mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border p-5 ${className}`}>
+      <p className="mb-4 text-meta tracking-wide text-muted-foreground uppercase">{label}</p>
       {children}
     </div>
   );
@@ -20,7 +20,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
 
 function CheckboxStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-caption text-muted-foreground grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-caption text-muted-foreground">
       <span />
       <span>Default</span>
       <span>Checked</span>
@@ -92,8 +92,8 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="border-border bg-background grid min-w-104 gap-4 rounded-lg border p-4">
-      <div className="text-caption text-muted-foreground grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3">
+    <div className="grid min-w-104 gap-4 rounded-lg border border-border bg-background p-4">
+      <div className="grid grid-cols-[9rem_repeat(4,minmax(0,1fr))] items-center gap-x-5 gap-y-3 text-caption text-muted-foreground">
         <span />
         <span>Default</span>
         <span>Checked</span>
@@ -108,7 +108,7 @@ export const AllStates: Story = {
           aria-label="focused checked"
           checked
           onCheckedChange={() => {}}
-          className="border-border-focus outline-border-focus outline-1 outline-offset-2 outline-solid"
+          className="border-border-focus outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
 
         <span className="text-foreground">Disabled</span>
@@ -120,7 +120,7 @@ export const AllStates: Story = {
           checked
           disabled
           onCheckedChange={() => {}}
-          className="border-border-focus outline-border-focus outline-1 outline-offset-2 outline-solid"
+          className="border-border-focus outline-1 outline-offset-2 outline-border-focus outline-solid"
         />
       </div>
     </div>
@@ -144,28 +144,28 @@ export const OnSurfaces: Story = {
 
 export const WithLabel: Story = {
   render: args => (
-    <div className="flex items-center gap-2">
-      <Checkbox id="terms" {...args} />
-      <Label htmlFor="terms">Accept terms and conditions</Label>
-    </div>
+    <Field orientation="horizontal">
+      <Checkbox {...args} />
+      <FieldLabel>Accept terms and conditions</FieldLabel>
+    </Field>
   ),
 };
 
 export const CheckboxGroup: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Checkbox id="option1" />
-        <Label htmlFor="option1">Option 1</Label>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="option2" defaultChecked />
-        <Label htmlFor="option2">Option 2</Label>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="option3" />
-        <Label htmlFor="option3">Option 3</Label>
-      </div>
+      <Field orientation="horizontal">
+        <Checkbox />
+        <FieldLabel>Option 1</FieldLabel>
+      </Field>
+      <Field orientation="horizontal">
+        <Checkbox defaultChecked />
+        <FieldLabel>Option 2</FieldLabel>
+      </Field>
+      <Field orientation="horizontal">
+        <Checkbox />
+        <FieldLabel>Option 3</FieldLabel>
+      </Field>
     </div>
   ),
 };

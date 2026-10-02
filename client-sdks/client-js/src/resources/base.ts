@@ -100,9 +100,9 @@ export class BaseResource {
           throw error;
         }
 
-        // Don't retry 4xx client errors - they won't resolve with retries
+        // Don't retry 4xx client errors or 501 Not Implemented - they won't resolve with retries
         const status = (error as Error & { status?: number }).status;
-        if (status !== undefined && status >= 400 && status < 500) {
+        if (status !== undefined && ((status >= 400 && status < 500) || status === 501)) {
           throw error;
         }
 

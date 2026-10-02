@@ -9,6 +9,7 @@ import type { FilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
@@ -91,9 +92,9 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
           <span className="truncate">Advanced filter</span>
           {count > 0 && (
-            <span className="text-column text-muted-foreground" aria-hidden>
+            <Txt as="span" variant="column" tone="muted" aria-hidden>
               {count}
-            </span>
+            </Txt>
           )}
         </PopoverTrigger>
         {leaving ? (
@@ -120,10 +121,14 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         {...{ [FILTER_BAR_SCOPE_ATTR]: 'advanced' }}
         finalFocus={triggerRef}
       >
-        <div className="border-border flex items-center gap-2 border-b px-3 py-2">
-          <BracesIcon className="text-muted-foreground size-3.5" />
-          <span className="text-label text-foreground">Advanced filter</span>
-          <span className="bg-fill-subtle text-column text-muted-foreground rounded-md px-1.5">{count}</span>
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <BracesIcon className="size-3.5 text-muted-foreground" />
+          <Txt as="span" variant="label" tone="ink">
+            Advanced filter
+          </Txt>
+          <Txt as="span" variant="column" tone="muted" className="rounded-md bg-fill-subtle px-1.5">
+            {count}
+          </Txt>
           <Button
             variant="ghost"
             size="icon-sm"

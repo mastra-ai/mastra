@@ -157,18 +157,138 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
 }
 
 /**
+ * Rewrites invalid tool-call IDs in the outbound prompt, keeping call↔result
+ * pairing intact. Nothing is persisted — the prompt is rebuilt, and the
+ * original ids stay in the message list.
+ *
+ * Replacements are assigned per call, in encounter order, and never collide
+ * with an id the prompt already carries: a sanitized id that is already
+ * claimed — by another original id or by a valid id elsewhere in the prompt —
+ * gets `_2`, `_3`, … appended until it is unique. Anthropic rejects duplicate
+ * `tool_use.id` values, so uniqueness is what keeps call/result pairing
+ * resolvable. Two calls that share one invalid original id still receive
+ * distinct replacements; the nth result carrying that id pairs with the nth
+ * call, which is the only resolvable reading of an already-degenerate prompt.
+ */
+function rewritePromptToolIds(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
+  const replacements = new Map<string, string[]>();
+  const claimed = new Set<string>();
+
+  // Every id the prompt carries is unavailable as a replacement target.
+  for (const message of prompt) {
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      for (const part of message.content) {
+        if (part.type === 'tool-call') claimed.add(part.toolCallId);
+      }
+      continue;
+    }
+    if (message.role === 'tool') {
+      for (const part of message.content) claimed.add(part.toolCallId);
+    }
+  }
+
+  // Assign a replacement to every call with an invalid id, per occurrence.
+  let assigned = 0;
+  for (const message of prompt) {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== 'tool-call') continue;
+      const id = part.toolCallId;
+      if (VALID_TOOL_ID_PATTERN.test(id)) continue;
+
+      const sanitized = sanitizeToolId(id);
+      let candidate = sanitized;
+      for (let suffix = 2; claimed.has(candidate); suffix++) {
+        candidate = `${sanitized}_${suffix}`;
+      }
+      claimed.add(candidate);
+      const queue = replacements.get(id);
+      if (queue) queue.push(candidate);
+      else replacements.set(id, [candidate]);
+      assigned++;
+    }
+  }
+
+  if (assigned === 0) return undefined;
+
+  // Calls and results interleave in the prompt, so each side tracks its own
+  // occurrence index: the nth result carrying an id pairs with the nth call.
+  const callIndex = new Map<string, number>();
+  const resultIndex = new Map<string, number>();
+  const takeAt = (index: Map<string, number>, id: string): string | undefined => {
+    const queue = replacements.get(id);
+    if (!queue) return undefined;
+    const i = index.get(id) ?? 0;
+    index.set(id, i + 1);
+    return i < queue.length ? queue[i] : undefined;
+  };
+  const takeCall = (id: string) => takeAt(callIndex, id);
+  const takeResult = (id: string) => takeAt(resultIndex, id);
+
+  const rewritten: LanguageModelV2Prompt = prompt.map(message => {
+    if (message.role === 'assistant' && Array.isArray(message.content)) {
+      let changed = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'tool-call') return part;
+        const replacement = takeCall(part.toolCallId);
+        if (!replacement) return part;
+        changed = true;
+        return { ...part, toolCallId: replacement };
+      });
+      return changed ? { ...message, content } : message;
+    }
+
+    if (message.role === 'tool') {
+      let changed = false;
+      const content = message.content.map(part => {
+        const replacement = takeResult(part.toolCallId);
+        if (!replacement) return part;
+        changed = true;
+        return { ...part, toolCallId: replacement };
+      });
+      return changed ? { ...message, content } : message;
+    }
+
+    return message;
+  });
+
+  return rewritten;
+}
+
+/**
  * Anthropic enforces `^[a-zA-Z0-9_-]+$` on tool_use.id values.
  * Tool-call IDs from other providers (e.g. containing `.`, `:`) will be
- * rejected. This rule rewrites offending characters to `_`.
+ * rejected. This rule rewrites offending characters to `_` in the outbound
+ * prompt, so the rejection never happens and persisted history keeps its
+ * original IDs.
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
+  /**
+   * Matches Anthropic's tool_use.id rejection. The preemptive
+   * `applyToPrompt` hook repairs the outbound prompt first, so this pattern
+   * only fires when that hook cannot see the request: Anthropic served
+   * through a provider `isMaybeAnthropic` does not recognize (for example
+   * Vertex- or Bedrock-hosted Claude), or compat configured outside the
+   * agent's prompt path.
+   */
   errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
+  /**
+   * Rewrites invalid tool-call ids in place after a provider rejection.
+   * This is the fallback repair for Anthropic served through a provider the
+   * preemptive `applyToPrompt` check does not recognize (for example Vertex-
+   * or Bedrock-hosted Claude), and the only repair available once an API
+   * call has already been rejected.
+   */
   fix(messages) {
     const idMap = buildToolIdMap(messages);
     if (idMap.size === 0) return false;
     rewriteToolIds(messages, idMap);
     return true;
+  },
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return rewritePromptToolIds(prompt);
   },
 };
 
@@ -444,7 +564,8 @@ function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
 
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
- * assistant messages. Returns `undefined` if no changes were necessary.
+ * assistant messages, dropping any assistant message left with no content.
+ * Returns `undefined` if no changes were necessary.
  *
  * `skipIndex` excludes one message from stripping — used to protect the
  * trailing assistant message of an active tool-use continuation, which
@@ -463,16 +584,31 @@ function stripReasoningFromPrompt(
   skipIndex = -1,
 ): LanguageModelV2Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = prompt.map((message, index) => {
-    if (index === skipIndex) return message;
-    if (message.role !== 'assistant') return message;
-    if (typeof message.content === 'string') return message;
-    if (!Array.isArray(message.content)) return message;
+  const next: LanguageModelV2Prompt = [];
+  for (let index = 0; index < prompt.length; index++) {
+    const message = prompt[index]!;
+    if (
+      index === skipIndex ||
+      message.role !== 'assistant' ||
+      typeof message.content === 'string' ||
+      !Array.isArray(message.content)
+    ) {
+      next.push(message);
+      continue;
+    }
     const filtered = message.content.filter(part => part.type !== 'reasoning' || !shouldStrip(part as any));
-    if (filtered.length === message.content.length) return message;
+    if (filtered.length === message.content.length) {
+      next.push(message);
+      continue;
+    }
     mutated = true;
-    return { ...message, content: filtered };
-  });
+    // A reasoning-only turn is emptied by the strip. Processors run after
+    // conversion, so the empty-content filter in MessageList no longer
+    // applies — Anthropic rejects empty assistant content, so drop the
+    // message itself (same idiom as anthropicStripForeignSignedReasoning).
+    if (filtered.length === 0) continue;
+    next.push({ ...message, content: filtered });
+  }
   return mutated ? next : undefined;
 }
 
@@ -890,6 +1026,61 @@ export const openaiOrphanItemId: CompatRule = {
 };
 
 // ---------------------------------------------------------------------------
+// Built-in rule: Anthropic orphaned thinking step (reactive)
+// ---------------------------------------------------------------------------
+
+/**
+ * Removes steps that hold nothing but reasoning when more assistant content
+ * follows them. The step's other parts were lost (older `@mastra/memory`
+ * releases stripped an `updateWorkingMemory` call and kept its thinking), so
+ * `@ai-sdk/anthropic` merges the leftover signed thinking into the next
+ * assistant step — a shape Anthropic rejects on every later turn.
+ *
+ * Reactive (matches Anthropic's "cannot be modified" 400); a recovery seatbelt
+ * for history saved before the strip was fixed.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/22798
+ */
+export const anthropicOrphanedThinkingStep: CompatRule = {
+  name: 'anthropic-orphaned-thinking-step',
+  errorPatterns: [/thinking`? or `?redacted_thinking`? blocks in the latest assistant message cannot be modified/i],
+  fix(messages) {
+    let mutated = false;
+
+    messages.forEach((message, index) => {
+      const parts = message.content?.parts;
+      if (message.role !== 'assistant' || !parts?.length) return;
+
+      const followedByAssistant = messages[index + 1]?.role === 'assistant';
+      // A step starts at a `step-start` part, or where a tool part is followed by a
+      // non-tool part (the boundary prompt conversion uses when markers are missing).
+      const steps: (typeof parts)[] = [];
+      parts.forEach((part, i) => {
+        const previous = parts[i - 1];
+        const startsStep =
+          part.type === 'step-start' || (previous?.type === 'tool-invocation' && part.type !== 'tool-invocation');
+        if (startsStep || steps.length === 0) steps.push([]);
+        steps[steps.length - 1]!.push(part);
+      });
+
+      const kept = steps.filter((step, i) => {
+        const content = step.filter(
+          part => part.type !== 'step-start' && !(part.type === 'text' && !part.text?.trim()),
+        );
+        const reasoningOnly = content.length > 0 && content.every(part => part.type === 'reasoning');
+        return !reasoningOnly || (i === steps.length - 1 && !followedByAssistant);
+      });
+
+      if (kept.length === steps.length) return;
+      parts.splice(0, parts.length, ...kept.flat());
+      mutated = true;
+    });
+
+    return mutated;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
 
@@ -906,6 +1097,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
   openaiOrphanItemId,
+  anthropicOrphanedThinkingStep,
 ];
 
 // ---------------------------------------------------------------------------
@@ -921,8 +1113,13 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * Built-in rules:
  * - **anthropic-tool-id-format** — rewrites tool-call IDs that contain
  *   characters outside `[a-zA-Z0-9_-]` (e.g. `.` or `:` from other
- *   providers). Reactive (matches a 400 response body, retries with
- *   sanitized IDs).
+ *   providers). Preemptive; runs in `processLLMRequest` so the persisted
+ *   message list keeps its original IDs. Both the call and its paired result
+ *   are rewritten together, and a sanitized ID that would collide with an ID
+ *   already in the prompt gets a `_2`/`_3`… suffix. The reactive fallback
+ *   (matching a 400 response body and retrying with sanitized IDs) covers
+ *   providers the preemptive check doesn't recognize, such as Vertex-hosted
+ *   Claude.
  * - **cerebras-strip-reasoning-content** — strips `reasoning` parts from
  *   assistant messages in the outbound prompt when the resolved model is
  *   Cerebras, to avoid the `@ai-sdk/openai-compatible@>=1.0.32` regression
@@ -947,6 +1144,11 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   value instead of as an unsatisfiable `item_reference`. Reactive (matches
  *   the specific `of type 'message' … without its required 'reasoning' item`
  *   400); a recovery seatbelt for already-corrupted history.
+ * - **anthropic-orphaned-thinking-step** — drops steps left with only signed
+ *   reasoning when more assistant content follows them, so Anthropic doesn't
+ *   see that thinking merged into the next step. Reactive (matches the
+ *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
+ *   already-corrupted history.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

@@ -11,10 +11,6 @@ import { LoginPage } from '../login-page';
 import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -90,14 +86,14 @@ describe('LoginPage UI parity for /login and /signup', () => {
     expect(root).toBeTruthy();
   });
 
-  it('does not wrap content in a rounded padded card on either route', async () => {
+  it('does not render its own card or viewport wrapper on either route (the auth shell owns those)', async () => {
     mockCapabilities(credentialsCapabilities);
     const { unmount } = renderLogin();
 
     const loginRoot = await screen.findByTestId('login-page');
-    const loginInner = loginRoot.firstElementChild as HTMLElement;
-    expect(loginInner.className).not.toMatch(/rounded-lg/);
-    expect(loginInner.className).not.toMatch(/\bp-8\b/);
+    expect(loginRoot.className).not.toMatch(/min-h-screen/);
+    expect(loginRoot.className).not.toMatch(/bg-sidebar/);
+    expect(loginRoot.closest('[data-slot="main-card"]')).toBeNull();
 
     unmount();
     cleanup();
@@ -105,9 +101,9 @@ describe('LoginPage UI parity for /login and /signup', () => {
     mockCapabilities(credentialsCapabilities);
     renderSignUp();
     const signUpRoot = await screen.findByTestId('login-page');
-    const signUpInner = signUpRoot.firstElementChild as HTMLElement;
-    expect(signUpInner.className).not.toMatch(/rounded-lg/);
-    expect(signUpInner.className).not.toMatch(/\bp-8\b/);
+    expect(signUpRoot.className).not.toMatch(/min-h-screen/);
+    expect(signUpRoot.className).not.toMatch(/bg-sidebar/);
+    expect(signUpRoot.closest('[data-slot="main-card"]')).toBeNull();
   });
 
   it('shows the sign in heading on /login by default', async () => {

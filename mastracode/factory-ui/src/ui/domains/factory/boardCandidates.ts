@@ -60,7 +60,13 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
     column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
-    metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
+    metadata: {
+      number: issue.number,
+      author: issue.author,
+      assignee: issue.assignee,
+      assignees: issue.assignees ?? (issue.assignee ? [issue.assignee] : []),
+      labels,
+    },
   };
 }
 
@@ -77,6 +83,7 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
       author: pr.author,
       assignees: pr.assignees ?? [],
       requestedReviewers: pr.requestedReviewers ?? [],
+      labels: pr.labels ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
     },
@@ -119,6 +126,7 @@ export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandid
       author: pr.author,
       assignees: pr.assignees,
       requestedReviewers: pr.requestedReviewers,
+      labels: pr.labels ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
     },
@@ -135,10 +143,12 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     column: 'intake',
     metadata: {
       linearIssueId: issue.id,
+      ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
       identifier: issue.identifier,
       state: issue.state,
       assignee: issue.assignee,
       creator: issue.creator ?? null,
+      labels: issue.labels,
     },
   };
 }

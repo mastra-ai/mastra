@@ -49,7 +49,7 @@ export const AllSizes: Story = {
 
 export const OnSurface: Story = {
   render: () => (
-    <div className="bg-background flex h-64 w-96 items-center justify-center rounded-lg">
+    <div className="flex h-64 w-96 items-center justify-center rounded-lg bg-background">
       <BrandLoader size="lg" />
     </div>
   ),
@@ -72,7 +72,7 @@ export const SuperposedOnLogo: Story = {
             size=&quot;{size}&quot; · {SIZE_PX[size]}px (per-size stroke)
           </span>
           <div className="relative" style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}>
-            <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
+            <LogoWithoutText className="absolute inset-0 size-full text-destructive-edge" aria-hidden />
             <div className="absolute inset-0">
               <BrandLoader size={size} aria-label={`BrandLoader overlay ${size}`} className="size-full" />
             </div>
@@ -83,7 +83,7 @@ export const SuperposedOnLogo: Story = {
         <div key={px} className="flex flex-col items-center gap-2">
           <span className="text-caption text-muted-foreground">{px}px (uses lg stroke via className)</span>
           <div className="relative" style={{ width: px, aspectRatio: '34 / 21' }}>
-            <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
+            <LogoWithoutText className="absolute inset-0 size-full text-destructive-edge" aria-hidden />
             <div className="absolute inset-0">
               <BrandLoader aria-label="BrandLoader overlay" className="size-full" />
             </div>
@@ -103,7 +103,7 @@ export const FullHeightPage: Story = {
     layout: 'fullscreen',
   },
   render: () => (
-    <div className="bg-sidebar flex h-screen w-screen items-center justify-center">
+    <div className="flex h-screen w-screen items-center justify-center bg-sidebar">
       <BrandLoader size="lg" aria-label="Loading app" />
     </div>
   ),

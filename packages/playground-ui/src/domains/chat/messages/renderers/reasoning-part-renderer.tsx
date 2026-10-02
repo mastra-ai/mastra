@@ -1,13 +1,15 @@
 import type { ReasoningPart } from '@mastra/react/ui';
 
-import { Reasoning } from '../reasoning';
 import { getReasoningContent } from '../reasoning-content';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 
 export interface ReasoningPartRendererProps {
   part: ReasoningPart;
+  /** Whether the passage starts expanded. Defaults to `true`. */
+  defaultOpen?: boolean;
 }
 
-export const ReasoningPartRenderer = ({ part }: ReasoningPartRendererProps) => {
+export const ReasoningPartRenderer = ({ part, defaultOpen }: ReasoningPartRendererProps) => {
   const content = getReasoningContent(part);
-  return content ? <Reasoning {...content} /> : null;
+  return content ? <ReasoningActivity {...content} defaultOpen={defaultOpen} /> : null;
 };

@@ -405,46 +405,9 @@ describe('ThemeToggle', () => {
     expect(getByRole('radio', { name: 'Only light' }).getAttribute('aria-checked')).toBe('true');
   });
 
-  it('uses medium segment measurements and interaction styles', () => {
-    const { getAllByRole, getByRole } = render(<ThemeToggle size="md" value="dark" onChange={() => undefined} />);
-    const group = getByRole('radiogroup');
-    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
-    const radios = getAllByRole('radio');
+  it('renders icons only, named by their labels', () => {
+    const { getAllByRole } = render(<ThemeToggle value="dark" onChange={() => undefined} />);
 
-    expect(group.classList.contains('gap-0.5')).toBe(true);
-    expect(indicator?.style.width).toBe('28px');
-    expect(indicator?.style.transform).toBe('translateX(60px)');
-    expect(radios.every(radio => radio.style.width === '28px')).toBe(true);
-    expect(radios.every(radio => radio.classList.contains('rounded-full'))).toBe(true);
-    expect(radios.every(radio => radio.classList.contains('focus-visible:outline-hidden'))).toBe(true);
-    expect(radios.every(radio => radio.classList.contains('active:scale-90'))).toBe(true);
-  });
-
-  it('uses extra-small segment measurements at the extra-small size', () => {
-    const { getAllByRole, getByRole } = render(<ThemeToggle size="xs" value="dark" onChange={() => undefined} />);
-    const group = getByRole('radiogroup');
-    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
-
-    expect(group.classList.contains('gap-px')).toBe(true);
-    expect(group.classList.contains('p-px')).toBe(true);
-    expect(indicator?.classList.contains('inset-y-px')).toBe(true);
-    expect(indicator?.style.width).toBe('20px');
-    expect(indicator?.style.transform).toBe('translateX(42px)');
-    expect(getAllByRole('radio').every(radio => radio.style.width === '20px')).toBe(true);
-    expect(getAllByRole('radio').every(radio => radio.classList.contains('h-4'))).toBe(true);
-  });
-
-  it('uses compact segment measurements at the small size', () => {
-    const { getAllByRole, getByRole } = render(<ThemeToggle size="sm" value="dark" onChange={() => undefined} />);
-    const group = getByRole('radiogroup');
-    const indicator = group.querySelector<HTMLSpanElement>(':scope > span[aria-hidden="true"]');
-
-    expect(group.classList.contains('gap-px')).toBe(true);
-    expect(group.classList.contains('p-px')).toBe(true);
-    expect(indicator?.classList.contains('inset-y-px')).toBe(true);
-    expect(indicator?.style.width).toBe('24px');
-    expect(indicator?.style.transform).toBe('translateX(50px)');
-    expect(getAllByRole('radio').every(radio => radio.style.width === '24px')).toBe(true);
-    expect(getAllByRole('radio').every(radio => radio.classList.contains('h-5'))).toBe(true);
+    expect(getAllByRole('radio').every(radio => radio.textContent === '')).toBe(true);
   });
 });

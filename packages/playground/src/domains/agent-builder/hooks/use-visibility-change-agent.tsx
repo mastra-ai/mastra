@@ -45,7 +45,7 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
     },
     renderExtraContent: pending =>
       pending === 'private' ? (
-        <DialogBody className="pt-0">
+        <DialogBody>
           <AgentImpactWarnings agentId={agentId} variant="make-private" />
         </DialogBody>
       ) : null,

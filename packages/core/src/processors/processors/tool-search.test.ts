@@ -1305,6 +1305,64 @@ describe('ToolSearchProcessor', () => {
       } as unknown as ProcessInputStepArgs;
     }
 
+    function argsWithSearchResult(threadId: string, result: unknown): ProcessInputStepArgs {
+      return {
+        ...createMockArgs(threadId),
+        messages: [
+          {
+            id: 'm1',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: 'call-0',
+                    toolName: 'search_tools',
+                    args: {},
+                    result,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      } as unknown as ProcessInputStepArgs;
+    }
+
+    it("'context' mode: search_tools hits do not load tools when autoLoad is false", async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+        storage: 'context',
+      });
+
+      const first = await processor.processInputStep(createMockArgs('thread-search'));
+      const searchResult = await first.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(searchResult.results.map((r: { name: string }) => r.name)).toContain('weather');
+      expect(searchResult.loaded).toBeUndefined();
+
+      const next = await processor.processInputStep(argsWithSearchResult('thread-search', searchResult));
+      expect(Object.keys(next.tools ?? {})).toEqual(['search_tools', 'load_tool']);
+    });
+
+    it("'context' mode: autoLoad search_tools results load their hits from messages alone", async () => {
+      const tools = { weather: createMockTool('weather', 'Get weather') };
+      const searcher = new ToolSearchProcessor({ tools, storage: 'context', search: { autoLoad: true } });
+      const first = await searcher.processInputStep(createMockArgs('thread-auto'));
+      const searchResult = await first.tools?.search_tools!.execute?.({ query: 'weather' }, undefined);
+      expect(searchResult.loaded).toEqual(['weather']);
+
+      // A fresh processor has no same-process state, so activation comes from the messages.
+      const fresh = new ToolSearchProcessor({ tools, storage: 'context', search: { autoLoad: true } });
+      const next = await fresh.processInputStep(argsWithSearchResult('thread-auto', searchResult));
+      expect(next.tools?.weather).toBeDefined();
+    });
+
     it('loads are append-only: the cached prefix keeps its order as tools are loaded', async () => {
       const processor = new ToolSearchProcessor({
         tools: {

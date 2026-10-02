@@ -9,6 +9,7 @@ import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * Compare mode: two interchangeable points on the shared time axis show how
@@ -99,25 +100,35 @@ export function ThemeCompare({
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <p className="border-border text-muted-foreground text-caption rounded-md border px-2 py-1 font-mono tabular-nums">
+        <Txt
+          variant="caption"
+          tone="muted"
+          font="mono"
+          className="rounded-md border border-border px-2 py-1 tabular-nums"
+        >
           {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
-        </p>
-        <span aria-hidden="true" className="text-muted-foreground text-caption">
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted" aria-hidden="true">
           →
-        </span>
-        <p className="border-border text-muted-foreground text-caption rounded-md border px-2 py-1 font-mono tabular-nums">
+        </Txt>
+        <Txt
+          variant="caption"
+          tone="muted"
+          font="mono"
+          className="rounded-md border border-border px-2 py-1 tabular-nums"
+        >
           {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
-        </p>
-        <p className="text-muted-foreground text-caption">
+        </Txt>
+        <Txt variant="caption" tone="muted">
           {grabbedPoint === undefined
             ? 'Click a landmark to move the nearest point · click a point to grab it.'
             : 'Point grabbed — click a landmark to place it.'}
-        </p>
+        </Txt>
       </div>
       {fromIndex === toIndex ? (
-        <p className="border-border bg-background text-muted-foreground text-body rounded-lg border p-6">
+        <Txt tone="muted" className="rounded-lg border border-border bg-background p-6">
           Pick two different landmarks on the timeline to compare them.
-        </p>
+        </Txt>
       ) : !fromFlow || !toFlow ? (
         <SignalsFrameLoadingSkeleton />
       ) : (

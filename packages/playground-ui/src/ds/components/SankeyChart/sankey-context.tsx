@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import { buildSankeyChartGraph, reorderSankeyChartColumns } from './sankey-chart-utils';
 import type { SankeyChartColumn, SankeyChartGraph, SankeyChartRecord } from './sankey-chart-utils';
-import { buildSankeyHueMap } from './sankeyColor';
+import { buildSankeyColorMap } from './sankeyColor';
 
 export type SankeyProps = {
   data: Array<SankeyChartRecord>;
@@ -17,7 +17,7 @@ export type SankeyProps = {
   getRecordNodeId?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
   getRecordNodeLabel?: (record: SankeyChartRecord, column: SankeyChartColumn) => string;
   getRecordNodeValue?: (record: SankeyChartRecord, column: SankeyChartColumn) => number;
-  getColumnHue?: (column: SankeyChartColumn) => number;
+  getColumnColor?: (column: SankeyChartColumn) => string;
 };
 
 export type SankeyControlColumn = SankeyChartColumn & {
@@ -33,7 +33,7 @@ export type SankeyControls = {
 type SankeyRenderContext = {
   graph: SankeyChartGraph;
   enabledColumns: Array<SankeyChartColumn>;
-  hueMap: Record<string, number>;
+  colorMap: Record<string, string>;
   usesFixedGeometry: boolean;
 };
 
@@ -53,7 +53,7 @@ export function Sankey({
   getRecordNodeId,
   getRecordNodeLabel,
   getRecordNodeValue,
-  getColumnHue,
+  getColumnColor,
 }: SankeyProps) {
   const columnIds = columns.map(column => column.id);
   const [internalOrder, setInternalOrder] = useState(columnIds);
@@ -70,11 +70,11 @@ export function Sankey({
     getRecordNodeValue,
     getRecordLayoutWeight,
   );
-  const defaultHueMap = buildSankeyHueMap(graph.nodes.map(node => String(node.value)));
-  const hueMap = Object.fromEntries(
+  const defaultColorMap = buildSankeyColorMap(graph.nodes.map(node => String(node.value)));
+  const colorMap = Object.fromEntries(
     graph.nodes.map(node => [
       String(node.value),
-      getColumnHue?.(node.column) ?? defaultHueMap[String(node.value)] ?? 0,
+      getColumnColor?.(node.column) ?? defaultColorMap[String(node.value)] ?? 'var(--chart-blue)',
     ]),
   );
 
@@ -109,7 +109,7 @@ export function Sankey({
   return (
     <SankeyControlsContext.Provider value={{ columns: controlColumns, toggleColumn, reorderColumns }}>
       <SankeyRenderContext.Provider
-        value={{ graph, enabledColumns, hueMap, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
+        value={{ graph, enabledColumns, colorMap, usesFixedGeometry: getRecordLayoutWeight !== undefined }}
       >
         {children}
       </SankeyRenderContext.Provider>

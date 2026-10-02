@@ -81,6 +81,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
         editable={editable}
         onlySelected={onlySelected}
         onOnlySelectedChange={setOnlySelected}
+        search={search}
         onSearch={setSearch}
         emptyStateDetails={emptyStateDetails}
         onToggle={toggle}

@@ -61,6 +61,31 @@ export async function subscriptionRunContext(
   return requestContext;
 }
 
+/**
+ * Attach the Factory session's owner, in its organization, to the request
+ * context of a run that has no inbound request (a notification or peer-signal
+ * wake), and prime that tenant's credentials. The live session's `ownerId`
+ * isn't used: sessions opened from the browser or Slack are owned by the
+ * controller id, not a user. Leaves the context alone when `sessionId` names no
+ * Factory session or its org is unresolved, so credential resolution fails
+ * closed.
+ */
+export async function prepareSessionRunContext(
+  requestContext: RequestContext,
+  sessionId: string,
+  sourceControl: SubscriptionSessionLookup,
+  options?: { expectedOrgId?: string },
+): Promise<'prepared' | 'unavailable' | 'organization-mismatch'> {
+  const sessionRow = await sourceControl.sessions.getBySessionId(sessionId);
+  if (!sessionRow || !hasResolvedOrg(sessionRow.orgId)) return 'unavailable';
+  if (options?.expectedOrgId !== undefined && sessionRow.orgId !== options.expectedOrgId) {
+    return 'organization-mismatch';
+  }
+  requestContext.set('user', { workosId: sessionRow.userId, organizationId: sessionRow.orgId });
+  await primeTenantCredentialsForRequestContext(requestContext);
+  return 'prepared';
+}
+
 export async function resolveSubscriptionSession(
   controller: MountedMastraCode['controller'],
   subscription: SubscriptionSessionRow,

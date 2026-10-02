@@ -205,6 +205,9 @@ export class Tool<
   /** Unique identifier for the tool */
   id: TId;
 
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
+
   /** Description of what the tool does */
   description: string;
 
@@ -232,7 +235,9 @@ export class Tool<
    * @param context - Optional execution context with metadata
    * @returns Promise resolving to tool output or a ValidationError if input validation fails
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute'];
+  execute?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute']
+  >;
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -250,15 +255,9 @@ export class Tool<
    * requireApproval: async ({ isDryRun }) => !isDryRun
    * ```
    */
-  requireApproval?: ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId,
-    TRequestContext
-  >['requireApproval'];
+  requireApproval?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['requireApproval']
+  >;
 
   /**
    * Runtime-resolved per-tool approval predicate, evaluated per call.
@@ -320,42 +319,18 @@ export class Tool<
    */
   mcp?: MCPToolProperties;
 
-  onInputStart?: ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId,
-    TRequestContext
-  >['onInputStart'];
-  onInputDelta?: ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId,
-    TRequestContext
-  >['onInputDelta'];
-  onInputAvailable?: ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId,
-    TRequestContext
-  >['onInputAvailable'];
-  onOutput?: ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId,
-    TRequestContext
-  >['onOutput'];
+  onInputStart?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['onInputStart']
+  >;
+  onInputDelta?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['onInputDelta']
+  >;
+  onInputAvailable?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['onInputAvailable']
+  >;
+  onOutput?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['onOutput']
+  >;
 
   /**
    * Examples of valid tool inputs passed through to the AI SDK.
@@ -398,6 +373,7 @@ export class Tool<
   ) {
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
+    this.title = opts.title;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
     this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
@@ -508,10 +484,13 @@ export class Tool<
               threadId,
               resourceId,
               writableStream,
+              isBackgroundTask,
+              background,
               ...rest
             } = baseContext;
             organizedContext = {
               ...rest,
+              background,
               agent: {
                 agentId: agentId || '',
                 toolCallId,
@@ -522,6 +501,7 @@ export class Tool<
                 threadId,
                 resourceId,
                 writableStream,
+                ...(isBackgroundTask ? { isBackgroundTask: true } : {}),
               },
               // Ensure requestContext is always present
               requestContext: executionRequestContext ?? new RequestContext(),

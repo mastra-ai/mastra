@@ -1,21 +1,36 @@
 import { z } from 'zod';
-import { createBackgroundTask } from '../../../../background-tasks/create';
-import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
+import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
+import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
+import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
+import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
+import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
+import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
+import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { ProcessorRunner } from '../../../../processors/runner';
+import type { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
+import {
+  getTransformedToolPayload,
+  hasTransformedToolPayload,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import { getToolTitle } from '../../../../tools/tool-title';
+import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -23,16 +38,17 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
+  DurableToolCallOutput,
   SerializableDurableOptions,
   AgentSuspendedEventData,
   RunRegistryEntry,
 } from '../../types';
-import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import {
   rebuildRunToolsFromMastra,
   resolveTool,
@@ -40,7 +56,6 @@ import {
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
-import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable tool call step.
@@ -54,16 +69,37 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  // Stamps from the step's *effective* tool set so the durable foreach
+  // concurrency gate can see approval/suspension capability that the run-start
+  // `toolsMetadata` lacks (e.g. tools added by input processors, issue #24377).
+  requireApproval: z.boolean().optional(),
+  hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
 });
 
 /**
- * Output schema for the durable tool call step
+ * Output schema for the durable tool call step.
+ *
+ * NOTE on field declarations: nothing strips undeclared fields today — both
+ * loop builders run with `validateInputs: false` and the workflows engine has
+ * no output-side validation — so undeclared fields still cross step
+ * boundaries at runtime. Every field the step emits is declared anyway for
+ * type/schema honesty and so the contract survives if validation is ever
+ * (re-)enabled (e.g. by the Phase 2 evented port, which may use different
+ * validation defaults). If validation is enabled, an undeclared field would
+ * be silently stripped at the boundary — declare new output fields here.
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  // Set when execution was interrupted by request abort (not a tool error); no result/error
+  // so the mapping step leaves the call incomplete.
+  // Mirrors the non-durable tool-call output schema.
+  aborted: z.boolean().optional(),
+  // Set when a processToolResult processor blocked the result via tripwire; no result
+  // crosses the boundary and the mapping step leaves the call incomplete.
+  resultBlocked: z.boolean().optional(),
   error: z
     .object({
       name: z.string(),
@@ -71,8 +107,8 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       stack: z.string().optional(),
     })
     .optional(),
-  // Approval decision for a `requireApproval` tool. Without this field Zod would strip the
-  // approval off the step output, so a declined call would lose its `output-denied` marker.
+  // Approval decision for a `requireApproval` tool; a declined call carries its
+  // `output-denied` marker across the boundary in this field.
   approval: z
     .object({
       id: z.string(),
@@ -80,6 +116,29 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       reason: z.string().optional(),
     })
     .optional(),
+  // Non-transient data-* chunks emitted by output processors via writer.custom()
+  // during this tool call. The tool-call step's messageList is a local copy whose
+  // mutations don't cross the step boundary, so these are carried on the output
+  // record and persisted into the authoritative messageList by the mapping step
+  // (#19375 parity port).
+  processorDataParts: z
+    .array(
+      z.object({
+        type: z.string(),
+        data: z.any().optional(),
+        messageId: z.string().optional(),
+      }),
+    )
+    .optional(),
+  // Payload-transform metadata captured from the emitted tool-result/tool-error
+  // chunk (L18b): merged into providerMetadata by the mapping step before
+  // commitToolResult so transcript/display targets apply on recall.
+  transformMetadata: z.record(z.string(), z.any()).optional(),
+  // Set when a delegation onDelegationComplete hook called ctx.bail() during
+  // this tool call. Carried on the step output (not requestContext) because
+  // the evented engine rehydrates a fresh RequestContext per step, so the
+  // wrapper's by-reference flag write never reaches the mapping step there.
+  delegationBailed: z.boolean().optional(),
 });
 
 /**
@@ -136,11 +195,12 @@ async function flushMessagesBeforeSuspension({
 }
 
 /**
- * Run a tool-result or tool-error chunk through the run's output processor pipeline.
- * Returns the processed chunk (possibly modified), or `null` if a processor blocked it
- * (in which case a tripwire chunk is emitted instead).
+ * Run a tool-result or tool-error chunk through the run's output processor
+ * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
+ * processed chunk, or `null` if a processor blocked it.
  *
- * Mirrors the regular agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
+ * Thin glue over the shared per-chunk pipeline core; mirrors the regular
+ * agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
  */
 async function processChunkThroughOutputProcessors(
   chunk: ChunkType,
@@ -151,68 +211,62 @@ async function processChunkThroughOutputProcessors(
   logger: any,
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
+  collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
 ): Promise<ChunkType | null> {
-  if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
-    return chunk;
-  }
+  const runner =
+    registryEntry?.outputProcessors?.length && registryEntry.processorStates
+      ? new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors: registryEntry.outputProcessors,
+          logger,
+          agentName,
+          processorStates: registryEntry.processorStates,
+        })
+      : undefined;
 
-  const runner = new ProcessorRunner({
-    inputProcessors: [],
-    outputProcessors: registryEntry.outputProcessors,
-    logger,
-    agentName,
-    processorStates: registryEntry.processorStates,
-  });
-
-  try {
-    const {
-      part: processed,
-      blocked,
-      reason,
-      tripwireOptions,
-      processorId,
-    } = await runner.processPart(
-      chunk,
-      registryEntry.processorStates as Map<string, ProcessorState>,
-      observabilityContext,
-      registryEntry.requestContext,
-      messageList,
-      0,
-      pubsub
-        ? {
-            custom: async (data: { type: string }) => {
-              await emitChunkEvent(pubsub, runId, data as ChunkType);
-            },
-          }
-        : undefined,
-    );
-
-    if (blocked) {
-      // Emit a tripwire chunk so downstream knows about the block
-      if (pubsub) {
-        await emitChunkEvent(pubsub, runId, {
-          type: 'tripwire',
-          payload: {
-            reason: reason || 'Output processor blocked content',
-            retry: tripwireOptions?.retry,
-            metadata: tripwireOptions?.metadata,
-            processorId,
+  return processAndEmitChunk(chunk, {
+    runner,
+    processorStates: registryEntry?.processorStates as Map<string, ProcessorState> | undefined,
+    observabilityContext,
+    requestContext: registryEntry?.requestContext,
+    messageList,
+    streamWriter: pubsub
+      ? {
+          custom: async (
+            data: { type: string; data?: unknown; transient?: boolean },
+            writerOptions?: { messageId?: string },
+          ) => {
+            // Collect non-transient data-* chunks for persistence by the
+            // mapping step (#19375 parity port); transient chunks stay
+            // stream-only.
+            if (data.type.startsWith('data-') && !data.transient) {
+              collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
+            }
+            await emitChunkEvent(pubsub, runId, data as ChunkType);
           },
-        } as ChunkType);
+        }
+      : undefined,
+    emitChunk: async c => {
+      if (pubsub) {
+        // Mark chunks the processors ran on so the stream consumer doesn't run
+        // them again. Without a runner (no processors, or none in this process)
+        // the chunk goes out unmarked and the consumer processes it.
+        await emitChunkEvent(pubsub, runId, c, !!runner);
       }
+    },
+    onProcessorError: error => {
+      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
+      // Fail closed: drop the chunk instead of emitting the unprocessed
+      // original — a throwing redaction processor must not leak the raw
+      // value. The regular loop registers no fallback at all (processor
+      // failures propagate and fail the request); this engine keeps the
+      // run alive but suppresses the chunk.
       return null;
-    }
-
-    return (processed as ChunkType) ?? null;
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-    // Fall through: emit the original chunk if processor fails
-    return chunk;
-  } finally {
+    },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
-    runner.endStreamProcessorSpans(registryEntry.processorStates as Map<string, ProcessorState>);
-  }
+    endSpansAfterProcessing: true,
+  });
 }
 
 /**
@@ -230,6 +284,13 @@ async function processChunkThroughOutputProcessors(
  * - Tool approval: step suspends with approval payload
  * - In-execution suspension: tool calls suspend() callback, step suspends with suspension payload
  * - Message persistence: messages are flushed before any suspension
+ *
+ * Deliberate divergence from the main loop: main cannot pause its
+ * request-scoped loop, so pending client tools ride the finish payload for
+ * browser-side handling and results come back on a follow-up request (#21688
+ * family). Durable has first-class suspension — the whole workflow parks at
+ * this step and resumes with the decision/result — so none of main's
+ * pending-tool plumbing applies here.
  */
 export function createDurableToolCallStep() {
   return createStep({
@@ -265,7 +326,21 @@ export function createDurableToolCallStep() {
         args = argsFromInput;
         resumeDataFromArgs = resumeDataFromInput;
       }
+      // Non-transient data-* chunks emitted by output processors or tools via
+      // writer.custom() during this tool call. This step's messageList is a
+      // local copy whose mutations don't cross the step boundary, so parts are
+      // collected here and carried on the output record for the mapping step
+      // to persist into the authoritative messageList (#19375 parity port).
+      const processorDataParts: Array<{ type: string; data?: unknown; messageId?: string }> = [];
+      const collectProcessorDataPart = (part: { type: string; data?: unknown; messageId?: string }) => {
+        processorDataParts.push(part);
+      };
+
       const resumeData = resumeDataFromArgs ?? workflowResumeData;
+      // Approval decisions are read from the serialized resume payload — never
+      // from live in-memory policy objects. Main's #20487 bug (a live
+      // `requireToolApproval` policy that didn't survive serialization let
+      // declined tools execute) cannot occur here by construction.
       const approvalDecision =
         workflowResumeData != null &&
         typeof workflowResumeData === 'object' &&
@@ -325,11 +400,20 @@ export function createDurableToolCallStep() {
         }
       };
 
-      // If the tool was already executed by the provider, return the output
-      if (providerExecuted && output !== undefined) {
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution.ts), so skip client
+      // execution — mirrors the non-durable tool-call step. When the provider
+      // already delivered the output in the same stream, thread it through as
+      // the result; a deferred result (e.g. Anthropic web_search resolving in
+      // a later stream) must not fall through to client execution, which would
+      // try to run the provider tool client-side and fail with
+      // ToolNotFoundError. The deferred result is patched into the messageList
+      // by llm-execution's tool-result handling when it arrives in a later
+      // stream (#14282 parity port).
+      if (providerExecuted) {
         return {
           ...typedInput,
-          result: output,
+          ...(output !== undefined ? { result: output } : {}),
         };
       }
 
@@ -363,6 +447,9 @@ export function createDurableToolCallStep() {
       let rebuiltWorkspace: any;
       let rebuiltMemory: any;
       let rebuiltSaveQueueManager: any;
+      // RequestContext the rebuilt tools were built with (their closures
+      // capture it) — checked for the delegation bail flag after execution.
+      let rebuiltRequestContext: RequestContext | undefined;
 
       if (!tool) {
         tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
@@ -374,24 +461,8 @@ export function createDurableToolCallStep() {
         ) as typeof tool;
       }
 
-      if (!tool) {
-        tool = resolveTool(toolName, mastra as Mastra);
-      }
-
-      if (!tool && mastra) {
-        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
-        if (mastraTools) {
-          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
-          if (!tool) {
-            tool = Object.values(mastraTools).find(
-              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
-            ) as typeof tool;
-          }
-        }
-      }
-
       // Cross-process fallback: workspace/skill tools are per-request closures
-      // never registered at the Mastra-instance level, so the lookups above miss
+      // never registered at the Mastra-instance level, so the registry lookups miss
       // them when the durable steps run on a separate process (e.g. the
       // @mastra/inngest connect() worker) whose registry is empty. Rebuild the
       // full toolset from the agent — the same rebuild the LLM step already does
@@ -428,6 +499,7 @@ export function createDurableToolCallStep() {
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
           rebuiltSaveQueueManager = rebuilt.saveQueueManager;
+          rebuiltRequestContext = rebuilt.requestContext;
           // Keep an already-resolved tool: we may have rebuilt purely to obtain the
           // SaveQueueManager, and the registry's instance is the live per-request closure.
           if (!tool) {
@@ -438,6 +510,25 @@ export function createDurableToolCallStep() {
           }
           if (!tool) {
             tool = Object.values(rebuiltTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
+      // Mastra-wide lookup runs only after the owning agent's tools (registry or
+      // rebuild) miss: tool ids are not unique across agents, so a global lookup
+      // first could execute another agent's same-id tool on a cold worker.
+      if (!tool) {
+        tool = resolveTool(toolName, mastra as Mastra);
+      }
+
+      if (!tool && mastra) {
+        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
               (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
             ) as typeof tool;
           }
@@ -637,6 +728,7 @@ export function createDurableToolCallStep() {
         };
 
         const changedMessages = [];
+        let matchedEntry: Record<string, any> | undefined;
         for (const message of messageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
@@ -649,6 +741,7 @@ export function createDurableToolCallStep() {
           if (entries) {
             for (const [key, entry] of Object.entries(entries)) {
               if (entryMatches(entry, key)) {
+                matchedEntry ??= { ...entry, toolCallId: entry?.toolCallId ?? key };
                 delete entries[key];
                 messageChanged = true;
               }
@@ -658,6 +751,7 @@ export function createDurableToolCallStep() {
 
           message.content.parts = message.content.parts?.map(part => {
             if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            matchedEntry ??= { ...(part.data as Record<string, any>) };
             if ((part.data as { resumed?: boolean }).resumed) return part;
             messageChanged = true;
             return { ...part, data: { ...(part.data as any), resumed: true } };
@@ -666,9 +760,49 @@ export function createDurableToolCallStep() {
           if (messageChanged) changedMessages.push(message);
         }
 
-        if (changedMessages.length === 0) return;
-        messageList.add(changedMessages, 'response');
-        await doFlush();
+        if (changedMessages.length > 0) {
+          messageList.add(changedMessages, 'response');
+          await doFlush();
+        }
+        // Live counterpart of the persisted `resumed: true` marker (mirrors the base tool-call step).
+        if (matchedEntry && pubsub) {
+          // Re-run the original approval/suspension display transform so the ack never re-exposes redacted payloads.
+          const displayed = await applyToolPayloadTransformToChunk(
+            {
+              type: type === 'approval' ? ('tool-call-approval' as const) : ('tool-call-suspended' as const),
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: matchedEntry.toolCallId ?? toolCallId,
+                // Delegated approvals store the inner tool's name; policies select redaction by it.
+                toolName: matchedEntry.toolName ?? toolName,
+                args: matchedEntry.args,
+                ...(type === 'suspension' ? { suspendPayload: matchedEntry.suspendPayload } : {}),
+                resumeSchema: matchedEntry.resumeSchema,
+              },
+              metadata: undefined as Record<string, any> | undefined,
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-call-resumed',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: matchedEntry.toolCallId ?? toolCallId,
+              toolName: matchedEntry.toolName ?? toolName,
+              kind: type,
+              args: displayed.payload.args,
+              ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
+              resumeSchema: displayed.payload.resumeSchema,
+            },
+            ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
+          });
+        }
       };
 
       const suspendedForApproval =
@@ -690,14 +824,24 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
-        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
+        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue).
+        // Apply the tool payload transform first so display targets never see raw
+        // args on the approval prompt (parity with the main loop's approval chunk).
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-call-approval',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, resumeSchema },
-          });
+          const approvalChunk = await applyToolPayloadTransformToChunk(
+            {
+              type: 'tool-call-approval' as const,
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, resumeSchema, updatedAt: Date.now() },
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
+          await emitChunkEvent(pubsub, runId, approvalChunk);
         }
 
         // Emit suspended event for the stream adapter
@@ -767,7 +911,8 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              const processed = await processChunkThroughOutputProcessors(
+              // Processes through output processors and emits (or emits a tripwire when blocked).
+              await processChunkThroughOutputProcessors(
                 deniedChunk as ChunkType,
                 registryEntry,
                 pubsub,
@@ -776,10 +921,8 @@ export function createDurableToolCallStep() {
                 logger,
                 messageList,
                 processorObservabilityContext,
+                collectProcessorDataPart,
               );
-              if (processed) {
-                await emitChunkEvent(pubsub, runId, processed);
-              }
             } catch (emitError) {
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
@@ -787,6 +930,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             approval,
+            ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
       }
@@ -811,6 +955,7 @@ export function createDurableToolCallStep() {
 
       // Strip _background from args before execution (same as non-durable path)
       const cleanedArgs = { ...args };
+      const isAgentTool = toolName?.startsWith('agent-');
       if ('_background' in cleanedArgs) {
         delete (cleanedArgs as any)._background;
       }
@@ -854,6 +999,14 @@ export function createDurableToolCallStep() {
       // fresh) or a delegated approval raised mid-execution by the sub-agent. A
       // framework-resolved inner run id disambiguates the delegated approval.
       const isDelegatedApprovalResume = !!approvalGrant && !!suspendedToolRunId;
+      // Mirror the non-durable step: a bare `{ approved }` belongs to the gate and is
+      // dropped, but an approval carrying extra keys is caller data for the tool.
+      const hasCustomApprovalResumeData =
+        approvalGated &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData &&
+        Object.keys(resumeData).length > 1;
       if ((isResumingFromSuspension || isDelegatedApprovalResume) && suspendedToolRunId) {
         cleanedArgs.suspendedToolRunId = suspendedToolRunId;
       }
@@ -907,8 +1060,13 @@ export function createDurableToolCallStep() {
 
       // Provide outputWriter so context.writer.write() / context.writer.custom()
       // emit chunks through pubsub (matching the regular agent's tool streaming).
+      // Non-transient data-* chunks are also collected for persistence, as the
+      // regular agent does for tool-written data parts (#25122).
       const outputWriter = pubsub
         ? async (chunk: any) => {
+            if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
+              collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
+            }
             await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
         : undefined;
@@ -916,6 +1074,7 @@ export function createDurableToolCallStep() {
       const toolOptions = {
         toolCallId,
         messages: [],
+        getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
         requestContext,
         mcp: registryEntry?.mcp,
@@ -925,7 +1084,8 @@ export function createDurableToolCallStep() {
         actor,
         // Delegated approval decisions must also flow to the wrapper tool: it only
         // resumes the inner suspended run when resumeData is present.
-        resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
+        resumeData:
+          isResumingFromSuspension || isDelegatedApprovalResume || hasCustomApprovalResumeData ? resumeData : undefined,
         suspendedToolRunId,
         // The payload this tool call suspended with (see `toolCallSuspended` below), so a
         // resumed tool can continue from its own state — mirrors the non-durable step.
@@ -979,17 +1139,26 @@ export function createDurableToolCallStep() {
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
-              await emitChunkEvent(pubsub, runId, {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId,
-                  toolName: approvalToolName,
-                  args: approvalArgs,
-                  resumeSchema: approvalResumeSchema,
+              const approvalChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-call-approval' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
+                    resumeSchema: approvalResumeSchema,
+                    updatedAt: Date.now(),
+                  },
                 },
-              });
+                {
+                  policy: registryEntry?.toolPayloadTransform,
+                  tools: registryEntry?.tools,
+                  logger: logger as any,
+                },
+              );
+              await emitChunkEvent(pubsub, runId, approvalChunk);
             }
 
             if (pubsub) {
@@ -1037,18 +1206,26 @@ export function createDurableToolCallStep() {
             };
 
             if (pubsub) {
-              await emitChunkEvent(pubsub, runId, {
-                type: 'tool-call-suspended',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId,
-                  toolName,
-                  suspendPayload,
-                  args,
-                  resumeSchema: suspendOptions?.resumeSchema,
+              const suspensionChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-call-suspended' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId,
+                    toolName,
+                    suspendPayload,
+                    args,
+                    resumeSchema: suspendOptions?.resumeSchema,
+                  },
                 },
-              });
+                {
+                  policy: registryEntry?.toolPayloadTransform,
+                  tools: registryEntry?.tools,
+                  logger: logger as any,
+                },
+              );
+              await emitChunkEvent(pubsub, runId, suspensionChunk);
 
               await emitSuspendedEvent(pubsub, runId, suspendedEventData);
             }
@@ -1084,306 +1261,386 @@ export function createDurableToolCallStep() {
         },
       };
 
-      // Resolve whether to run in background using the shared config resolver
-      if (bgManager && !bgConfig?.disabled && typeof cleanedArgs === 'object' && cleanedArgs !== null) {
-        const bgResolved = resolveBackgroundConfig({
-          llmBgOverrides,
-          toolName,
-          toolConfig: toolBgConfig,
-          agentConfig: bgConfig,
-          managerConfig: bgManager.config,
-        });
-
-        if (bgResolved.runInBackground) {
-          try {
-            const bgTask = createBackgroundTask(bgManager, {
-              toolName,
-              toolCallId,
-              args: cleanedArgs,
-              agentId: initData.agentId,
-              threadId: state?.threadId,
-              resourceId: state?.resourceId,
+      // Live-attempt barrier only. Durable recovery must use persisted task and
+      // transcript state because this Promise does not survive workflow replay.
+      let resolveReconciliation!: (outcome: { error?: unknown }) => void;
+      const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
+        resolveReconciliation = resolve;
+      });
+      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
+        ...typedInput.providerMetadata,
+        mastra: {
+          ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
+          backgroundTask: { taskId, status },
+        },
+      });
+      // Background task dispatch via the shared dispatch ladder with the
+      // durable policy: steps replay under at-least-once redelivery, so an
+      // already-running task is restarted to reattach hooks and
+      // ladder failures degrade to sync execution to preserve forward
+      // progress across transport/store boundaries.
+      const bgOutcome = await dispatchBackgroundTool({
+        existingRunningTask: 'restart',
+        dispatchFailure: 'fallback-to-sync',
+        backgroundTaskManager: bgManager,
+        agentBackgroundConfig: bgConfig,
+        managerConfig: bgManager?.config,
+        toolBackgroundConfig: toolBgConfig,
+        llmBgOverrides,
+        args: cleanedArgs,
+        toolName,
+        toolCallId,
+        agentId: initData.agentId,
+        threadId: state?.threadId,
+        resourceId: state?.resourceId,
+        runId,
+        // Only a resume of a previously-suspended call may reattach to a
+        // suspended background task; a fresh call must dispatch its own.
+        resumeData: isResumingFromSuspension ? resumeData : undefined,
+        logger: logger as any,
+        adoptPersistedTask: true,
+        emitTaskStarted: async task => {
+          // Emit background-task-started chunk via PubSub
+          if (pubsub) {
+            await emitChunkEvent(pubsub, runId, {
+              type: 'background-task-started' as any,
               runId,
-              timeoutMs: bgResolved.timeoutMs,
-              maxRetries: bgResolved.maxRetries,
-              context: {
-                executor: {
-                  execute: async (taskArgs: any, taskContext: any) => {
-                    return tool.execute!(taskArgs, {
-                      ...toolOptions,
-                      ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
-                      suspendedToolRunId: taskContext?.suspendedToolRunId,
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return taskContext?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await taskContext?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
-                    });
-                  },
-                },
-                onChunk: (chunk: any) => {
-                  if (!pubsub) return;
-                  try {
-                    const bgRunId = chunk.payload.runId;
-                    // Emit tool-call chunk so UIs can render the invocation inline
-                    if (bgRunId !== runId || (bgRunId === runId && resumeData)) {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-call',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: cleanedArgs,
-                        },
-                      });
-                    }
-
-                    if (chunk.type === 'background-task-completed') {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-result',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: cleanedArgs,
-                          result: chunk.payload.result,
-                        },
-                      });
-                    } else if (chunk.type === 'background-task-failed') {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-error',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          error: chunk.payload.error,
-                          args: cleanedArgs,
-                        },
-                      });
-                    }
-                  } catch {
-                    // PubSub may be closed — ignore
-                  }
-                },
-
-                onResult: async (params: any) => {
-                  if (!messageList) return;
-
-                  const result =
-                    params.status === 'failed'
-                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                      : params.result;
-
-                  const updated = messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        // A failed background task is recorded as `output-error` with the
-                        // message in `errorText`; a successful one keeps `state: 'result'`.
-                        ...(params.status === 'failed'
-                          ? { state: 'output-error' as const, errorText: result }
-                          : { state: 'result' as const, result }),
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args: cleanedArgs,
-                        // Preserve the approval decision for an approved approval-gated tool that
-                        // ran in the background so it round-trips on recall, matching the sync path.
-                        ...(approvalGrant ?? {}),
-                      },
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          completedAt: params.completedAt,
-                          taskId: params.taskId,
-                        },
-                      },
-                    },
-                  );
-
-                  if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && resumeData)) {
-                      messageList.add(
-                        [
-                          {
-                            role: 'tool' as const,
-                            type: 'tool-call',
-                            id: crypto.randomUUID(),
-                            createdAt: new Date(),
-                            content: [
-                              {
-                                type: 'tool-call' as const,
-                                toolCallId: params.toolCallId,
-                                toolName: params.toolName,
-                                args: cleanedArgs,
-                              },
-                            ],
-                          },
-                        ],
-                        'response',
-                      );
-                    }
-                    messageList.add(
-                      [
-                        {
-                          role: 'tool' as const,
-                          content: [
-                            {
-                              type: 'tool-result' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              result,
-                              isError: params.status === 'failed',
-                            },
-                          ],
-                        },
-                      ],
-                      'response',
-                    );
-                  }
-
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-                  }
-                },
-
-                onExecution: async (params: any) => {
-                  if (!messageList) return;
-
-                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-                    mode: 'stream',
-                    backgroundTasks: {
-                      [params.toolCallId]: {
-                        startedAt: params.startedAt,
-                        suspendedAt: params.suspendedAt,
-                        taskId: params.taskId,
-                      },
-                    },
-                  });
-
-                  // Flush to storage so the metadata update (especially suspendedAt)
-                  // is persisted. Unlike the regular agent which has a single long-lived
-                  // messageList, the durable agent's workflow state is serialized before
-                  // this async callback fires, so we must flush directly.
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-                  }
-                },
-
-                onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
-                onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
+              from: ChunkFrom.AGENT,
+              payload: {
+                taskId: task.id,
+                toolName,
+                toolCallId,
               },
             });
-
-            // If the agent is resuming this tool call and a previously-suspended
-            // bg task exists for this toolCallId+runId, resume the bg task with
-            // the agent-resume payload instead of dispatching a fresh one.
-            const isSuspendedBgResume =
-              isResumingFromSuspension && resumeData && typeof resumeData === 'object' && resumeData !== null;
-            if (isSuspendedBgResume) {
-              const isSuspended = await bgTask.checkIfSuspended({
-                toolCallId,
-                runId,
-                agentId: initData.agentId,
-                threadId: state?.threadId,
-                resourceId: state?.resourceId,
-                toolName,
+          }
+        },
+        taskContext: info => ({
+          executor: {
+            execute: async (taskArgs: any, taskContext: any) => {
+              const taskId = info.getTaskId()!;
+              const execution = await executeAdoptedBackgroundOperation({
+                taskId,
+                disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                abortSignal: taskContext?.abortSignal ?? toolAbortSignal,
+                execute: background =>
+                  tool.execute!(taskArgs, {
+                    ...toolOptions,
+                    isBackgroundTask: true,
+                    abortSignal: taskContext?.abortSignal ?? toolAbortSignal,
+                    background,
+                    [BACKGROUND_WORK_CONTEXT]: {
+                      originRunId: runId,
+                      originToolCallId: toolCallId,
+                      taskId,
+                      invocationKind: isAgentTool ? 'agent' : 'tool',
+                      disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
+                    },
+                    ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                    // Framework-resolved delegated run id recovered from persisted
+                    // suspension state (#23739) — never the model-authored one.
+                    suspendedToolRunId: taskContext?.suspendedToolRunId,
+                    suspend: async (data?: unknown, options?: SuspendOptions) => {
+                      await toolOptions.suspend?.(data, options);
+                      return taskContext?.suspend?.(data, options);
+                    },
+                    outputWriter: async (chunk: any) => {
+                      await taskContext?.onProgress?.(chunk);
+                      return toolOptions.outputWriter?.(chunk);
+                    },
+                  } as any),
+                onCancelError: error => logger?.warn('Failed to cancel adopted background operation', error),
               });
-              if (isSuspended) {
-                const task = await bgTask.resume(resumeData);
-                return {
-                  ...typedInput,
-                  args: cleanedArgs,
-                  result: `Background task resumed. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-                };
+
+              if (!execution.adopted) {
+                return execution.result;
               }
-            }
 
-            const isPreviouslyRunning = await bgTask.checkIfRunning({
-              toolCallId,
-              runId,
-              agentId: initData.agentId,
-              threadId: state?.threadId,
-              resourceId: state?.resourceId,
-              toolName,
-            });
-
-            if (isPreviouslyRunning) {
-              const task = await bgTask.restart();
-              return {
-                ...typedInput,
-                args: cleanedArgs,
-                result: `Background task restarted. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-              };
-            }
-
-            const { task, fallbackToSync } = await bgTask.dispatch();
-
-            if (!fallbackToSync) {
-              // Emit background-task-started chunk via PubSub
-              if (pubsub) {
-                await emitChunkEvent(pubsub, runId, {
-                  type: 'background-task-started' as any,
-                  runId,
+              const outputValidation = validateToolOutput(
+                resolveToolOutputValidationSchema(tool),
+                execution.result,
+                toolName,
+                false,
+              );
+              return outputValidation.error ?? outputValidation.data;
+            },
+          },
+          onChunk: (chunk: any) => {
+            if (!pubsub) return;
+            try {
+              const bgRunId = chunk.payload.runId;
+              // Emit tool-call chunk so UIs can render the invocation inline
+              if (bgRunId !== runId || (bgRunId === runId && resumeData != null)) {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-call',
+                  runId: bgRunId,
                   from: ChunkFrom.AGENT,
                   payload: {
-                    taskId: task.id,
-                    toolName,
-                    toolCallId,
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: cleanedArgs,
+                    title: getToolTitle(tool),
                   },
                 });
               }
 
-              // Return placeholder result so the LLM can continue
-              return {
-                ...typedInput,
-                args: cleanedArgs,
-                result: `Background task started. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-                ...(approvalGrant ?? {}),
-              };
+              if (chunk.type === 'background-task-completed') {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-result',
+                  runId: bgRunId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: cleanedArgs,
+                    result: chunk.payload.result,
+                    providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'completed'),
+                  },
+                });
+              } else if (chunk.type === 'background-task-failed') {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-error',
+                  runId: bgRunId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    error: chunk.payload.error,
+                    args: cleanedArgs,
+                    providerMetadata: backgroundResultMetadata(chunk.payload.taskId, 'failed'),
+                  },
+                });
+              }
+            } catch {
+              // PubSub may be closed — ignore
             }
-            // fallbackToSync: concurrency limit hit, fall through to synchronous execution
-          } catch (bgError) {
-            logger?.debug?.(
-              `[DurableAgent] Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`,
+          },
+
+          onResult: async (params: any) => {
+            if (!messageList) {
+              if (info.disposition === 'awaited') {
+                const error = new Error('Cannot reconcile an awaited background task without a message list');
+                resolveReconciliation({ error });
+                throw error;
+              }
+              return;
+            }
+
+            try {
+              // Resolve the mapping tool at completion time: the registry entry
+              // may have been rebuilt (or expired) if the task finished after a
+              // process restart.
+              const liveEntry = globalRunRegistry.get(runId);
+              const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
+              await applyBackgroundToolResult({
+                params,
+                currentRunId: runId,
+                hasResumeData: resumeData != null,
+                args: cleanedArgs,
+                messageList,
+                approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+                baseProviderMetadata: typedInput.providerMetadata as any,
+                // Transcript payload transforms (L22 parity port). The policy and
+                // tool-level transform are resolved at completion time from the
+                // live registry — NOT captured at dispatch — because the entry may
+                // be rebuilt after a process restart. The run-level policy carries
+                // a closure and cannot be rehydrated across restarts (only
+                // tool-level transforms survive via registry re-resolution) — a
+                // limitation shared with the sync tool-call path.
+                transformForTranscript: async result => {
+                  const failed = params.status === 'failed';
+                  const transformCarrier = await applyToolPayloadTransformToChunk(
+                    {
+                      type: failed ? 'tool-error' : 'tool-result',
+                      payload: {
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        args: cleanedArgs,
+                        ...(failed ? { error: params.error } : { result: params.result }),
+                      },
+                      metadata: {} as Record<string, any>,
+                    },
+                    {
+                      policy: liveEntry?.toolPayloadTransform,
+                      toolTransform: (mappingTool as { transform?: any })?.transform,
+                      tools: liveEntry?.tools,
+                      logger: logger as any,
+                      transformInput: {
+                        providerMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                    },
+                  );
+                  const transcriptArgsTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
+                    'transcript',
+                    'input-available',
+                  );
+                  const transcriptResultTransform = getTransformedToolPayload(
+                    transformCarrier.metadata,
+                    'transcript',
+                    failed ? 'error' : 'output-available',
+                  );
+                  return {
+                    transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                      ? transcriptArgsTransform.transformed
+                      : cleanedArgs,
+                    transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                      ? transcriptResultTransform.transformed
+                      : result,
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      typedInput.providerMetadata as any,
+                      transformCarrier.metadata,
+                    ) as any,
+                  };
+                },
+                toModelOutput: mappingTool.toModelOutput,
+                // Respect a custom idGenerator for the fallback appended message —
+                // parity with main, which reads generateId from its run scope.
+                generateId: mastra ? () => (mastra as Mastra).generateId() : undefined,
+                logger: logger as any,
+                flush: async () => {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                  }
+                },
+              });
+              resolveReconciliation({});
+            } catch (error) {
+              resolveReconciliation({ error });
+              throw error;
+            }
+          },
+
+          onExecution: async (params: any) => {
+            if (!messageList) return;
+
+            messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+              mode: 'stream',
+              backgroundTasks: {
+                [params.toolCallId]: {
+                  startedAt: params.startedAt,
+                  suspendedAt: params.suspendedAt,
+                  taskId: params.taskId,
+                },
+              },
+            });
+
+            // Flush to storage so the metadata update (especially suspendedAt)
+            // is persisted. Unlike the regular agent which has a single long-lived
+            // messageList, the durable agent's workflow state is serialized before
+            // this async callback fires, so we must flush directly.
+            if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+              await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            }
+          },
+
+          onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
+          onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
+        }),
+      });
+
+      if (bgOutcome.status !== 'sync') {
+        if (bgOutcome.disposition === 'awaited') {
+          const completedTask = await bgOutcome.waitForCompletion({ abortSignal: toolAbortSignal });
+          // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+          if (completedTask.status !== 'cancelled') {
+            const reconciliation = await reconciliationComplete;
+            if (reconciliation.error) {
+              throw reconciliation.error;
+            }
+          }
+
+          if (completedTask.status !== 'completed') {
+            throw new Error(
+              completedTask.error?.message ??
+                `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
             );
           }
+
+          return {
+            ...typedInput,
+            args: cleanedArgs,
+            result: completedTask.result,
+            providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+            ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
+            ...(processorDataParts.length ? { processorDataParts } : {}),
+          };
         }
+
+        if (bgOutcome.status === 'started') {
+          // Return placeholder result so the LLM can continue
+          return {
+            ...typedInput,
+            args: cleanedArgs,
+            result: bgOutcome.placeholder,
+            providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
+            ...(approvalGrant ?? {}),
+          };
+        }
+        return {
+          ...typedInput,
+          args: cleanedArgs,
+          result: bgOutcome.placeholder,
+          providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'running'),
+        };
       }
 
-      try {
-        const releaseRunActivity = markRunActive(runId);
-        let result: unknown;
-        try {
-          result = await tool.execute(cleanedArgs, toolOptions);
-        } finally {
-          releaseRunActivity();
-        }
-
-        // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
-        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
-          try {
-            await (tool as any).onOutput({
-              toolCallId,
-              toolName,
-              output: result,
-            });
-          } catch (hookError) {
-            logger?.error?.('Error calling onOutput', hookError);
+      // Read-and-clear the delegation bail signal (`ctx.bail()` from an
+      // onDelegationComplete hook). The sub-agent tool wrapper writes the
+      // flag by-reference to the RequestContext instance captured when the
+      // tool was BUILT — the registry's live instance in-process, or the
+      // context restored by rebuildRunToolsFromMastra cross-process. On the
+      // evented engine every step rehydrates its own RequestContext copy from
+      // its event payload, so that write never reaches the llm-mapping step's
+      // instance and bail used to cost one extra LLM turn (G3). Consuming the
+      // flag here — same process and same instances as tool execution — and
+      // carrying it on the serializable step output stops the loop in the
+      // same iteration on every engine.
+      const consumeDelegationBailSignal = (): boolean => {
+        let bailed = false;
+        for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
+          if (rc?.get('__mastra_delegationBailed')) {
+            bailed = true;
+            rc.set('__mastra_delegationBailed', false);
           }
         }
+        return bailed;
+      };
+
+      try {
+        const outcome = await executeToolCall({
+          tool: tool as any,
+          args: cleanedArgs,
+          toolOptions,
+          toolCallId,
+          toolName,
+          abortSignal: toolAbortSignal,
+          // Run-activity tracking brackets live execution (durable-only bookkeeping).
+          acquireExecution: () => markRunActive(runId),
+          logger: logger as any,
+        });
+
+        if (outcome.status === 'aborted') {
+          // Mid-flight cancellation: leave the call incomplete (no result/error,
+          // no chunk emission) so the mapping step doesn't fake-complete it on
+          // resume. Mirrors the non-durable tool-call step.
+          return {
+            ...typedInput,
+            aborted: true,
+          };
+        }
+
+        if (outcome.status === 'error') {
+          // Route through the catch below so error serialization and the
+          // tool-error chunk emission stay on the single existing path.
+          throw outcome.error;
+        }
+
+        let result = outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
-        // other non-JSON side channels used by tools such as MCP structured-output tools.
+        // other non-JSON side channels used by tools such as MCP structured-output tools. Map from
+        // the raw pre-serialization result for the same reason.
         let providerMetadata = typedInput.providerMetadata;
         let modelOutputComputed: boolean | undefined;
         const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
@@ -1396,14 +1653,14 @@ export function createDurableToolCallStep() {
             entityType: EntityType.TOOL,
             entityId: toolName,
             entityName: toolName,
-            input: result,
+            input: outcome.rawResult,
             attributes: {
               mappingType: 'toModelOutput',
               toolCallId,
             },
           });
           try {
-            const modelOutput = normalizeModelOutput(await toModelOutput(result));
+            const modelOutput = normalizeModelOutput(await toModelOutput(outcome.rawResult));
             mappingSpan?.end({ output: modelOutput });
 
             if (modelOutput != null) {
@@ -1419,12 +1676,115 @@ export function createDurableToolCallStep() {
           }
         }
 
+        // Run processToolResult hooks before the tool-result chunk is emitted.
+        // In this engine subscribers receive tool-result chunks HERE, at
+        // tool-call time — running the hook later in llm-mapping would protect
+        // only the transcript after the raw value had already reached the
+        // stream. Processors mutate via messageList.updateToolInvocation, but
+        // llm-mapping re-derives the transcript from the llm-execution snapshot
+        // plus the serialized step outputs, so the processed value must travel
+        // through the returned `result` field. Requires the live in-process
+        // registry (processor states are unserializable) — a cross-process
+        // resume skips, same as the chunk pipeline below.
+        if (!wasSuspended && registryEntry?.outputProcessors?.length && registryEntry.processorStates && messageList) {
+          const resultProcessorRunner = new ProcessorRunner({
+            inputProcessors: [],
+            outputProcessors: registryEntry.outputProcessors,
+            logger,
+            agentName: initData.agentId,
+            processorStates: registryEntry.processorStates,
+          });
+          try {
+            await resultProcessorRunner.runProcessToolResult({
+              // The accumulated StepResult[] is not reconstructable at
+              // tool-call time in this engine (only serialized iteration state
+              // exists), so hooks that inspect prior steps see an empty array.
+              steps: [],
+              stepNumber: 0,
+              messages: messageList.get.all.db(),
+              messageList,
+              toolName,
+              toolCallId,
+              toolArgs: cleanedArgs,
+              result,
+              ...(processorObservabilityContext ?? {}),
+              requestContext: registryEntry.requestContext,
+              retryCount: 0,
+              writer: pubsub
+                ? {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      if (data.type.startsWith('data-') && !data.transient) {
+                        collectProcessorDataPart({
+                          type: data.type,
+                          data: data.data,
+                          messageId: writerOptions?.messageId,
+                        });
+                      }
+                      await emitChunkEvent(pubsub, runId, data as ChunkType);
+                    },
+                  }
+                : undefined,
+              abortSignal: toolAbortSignal,
+            });
+            // Sync any processor mutation back so the emitted chunk and the
+            // serialized step output both carry the post-processor value.
+            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
+            if (postProcessorResult !== undefined && postProcessorResult !== result) {
+              result = postProcessorResult;
+            }
+          } catch (processorError) {
+            if (processorError instanceof TripWire) {
+              // Blocked: emit a tripwire chunk instead of the tool-result and
+              // leave the call incomplete (no result). llm-mapping skips
+              // `resultBlocked` entries the way it skips `aborted` ones, so
+              // the invocation stays in 'call' state — mirroring the main
+              // loop, where a tripwire skips both commit and emission.
+              if (pubsub) {
+                try {
+                  await emitChunkEvent(pubsub, runId, {
+                    type: 'tripwire',
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      reason: processorError.message || 'Tool result blocked by processor',
+                      retry: processorError.options?.retry,
+                      metadata: processorError.options?.metadata,
+                      processorId: processorError.processorId,
+                    },
+                  } as ChunkType);
+                } catch (emitError) {
+                  logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
+                }
+              }
+              return {
+                ...typedInput,
+                resultBlocked: true,
+                ...(processorDataParts.length ? { processorDataParts } : {}),
+              };
+            }
+            // A non-tripwire processor failure must not kill the run in this
+            // engine (run and stream lifecycles are decoupled) — but it must
+            // fail closed: continuing with the raw result would leak the
+            // unprocessed value past a throwing redaction processor. The
+            // regular loop rethrows here (runToolResultProcessors), so no
+            // engine emits or persists the raw value; this engine substitutes
+            // an error placeholder for both emission and persistence and
+            // keeps the run alive.
+            logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
+            result = { error: 'Tool result processing failed' };
+          }
+        }
+
         // Emit tool-result chunk (non-fatal — result is returned regardless).
         // Skip emission when the tool called suspend() — the workflow engine's
         // suspend() sets a flag but does NOT throw, so execution continues past
         // the suspend call and tool.execute() returns undefined. Emitting a
         // tool-result with undefined would produce a spurious entry that
         // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
+        let transformMetadata: DurableToolCallOutput['transformMetadata'];
         if (pubsub && !wasSuspended) {
           try {
             const resultChunk = await applyToolPayloadTransformToChunk(
@@ -1436,12 +1796,18 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
             );
-            // Run through output processors (tripwire/blocking/redaction)
-            const processed = await processChunkThroughOutputProcessors(
+            // Capture the transform metadata for the step output (L18b) —
+            // this step's messageList is a local copy, so llm-mapping layers
+            // it into the persisted providerMetadata from the output record.
+            transformMetadata = (resultChunk as { metadata?: Record<string, any> })
+              .metadata as DurableToolCallOutput['transformMetadata'];
+            // Runs through output processors (tripwire/blocking/redaction) and emits
+            await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
               pubsub,
@@ -1450,10 +1816,8 @@ export function createDurableToolCallStep() {
               logger,
               messageList,
               processorObservabilityContext,
+              collectProcessorDataPart,
             );
-            if (processed) {
-              await emitChunkEvent(pubsub, runId, processed);
-            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
@@ -1465,6 +1829,9 @@ export function createDurableToolCallStep() {
           result,
           modelOutputComputed,
           ...(approvalGrant ?? {}),
+          ...(processorDataParts.length ? { processorDataParts } : {}),
+          ...(transformMetadata ? { transformMetadata } : {}),
+          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them —
@@ -1477,6 +1844,7 @@ export function createDurableToolCallStep() {
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
+        let errorTransformMetadata: DurableToolCallOutput['transformMetadata'];
         if (pubsub && !wasSuspended) {
           try {
             const errorChunk = await applyToolPayloadTransformToChunk(
@@ -1488,12 +1856,17 @@ export function createDurableToolCallStep() {
               },
               {
                 policy: registryEntry?.toolPayloadTransform,
+                toolTransform: (tool as { transform?: any })?.transform,
                 tools: registryEntry?.tools,
                 logger: logger as any,
               },
             );
-            // Run through output processors (tripwire/blocking/redaction)
-            const processed = await processChunkThroughOutputProcessors(
+            // Capture the transform metadata for the step output (L18b) — see
+            // the tool-result path above.
+            errorTransformMetadata = (errorChunk as { metadata?: Record<string, any> })
+              .metadata as DurableToolCallOutput['transformMetadata'];
+            // Runs through output processors (tripwire/blocking/redaction) and emits
+            await processChunkThroughOutputProcessors(
               errorChunk,
               registryEntry,
               pubsub,
@@ -1502,10 +1875,8 @@ export function createDurableToolCallStep() {
               logger,
               messageList,
               processorObservabilityContext,
+              collectProcessorDataPart,
             );
-            if (processed) {
-              await emitChunkEvent(pubsub, runId, processed);
-            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
@@ -1515,6 +1886,10 @@ export function createDurableToolCallStep() {
           ...typedInput,
           error: toolError,
           ...(approvalGrant ?? {}),
+          ...(processorDataParts.length ? { processorDataParts } : {}),
+          ...(errorTransformMetadata ? { transformMetadata: errorTransformMetadata } : {}),
+          // A hook may bail on a FAILED delegation too (success: false).
+          ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       }
     },

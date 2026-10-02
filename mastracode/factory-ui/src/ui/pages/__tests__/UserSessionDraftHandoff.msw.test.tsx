@@ -204,7 +204,8 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
     expect(route.bindingsBeforePrompt).toEqual(['mode:plan', 'model:openai/gpt-4o-mini']);
     const thread = within(screen.getByRole('main'));
-    await waitFor(() => expect(thread.getByText('fix the login bug')).toBeInTheDocument());
+    // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
+    await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
     expect(thread.queryByText(/Failed to load messages/)).not.toBeInTheDocument();
 
     route.finishWorkspace();

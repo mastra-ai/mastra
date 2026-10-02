@@ -22,6 +22,7 @@ import {
   readResourceResponseSchema,
   listResourcesResponseSchema,
 } from '../schemas/mcp';
+import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -36,6 +37,15 @@ import { createRoute } from '../server-adapter/routes/route-builder';
  */
 function hasSSETransport(server: MastraMCPServerImplementation): boolean {
   return server.mcpVersion !== 2;
+}
+
+export interface MCPServerInfoResponse extends ServerInfo {
+  /** Endpoints served under `/mcp/:serverId`; 2026-07-28 servers speak Streamable HTTP only. */
+  transports: MCPServerTransport[];
+}
+
+function transportsOf(server: MastraMCPServerImplementation): MCPServerTransport[] {
+  return hasSSETransport(server) ? ['streamable-http', 'sse'] : ['streamable-http'];
 }
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
@@ -107,7 +117,10 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     }
 
     // Get server info for each server
-    const serverInfoList: ServerInfo[] = paginatedServers.map(server => server.getServerInfo());
+    const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
+      ...server.getServerInfo(),
+      transports: transportsOf(server),
+    }));
 
     return {
       servers: serverInfoList,
@@ -139,7 +152,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    const serverDetail = server.getServerDetail();
+    const serverDetail = { ...server.getServerDetail(), transports: transportsOf(server) };
 
     // If a specific version was requested, check if it matches
     if (version && serverDetail.version_detail.version !== version) {

@@ -36,7 +36,7 @@ describe('Drawer', () => {
             <DrawerBody>Body content</DrawerBody>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button>Cancel</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>
@@ -89,7 +89,7 @@ describe('Drawer', () => {
           <DrawerTitle>Title</DrawerTitle>
           <DrawerFooter>
             <DrawerClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button>Cancel</Button>
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>

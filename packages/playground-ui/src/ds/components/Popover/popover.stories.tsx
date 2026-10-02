@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings } from 'lucide-react';
 import { Button } from '../Button';
+import { Field, FieldLabel } from '../Field';
 import { Input } from '../Input';
-import { Label } from '../Label';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
 const meta: Meta<typeof Popover> = {
@@ -27,14 +27,14 @@ export const Default: Story = {
             <p className="text-body text-muted-foreground">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
-            <div className="grid grid-cols-3 items-center gap-4">
-              <Label htmlFor="width">Width</Label>
-              <Input id="width" defaultValue="100%" className="col-span-2 h-8" />
-            </div>
-            <div className="grid grid-cols-3 items-center gap-4">
-              <Label htmlFor="height">Height</Label>
-              <Input id="height" defaultValue="25px" className="col-span-2 h-8" />
-            </div>
+            <Field className="grid-cols-3 items-center gap-4">
+              <FieldLabel>Width</FieldLabel>
+              <Input defaultValue="100%" className="col-span-2 h-8" />
+            </Field>
+            <Field className="grid-cols-3 items-center gap-4">
+              <FieldLabel>Height</FieldLabel>
+              <Input defaultValue="25px" className="col-span-2 h-8" />
+            </Field>
           </div>
         </div>
       </PopoverContent>
@@ -46,7 +46,7 @@ export const Default: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="grid gap-4">
-      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-2">
           {(['sm', 'md', 'lg'] as const).map(size => (
             <Popover key={size}>
@@ -76,13 +76,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <Popover>
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="md">
-            Open Popover
-          </Button>
-        }
-      />
+      <PopoverTrigger render={<Button size="md">Open Popover</Button>} />
       <PopoverContent>
         <p className="text-body">Popover content.</p>
       </PopoverContent>

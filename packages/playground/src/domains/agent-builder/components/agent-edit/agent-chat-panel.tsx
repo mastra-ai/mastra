@@ -1,6 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
+import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
@@ -15,7 +16,6 @@ import { MessageList } from '../chat-primitives/message-list';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface AgentChatPanelProviderProps {
   agentId: string;
@@ -205,11 +205,14 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group border-border bg-background state-layer hover:border-border-strong focus-visible:ring-accent1 flex gap-3 rounded-3xl border p-4 text-left focus-visible:ring-2 focus-visible:outline-none"
+                className={cn(
+                  'starter-chip group state-layer flex gap-3 rounded-3xl border border-border bg-background p-4 text-left hover:border-border-strong',
+                  focusRing,
+                )}
               >
                 <span
                   className={cn(
-                    'bg-card mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md',
+                    'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-card',
                     quietTextHoverInGroup,
                     controlStateColorTransition,
                   )}

@@ -1,6 +1,7 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { XIcon } from 'lucide-react';
 import { DATASET_EXPERIMENT_OPTIONS } from './datasets-list/helpers';
 import type { DatasetTargetType } from './target-type-options';
@@ -43,48 +44,54 @@ export function DatasetsToolbar({
   hasActiveFilters,
 }: DatasetsToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
-        <ListSearch
-          label="Search datasets"
-          placeholder="Filter by dataset name"
-          value={search}
-          onSearch={onSearchChange}
-        />
-      </div>
-      <div className="flex items-center gap-2">
+    <ActionRow>
+      <ActionRow.Start>
+        <div className="max-w-120 flex-1">
+          <ListSearch
+            label="Search datasets"
+            placeholder="Filter by dataset name"
+            value={search}
+            onSearch={onSearchChange}
+          />
+        </div>
         <TargetFilter
           targetType={targetType}
           targetId={targetId}
           onTargetTypeChange={onTargetTypeChange}
           onTargetIdChange={onTargetIdChange}
         />
-        <SelectFieldBlock
-          label="Experiments"
-          labelIsHidden
-          name="filter-experiments"
-          options={[...DATASET_EXPERIMENT_OPTIONS]}
-          value={experimentFilter}
-          onValueChange={onExperimentFilterChange}
-          className="whitespace-nowrap"
-        />
+        <Select value={experimentFilter} onValueChange={onExperimentFilterChange}>
+          <SelectTrigger aria-label="Experiments" size="md" className="whitespace-nowrap">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {DATASET_EXPERIMENT_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {tagOptions.length > 1 && (
-          <SelectFieldBlock
-            label="Tags"
-            labelIsHidden
-            name="filter-tags"
-            options={tagOptions}
-            value={tagFilter}
-            onValueChange={onTagFilterChange}
-            className="whitespace-nowrap"
-          />
+          <Select value={tagFilter} onValueChange={onTagFilterChange}>
+            <SelectTrigger aria-label="Tags" size="md" className="whitespace-nowrap">
+              <SelectValue placeholder="Select an option" />
+            </SelectTrigger>
+            <SelectContent>
+              {tagOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         {onReset && hasActiveFilters && (
           <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
             Reset
           </Button>
         )}
-      </div>
-    </div>
+      </ActionRow.Start>
+    </ActionRow>
   );
 }

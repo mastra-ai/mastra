@@ -3,7 +3,7 @@ import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
@@ -326,9 +326,7 @@ function FilterBarInputImpl({
           if (next) setOpen(true);
           else close();
         }}
-        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
-        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
-        autoHighlight={'always' as unknown as boolean}
+        {...alwaysHighlightProps}
         modal={false}
       >
         <div
@@ -345,7 +343,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="text-muted-foreground -ml-[.3em] shrink-0" />
+          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;
@@ -407,7 +405,7 @@ function FilterBarInputImpl({
                     <>
                       <FilterBarFieldLabel field={f} />
                       {f.search && query !== '' && (
-                        <span className="text-muted-foreground min-w-0 truncate">
+                        <span className="min-w-0 truncate text-muted-foreground">
                           {ctx.getFieldOperators(f)[0]?.label} "{query}"
                         </span>
                       )}
@@ -456,7 +454,7 @@ function FilterBarInputImpl({
                 </div>
               )}
               {step === 'value' && valueStep.isMany && (
-                <div className="border-border flex items-center justify-end gap-1 border-t p-1">
+                <div className="flex items-center justify-end gap-1 border-t border-border p-1">
                   <Button
                     size="sm"
                     variant="default"

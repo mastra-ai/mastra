@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 
 import { SpanType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../test/msw-server';
 import { useTraceOrBranchSpans } from '../use-trace-or-branch-spans';
+import { useTraceSearch } from '../use-trace-search';
 
 const BASE_URL = 'http://localhost:4111';
 const TRACE_ID = 'trace-alpha';
@@ -75,16 +77,35 @@ describe('useTraceOrBranchSpans in traces mode', () => {
     unmount();
   });
 
-  it('makes the payload fields the light projection drops searchable', async () => {
+  it('returns plain spans, leaving the search haystack to the search surface', async () => {
     server.use(http.get(FULL_URL, () => HttpResponse.json({ traceId: TRACE_ID, spans: [fullSpan] })));
 
     const { result, unmount } = renderTraceSpans();
     await waitFor(() => expect(result.current.spans).toBeDefined());
 
-    const searchText = result.current.spans?.[0]?.searchText ?? '';
-    expect(searchText).toContain('you are a weather assistant');
-    expect(searchText).toContain('it is raining in lyon');
-    expect(searchText).toContain('gpt-4o-mini');
+    expect(result.current.spans?.[0]).not.toHaveProperty('searchText');
+    unmount();
+  });
+
+  it.each([
+    ['input', 'weather assistant'],
+    ['output', 'raining in lyon'],
+    ['attributes', 'gpt-4o-mini'],
+  ])('lets the trace search find text only present in %s', async (_field, term) => {
+    server.use(http.get(FULL_URL, () => HttpResponse.json({ traceId: TRACE_ID, spans: [fullSpan] })));
+
+    const { result, unmount } = renderHook(
+      () => {
+        const { spans } = useTraceOrBranchSpans({ traceId: TRACE_ID, listMode: 'traces' });
+        return { spans, search: useTraceSearch(spans ?? []) };
+      },
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.spans).toBeDefined());
+
+    act(() => result.current.search.setQuery(term));
+
+    await waitFor(() => expect(result.current.search.results.map(span => span.spanId)).toEqual(['span-alpha']));
     unmount();
   });
 });

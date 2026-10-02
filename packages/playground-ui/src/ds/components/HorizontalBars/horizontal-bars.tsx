@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -67,11 +68,15 @@ export function HorizontalBars({
           {segments.map(seg => (
             <div key={seg.label} className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: seg.color }} />
-              <span className="text-caption text-muted-foreground">{seg.label}</span>
+              <Txt as="span" variant="caption" tone="muted">
+                {seg.label}
+              </Txt>
             </div>
           ))}
         </div>
-        <span className="text-caption text-placeholder shrink-0 pr-2">Total</span>
+        <Txt as="span" variant="caption" tone="faint" className="shrink-0 pr-2">
+          Total
+        </Txt>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -148,22 +153,34 @@ export function HorizontalBars({
                     darkLabelOnFill && 'dark:[clip-path:inset(0_0_0_var(--bar-width))]',
                   )}
                 >
-                  <span className="text-caption text-muted-foreground absolute inset-y-0 left-2.5 flex items-center truncate">
+                  <Txt
+                    as="span"
+                    variant="caption"
+                    tone="muted"
+                    className="absolute inset-y-0 left-2.5 flex items-center truncate"
+                  >
                     {d.name}
-                  </span>
+                  </Txt>
                 </div>
                 {darkLabelOnFill && (
                   <div
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 left-0 z-10 hidden w-(--bar-width) overflow-hidden dark:block"
                   >
-                    <span className="text-caption text-placeholder absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap">
+                    <Txt
+                      as="span"
+                      variant="caption"
+                      tone="faint"
+                      className="absolute inset-y-0 left-2.5 flex items-center whitespace-nowrap"
+                    >
                       {d.name}
-                    </span>
+                    </Txt>
                   </div>
                 )}
               </div>
-              <span className="text-body text-muted-foreground shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
+              <Txt as="span" tone="muted" className="shrink-0 pr-3 tabular-nums">
+                {fmt(total)}
+              </Txt>
             </>
           );
 
@@ -172,7 +189,7 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="hover:bg-fill-subtle focus-visible:bg-fill-subtle flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
+                className="flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none hover:bg-fill-subtle focus-visible:bg-fill-subtle"
               >
                 {rowBody}
               </LinkComponent>

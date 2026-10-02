@@ -41,9 +41,9 @@ function formatUnknown(value: unknown): string {
 }
 
 function getScoreBadgeVariant(score: number) {
-  if (score >= 0.7) return 'green';
-  if (score >= 0.4) return 'yellow';
-  return 'red';
+  if (score >= 0.7) return 'success';
+  if (score >= 0.4) return 'warning';
+  return 'destructive';
 }
 
 export function ReviewItemCard({
@@ -88,15 +88,15 @@ export function ReviewItemCard({
   return (
     <div
       className={cn(
-        'border border-border rounded-lg p-3 transition-colors',
-        isSelected && 'ring-1 ring-accent1',
-        item.tags.length > 0 && 'border-l-2 border-l-accent1',
+        'rounded-lg border border-border p-3 transition-colors',
+        isSelected && 'ring-1 ring-foreground',
+        item.tags.length > 0 && 'border-l-2 border-l-border-strong',
       )}
     >
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="xs" className="text-positive1 shrink-0">
+          <Icon size="xs" className="shrink-0 text-success-indicator">
             <CheckCircle />
           </Icon>
         ) : (
@@ -104,7 +104,7 @@ export function ReviewItemCard({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="border-border accent-accent1 h-3.5 w-3.5 rounded"
+            className="h-3.5 w-3.5 rounded border-border accent-success-indicator"
           />
         )}
         <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
@@ -116,7 +116,7 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="meta" className="text-negative1 mt-1 block truncate">
+        <Txt variant="meta" className="mt-1 block truncate text-destructive-foreground">
           Error: {typeof item.error === 'string' ? item.error : String(item.error)}
         </Txt>
       )}
@@ -133,7 +133,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'positive' ? 'text-positive1' : ''}>
+              <Icon size="xs" className={item.rating === 'positive' ? 'text-success-indicator' : ''}>
                 <ThumbsUp />
               </Icon>
             </Button>
@@ -145,7 +145,7 @@ export function ReviewItemCard({
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
-              <Icon size="xs" className={item.rating === 'negative' ? 'text-negative1' : ''}>
+              <Icon size="xs" className={item.rating === 'negative' ? 'text-destructive-foreground' : ''}>
                 <ThumbsDown />
               </Icon>
             </Button>
@@ -188,13 +188,13 @@ export function ReviewItemCard({
             <div className="flex items-center gap-0.5">
               {onComplete && (
                 <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
-                  <Icon size="xs" className="text-positive1">
+                  <Icon size="xs" className="text-success-indicator">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
               <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
-                <Icon size="xs" className="text-placeholder hover:text-negative1">
+                <Icon size="xs" className="text-placeholder hover:text-destructive-foreground">
                   <Trash2 />
                 </Icon>
               </Button>
@@ -205,22 +205,22 @@ export function ReviewItemCard({
 
       {/* Expanded: full input/output + comment */}
       {isExpanded && (
-        <div className="border-border mt-3 space-y-3 border-t pt-3">
+        <div className="mt-3 space-y-3 border-t border-border pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
               <Txt variant="meta" tone="muted">
                 Experiment:
               </Txt>
-              <code className="text-muted-foreground bg-background text-meta rounded px-1.5 py-0.5 font-mono">
+              <Txt as="span" variant="meta" tone="muted" font="mono">
                 {item.experimentId.slice(0, 8)}
-              </code>
+              </Txt>
             </div>
           )}
           <div>
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+            <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
               {formatUnknown(item.input)}
             </pre>
           </div>
@@ -229,7 +229,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <pre className="text-foreground bg-background text-caption max-h-40 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground">
                 {formatUnknown(item.output)}
               </pre>
             </div>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <pre className="text-negative1 bg-background text-caption max-h-20 overflow-auto rounded p-2 whitespace-pre-wrap">
+              <pre className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -268,7 +268,7 @@ export function ReviewItemCard({
                 className="text-caption"
               />
               {commentSaved && (
-                <Txt variant="meta" className="text-positive1 mt-0.5">
+                <Txt variant="meta" className="mt-0.5 text-success-indicator">
                   Saved
                 </Txt>
               )}

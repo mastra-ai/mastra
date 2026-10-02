@@ -70,6 +70,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       resourceId: this.opts.resourceId,
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
+      timeZone: this.opts.record.observedTimezone,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
@@ -78,7 +79,10 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
+      recentMessages: formatMessagesForObserver(messages, {
+        maxPartLength: 500,
+        timeZone: this.opts.record.observedTimezone,
+      }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -180,7 +184,13 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
 
-    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+    await this.indexObservationGroups(
+      processed.observations,
+      threadId,
+      resourceId,
+      processed.lastObservedAt,
+      record.id,
+    );
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
     const candidateTitle = processed.threadTitle?.trim();
@@ -262,6 +272,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       startedAt: this.startedAt,
       tokensAttempted,
       error,
+      failurePolicy: this.observationConfig.failurePolicy,
       recordId: record.id,
       threadId,
     });

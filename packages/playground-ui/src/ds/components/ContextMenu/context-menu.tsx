@@ -178,12 +178,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
   ({ className, inset, children, ...props }, ref) => (
     <ContextMenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
-      className={cn(
-        menuItemClass,
-        'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
-        inset && menuItemInsetClass,
-        className,
-      )}
+      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}

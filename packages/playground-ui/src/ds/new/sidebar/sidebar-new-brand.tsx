@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { useMainSidebar } from '@/ds/components/MainSidebar/main-sidebar-context';
+import { Txt } from '@/ds/components/Txt';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +18,9 @@ export function SidebarNewBrand({ logo, title, className, ...props }: SidebarNew
       {state === 'collapsed' ? (
         <VisuallyHidden>{title}</VisuallyHidden>
       ) : (
-        <span className="text-subheading text-foreground font-body truncate tracking-tight">{title}</span>
+        <Txt as="span" variant="subheading" tone="ink" className="truncate font-body tracking-tight">
+          {title}
+        </Txt>
       )}
     </div>
   );

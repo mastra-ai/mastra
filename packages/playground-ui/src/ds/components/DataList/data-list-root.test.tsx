@@ -86,9 +86,9 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).not.toContain('mask-l-from');
-      expect(scrollRef.current?.className).toContain('mask-r-from');
-      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-left')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
     });
 
     it('leaves the top unfaded by default, since the header sits there', () => {
@@ -99,8 +99,8 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).not.toContain('mask-t-from');
-      expect(scrollRef.current?.className).toContain('mask-b-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
     });
 
     it('fades the top when the caller asks for it by name', () => {
@@ -111,7 +111,7 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('mask-t-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
     });
 
     it('fades every end when the caller turns masking on outright', () => {
@@ -122,8 +122,8 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('mask-t-from');
-      expect(scrollRef.current?.className).toContain('mask-b-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
     });
 
     it('fades nothing when the caller turns masking off', () => {
@@ -276,6 +276,20 @@ describe('DataListRoot', () => {
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
       expect(defaultRow.dataset.variant).toBe('default');
+    });
+
+    describe('when the error row is pressed', () => {
+      it('keeps a red tint instead of the grey active fill', () => {
+        const { container } = render(
+          <DataList columns="1fr">
+            <DataList.RowButton variant="error">
+              <DataList.Cell>boom</DataList.Cell>
+            </DataList.RowButton>
+          </DataList>,
+        );
+        const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+        expect(row?.className).toContain('data-[variant=error]:active:bg-destructive-subtle-active');
+      });
     });
 
     it('exposes featured rows as data-featured', () => {

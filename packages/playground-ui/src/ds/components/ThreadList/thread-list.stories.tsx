@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon } from 'lucide-react';
+import { EllipsisVerticalIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -67,7 +68,7 @@ export const Default: Story = {
 
 export const Embedded: Story = {
   render: () => (
-    <div className="border-border bg-background rounded-xl border p-3">
+    <div className="rounded-xl border border-border bg-background p-3">
       <ThreadListPreview embedded />
     </div>
   ),
@@ -78,6 +79,35 @@ export const Empty: Story = {
     <div className="h-56 w-80">
       <ThreadList>
         <ThreadListEmpty>Your conversations will appear here.</ThreadListEmpty>
+      </ThreadList>
+    </div>
+  ),
+};
+
+export const WithActions: Story = {
+  render: () => (
+    <div className="h-96 w-80">
+      <ThreadList>
+        <ThreadListItems>
+          {initialThreads.map(thread => (
+            <ThreadListItem
+              key={thread}
+              actions={
+                <DropdownMenu>
+                  <DropdownMenu.Trigger aria-label={`Actions for ${thread}`}>
+                    <EllipsisVerticalIcon />
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item>Rename</DropdownMenu.Item>
+                    <DropdownMenu.Item variant="destructive">Delete</DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              }
+            >
+              <span className="block truncate">{thread}</span>
+            </ThreadListItem>
+          ))}
+        </ThreadListItems>
       </ThreadList>
     </div>
   ),

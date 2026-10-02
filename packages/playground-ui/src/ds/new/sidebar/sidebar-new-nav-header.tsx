@@ -28,7 +28,8 @@ export function SidebarNewNavHeader({
   const Link = LinkProp ?? context?.LinkComponent ?? 'a';
 
   return (
-    <div className={cn('mt-1 flex min-h-7 min-w-0 items-center', className)}>
+    // Same 40px slot in both states, so rows don't shift when collapsing; the divider is centered in it.
+    <div className={cn('flex min-w-0 items-center', showTitle ? 'mt-3 min-h-7' : 'h-10', className)}>
       {showTitle ? (
         <header
           {...props}
@@ -56,7 +57,7 @@ export function SidebarNewNavHeader({
           <VisuallyHidden asChild>
             <header {...props}>{children}</header>
           </VisuallyHidden>
-          <div aria-hidden="true" className="bg-border mx-3 h-px flex-1" />
+          <div aria-hidden="true" className="mx-3 h-px flex-1 bg-border" />
         </>
       )}
     </div>

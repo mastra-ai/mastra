@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Eye } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -48,7 +49,7 @@ export const AgentProfileReadyStep = () => {
       panelOverlay={<span ref={sweepRef} className="ready-stage-sweep" aria-hidden="true" />}
       cta={
         <div className="relative z-[2] flex items-center justify-center gap-3">
-          <Button icon={<Eye />} variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
+          <Button icon={<Eye />} onClick={handleReview} data-testid="agent-builder-ready-review">
             Review my agent
           </Button>
           <Button icon={<AgentIcon />} variant="primary" onClick={handleTry} data-testid="agent-builder-ready-try">
@@ -59,12 +60,12 @@ export const AgentProfileReadyStep = () => {
     >
       <div className="flex h-full w-full flex-col items-center justify-center px-4 py-4 text-center">
         <div className="ready-stage-content flex flex-col items-center gap-4">
-          <h2 className="text-foreground text-display" data-testid="agent-builder-ready-heading">
+          <Txt as="h2" variant="display" tone="ink" data-testid="agent-builder-ready-heading">
             Your agent is ready
-          </h2>
-          <p className="text-muted-foreground text-heading max-w-md">
+          </Txt>
+          <Txt variant="heading" tone="muted" className="max-w-md">
             You can review and fine-tune everything, or jump straight in and try it out.
-          </p>
+          </Txt>
         </div>
       </div>
     </AgentStepContainer>

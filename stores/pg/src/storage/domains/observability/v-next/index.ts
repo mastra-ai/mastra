@@ -108,9 +108,11 @@ import type {
   QueryThreadsResult,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -145,6 +147,7 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
@@ -361,9 +364,44 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'trace-query',
+        'trace-aggregate',
+        'trace-query-root-duration',
+        'trace-query-discovery',
+        'thread-query',
+        'trace-query-tenant-scope',
+        'feedback',
+        'trace-query-context-ids',
+      ] as const;
     }
-    return ['metrics', 'logs', 'delta-polling', 'trace-query', 'trace-query-discovery', 'thread-query'] as const;
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'trace-query',
+      'trace-aggregate',
+      'trace-query-root-duration',
+      'trace-query-discovery',
+      'thread-query',
+      'trace-query-tenant-scope',
+      'feedback',
+      'trace-query-context-ids',
+    ] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -434,6 +472,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return this.#run('QUERY_TRACES', () =>
       traceQueryOps.queryTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return this.#run('AGGREGATE_TRACES', () =>
+      traceAggregateOps.aggregateTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

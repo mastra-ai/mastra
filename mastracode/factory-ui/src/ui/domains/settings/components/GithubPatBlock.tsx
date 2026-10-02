@@ -81,7 +81,7 @@ function TokenRow({
             <Txt variant="body" className="text-foreground">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
+            <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
@@ -102,7 +102,7 @@ function TokenRow({
               {configured ? 'Update token' : 'Add token'}
             </Button>
             {configured && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
+              <Button size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
                 {removeMutation.isPending ? 'Removing…' : 'Remove'}
               </Button>
             )}
@@ -145,7 +145,7 @@ function TokenRow({
       )}
 
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}

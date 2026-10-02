@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/pla
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -109,7 +110,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
         ),
         value: (
           <Badge
-            variant={item.value === true ? 'green' : 'neutral'}
+            variant={item.value === true ? 'success' : 'neutral'}
             indicator={typeof item.value === 'boolean' ? 'dot' : undefined}
             className="h-auto min-h-5 min-w-0 break-words whitespace-normal"
           >
@@ -122,7 +123,10 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 }
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
-  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(agentId);
+  const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig(
+    agentId,
+    useEntityRequestContext('agent', agentId)[0],
+  );
 
   if (isLoading) return <Skeleton className="h-28 w-full" />;
 
@@ -132,7 +136,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
         <Txt variant="caption" tone="muted">
           Unable to load memory configuration
         </Txt>
-        <Button size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+        <Button size="sm" disabled={isFetching} onClick={() => void refetch()}>
           Retry
         </Button>
       </div>

@@ -33,6 +33,7 @@ import type {
   ListScoresBySpanParams,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
+  QueryTracesGroupedInput,
   QueryTracesInput,
   QueryTracesDeltaInput,
   QueryTracesKeysetInput,
@@ -45,7 +46,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
-  TraceQueryRequest,
+  TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
@@ -181,6 +183,7 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   GetLiveKitRecordingResponse,
+  GetObservabilityCapabilitiesResponse,
   BuilderSettingsResponse,
   BuilderAvailableModelsResponse,
   PermissionPatternsResponse,
@@ -1120,10 +1123,14 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
-  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   * Grouped results remain supported but are deprecated. Use `queryTraceThreads()` to retrieve thread identities.
+   */
+  queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
   queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
   queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
-  queryTraces(params: QueryTracesKeysetInput): Promise<Extract<TraceQueryResponse, { page: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
@@ -1357,6 +1364,11 @@ export class MastraClient extends BaseResource {
   /** Returns distinct tags with optional entity type filtering. */
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     return this.observability.getTags(params);
+  }
+
+  /** Returns which optional observability APIs the configured observability storage supports. */
+  getObservabilityCapabilities(): Promise<GetObservabilityCapabilitiesResponse> {
+    return this.observability.getCapabilities();
   }
 
   // ============================================================================

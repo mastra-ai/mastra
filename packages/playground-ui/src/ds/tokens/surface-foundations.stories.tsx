@@ -42,6 +42,14 @@ const filledDestructiveLadder: { token: FillToken; use: string }[] = [
   { token: 'fill-destructive-hover', use: 'Hover' },
   { token: 'fill-destructive-active', use: 'Press' },
   { token: 'fill-destructive-disabled', use: 'Disabled' },
+  { token: 'fill-destructive-disabled-foreground', use: 'Text on a disabled destructive fill' },
+];
+
+const fieldSurfaceTokens = [
+  { token: 'field-on-surface', use: 'Field fill inside a raised surface' },
+  { token: 'field-rim', use: 'Field edge on the canvas' },
+  { token: 'field-rim-focus', use: 'Focused field edge' },
+  { token: 'field-rim-on-surface', use: 'Field edge inside a raised surface' },
 ];
 
 const boundaryLadder: { token: BoundaryToken; use: string }[] = [
@@ -56,26 +64,21 @@ const overlayWashes: { token: FillToken; use: string }[] = [
   { token: 'surface-overlay-strong', use: 'The selected one, and a menu separator band' },
 ];
 
-const rimTokens = ['--surface-rim', '--surface-rim-focus'];
-const tintTokens = ['--fill-tint'];
-
 const tintValues = [
   { theme: 'Dark', value: '100%', use: 'Light catching a dark surface' },
   { theme: 'Light', value: '20.5%', use: 'Shade landing on a light one' },
 ];
 
-const FillLadderRow = () => (
+const FillLadderRow = ({ onSidebar = false }: { onSidebar?: boolean }) => (
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
     {fillLadder.map(rung => (
-      <Specimen key={rung.token} name={`--${rung.token}`} note={rung.use}>
+      <Specimen key={rung.token} name={onSidebar ? `Sidebar / --${rung.token}` : `--${rung.token}`} note={rung.use}>
         <div role="img" aria-label={`${rung.token} fill`} className="h-16" style={{ background: Colors[rung.token] }} />
       </Specimen>
     ))}
   </div>
 );
 
-// Each rung is drawn over a word: a filled control that stays filled is the whole
-// point of this ladder, so anything legible through a swatch is a bug in the token.
 const FilledLadderRow = ({ ladder }: { ladder: { token: FillToken; use: string }[] }) => (
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
     {ladder.map(rung => (
@@ -96,10 +99,14 @@ const FilledLadderRow = ({ ladder }: { ladder: { token: FillToken; use: string }
   </div>
 );
 
-const BoundaryLadderRow = ({ filled }: { filled: boolean }) => (
+const BoundaryLadderRow = ({ filled, onSidebar = false }: { filled: boolean; onSidebar?: boolean }) => (
   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
     {boundaryLadder.map(rung => (
-      <Specimen key={rung.token} name={`--${rung.token}`} note={filled ? undefined : rung.use}>
+      <Specimen
+        key={rung.token}
+        name={filled || onSidebar ? `${onSidebar ? 'Sidebar' : 'Filled'} / --${rung.token}` : `--${rung.token}`}
+        note={filled ? undefined : rung.use}
+      >
         <div
           role="img"
           aria-label={`${rung.token} edge`}
@@ -115,7 +122,7 @@ export const SurfaceFoundations: Story = {
   name: 'Surface foundations',
   render: (_args, context) => (
     <FoundationPage
-      eyebrow={`Surface / ${fillLadder.length + filledInverseLadder.length + filledDestructiveLadder.length + boundaryLadder.length + overlayWashes.length + rimTokens.length + tintTokens.length + 3} tokens`}
+      eyebrow="Surface"
       title="Surface foundations"
       description="A fill is the body of anything raised above its parent surface; a boundary is its 1px edge. Those rungs are alphas, so the same rung holds on any surface — read both ladders twice below, once on the canvas and once on the sidebar. The opaque ladder is the exception, and is shown once: a control that carries its own colour must read the same everywhere by covering what is under it."
       aside={
@@ -134,15 +141,15 @@ export const SurfaceFoundations: Story = {
           <FillLadderRow />
         </SpecimenGroup>
         <SpecimenGroup label="Inside a sidebar card">
-          <div className="bg-sidebar rounded-lg p-4">
-            <FillLadderRow />
+          <div className="rounded-lg bg-sidebar p-4">
+            <FillLadderRow onSidebar />
           </div>
         </SpecimenGroup>
       </FoundationSection>
 
       <FoundationSection
         label="Opaque ladder"
-        description="The states of a control that is a colour rather than a rung on the surface — the primary and destructive buttons. An alpha here would open a window onto the card text, row or image the control covers, widening with every louder state, so each rung is the opaque twin of the alpha it replaces: the same colour mixed toward --background by the same amount."
+        description="The states of a control that is a colour rather than a rung on the surface — the primary and destructive buttons. An alpha here would open a window onto the card text, row or image the control covers, so every rung is opaque. The inverse rungs mix --foreground toward --background; the destructive rungs step down the red ramp in both themes so the red-50 label stays legible."
       >
         <SpecimenGroup label="Inverse — primary">
           <FilledLadderRow ladder={filledInverseLadder} />
@@ -150,10 +157,38 @@ export const SurfaceFoundations: Story = {
         <SpecimenGroup label="Destructive">
           <FilledLadderRow ladder={filledDestructiveLadder} />
         </SpecimenGroup>
+        <div className="max-w-40">
+          <Specimen name="--fill-destructive-foreground" note="Text on every destructive fill">
+            <div
+              role="img"
+              aria-label="Destructive foreground"
+              className="h-16 border border-border"
+              style={{ background: Colors['fill-destructive-foreground'] }}
+            />
+          </Specimen>
+        </div>
         <Txt variant="caption" tone="muted">
-          The word behind each swatch never shows. Mixing happens in sRGB, the space a browser composites alpha in, so a
-          rung lands on the exact colour its translucent predecessor painted over the canvas — same paint, no window.
+          The word behind each swatch never shows. Inverse rungs mix in sRGB, the space a browser composites alpha in,
+          so each lands on the exact colour its translucent predecessor painted over the canvas — same paint, no window.
         </Txt>
+      </FoundationSection>
+
+      <FoundationSection
+        label="Field on a surface"
+        description="Fields change fill and edge with their parent surface; focus repaints that edge."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {fieldSurfaceTokens.map(({ token, use }) => (
+            <Specimen key={token} name={`--${token}`} note={use}>
+              <div
+                role="img"
+                aria-label={`--${token} swatch`}
+                className="h-16 border border-border"
+                style={{ background: `var(--${token})` }}
+              />
+            </Specimen>
+          ))}
+        </div>
       </FoundationSection>
 
       <FoundationSection
@@ -162,10 +197,10 @@ export const SurfaceFoundations: Story = {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
           <Specimen name="--surface-panel" note="Opaque — sticky headers, floating panels">
-            <div className="bg-surface-panel h-20 rounded-md" />
+            <div className="h-20 rounded-md bg-surface-panel" />
           </Specimen>
-          <Specimen name="--fill" note="Translucent — the control beside it">
-            <div className="bg-fill h-20 rounded-md" />
+          <Specimen name="Translucent comparison" note="--fill — the control beside it">
+            <div className="h-20 rounded-md bg-fill" />
           </Specimen>
         </div>
         <Txt variant="caption" tone="muted">
@@ -179,7 +214,7 @@ export const SurfaceFoundations: Story = {
       >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <SpecimenGroup label="The two washes, on a popover">
-            <div className="bg-popover shadow-overlay grid grid-cols-2 gap-3 rounded-xl p-3">
+            <div className="grid grid-cols-2 gap-3 rounded-xl bg-popover p-3 shadow-overlay">
               {overlayWashes.map(wash => (
                 <Specimen key={wash.token} name={`--${wash.token}`} note={wash.use}>
                   <div
@@ -193,14 +228,14 @@ export const SurfaceFoundations: Story = {
             </div>
           </SpecimenGroup>
           <SpecimenGroup label="In a menu">
-            <div className="bg-popover shadow-overlay flex flex-col rounded-xl p-1">
+            <div className="flex flex-col rounded-xl bg-popover p-1 shadow-overlay">
               <Txt variant="body-sm" className="rounded-md px-3 py-1.5">
                 Rest
               </Txt>
-              <Txt variant="body-sm" className="bg-surface-overlay-soft rounded-md px-3 py-1.5">
+              <Txt variant="body-sm" className="rounded-md bg-surface-overlay-soft px-3 py-1.5">
                 Hovered
               </Txt>
-              <Txt variant="body-sm" className="bg-surface-overlay-strong rounded-md px-3 py-1.5">
+              <Txt variant="body-sm" className="rounded-md bg-surface-overlay-strong px-3 py-1.5">
                 Selected
               </Txt>
             </div>
@@ -218,15 +253,15 @@ export const SurfaceFoundations: Story = {
       >
         <SpecimenGroup label="A dialog over the canvas">
           <Specimen name="--scrim" note="Backdrop of a dialog, drawer or command palette">
-            <div className="border-border relative overflow-hidden rounded-xl border">
-              <div className="bg-background flex flex-col gap-2 p-6">
+            <div className="relative overflow-hidden rounded-xl border border-border">
+              <div className="flex flex-col gap-2 bg-background p-6">
                 <Txt variant="body-sm">The page behind</Txt>
                 <Txt variant="caption" tone="muted">
                   Still visible, no longer reachable.
                 </Txt>
               </div>
               <div className="absolute inset-0 flex items-center justify-center" style={{ background: Colors.scrim }}>
-                <div className="bg-popover shadow-overlay rounded-xl px-6 py-4">
+                <div className="rounded-xl bg-popover px-6 py-4 shadow-overlay">
                   <Txt variant="body-sm">Dialog</Txt>
                 </div>
               </div>
@@ -246,9 +281,9 @@ export const SurfaceFoundations: Story = {
           <BoundaryLadderRow filled />
         </SpecimenGroup>
         <SpecimenGroup label="Inside a sidebar card">
-          <div className="bg-sidebar flex flex-col gap-3 rounded-lg p-4">
-            <BoundaryLadderRow filled={false} />
-            <BoundaryLadderRow filled />
+          <div className="flex flex-col gap-3 rounded-lg bg-sidebar p-4">
+            <BoundaryLadderRow filled={false} onSidebar />
+            <BoundaryLadderRow filled onSidebar />
           </div>
         </SpecimenGroup>
       </FoundationSection>
@@ -259,10 +294,13 @@ export const SurfaceFoundations: Story = {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
           <Specimen name="--surface-rim" note="Rest — every raised and overlay surface">
-            <div className="bg-card shadow-raised h-20 rounded-md" />
+            <div className="h-20 rounded-md bg-card shadow-raised" />
           </Specimen>
-          <Specimen name="--surface-rim-focus" note="Focus — the same edge, never a second line beside it">
-            <div className="bg-card shadow-raised h-20 rounded-md [--surface-rim:var(--surface-rim-focus)]" />
+          <Specimen
+            name="Focused rim comparison"
+            note="--border-focus repaints the edge, never a second line beside it"
+          >
+            <div className="h-20 rounded-md bg-card shadow-raised [--surface-rim:var(--border-focus)]" />
           </Specimen>
         </div>
         <Txt variant="caption" tone="muted">
@@ -275,22 +313,22 @@ export const SurfaceFoundations: Story = {
 
       <FoundationSection
         label="Focus"
-        description="Two focus languages, on purpose. A field takes the neutral edge — no accent — so a focused input does not read as a status. A row, link or tab takes the accent ring plus its halo, because there is no field edge to move."
+        description="Neutral and never a halo. A field or raised surface repaints its own edge to its focus rim. Anything without an edge — a row, link, tab or small control — takes a 1px --border-focus outline: flush, inset where the edge is clipped, or offset where it would vanish into a solid fill."
       >
         <div className="flex flex-wrap items-end gap-6">
           <div className="w-44">
-            <Specimen name="--ring" note="Alias of --border-focus">
-              <div role="img" aria-label="ring token" className="h-14 rounded-md" style={{ background: Colors.ring }} />
+            <Specimen name="focusRing" note="Row, link, tab">
+              <div className="h-14 rounded-md bg-fill outline-1 outline-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
-            <Specimen name="ring-1 ring-ring" note="Drawn outside the fill">
-              <div className="bg-fill ring-ring h-14 rounded-md ring-1" />
+            <Specimen name="focusRingInset" note="Full-bleed row whose outer edge is clipped">
+              <div className="h-14 rounded-md bg-fill outline-1 -outline-offset-1 outline-border-focus" />
             </Specimen>
           </div>
           <div className="w-44">
-            <Specimen name="--shadow-focus-ring" note="focusRing.visible — row, link, tab">
-              <div className="bg-fill shadow-focus-ring ring-accent1 h-14 rounded-md ring-1" />
+            <Specimen name="focusRingOffset" note="Checkbox, radio, switch">
+              <div className="h-14 rounded-md bg-foreground outline-1 outline-offset-2 outline-border-focus" />
             </Specimen>
           </div>
         </div>
@@ -303,7 +341,7 @@ export const SurfaceFoundations: Story = {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:max-w-160">
           {tintValues.map(tint => (
             <Specimen key={tint.theme} name={`--fill-tint: ${tint.value}`} note={`${tint.theme} — ${tint.use}`}>
-              <div className="bg-card h-20 rounded-md p-3">
+              <div className="h-20 rounded-md bg-card p-3">
                 <div
                   role="img"
                   aria-label={`${tint.theme} tint at the --fill-hover alpha`}

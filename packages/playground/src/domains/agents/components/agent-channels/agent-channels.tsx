@@ -37,7 +37,7 @@ export const AgentChannels = ({ agentId }: AgentChannelsProps) => {
   }
 
   return (
-    <ul className="divide-border divide-y">
+    <ul className="divide-y divide-border">
       {platforms.map(platform => (
         <ChannelRow key={platform.id} platform={platform} agentId={agentId} />
       ))}
@@ -85,11 +85,11 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
       </span>
 
       {isLoading ? null : activeInstallation ? (
-        <Badge variant="green" size="sm" indicator="dot">
+        <Badge variant="success" size="sm" indicator="dot">
           Connected
         </Badge>
       ) : !platform.isConfigured ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Not configured
         </Badge>
       ) : null}

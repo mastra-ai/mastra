@@ -1,9 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Bot, Calculator, Calendar, CreditCard, GitBranch, Rocket, Settings, Shield, Smile, User } from 'lucide-react';
+import {
+  Bot,
+  Calculator,
+  Calendar,
+  CreditCard,
+  GitBranch,
+  MessageSquare,
+  Rocket,
+  Settings,
+  Shield,
+  Smile,
+  User,
+  Wrench,
+} from 'lucide-react';
 import * as React from 'react';
 
+import { Badge } from '../Badge';
 import { Button } from '../Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../Dialog';
 import { Kbd } from '../Kbd';
+import { Txt } from '../Txt';
 import {
   Command,
   CommandDialog,
@@ -40,20 +56,20 @@ const InlineResult = ({
   subtitle: string;
   value: string;
 }) => (
-  <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
-    <span className="bg-card text-muted-foreground mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md">
+  <CommandItem value={value} className="group h-auto items-start gap-3 px-2.5 py-2">
+    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:size-4">
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-column text-foreground truncate">{title}</span>
-      <span className="text-meta text-muted-foreground truncate">{subtitle}</span>
+      <span className="truncate text-column text-foreground">{title}</span>
+      <span className="truncate text-meta text-muted-foreground">{subtitle}</span>
     </span>
   </CommandItem>
 );
 
 export const Default: Story = {
   render: () => (
-    <Command className="shadow-raised w-100 rounded-lg">
+    <Command className="w-100 rounded-lg shadow-raised">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -96,11 +112,11 @@ export const Default: Story = {
 
 export const InlineVercelStyle: Story = {
   render: () => (
-    <div className="bg-card shadow-raised w-sm overflow-hidden rounded-xl">
-      <Command className="bg-background rounded-none">
+    <div className="w-sm overflow-hidden rounded-xl bg-card shadow-raised">
+      <Command className="rounded-none bg-background">
         <CommandInput
           placeholder="Find..."
-          rightSlot={<Kbd className="bg-muted text-muted-foreground text-meta min-w-0 rounded px-1.5 py-0">Esc</Kbd>}
+          rightSlot={<Kbd className="min-w-0 rounded bg-muted px-1.5 py-0 text-meta text-muted-foreground">Esc</Kbd>}
         />
         <CommandList
           scrollArea
@@ -173,9 +189,9 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-muted-foreground text-body mb-4">
+        <p className="mb-4 text-body text-muted-foreground">
           Press{' '}
-          <kbd className="border-border bg-muted text-foreground text-meta pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono select-none">
+          <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-meta text-foreground select-none">
             <span className="text-caption">⌘</span>K
           </kbd>{' '}
           or click the button below
@@ -226,7 +242,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="shadow-raised w-100 rounded-lg">
+    <Command className="w-100 rounded-lg shadow-raised">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -237,7 +253,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="shadow-raised w-100 rounded-lg">
+    <Command className="w-100 rounded-lg shadow-raised">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -296,7 +312,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="shadow-raised w-100 rounded-lg">
+      <Command className="w-100 rounded-lg shadow-raised">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>
@@ -309,6 +325,49 @@ export const SearchOnly: Story = {
           </CommandGroup>
         </CommandList>
       </Command>
+    );
+  },
+};
+
+export const InDialogWithDisabledRows: Story = {
+  render: function InDialogWithDisabledRowsStory() {
+    const [picked, setPicked] = React.useState('Nothing yet');
+
+    return (
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add connection</DialogTitle>
+          </DialogHeader>
+          <Command loop label="Integrations">
+            <CommandInput placeholder="Search integrations" />
+            <CommandList className="p-2">
+              <CommandGroup heading="Available">
+                {['Slack', 'GitHub', 'Linear'].map(name => (
+                  <CommandItem key={name} onSelect={() => setPicked(name)}>
+                    <Calendar className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                    <Badge size="sm" variant="purple" icon={<Wrench />}>
+                      Tools
+                    </Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandGroup heading="Coming soon">
+                {['HubSpot', 'Discord'].map(name => (
+                  <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
+                    <MessageSquare className={iconClassName} />
+                    <span className="flex-1">{name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+          <Txt as="p" variant="caption" tone="muted" className="px-4 pb-4">
+            Picked: {picked}
+          </Txt>
+        </DialogContent>
+      </Dialog>
     );
   },
 };

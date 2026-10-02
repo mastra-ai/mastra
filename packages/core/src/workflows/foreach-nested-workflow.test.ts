@@ -69,4 +69,54 @@ describe('foreach nested workflow runs', () => {
       output: { value: 'second' },
     });
   });
+
+  it.each([1, 5, 10])(
+    'starts a fresh child run for each iteration when siblings suspend (concurrency %i)',
+    async concurrency => {
+      const childStep = createStep({
+        id: 'maybe-suspend',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        resumeSchema: z.object({ add: z.number() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (inputData % 2 === 1 && !resumeData) {
+            return suspend({ value: inputData });
+          }
+          return inputData + (resumeData?.add ?? 0);
+        },
+      });
+
+      const childWorkflow = createWorkflow({ id: 'child', inputSchema: z.number(), outputSchema: z.number() })
+        .then(childStep)
+        .commit();
+
+      const parentWorkflow = createWorkflow({
+        id: 'parent',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+      })
+        .foreach(childWorkflow, { concurrency })
+        .commit();
+
+      new Mastra({ workflows: { parentWorkflow }, storage: new MockStore(), logger: false });
+
+      const run = await parentWorkflow.createRun();
+      let result = await run.start({ inputData: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] });
+      expect(result.status).toBe('suspended');
+
+      for (const forEachIndex of [1, 3, 5, 7, 9]) {
+        expect(result.status).toBe('suspended');
+        result = await run.resume({
+          step: [childWorkflow.id, childStep.id],
+          resumeData: { add: 100 },
+          forEachIndex,
+        });
+      }
+
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result).toEqual([0, 101, 2, 103, 4, 105, 6, 107, 8, 109]);
+      }
+    },
+  );
 });

@@ -4,14 +4,18 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -21,7 +25,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus, Check } from 'lucide-react';
+import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -81,7 +85,6 @@ const SaveAsPromptBlockDialog = ({
     [name, description, onSave],
   );
 
-  // Reset form when dialog closes
   useEffect(() => {
     if (!open) {
       setName('');
@@ -90,44 +93,44 @@ const SaveAsPromptBlockDialog = ({
   }, [open]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Save as prompt block</DialogTitle>
           <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-3">
-            <TextFieldBlock
-              name="prompt-block-name"
-              label="Name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Tone guidelines"
-              autoFocus
-            />
-            <TextFieldBlock
-              name="prompt-block-description"
-              label="Description (optional)"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Brief description..."
-            />
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Tone guidelines"
+                autoFocus
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Description (optional)</FieldLabel>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Brief description..."
+              />
+            </Field>
             {error ? (
               <div role="alert">
                 <Notice variant="destructive">{error}</Notice>
               </div>
             ) : null}
           </DialogBody>
-          <DialogFooter className="px-4 pt-4">
-            <Button icon={<X />} type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button icon={<Check />} type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
               {isPending ? 'Saving...' : 'Save'}
-            </Button>
+            </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -191,8 +194,7 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-fill-subtle relative rounded-md">
-        {/* Left gutter — drag handle (visible on hover/focus-within) */}
+      <div className="group relative rounded-md hover:bg-fill-subtle">
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <div
@@ -211,7 +213,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <DisplayConditionsDialog
@@ -240,7 +241,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* CodeEditor — seamless, no border */}
         <CodeEditor
           ref={editorRef}
           value={block.content}

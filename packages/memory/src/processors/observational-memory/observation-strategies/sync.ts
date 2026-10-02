@@ -119,6 +119,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       resourceId: this.opts.resourceId,
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
+      timeZone: this.opts.record.observedTimezone,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
@@ -127,7 +128,10 @@ export class SyncObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
+      recentMessages: formatMessagesForObserver(this.opts.messages, {
+        maxPartLength: 500,
+        timeZone: this.opts.record.observedTimezone,
+      }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
@@ -262,7 +266,13 @@ export class SyncObservationStrategy extends ObservationStrategy {
       observedMessageIds: processed.observedMessageIds,
     });
 
-    await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
+    await this.indexObservationGroups(
+      processed.observations,
+      threadId,
+      resourceId,
+      processed.lastObservedAt,
+      record.id,
+    );
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
@@ -294,6 +304,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
         error,
+        failurePolicy: this.observationConfig.failurePolicy,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

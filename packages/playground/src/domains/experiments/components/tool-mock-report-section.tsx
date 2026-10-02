@@ -1,6 +1,8 @@
 import type { ToolMockReport } from '@mastra/client-js';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WrenchIcon } from 'lucide-react';
 
 export interface ToolMockReportSectionProps {
@@ -45,27 +47,33 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
             <span className="block">
               {`Tool "${failure.toolName}" was called with arguments that did not match an available mock (${failure.code}).`}
             </span>
-            <span className="text-caption mt-1 block font-mono">Called with: {formatArgs(failure.args)}</span>
+            <Txt as="span" variant="caption" className="mt-1 block">
+              Called with: <InlineCode>{formatArgs(failure.args)}</InlineCode>
+            </Txt>
             {unconsumed.length > 0 && (
-              <span className="text-caption mt-1 block font-mono">
-                Unconsumed mocks: {unconsumed.map(u => formatArgs(u.args)).join(', ')}
-              </span>
+              <Txt as="span" variant="caption" className="mt-1 block">
+                Unconsumed mocks: <InlineCode>{unconsumed.map(u => formatArgs(u.args)).join(', ')}</InlineCode>
+              </Txt>
             )}
           </Notice.Message>
         </Notice>
       )}
 
-      <div className="border-border divide-border text-body divide-y rounded border">
+      <div className="divide-y divide-border rounded border border-border text-body">
         {rows.map((row, i) => (
           <div
             key={`${row.outcome}-${row.toolName}-${i}`}
             className="flex items-center justify-between gap-2 px-3 py-1.5"
           >
             <span className="min-w-0 truncate">
-              <span className="text-muted-foreground font-mono">{row.toolName}</span>
-              <span className="text-muted-foreground text-caption ml-2 font-mono">{formatArgs(row.args)}</span>
+              <Txt as="span" variant="body-sm" tone="muted" font="mono">
+                {row.toolName}
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted" font="mono" className="ml-2">
+                {formatArgs(row.args)}
+              </Txt>
             </span>
-            <span className={`text-caption shrink-0 rounded px-2 py-0.5 ${outcomeClass(row.outcome)}`}>
+            <span className={`shrink-0 rounded px-2 py-0.5 text-caption ${outcomeClass(row.outcome)}`}>
               {row.outcome}
             </span>
           </div>
@@ -78,9 +86,9 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 function outcomeClass(outcome: ReportRow['outcome']): string {
   switch (outcome) {
     case 'served':
-      return 'bg-accent1/10 text-accent1';
+      return 'bg-success-subtle text-success-subtle-foreground';
     case 'live':
-      return 'bg-orange-500/10 text-orange-400';
+      return 'bg-badge-orange-subtle text-badge-orange-foreground';
     case 'unconsumed':
       return 'bg-muted-foreground/10 text-muted-foreground';
   }

@@ -114,7 +114,8 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
   {
     name: 'customRouteAuthConfig',
     type: 'Map<string, boolean>',
-    description: 'Per-route auth overrides. Keys are `METHOD:PATH`.',
+    description:
+      'Per-route auth overrides. Keys are `METHOD:PATH`. Custom routes from `server.apiRoutes` (`registerApiRoute()`) are added automatically based on their `requiresAuth` setting.',
     isOptional: true,
   },
   {
@@ -139,9 +140,8 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
     name: 'auth',
     type: '{ enabled?: boolean; allowQueryApiKey?: boolean }',
     description:
-      'Enable Mastra token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.',
+      'Controls Mastra auth for Mastra routes. When `server.auth` is configured on your `Mastra` instance, it runs automatically (the same pipeline as other adapters: bearer tokens, cookie sessions, session refresh, and `mapUserToResourceId`). Set `enabled: false` to rely only on your own NestJS guards. Query-string `apiKey` auth is opt-in for backward compatibility.',
     isOptional: true,
-    defaultValue: '`{ enabled: false }`',
   },
 ]}
 />
@@ -198,13 +198,59 @@ export class WorkflowService {
 }
 ```
 
+## Start background workers
+
+`MastraModule` doesn't start Mastra's background workers. Without them, [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, and event listeners never run. Call `mastra.startWorkers()` after the app starts listening:
+
+```typescript title="src/main.ts"
+import { NestFactory } from '@nestjs/core'
+import { MASTRA } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
+import { AppModule } from './app.module'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+  app.enableShutdownHooks()
+  await app.listen(3000)
+
+  try {
+    await app.get<Mastra>(MASTRA).startWorkers()
+  } catch (error) {
+    console.error('Failed to start background workers', error)
+    await app.close()
+    process.exit(1)
+  }
+}
+
+bootstrap()
+```
+
+The module's shutdown handling drains in-flight requests but doesn't stop Mastra. To stop workers and drain in-flight workflow runs, call `mastra.shutdown()` from a shutdown hook. The drain is bounded by `drainTimeout` (default 5 seconds), and runs that don't settle within it are abandoned with a warning:
+
+```typescript title="src/mastra-lifecycle.service.ts"
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common'
+import { MASTRA } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
+
+@Injectable()
+export class MastraLifecycleService implements OnApplicationShutdown {
+  constructor(@Inject(MASTRA) private readonly mastra: Mastra) {}
+
+  async onApplicationShutdown() {
+    await this.mastra.shutdown()
+  }
+}
+```
+
+Add `MastraLifecycleService` to the `providers` of a module that imports `MastraModule`. Shutdown hooks only run when `app.enableShutdownHooks()` is called.
+
+See [Start background workers](/docs/server/server-adapters#start-background-workers) for more details.
+
 ## MCP routes
 
 MCP endpoints are exposed under the API prefix:
 
 - `POST /api/mcp/:serverId/mcp`
-- `GET /api/mcp/:serverId/sse`
-- `POST /api/mcp/:serverId/messages`
 
 ## Health routes
 

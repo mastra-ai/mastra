@@ -1,4 +1,9 @@
-import type { GetTraceQueryFieldsResponse, GetTraceQueryValuesResponse, MastraClient } from '@mastra/client-js';
+import type {
+  GetObservabilityCapabilitiesResponse,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesResponse,
+  TraceQueryKeysetTraceResponse,
+} from '@mastra/client-js';
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
   canonicalFields: [],
@@ -58,7 +63,7 @@ export const traceQuerySpanModelValues: GetTraceQueryValuesResponse = {
   valuesTruncated: false,
 };
 
-export const traceQueryPage: Awaited<ReturnType<MastraClient['queryTraces']>> = {
+export const traceQueryPage: TraceQueryKeysetTraceResponse = {
   traces: [
     {
       traceId: 'trace-a',
@@ -93,4 +98,48 @@ export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraCl
     },
   ],
   page: { next: null },
+};
+
+export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    metrics: true,
+    logs: true,
+    discovery: {
+      entityTypes: true,
+      entityNames: true,
+      serviceNames: true,
+      environments: true,
+      tags: true,
+      metrics: true,
+    },
+    deltaPolling: true,
+    traceQuery: true,
+    traceQueryRootDuration: true,
+    traceQueryDiscovery: true,
+    traceQueryTenantScope: true,
+    threadQuery: true,
+    feedback: true,
+  },
+};
+
+export const noFeedbackCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    feedback: false,
+  },
+};
+
+export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageLibSQL',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQuery: false,
+    traceQueryRootDuration: false,
+    traceQueryDiscovery: false,
+    traceQueryTenantScope: false,
+    threadQuery: false,
+    feedback: false,
+  },
 };

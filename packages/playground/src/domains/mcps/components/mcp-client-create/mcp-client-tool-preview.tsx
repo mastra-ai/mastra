@@ -108,8 +108,8 @@ function ToolList({
 
   return (
     <div className="overflow-y-auto p-5">
-      <div className="text-foreground flex items-center gap-2">
-        <Icon size="lg" className="bg-muted rounded-md p-1">
+      <div className="flex items-center gap-2 text-foreground">
+        <Icon size="lg" className="rounded-md bg-muted p-1">
           <McpServerIcon />
         </Icon>
         <Txt variant="heading" as="h2">
@@ -125,7 +125,7 @@ function ToolList({
           return (
             <Entity key={tool.name}>
               <EntityIcon>
-                <ToolsIcon className="group-hover/entity:text-accent6" />
+                <ToolsIcon className="group-hover/entity:text-warning-foreground" />
               </EntityIcon>
               <EntityContent>
                 <EntityName>{tool.name}</EntityName>
@@ -134,8 +134,8 @@ function ToolList({
                     type="text"
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-muted-foreground bg-transparent',
-                      !isDisabled && 'border-border border-dashed',
+                      'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                      !isDisabled && 'border-dashed border-border',
                     )}
                     value={
                       isSelected

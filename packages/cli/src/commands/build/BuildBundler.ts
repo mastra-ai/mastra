@@ -8,6 +8,7 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
+  protected defaultExternalsPreset = true;
   private studio: boolean;
 
   constructor({ studio }: { studio?: boolean } = {}) {
@@ -22,15 +23,11 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-
-    if (!bundlerOptions[IS_DEFAULT] && bundlerOptions.externals !== undefined) {
+    if (bundlerOptions.externals !== undefined && !(IS_DEFAULT in bundlerOptions)) {
       return bundlerOptions;
     }
 
-    return {
-      ...bundlerOptions,
-      externals: true,
-    };
+    return { ...bundlerOptions, externals: true };
   }
 
   getEnvFiles(): Promise<string[]> {

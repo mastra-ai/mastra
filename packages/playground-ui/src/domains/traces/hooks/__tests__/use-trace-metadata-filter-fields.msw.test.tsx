@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/jsdom-polyfills';
 import type { GetTraceQueryFieldsArgs, GetTraceQueryValuesArgs } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -118,6 +119,26 @@ describe('useTraceMetadataFilterFields', () => {
 
       expect(result.current.isLoading).toBe(false);
       expect(result.current.fields).toHaveLength(2);
+    });
+  });
+
+  describe('when disabled', () => {
+    it('never requests the discovery endpoint and exposes no fields', async () => {
+      let requests = 0;
+      server.use(
+        http.post(FIELDS_URL, () => {
+          requests++;
+          return HttpResponse.json(traceQueryFieldsFixture);
+        }),
+      );
+
+      const { result } = renderHook(() => useTraceMetadataFilterFields({ timeRange, enabled: false }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(requests).toBe(0);
+      expect(result.current.fields).toEqual([]);
     });
   });
 

@@ -79,6 +79,7 @@ export const Sizes: Story = {
     <div className="flex items-center gap-4">
       <Spinner size="sm" />
       <Spinner />
+      <Spinner size="lg" />
     </div>
   ),
 };
@@ -94,6 +95,15 @@ export const AllVariants: Story = {
     <div className="flex items-center gap-4">
       <Spinner />
       <Spinner variant="pulse" />
+    </div>
+  ),
+};
+
+export const Fill: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <div className="h-120 border border-dashed border-border">
+      <Spinner fill size="lg" />
     </div>
   ),
 };

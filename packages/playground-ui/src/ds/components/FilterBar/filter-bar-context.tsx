@@ -148,6 +148,8 @@ export type FilterBarProviderProps = {
   value: FilterBarValueInput;
   /** Receives the same shape as `value` (method syntax so flat-only handlers stay assignable). */
   onValueChange(value: FilterBarValueInput): void;
+  /** Derives ids for root-level items only; items inside groups always get a random id
+   *  because a group may hold several conditions on the same field. */
   createItemId?: (fieldId: string) => string;
   /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
@@ -279,8 +281,8 @@ export function FilterBarProvider({
   // element through the commit. Consumers who derive ids themselves supply `createItemId` so
   // the id we hand back in `onValueChange` is the one they'll hand back in `value`.
   const newItemId = useCallback(
-    (fieldId: string) => (createItemId ? createItemId(fieldId) : createFilterId()),
-    [createItemId],
+    (fieldId: string) => (createItemId && inputTarget === undefined ? createItemId(fieldId) : createFilterId()),
+    [createItemId, inputTarget],
   );
 
   const setDraft = useCallback(

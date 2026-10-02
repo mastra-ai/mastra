@@ -23,7 +23,9 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { TIMESTAMP } from '../domains/factory/components/panel';
@@ -48,19 +50,27 @@ const STATUS_STYLE: Record<
   FactoryDecisionStatus,
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
-  pending: { icon: CircleDashed, tone: 'blue', label: 'queued' },
-  proposed: { icon: CirclePause, tone: 'yellow', label: 'awaiting approval' },
+  pending: { icon: CircleDashed, tone: 'info', label: 'queued' },
+  proposed: { icon: CirclePause, tone: 'warning', label: 'awaiting approval' },
   dismissed: { icon: CircleSlash, tone: 'neutral', label: 'dismissed' },
   superseded: { icon: CircleSlash, tone: 'neutral', label: 'superseded' },
   leased: { icon: CircleDashed, tone: 'cyan', label: 'running', live: true },
   retry: { icon: CircleDashed, tone: 'orange', label: 'retrying', live: true },
-  succeeded: { icon: CircleCheck, tone: 'green', label: 'done' },
-  failed: { icon: CircleX, tone: 'red', label: 'failed' },
+  succeeded: { icon: CircleCheck, tone: 'success', label: 'done' },
+  failed: { icon: CircleX, tone: 'destructive', label: 'failed' },
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="fit" {...slots}>
+      <div className="flex min-h-0 flex-col p-4">
+        <RulesContent factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
+  );
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
@@ -96,7 +106,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             value={decisionGroup}
             onValueChange={group => setSearchParams(group === 'all' ? {} : { group }, { replace: true })}
           >
-            <SelectTrigger variant="outline" size="sm" aria-label="Rule decision filter" className="w-full">
+            <SelectTrigger size="sm" aria-label="Rule decision filter" className="w-full">
               {decisionFilter?.label ?? 'All effects'}
             </SelectTrigger>
             <SelectContent>
@@ -108,14 +118,13 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             </SelectContent>
           </Select>
         </div>
-        <ButtonsGroup className="hidden lg:flex" role="group" aria-label="Rule decision filter">
+        <ButtonsGroup size="sm" className="hidden lg:flex" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
               <Button
                 key={entry.key}
-                variant={decisionGroup === entry.key ? 'primary' : 'outline'}
-                size="sm"
+                variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
@@ -139,7 +148,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter className="text-muted-foreground size-5" aria-hidden />}
+          iconSlot={<ListFilter aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -148,7 +157,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
+              <Button size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -228,11 +237,11 @@ function DecisionRow({
       <Txt as="span" variant="column" className="text-foreground shrink-0 truncate">
         {decision.type}
       </Txt>
-      <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
+      <Badge size="xs" variant={tone} emphasis="subtle" {...(live ? { indicator: 'pulse' as const } : {})}>
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="muted" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<Repeat aria-hidden />} title="Attempts">
           {decision.attempts}
         </Badge>
       ) : null}
@@ -275,7 +284,7 @@ function DecisionRow({
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
+          <Button size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}

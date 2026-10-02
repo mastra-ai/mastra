@@ -1,4 +1,5 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Lock } from 'lucide-react';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
@@ -63,8 +64,10 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-foreground text-heading">Authentication Required</h2>
-            <p className="text-muted-foreground max-w-sm">
+            <Txt as="h2" variant="heading" tone="ink">
+              Authentication Required
+            </Txt>
+            <p className="max-w-sm text-muted-foreground">
               Add the authorization header that Studio needs to reach your Mastra server.
             </p>
           </div>
@@ -88,13 +91,17 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-foreground text-heading">Sign in to continue</h2>
-          <p className="text-muted-foreground max-w-sm">You need to sign in to access this page.</p>
+          <Txt as="h2" variant="heading" tone="ink">
+            Sign in to continue
+          </Txt>
+          <p className="max-w-sm text-muted-foreground">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
-          <div className="border-border bg-background flex items-start gap-2.5 rounded-md border p-3 text-left">
-            <Lock className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-muted-foreground text-body max-w-sm">{capabilities.login.description}</p>
+          <div className="flex items-start gap-2.5 rounded-md border border-border bg-background p-3 text-left">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <Txt tone="muted" className="max-w-sm">
+              {capabilities.login.description}
+            </Txt>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />

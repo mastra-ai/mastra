@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type {
   IOrganizationsProvider,
   ISSOProvider,
@@ -31,7 +31,14 @@ export interface StudioUser extends EEUser {
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
   /** Base URL of the Mastra shared API (e.g., https://api.mastra.ai/v1) */
   sharedApiUrl?: string;
-  /** Organization ID that owns this deployed instance. Members are served in this org whatever org their session is on; non-members are rejected. */
+  /**
+   * Organization ID that owns this deployed instance. Members are served in
+   * this org whatever org their session is on; non-members are rejected.
+   *
+   * Resolved in order: this option → `MASTRA_ORGANIZATION_ID` env var →
+   * `organizationId` field in `.mastra-project.json` in the current working
+   * directory (written by the CLI when the project is linked to an org).
+   */
   organizationId?: string;
   /**
    * Cookie domain for session cookies (e.g., '.example.com').
@@ -43,6 +50,33 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
 }
 
 const COOKIE_NAME = 'wos-session';
+
+const PROJECT_CONFIG_FILE = '.mastra-project.json';
+
+/**
+ * Read `organizationId` from a project's `.mastra-project.json` in the current
+ * working directory. Used as a last-resort fallback when neither the constructor
+ * option nor `MASTRA_ORGANIZATION_ID` is set — the file is written by the CLI
+ * when a project is linked to a platform organization, so `mastra dev` /
+ * `mastra studio` should honor it locally without requiring the user to also
+ * export the env var. Failures (missing file, malformed JSON, unexpected shape)
+ * are swallowed silently: this is a best-effort fallback, not a hard dependency.
+ */
+function readOrganizationIdFromProjectConfig(): string | undefined {
+  try {
+    const raw = readFileSync(join(process.cwd(), PROJECT_CONFIG_FILE), 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && 'organizationId' in parsed) {
+      const value = (parsed as { organizationId?: unknown }).organizationId;
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
+    }
+  } catch {
+    // no-op: file missing, unreadable, or malformed — fall back to no org id
+  }
+  return undefined;
+}
 
 /**
  * Upper bound for shared-API verification fetches. Matches the platform API
@@ -112,7 +146,11 @@ export class MastraAuthStudio
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
     this.sharedApiUrl = explicitSharedApiUrl || 'https://platform.mastra.ai/v1';
-    this.organizationId = options?.organizationId || process.env.MASTRA_ORGANIZATION_ID;
+    // Prefer explicit config, then env, then `.mastra-project.json` in cwd. The
+    // project-config fallback covers local dev (`pnpm mastra dev`) where the
+    // env var typically isn't exported but the project is linked to an org.
+    this.organizationId =
+      options?.organizationId || process.env.MASTRA_ORGANIZATION_ID || readOrganizationIdFromProjectConfig();
 
     // Strip trailing slash
     if (this.sharedApiUrl.endsWith('/')) {
@@ -580,8 +618,11 @@ export class MastraAuthStudio
   }
 
   /** Cache key for a verified credential — hash, never the raw secret. */
-  private verificationKey(kind: 'cookie' | 'bearer', credential: string): string {
-    return createHash('sha256').update(`${kind}:${credential}`).digest('hex');
+  private async verificationKey(kind: 'cookie' | 'bearer', credential: string): Promise<string> {
+    const digest = new Uint8Array(
+      await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${kind}:${credential}`)),
+    );
+    return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
   private getCachedVerification(key: string): StudioUser | null {
@@ -636,7 +677,7 @@ export class MastraAuthStudio
    * to validate it and get user info.
    */
   private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('cookie', sessionCookie);
+    const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {
       // Keep the userId → cookie mapping warm for IOrganizationsProvider.
@@ -708,7 +749,7 @@ export class MastraAuthStudio
    * to validate it and get user info (used for CLI tokens).
    */
   private async verifyBearerToken(token: string): Promise<StudioUser | null> {
-    const cacheKey = this.verificationKey('bearer', token);
+    const cacheKey = await this.verificationKey('bearer', token);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) return cached;
 
