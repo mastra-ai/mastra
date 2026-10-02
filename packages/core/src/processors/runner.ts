@@ -1252,6 +1252,7 @@ export class ProcessorRunner {
           }
         } catch (error) {
           controller.error(error);
+          await reader.cancel(error).catch(() => {});
         }
       },
     });

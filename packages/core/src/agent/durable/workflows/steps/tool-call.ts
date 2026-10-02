@@ -202,6 +202,13 @@ class DurableOutputProcessorError extends Error {
   }
 }
 
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
+}
+
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
@@ -259,10 +266,18 @@ async function processChunkThroughOutputProcessors(
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
-        await emitChunkEvent(pubsub, runId, c, !!runner);
+        try {
+          await emitChunkEvent(pubsub, runId, c, !!runner);
+        } catch (error) {
+          throw new DurableChunkPublishError(error);
+        }
       }
     },
     onProcessorError: error => {
+      // Publication failures keep the callers' non-fatal emission path.
+      if (error instanceof DurableChunkPublishError) {
+        throw error.cause;
+      }
       throw new DurableOutputProcessorError(error);
     },
     // The finish chunk that normally ends stream-processor spans never reaches

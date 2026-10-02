@@ -61,10 +61,7 @@ function mockPubsub() {
   return { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() };
 }
 
-// Production always supplies a logger. An undefined logger makes the runner's
-// swallow-catch itself crash (`this.logger.error` TypeErrors), which escapes
-// processPart and lands in onProcessorError — a path processor throws never
-// take in production. The spies also let tests prove a swallow actually fired.
+// Production always supplies a logger; the spies let tests assert non-fatal warnings.
 const noopLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
 
 function makeInitData() {
@@ -298,5 +295,24 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(emittedChunksOfType('tool-result')).toHaveLength(0);
     expect(emittedChunksOfType('tripwire')).toHaveLength(0);
     expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
+  });
+
+  it('keeps the step alive when publishing a processed tool-result chunk fails', async () => {
+    const messageList = seedMessageList();
+    setupRegistry(
+      {
+        id: 'passthrough',
+        name: 'passthrough',
+        processOutputStream: async ({ part }: any) => part,
+      },
+      messageList,
+    );
+    vi.mocked(emitChunkEvent).mockRejectedValueOnce(new Error('pubsub closed'));
+
+    const output = await runToolCallStep();
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toEqual(RAW_RESULT);
+    expect(noopLogger.warn).toHaveBeenCalledWith(expect.stringContaining('pubsub closed'));
   });
 });
