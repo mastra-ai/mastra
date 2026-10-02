@@ -10282,6 +10282,16 @@ export class Agent<
     const approvalGated = inMemorySuspension
       ? inMemorySuspension.kind === 'approval'
       : suspendedToolCall?.requiresApproval === true;
+    const currentSuspensionIsNotApproval = inMemorySuspension
+      ? inMemorySuspension.kind !== 'approval'
+      : suspendedToolCall?.requiresApproval === false;
+
+    // A late/replayed approval prompt can arrive after the durable run has already
+    // advanced to a tool suspension. Ignore that obsolete decision so the current
+    // suspension prompt can be replayed and resumed with its own schema.
+    if (currentSuspensionIsNotApproval && customResumeData === undefined) {
+      return { accepted: true, runId, toolCallId: options.toolCallId };
+    }
 
     const resumeOptions = deepMerge(
       (streamOptions ?? {}) as Record<string, unknown>,
