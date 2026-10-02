@@ -115,17 +115,20 @@ export function ModelPicker() {
   // only fall back to the plain label when there is nothing to pick at all.
   if (!switchable || (!showPacks && !modelsQuery.data?.length)) {
     return (
-      <span
-        className={cn(
-          'inline-flex items-center gap-1.5',
-          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className={notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground'}
+          aria-label={notConfigured ? `${label} is not configured` : undefined}
+          title={selectedModelId}
+        >
+          {label}
+          {notConfigured ? ' · not configured' : null}
+        </span>
+        {switchable && selectedModelId ? (
+          <ThinkingPicker modelId={selectedModelId} />
+        ) : (
+          <ModelThinkingBars modelId={selectedModelId} />
         )}
-        aria-label={notConfigured ? `${label} is not configured` : undefined}
-        title={selectedModelId}
-      >
-        {label}
-        {notConfigured ? ' · not configured' : null}
-        <ModelThinkingBars modelId={selectedModelId} />
       </span>
     );
   }
@@ -153,122 +156,126 @@ export function ModelPicker() {
     runAction(setModelPack(packId), () => setPendingPackId(undefined), 'Failed to apply model pack');
   };
 
+  const modelMenu = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={busy}
+        aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+        aria-busy={busy}
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
+        )}
+        title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
+      >
+        <span className="max-w-48 truncate">
+          {label}
+          {notConfigured ? ' · not configured' : null}
+        </span>
+        <ChevronDown aria-hidden size={12} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <Command loop>
+          <CommandInput placeholder={showPacks ? 'Search models and packs…' : 'Search models…'} />
+          <CommandList className="max-h-80">
+            <CommandEmpty>No matching model.</CommandEmpty>
+            {showPacks ? (
+              <CommandGroup heading="Model packs">
+                {modelPacks.map(pack => (
+                  <CommandItem
+                    key={pack.id}
+                    value={`pack:${pack.id}`}
+                    keywords={[pack.name, pack.models.build, pack.models.plan, pack.models.fast]}
+                    aria-label={`Model pack ${pack.name}`}
+                    title={packDetail(pack)}
+                    onSelect={() => pickPack(pack.id)}
+                  >
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="truncate">{pack.name}</span>
+                        {pack.id === defaultModelPackId ? (
+                          <Badge variant="blue" size="xs">
+                            Default
+                          </Badge>
+                        ) : null}
+                      </span>
+                      <Txt as="span" variant="meta" tone="muted" className="truncate">
+                        {packSummary(pack)}
+                      </Txt>
+                    </div>
+                    {pack.id === selectedPackId && !packModelDeviates ? (
+                      <Check aria-hidden className="ml-auto shrink-0" />
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : null}
+            {providerGroups.map(([provider, models]) => (
+              <CommandGroup
+                key={provider}
+                heading={provider}
+                // Providers are a soft grouping inside the models list, not a
+                // top-level section: mute the loud uppercase heading styling.
+                className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
+              >
+                {models.map(model => (
+                  <CommandItem
+                    key={model.id}
+                    value={model.id}
+                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
+                    title={model.id}
+                    onSelect={() => pickModel(model.id)}
+                  >
+                    <span className="truncate">{model.modelName}</span>
+                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+            {canReset || showPacks ? <CommandSeparator /> : null}
+            {canReset && defaultModelPackId ? (
+              <CommandGroup>
+                <CommandItem
+                  value="action:reset"
+                  keywords={['reset', 'default', 'pack']}
+                  onSelect={() => pickPack(defaultModelPackId)}
+                >
+                  <RotateCcw aria-hidden />
+                  <span>Reset to default pack</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+            {showPacks && factoryId ? (
+              <CommandGroup>
+                <CommandItem
+                  value="action:manage"
+                  keywords={['manage', 'model', 'packs', 'settings']}
+                  onSelect={() => {
+                    setOpen(false);
+                    navigate(`${settingsSectionPath(factoryId, 'models')}#model-packs`);
+                  }}
+                >
+                  <Settings2 aria-hidden />
+                  <span>Manage model packs</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+          {modeKey ? (
+            <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
+              Model choices apply to {titleCase(modeKey)} mode only.
+              {showPacks ? ' Packs set all three modes.' : ''}
+            </Txt>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <ButtonsGroup size="sm" aria-label="Model and thinking">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          type="button"
-          disabled={busy}
-          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-          aria-busy={busy}
-          className={cn(
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
-            notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-          )}
-          title={[selectedModelId, selectedPack?.name].filter(Boolean).join(' · ') || undefined}
-        >
-          <span className="max-w-48 truncate">
-            {label}
-            {notConfigured ? ' · not configured' : null}
-          </span>
-          <ChevronDown aria-hidden size={12} />
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 p-0">
-          <Command loop>
-            <CommandInput placeholder={showPacks ? 'Search models and packs…' : 'Search models…'} />
-            <CommandList className="max-h-80">
-              <CommandEmpty>No matching model.</CommandEmpty>
-              {showPacks ? (
-                <CommandGroup heading="Model packs">
-                  {modelPacks.map(pack => (
-                    <CommandItem
-                      key={pack.id}
-                      value={`pack:${pack.id}`}
-                      keywords={[pack.name, pack.models.build, pack.models.plan, pack.models.fast]}
-                      aria-label={`Model pack ${pack.name}`}
-                      title={packDetail(pack)}
-                      onSelect={() => pickPack(pack.id)}
-                    >
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="truncate">{pack.name}</span>
-                          {pack.id === defaultModelPackId ? (
-                            <Badge variant="blue" size="xs">
-                              Default
-                            </Badge>
-                          ) : null}
-                        </span>
-                        <Txt as="span" variant="meta" tone="muted" className="truncate">
-                          {packSummary(pack)}
-                        </Txt>
-                      </div>
-                      {pack.id === selectedPackId && !packModelDeviates ? (
-                        <Check aria-hidden className="ml-auto shrink-0" />
-                      ) : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ) : null}
-              {providerGroups.map(([provider, models]) => (
-                <CommandGroup
-                  key={provider}
-                  heading={provider}
-                  // Providers are a soft grouping inside the models list, not a
-                  // top-level section: mute the loud uppercase heading styling.
-                  className="**:[[cmdk-group-heading]]:text-placeholder **:[[cmdk-group-heading]]:font-normal **:[[cmdk-group-heading]]:tracking-normal **:[[cmdk-group-heading]]:normal-case"
-                >
-                  {models.map(model => (
-                    <CommandItem
-                      key={model.id}
-                      value={model.id}
-                      keywords={[model.provider, model.modelName, formatModelName(model.id)]}
-                      title={model.id}
-                      onSelect={() => pickModel(model.id)}
-                    >
-                      <span className="truncate">{model.modelName}</span>
-                      {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-              {canReset || showPacks ? <CommandSeparator /> : null}
-              {canReset && defaultModelPackId ? (
-                <CommandGroup>
-                  <CommandItem
-                    value="action:reset"
-                    keywords={['reset', 'default', 'pack']}
-                    onSelect={() => pickPack(defaultModelPackId)}
-                  >
-                    <RotateCcw aria-hidden />
-                    <span>Reset to default pack</span>
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
-              {showPacks && factoryId ? (
-                <CommandGroup>
-                  <CommandItem
-                    value="action:manage"
-                    keywords={['manage', 'model', 'packs', 'settings']}
-                    onSelect={() => {
-                      setOpen(false);
-                      navigate(`${settingsSectionPath(factoryId, 'models')}#model-packs`);
-                    }}
-                  >
-                    <Settings2 aria-hidden />
-                    <span>Manage model packs</span>
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
-            </CommandList>
-            {modeKey ? (
-              <Txt variant="meta" tone="muted" className="border-border border-t px-3 py-2">
-                Model choices apply to {titleCase(modeKey)} mode only.
-                {showPacks ? ' Packs set all three modes.' : ''}
-              </Txt>
-            ) : null}
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {modelMenu}
       {selectedModelId ? <ThinkingPicker modelId={selectedModelId} /> : null}
     </ButtonsGroup>
   );
