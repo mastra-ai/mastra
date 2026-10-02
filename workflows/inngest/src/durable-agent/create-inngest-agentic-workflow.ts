@@ -417,7 +417,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               })),
             );
             modelSpan?.createTracker()?.endGeneration({
-              output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
+              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
               usage: state.accumulatedUsage,
             });

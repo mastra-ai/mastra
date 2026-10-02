@@ -272,7 +272,7 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
     // Usage belongs on the attributes, normalized to UsageStats the way every other
     // model span records it, rather than raw in the output.
     expect(endedModel!.output).toEqual({ text: 'final answer' });
-    expect(endedModel!.output.toolCalls).toBeUndefined();
+    expect(endedModel!.output).not.toHaveProperty('toolCalls');
     expect(endedModel!.attributes).toMatchObject({
       finishReason: 'stop',
       usage: { inputTokens: 3, outputTokens: 5, inputDetails: { text: 3 }, outputDetails: { text: 5 } },

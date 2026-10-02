@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Inngest agents now include the run's tool calls (`toolCalls`) in the `MODEL_GENERATION` span output, matching regular and core durable agents. Tracing exporters such as PostHog now show which tools an Inngest agent called.
+Fixed Inngest agent traces so tracing exporters such as PostHog show every tool called during a run. The `MODEL_GENERATION` span output now includes the run's `toolCalls`.
