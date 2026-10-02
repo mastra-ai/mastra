@@ -430,6 +430,15 @@ describe('TraceDataPanelView — the body', () => {
     expect(screen.queryByText('No spans match your search.')).toBeNull();
   });
 
+  it('keeps a single search field while loading, so the header does not jump when spans land', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+
+    expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
+    // The header owns the search; the tree placeholder starts straight at the legend, not with a second field.
+    const [placeholder] = screen.getAllByRole('status', { name: 'Loading spans' });
+    expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
+  });
+
   it('says a settled trace has no spans', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 

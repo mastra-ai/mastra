@@ -351,12 +351,29 @@ describe('ThreadViewByTrace', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
       expect(document.querySelector('[data-trace-id]')).toBeNull();
+      // Same boxes as the resolved rows: a `px-4` messages column and one tab pill per tab.
+      const skeleton = screen.getByRole('status', { name: 'Loading thread' });
+      const messagesColumns = skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]');
+      expect(messagesColumns.length).toBeGreaterThan(0);
+      messagesColumns.forEach(column => expect(column.classList.contains('px-4')).toBe(true));
+      const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
+      expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(3);
       expect(screen.queryByText('No traces found for this thread.')).toBeNull();
 
       release();
       await screen.findByText('Chef agent run');
       expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
       expect(screen.queryByRole('status', { name: 'Loading thread' })).toBeNull();
+    });
+
+    it('shows one tab pill per tab in the skeleton when feedback is off', async () => {
+      installHandlers();
+      server.use(http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => new Promise<never>(() => {})));
+      renderView({ withFeedback: false });
+
+      const skeleton = await screen.findByRole('status', { name: 'Loading thread' });
+      const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
+      expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(2);
     });
 
     it('never shows the empty state before the list resolves', async () => {
