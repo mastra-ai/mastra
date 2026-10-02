@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.75.0-alpha.1
+
+### Patch Changes
+
+- Fixed a client's own auth header being sent to the model provider. When a request body included `modelSettings.headers` with credentials such as `Authorization` (for example, an app forwarding its user's bearer token), that header was passed to the provider and overrode the `apiKey` configured on the server. Agent routes in `@mastra/server` and `handleChatStream`/`chatRoute` in `@mastra/ai-sdk` now drop credential headers (`authorization`, `proxy-authorization`, `x-api-key`, `api-key`, `x-goog-api-key`, `cookie`) from client-supplied `modelSettings.headers`. Other headers and body options are passed through unchanged. ([#25548](https://github.com/mastra-ai/mastra/pull/25548))
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e)]:
+  - @mastra/core@1.75.0-alpha.1
+
 ## 1.75.0-alpha.0
 
 ### Patch Changes

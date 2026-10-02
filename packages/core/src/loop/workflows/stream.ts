@@ -108,6 +108,52 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           },
         };
 
+        const enqueueTripwire = (
+          reason: string | undefined,
+          tripwireOptions: { retry?: unknown; metadata?: unknown } | undefined,
+          processorId: string | undefined,
+        ) => {
+          safeEnqueue(controller, {
+            type: 'tripwire',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              reason: reason || 'Output processor blocked content',
+              retry: tripwireOptions?.retry,
+              metadata: tripwireOptions?.metadata,
+              processorId,
+            },
+          } as ChunkType<OUTPUT>);
+        };
+
+        // Emit parts a processor stashed for reprocessing (e.g. the non-text part
+        // that triggered a BatchPartsProcessor flush). Leaving them stashed lets
+        // them leak into the next step — after a retried mid-stream error that
+        // surfaces a stray step-finish on an already-consumed step output.
+        const drainReprocessed = async () => {
+          const reprocessed = await dataChunkProcessorRunner!.drainReprocessParts(
+            dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
+            undefined,
+            requestContext,
+            messageList,
+            0,
+            dataChunkStreamWriter,
+          );
+          for (const r of reprocessed) {
+            if (r.blocked) {
+              enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+              return;
+            }
+            if (r.part == null) continue;
+            const part = r.part as ChunkType<OUTPUT>;
+            if (part.type.startsWith('data-')) {
+              await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
+            } else {
+              safeEnqueue(controller, part);
+            }
+          }
+        };
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
@@ -132,23 +178,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
 
             if (blocked) {
-              safeEnqueue(controller, {
-                type: 'tripwire',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  reason: reason || 'Output processor blocked content',
-                  retry: tripwireOptions?.retry,
-                  metadata: tripwireOptions?.metadata,
-                  processorId,
-                },
-              } as ChunkType<OUTPUT>);
+              enqueueTripwire(reason, tripwireOptions, processorId);
               return;
             }
 
             if (processed) {
               processedChunk = processed as ChunkType<OUTPUT>;
             } else {
+              await drainReprocessed();
               return;
             }
           }
@@ -188,6 +225,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           safeEnqueue(controller, processedChunk);
+          if (dataChunkProcessorRunner) await drainReprocessed();
           return;
         }
 
@@ -214,22 +252,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           );
 
           if (blocked) {
-            safeEnqueue(controller, {
-              type: 'tripwire',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                reason: reason || 'Output processor blocked content',
-                retry: tripwireOptions?.retry,
-                metadata: tripwireOptions?.metadata,
-                processorId,
-              },
-            } as ChunkType<OUTPUT>);
+            enqueueTripwire(reason, tripwireOptions, processorId);
             return;
           }
 
-          if (!processed) return;
-          safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          if (processed) safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          await drainReprocessed();
           return;
         }
 

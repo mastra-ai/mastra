@@ -72,9 +72,9 @@ export function WorkItemCardRows({
             </Txt>
           )}
         </div>
-        <div className="flex min-w-0 items-center gap-1.5 tracking-tight">
+        <div className="flex min-w-0 items-center gap-1.5">
           <WorkItemSourceIcon item={item} />
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-[550]">
+          <Txt as="span" variant="card-title-tight" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={item.source} title={item.title} id={titleId} />
           </Txt>
         </div>

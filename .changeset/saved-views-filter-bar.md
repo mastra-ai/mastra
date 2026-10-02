@@ -6,6 +6,8 @@ Added `SavedViews`, Linear-style saved views for pages that use `FilterBar`. A n
 
 Fixed `FilterBar` chips rendering `[object Object]` as the value of their hidden form inputs, which showed up when a chip's text was copied.
 
+`FilterBar` chips with several values now show the first value and a count, such as `prod +2`, instead of a truncated list.
+
 ```tsx
 import { SavedViewEditor, SavedViewTabs, useSavedViews } from '@mastra/playground-ui/components/SavedViews';
 

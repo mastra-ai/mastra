@@ -23,10 +23,16 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// jsdom does not implement scrollIntoView, which the anchor row relies on.
+// jsdom does not implement scrollIntoView, which the anchor row relies on, nor ResizeObserver,
+// which the resizable panel group relies on.
 const scrollIntoView = vi.fn();
 beforeAll(() => {
   Element.prototype.scrollIntoView = scrollIntoView;
+  window.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 });
 
 beforeEach(() => {
@@ -149,53 +155,65 @@ describe('ThreadTrace', () => {
       const rows = [...container.querySelectorAll<HTMLElement>('[data-trace-id]')].map(row => row.dataset.traceId);
       expect(rows).toEqual(['trace-a', 'trace-b']);
       expect(container.firstElementChild?.className).toContain('custom-root');
-      expect(container.firstElementChild?.className).toContain('grid');
       expect(screen.getByTestId('thread-trace-list')).toBeTruthy();
     });
   });
 
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      renderView();
+      await waitFor(() => expect(within(getRow('trace-b')).getAllByRole('button').length).toBeGreaterThan(0));
+
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = TRACE_IDS.flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+    });
+  });
+
   describe('row emphasis', () => {
-    it('emphasises the first row in view and dims the others', async () => {
+    it('keeps every row at full opacity, whichever is in view', async () => {
       const { intersect } = stubIntersectionObserver();
       renderView();
       await screen.findByText('Chef agent run');
 
-      expect(getRow('trace-a').className).toContain('opacity-50');
-      expect(getRow('trace-b').className).toContain('opacity-50');
-
       act(() => intersect(getRow('trace-b')));
-      expect(getRow('trace-b').className).toContain('opacity-100');
-      expect(getRow('trace-a').className).toContain('opacity-50');
+      expect(getRow('trace-a').className).not.toMatch(/opacity/);
+      expect(getRow('trace-b').className).not.toMatch(/opacity/);
     });
   });
 
   describe('selecting a span', () => {
     it('opens the side panel for that row, marks the row active, and closes back', async () => {
-      const { container } = renderView();
+      renderView();
       await screen.findByText('Chef agent run');
-      // The span cell stays mounted but collapsed so opening it animates the grid columns.
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
-      expect(container.firstElementChild?.className).toContain('transition-[grid-template-columns]');
-      expect(screen.getByTestId('span-panel').childElementCount).toBe(0);
+      expect(screen.queryByTestId('span-panel')).toBeNull();
+      expect(screen.queryByRole('separator')).toBeNull();
 
       fireEvent.click(screen.getByText('Chef agent run'));
 
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
+      // The span column opens behind a resize handle.
+      expect(screen.getAllByRole('separator')).toHaveLength(1);
       expect(getRow('trace-a').dataset.active).toBe('true');
       expect(getRow('trace-b').dataset.active).toBeUndefined();
       expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none');
 
       // Re-clicking the selected span toggles it off...
       fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
+      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
 
       // ...and so does the panel's close button.
       fireEvent.click(screen.getByText('Chef agent run'));
       await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBeGreaterThan(0));
       fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
-      await waitFor(() => expect(screen.getByTestId('span-panel').childElementCount).toBe(0));
-      expect(container.firstElementChild?.className).toContain('grid-cols-[minmax(0,2fr)_minmax(0,0fr)]');
+      await waitFor(() => expect(screen.queryByTestId('span-panel')).toBeNull());
+      expect(screen.queryByRole('separator')).toBeNull();
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 
