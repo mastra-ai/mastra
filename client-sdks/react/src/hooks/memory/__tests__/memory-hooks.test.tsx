@@ -4,7 +4,6 @@ import type {
   GetObservationalMemoryResponse,
   ListMemoryThreadMessagesResponse,
 } from '@mastra/client-js';
-import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -15,6 +14,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { useMemoryStatus } from '../use-memory-status';
 import { useMemoryThreadMessages } from '../use-memory-thread-messages';
 import { useObservationalMemory } from '../use-observational-memory';
+import { MastraReactProvider } from '@/mastra-react-provider';
 
 const BASE_URL = 'http://localhost:4111';
 const ROOT = `${BASE_URL}/api`;
@@ -40,6 +40,7 @@ const threadMessagesResponse: ListMemoryThreadMessagesResponse = {
       },
     },
   ],
+  uiMessages: null,
 };
 
 const observationalMemoryResponse: GetObservationalMemoryResponse = {

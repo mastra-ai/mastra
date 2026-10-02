@@ -1,4 +1,4 @@
-import { MastraReactProvider } from '@mastra/react';
+// @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useThreads, useUpdateThread } from '../use-memory';
 import { makeThread, makeThreadsResponse } from './fixtures/threads';
+import { MastraReactProvider } from '@/mastra-react-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

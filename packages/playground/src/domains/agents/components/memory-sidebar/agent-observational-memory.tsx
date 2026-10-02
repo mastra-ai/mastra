@@ -9,11 +9,11 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
+import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 
 const formatTokens = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -337,7 +337,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
 
-  const { data: omData, isLoading: isOMLoading } = useObservationalMemory({
+  const { data: omData, isLoading: isOMLoading } = useObservationalMemoryWithHistory({
     agentId,
     resourceId,
     threadId,

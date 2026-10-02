@@ -1,6 +1,8 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { RequestContext } from '@mastra/core/request-context';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import type { UseMutationResult } from '@tanstack/react-query';
+import { useMastraClient } from '@/mastra-client-context';
 
 export const useMCPServerTool = (
   serverId: string,
@@ -20,11 +22,17 @@ export const useMCPServerTool = (
   });
 };
 
-export const useExecuteMCPTool = (serverId: string, toolId: string) => {
+type ExecuteMCPToolResponse = Awaited<ReturnType<ReturnType<MastraClient['getMcpServerTool']>['execute']>>;
+type ExecuteMCPToolVariables = { data: any; requestContext?: Record<string, any> };
+
+export const useExecuteMCPTool = (
+  serverId: string,
+  toolId: string,
+): UseMutationResult<ExecuteMCPToolResponse, Error, ExecuteMCPToolVariables> => {
   const client = useMastraClient();
 
   return useMutation({
-    mutationFn: ({ data, requestContext }: { data: any; requestContext?: Record<string, any> }) => {
+    mutationFn: ({ data, requestContext }: ExecuteMCPToolVariables) => {
       const instance = client.getMcpServerTool(serverId, toolId);
       return instance.execute({ data, requestContext: requestContext as RequestContext });
     },

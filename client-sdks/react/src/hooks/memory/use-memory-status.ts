@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
 import { skipToken, useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '@/mastra-client-context';
 
 export const memoryStatusQueryKey = (agentId: string | undefined, threadId?: string) =>
   ['memory', 'status', agentId, threadId] as const;

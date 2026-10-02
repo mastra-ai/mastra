@@ -10,6 +10,7 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useMastraClient } from '@mastra/react';
+import { useMemory, useThreads } from '@mastra/react/hooks';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -34,7 +35,6 @@ import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities'
 import { isAuthenticated } from '@/domains/auth/types';
 import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentThread() {

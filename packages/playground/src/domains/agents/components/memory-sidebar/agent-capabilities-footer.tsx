@@ -6,6 +6,7 @@ import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMemory } from '@mastra/react/hooks';
 import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -13,7 +14,6 @@ import { useState } from 'react';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 

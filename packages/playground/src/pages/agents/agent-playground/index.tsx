@@ -4,6 +4,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { useMemory } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
@@ -16,7 +17,6 @@ import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-age
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 function AgentPlayground() {

@@ -1,10 +1,12 @@
-import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { useMastraClient } from '@mastra/react';
+import type { GetObservationalMemoryResponse, GetMemoryStatusResponse, MastraClient } from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UseMutationResult } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
+import { useMastraClient } from '@/mastra-client-context';
 
-import type { MemorySearchParams } from '@/types/memory';
+export interface MemorySearchParams {
+  lastMessages?: number | false;
+}
 
 export const useMemory = (agentId?: string, requestContext?: Record<string, any>) => {
   const client = useMastraClient();
@@ -79,7 +81,11 @@ export const useThreads = (
   });
 };
 
-export const useDeleteThread = (requestContext?: Record<string, any>) => {
+type DeleteThreadResponse = Awaited<ReturnType<ReturnType<MastraClient['getMemoryThread']>['delete']>>;
+
+export const useDeleteThread = (
+  requestContext?: Record<string, any>,
+): UseMutationResult<DeleteThreadResponse, Error, { threadId: string; agentId: string }> => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
@@ -93,10 +99,6 @@ export const useDeleteThread = (requestContext?: Record<string, any>) => {
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
-      toast.success('Chat deleted successfully');
-    },
-    onError: () => {
-      toast.error('Failed to delete chat');
     },
   });
 };
@@ -111,10 +113,6 @@ export const useUpdateThread = (requestContext?: Record<string, any>) => {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
       void queryClient.invalidateQueries({ queryKey: ['memory', 'thread'] });
-      toast.success('Chat renamed');
-    },
-    onError: () => {
-      toast.error('Failed to rename chat');
     },
   });
 };
@@ -153,10 +151,6 @@ export const useCloneThread = (requestContext?: Record<string, any>) => {
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
       }
-      toast.success('Thread cloned successfully');
-    },
-    onError: () => {
-      toast.error('Failed to clone thread');
     },
   });
 };
@@ -166,7 +160,7 @@ export const useCloneThread = (requestContext?: Record<string, any>) => {
  * Returns the current OM record and history for a given resource/thread
  * Polls more frequently when observing/reflecting is in progress
  */
-export const useObservationalMemory = (
+export const useObservationalMemoryWithHistory = (
   {
     agentId,
     resourceId,

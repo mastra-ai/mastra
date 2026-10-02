@@ -15,7 +15,7 @@ import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useWorkflows } from '@mastra/react/hooks';
+import { useWorkflows, useMCPServers } from '@mastra/react/hooks';
 import {
   Cpu,
   EyeIcon,
@@ -34,7 +34,6 @@ import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
