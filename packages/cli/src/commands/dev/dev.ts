@@ -496,6 +496,12 @@ export async function dev({
 
   environmentState.sync(loadedEnv);
 
+  // Empty the output directory before extracting server options. Extraction
+  // imports a generated config from `.mastra/output`, so leftovers from a
+  // previous `mastra build` (e.g. packed workspace deps under node_modules)
+  // would otherwise shadow the project's own dependencies.
+  await bundler.prepare(dotMastraPath);
+
   const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
@@ -548,12 +554,6 @@ export async function dev({
     peerDepMismatches,
     factory,
   };
-
-  await bundler.prepare(dotMastraPath);
-
-  // Re-assert the lock after prepare() emptied the directory.
-  // The bundler preserves the lock, but this ensures the data is current.
-  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
   // empties the output directory so the wrapper is not wiped before the watcher
