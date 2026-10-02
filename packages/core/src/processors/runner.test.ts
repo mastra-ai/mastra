@@ -2941,6 +2941,46 @@ describe('ProcessorRunner', () => {
       expect(memory.saveThread).toHaveBeenCalledTimes(1);
     });
 
+    it('forwards the abort signal to output-stream workflow processors', async () => {
+      const processOutputStream = vi.fn(async ({ part }: any) => part);
+      const workflow = createWorkflow({
+        id: 'output-stream-abort-test',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep({ id: 'abort-aware-processor', processOutputStream } as any))
+        .commit() as ProcessorWorkflow;
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [workflow],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+      await runner.processPart(
+        {
+          type: 'text-delta',
+          runId: 'run-1',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: 'hi' },
+        } as ChunkType,
+        new Map(),
+        undefined,
+        undefined,
+        messageList,
+        0,
+        undefined,
+        controller.signal,
+      );
+
+      expect(processOutputStream).toHaveBeenCalledWith(expect.objectContaining({ abortSignal: controller.signal }));
+    });
+
     it('passes empty state history to computeStateSignal before any state exists', async () => {
       messageList = new MessageList({ threadId: 'thread-1' });
       const requestContext = new RequestContext();

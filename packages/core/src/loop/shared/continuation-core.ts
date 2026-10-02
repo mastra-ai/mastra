@@ -307,16 +307,12 @@ async function decideContinuationDefault(
           isFinal = true;
         } else if (iterationResult.continue === true && (hasFinishedSteps || !shouldContinue)) {
           // Resurrection: `{ continue: true }` on a stopped run forces
-          // another turn. The released default contract silently DROPS any
-          // `feedback` in this branch (the feedback gate above requires the
-          // LLM to already want to continue), so no injection happens here.
-          // Durable differs: its ladder routes `{ continue: true, feedback }`
-          // through `canRunAnotherTurn` and injects the feedback before
-          // resurrecting. Fixing the drop on the default engine is a real
-          // data-loss fix, but it changes the released transcript contract —
-          // it ships separately with its own product decision, not in this
-          // extraction.
+          // another turn. Inject feedback before reopening the run so the
+          // next model call can act on it, matching the durable ladder.
           if (deps.underMaxSteps) {
+            if (iterationResult.feedback) {
+              await deps.injectFeedback(iterationResult.feedback);
+            }
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;

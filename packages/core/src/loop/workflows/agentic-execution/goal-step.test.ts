@@ -55,6 +55,7 @@ async function runGoalStep(
     requestContext?: RequestContext;
     judge?: any;
     tools?: any;
+    outputWriter?: (data: any, options: any) => Promise<void>;
   },
 ) {
   const store = createStore(record);
@@ -160,7 +161,7 @@ async function runGoalStep(
     mastra,
     controller: { enqueue: (c: any) => chunks.push(c) },
     runId: 'run-1',
-    outputWriter: async (data: any, options: any) => dataParts.push({ data, options }),
+    outputWriter: opts?.outputWriter ?? (async (data: any, options: any) => dataParts.push({ data, options })),
     _internal: {
       generateId: () => 'response-2',
       threadId: THREAD_ID,
@@ -386,6 +387,19 @@ describe('goal step waiting semantics', () => {
     expect(record.status).toBe('done');
     expect(stepResult.isContinued).toBe(false);
     expect(chunk.payload.passed).toBe(true);
+  });
+
+  it('completes the judged step when the feedback signal transport write rejects', async () => {
+    const { record, stepResult, chunk, messages } = await runGoalStep('done', makeRecord(), {
+      outputWriter: async () => {
+        throw new Error('transport closed');
+      },
+    });
+
+    expect(record.status).toBe('done');
+    expect(stepResult.isContinued).toBe(false);
+    expect(chunk.payload.passed).toBe(true);
+    expect(messages.some(m => JSON.stringify(m).includes('goal-judge'))).toBe(true);
   });
 
   it('keeps the objective active and continues the loop on a continue decision', async () => {
