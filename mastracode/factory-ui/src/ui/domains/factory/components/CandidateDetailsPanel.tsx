@@ -36,6 +36,7 @@ export function CandidateDetailsPanel({
   factoryProjectId: string;
   menu: ReactNode;
   defaultMove?: CardMove;
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);

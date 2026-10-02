@@ -37,6 +37,10 @@ export const Default: Story = {
   },
 };
 
+/**
+ * One class per role: the weight and line height are part of the role, so two
+ * components asking for the same role cannot disagree about how it looks.
+ */
 export const Roles: Story = {
   render: () => (
     <div className="flex max-w-xl flex-col gap-3">
