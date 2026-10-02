@@ -233,11 +233,14 @@ export class ObservationStep {
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer
-        // remain in the live response/input buckets. Move the exact same messages
-        // into memory so later step-save drains don't pull them back out and grow
-        // them again under the old response id.
-        messageList.removeByIds(safeCandidates.map(msg => msg.id));
-        for (const msg of safeCandidates) {
+        // remain in the live response bucket. Move the exact same messages into
+        // memory so later step-save drains don't pull them back out and grow them
+        // again under the old response id. Input messages stay put: they don't grow,
+        // and semantic recall embeds the turn's new user messages from the input bucket.
+        const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
+        const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
+        messageList.removeByIds(sealedOutput.map(msg => msg.id));
+        for (const msg of sealedOutput) {
           messageList.add(msg, 'memory');
         }
       }

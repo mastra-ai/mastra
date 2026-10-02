@@ -11947,10 +11947,13 @@ describe('Full Async Buffering Flow', () => {
 
     // Helper to call processInputStep
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
-    async function step(stepNumber: number, opts?: { freshState?: boolean }) {
+    async function step(stepNumber: number, opts?: { freshState?: boolean; input?: MastraDBMessage[] }) {
       if (opts?.freshState) {
         Object.keys(sharedState).forEach(k => delete sharedState[k]);
         sharedMessageList = new MessageList({ threadId, resourceId });
+      }
+      for (const msg of opts?.input ?? []) {
+        sharedMessageList.add(msg, 'input');
       }
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
@@ -13090,20 +13093,25 @@ describe('Full Async Buffering Flow', () => {
     holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
     const callsBeforeOp = observerCalls.length;
     const inFlightOp = om.buffer({ threadId, resourceId, messages: bandMessages, pendingTokens: status.pendingTokens });
+    let turn2Step0: Promise<unknown> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeOp + 1));
       expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
 
       // Turn 2, step 0: a chunk is ready, but activating now would wait on the held op.
-      const turn2Step0 = await Promise.race([
-        step(0, { freshState: true }).then(() => 'completed' as const),
-        new Promise<'blocked'>(resolve => setTimeout(() => resolve('blocked'), 1000)),
+      turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
       ]);
-      expect(turn2Step0).toBe('completed');
+      expect(outcome).toBe('completed');
       expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations ?? '').toBe('');
     } finally {
+      clearTimeout(timer);
       holdObserver = undefined;
       releaseObserver();
+      await turn2Step0?.catch(() => {});
     }
     await inFlightOp;
     await waitForAsyncOps();
@@ -13111,6 +13119,33 @@ describe('Full Async Buffering Flow', () => {
     // With no op in flight, the next step activates the buffered chunks.
     await step(1);
     expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+  });
+
+  it('should keep the new user input in the input bucket when step 0 buffers it', async () => {
+    // Semantic recall embeds new user messages from messageList.get.input.db(); the
+    // buffer path must not move the turn's prompt out of that bucket.
+    const { step, waitForAsyncOps, observerCalls, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
+    const prompt = {
+      id: 'new-user-prompt',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'What did we decide about the launch date?' }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+      threadId,
+      resourceId,
+    } as MastraDBMessage;
+
+    const list = await step(0, { input: [prompt] });
+    await waitForAsyncOps();
+
+    expect(observerCalls.some(call => call.input.includes('launch date'))).toBe(true);
+    expect(list.get.input.db().map(m => m.id)).toContain('new-user-prompt');
   });
 
   it('should resolve a multiplier blockAfter against a per-record messageTokens override', async () => {

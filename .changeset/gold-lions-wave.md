@@ -12,4 +12,15 @@ observationalMemory: {
 }
 ```
 
-A multiplier `blockAfter` now scales a per-thread `messageTokens` override set with `updateObservationalMemoryConfig()`, instead of the instance threshold. `getStatus()` also returns `observationBlockAfter` and `inAsyncObservationBand`.
+A multiplier `blockAfter` now scales a per-thread `messageTokens` override instead of the instance threshold. With `blockAfter: 1.2`, this thread blocks at 3,600 tokens:
+
+```ts
+await memory.updateObservationalMemoryConfig({
+  threadId,
+  config: { observation: { messageTokens: 3_000 } },
+});
+```
+
+`getStatus()` also returns `observationBlockAfter` and `inAsyncObservationBand`.
+
+Fixed semantic recall missing a turn's new user message when background buffering picked it up on the first step.
