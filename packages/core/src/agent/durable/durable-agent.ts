@@ -38,6 +38,7 @@ import {
   resolveLeaseProvider,
   RUN_ACTIVE_ERROR_ID,
   setExecutionClaim,
+  supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
@@ -62,6 +63,8 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
+/** Stores already reported as unable to fence run writes, so each is warned about once per process. */
+const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
 
 /** Why `recover()` refused a run that is not orphaned, or `undefined` for a real failure. */
 function recoverySkip(error: unknown): Pick<DurableAgentRecoveredRun, 'reason' | 'retryAt'> | undefined {
@@ -1940,12 +1943,32 @@ export class DurableAgent<
         error,
       });
     }
+    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto') this.#warnIfUnfenced(store, 'memory');
     try {
       await fence.coverMemory(store);
     } catch (error) {
       await fence.settle(async () => {});
       throw error;
     }
+  }
+
+  /**
+   * Warn, once per store, that a store recovery relies on can't fence run
+   * writes (#23734). Returns whether it can't.
+   */
+  #warnIfUnfenced(store: WorkflowsStorage | MemoryStorage | undefined, domain: 'workflows' | 'memory'): boolean {
+    if (!store || supportsRunFencing(store)) return false;
+    if (unfencedStoresWarned.has(store)) return true;
+    unfencedStoresWarned.add(store);
+    const consequence =
+      domain === 'workflows'
+        ? `Recovery can only tell that a run is still live through the pubsub lease, which works only when every instance shares the pubsub, and writes from an execution that lost its run are not rejected. A run recovered while it is still live can end with the stale execution's output.`
+        : `When recovery takes a run over, the memory writes (messages, threads, working memory) of the execution that lost it are not rejected.`;
+    this.guardrailLogger?.warn(
+      `DurableAgent '${this.id}': the ${domain} store (${store.constructor.name}) can't fence run writes. ${consequence} ` +
+        `Use a storage adapter that supports run fencing.`,
+    );
+    return true;
   }
 
   /**
@@ -3805,6 +3828,12 @@ export class DurableAgent<
     options: DurableAgentRecoverActiveRunsOptions = {},
   ): Promise<DurableAgentRecoverActiveRunsResult> {
     const { runId, ...discoveryOptions } = options;
+
+    // Without fencing in the workflows store nothing is fenced, memory included.
+    const storage = this.#mastra?.getStorage();
+    if (!this.#warnIfUnfenced(await storage?.getStore('workflows'), 'workflows')) {
+      this.#warnIfUnfenced(await storage?.getStore('memory'), 'memory');
+    }
 
     let targetRunIds: string[];
     if (runId) {
