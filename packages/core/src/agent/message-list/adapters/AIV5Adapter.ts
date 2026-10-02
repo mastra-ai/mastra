@@ -8,9 +8,11 @@ import {
   createDataUri,
   imageContentToString,
   isAbsoluteUrl,
+  isBase64DataUri,
   isBase64Like,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
+  toBase64DataUri,
 } from '../prompt/image-utils';
 import type {
   MastraDBMessage,
@@ -444,7 +446,11 @@ export class AIV5Adapter {
             if (typeof fileData === 'string') {
               const parsed = parseDataUri(fileData);
 
-              if (parsed.isDataUri) {
+              if (parsed.isDataUri && !isBase64DataUri(fileData)) {
+                // Percent-encoded data URLs (`data:image/svg+xml,%3Csvg...`) are converted to
+                // base64 rather than having their payload re-wrapped as if it already were.
+                filePartData = toBase64DataUri(fileData) ?? fileData;
+              } else if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
                 if (parsed.mimeType) {
                   extractedMimeType = extractedMimeType || parsed.mimeType;

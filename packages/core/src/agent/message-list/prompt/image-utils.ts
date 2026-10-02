@@ -1,4 +1,4 @@
-import { convertBase64ToUint8Array } from '@ai-sdk/provider-utils-v6';
+import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v6';
 import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
 
@@ -330,6 +330,42 @@ function isValidInlineContent(base64: string, mediaType: string | undefined): bo
   return true;
 }
 
+/** Whether a data URL's header declares base64 content (`data:<type>;base64,...`). */
+export function isBase64DataUri(data: string): boolean {
+  const comma = data.indexOf(',');
+  return comma !== -1 && /;base64$/i.test(data.slice(5, comma));
+}
+
+/**
+ * Converts a percent-encoded data URL (`data:image/svg+xml,%3Csvg...`) to its base64 form, which
+ * is what the AI SDK prompt conversion expects. Returns undefined if an escape is invalid.
+ */
+export function toBase64DataUri(dataUri: string): string | undefined {
+  const comma = dataUri.indexOf(',');
+  const bytes = decodePercentEncoded(dataUri.slice(comma + 1));
+  if (comma === -1 || !bytes) return undefined;
+  return `data:${dataUri.slice(5, comma)};base64,${convertUint8ArrayToBase64(bytes)}`;
+}
+
+/** Decodes a percent-encoded data URL payload to bytes, or undefined if an escape is invalid. */
+function decodePercentEncoded(payload: string): Uint8Array | undefined {
+  const encoder = new TextEncoder();
+  const bytes: number[] = [];
+  for (let i = 0; i < payload.length;) {
+    if (payload[i] === '%') {
+      const hex = payload.slice(i + 1, i + 3);
+      if (!/^[0-9a-f]{2}$/i.test(hex)) return undefined;
+      bytes.push(Number.parseInt(hex, 16));
+      i += 3;
+    } else {
+      const char = String.fromCodePoint(payload.codePointAt(i)!);
+      bytes.push(...encoder.encode(char));
+      i += char.length;
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
 /**
  * Checks whether file/image part data can be sent to a model: an OpenAI file ID (`file-...`),
  * an absolute URL (any scheme), or inline content (raw base64 or a data URL) that decodes and,
@@ -338,12 +374,10 @@ function isValidInlineContent(base64: string, mediaType: string | undefined): bo
  */
 export function isSendableFileData(data: string, mediaType?: string): boolean {
   if (data.startsWith('data:')) {
-    const comma = data.indexOf(',');
-    if (comma === -1) return false;
-    const header = data.slice(5, comma);
-    // Only base64 data URLs carry content to check; percent-encoded ones are plain text.
-    if (!/;base64$/i.test(header)) return true;
-    return isValidInlineContent(data.slice(comma + 1), header.split(';')[0] || mediaType);
+    const base64Uri = isBase64DataUri(data) ? data : toBase64DataUri(data);
+    if (!base64Uri) return false;
+    const comma = base64Uri.indexOf(',');
+    return isValidInlineContent(base64Uri.slice(comma + 1), base64Uri.slice(5, comma).split(';')[0] || mediaType);
   }
   if (data.startsWith('file-') || isAbsoluteUrl(data)) return true;
   return isValidInlineContent(data, mediaType);
