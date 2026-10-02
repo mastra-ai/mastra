@@ -395,6 +395,12 @@ export interface MastraCodeConfig {
     resourceId: string;
     threadId: string;
   }) => void | Promise<void>;
+  /**
+   * Let a caller whose auth maps them to a different resource run a session
+   * under the session's own resource. Passed through to the controller; see
+   * `AgentControllerConfig.authorizeSessionResource`.
+   */
+  authorizeSessionResource?: AgentControllerConfig<MastraCodeState>['authorizeSessionResource'];
 }
 
 export function createAuthStorage() {
@@ -1519,6 +1525,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
+    authorizeSessionResource: config?.authorizeSessionResource,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
