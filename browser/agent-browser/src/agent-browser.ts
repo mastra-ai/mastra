@@ -19,9 +19,9 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 
-import { BrowserManager } from 'agent-browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
+import { BrowserManager } from './browser-manager';
+import type { BrowserLaunchOptions } from './browser-manager';
 import type {
   GotoInput,
   SnapshotInput,

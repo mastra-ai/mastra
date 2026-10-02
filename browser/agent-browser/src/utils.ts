@@ -1,4 +1,4 @@
-import type { BrowserManager } from 'agent-browser';
+import type { BrowserManager } from './browser-manager';
 
 /**
  * Get the browser process PID from a BrowserManager instance via CDP.

@@ -158,6 +158,11 @@ packageExtensions:
     dependencies:
       tslib: '*'
 
+# Stagehand 3 lists puppeteer-core 22 as optional and never loads it at runtime.
+# Skipping it drops extract-zip, basic-ftp 5 and chromium-bidi's zod 3.23.8.
+ignoredOptionalDependencies:
+  - puppeteer-core
+
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days

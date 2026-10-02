@@ -10,6 +10,6 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   deps: {
-    neverBundle: ['@mastra/agent-browser', '@mastra/core', '@mastra/core/browser', 'agent-browser', 'firecrawl'],
+    neverBundle: ['@mastra/agent-browser', '@mastra/core', '@mastra/core/browser', 'firecrawl'],
   },
 });
