@@ -6,6 +6,8 @@ import { Link, useParams } from 'react-router';
 import { externalLinkLabel, githubNumberForItem } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
+import type { BoardCardActivity } from '../boardCardState';
+import { isCardActionPending } from '../boardCardState';
 import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import { workItemPrompt } from '../../supervisor/services/supervisor';
@@ -21,6 +23,7 @@ export interface WorkItemMenuProps {
   proposal?: FactoryDecisionSummary;
   proposedRunLabel?: string;
   approvingDecisionId?: string;
+  activity: BoardCardActivity;
   onApproveProposal: (decisionId: string) => void;
   onDismissProposal: (decisionId: string) => void;
   onMove: (toStage: string) => void;
@@ -38,9 +41,9 @@ export function askSupervisorPath(
 }
 
 /** A lane's available move. Plan approval remains a separate human decision. */
-function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove']): ReactElement {
+function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove'], disabled: boolean): ReactElement {
   return (
-    <DropdownMenu.Item key={move.label} onClick={() => onMove(move.stage)}>
+    <DropdownMenu.Item key={move.label} disabled={disabled} onClick={() => onMove(move.stage)}>
       {actionIcon(move.label)}
       <span>{move.label}</span>
     </DropdownMenu.Item>
@@ -54,6 +57,7 @@ export function WorkItemMenuItems({
   proposal,
   proposedRunLabel,
   approvingDecisionId,
+  activity,
   onApproveProposal,
   onDismissProposal,
   onMove,
@@ -77,23 +81,23 @@ export function WorkItemMenuItems({
   // one of those would advance it as a side effect. Dismissing a stale
   // suggestion stays, since that starts nothing.
   const decision = !custom && awaitsTriageDecision(item, columnStage);
+  const busy = activity !== 'idle';
+  const moveDisabled = (stage: string) => {
+    if (isCardActionPending(activity)) return true;
+    return busy && board?.phases.find(phase => phase.id === stage)?.kind === 'working';
+  };
   return (
     <>
       {decision &&
         TRIAGE_DECISIONS.map(choice => (
-          <DropdownMenu.Item key={choice.stage} onClick={() => onMove(choice.stage)}>
+          <DropdownMenu.Item key={choice.stage} disabled={busy} onClick={() => onMove(choice.stage)}>
             <BoardStageIcon stage={choice.stage} />
             <span>{choice.label}</span>
           </DropdownMenu.Item>
         ))}
-      {!decision && moves.map(move => moveItem(move, onMove))}
-      {/* Once the card has a live session its surface opens details, so the
-          menus stay the only place left to release a proposed run. */}
+      {!decision && moves.map(move => moveItem(move, onMove, busy))}
       {suggestion !== undefined && !decision && (
-        <DropdownMenu.Item
-          disabled={approvingDecisionId === suggestion.id}
-          onClick={() => onApproveProposal(suggestion.id)}
-        >
+        <DropdownMenu.Item disabled={busy} onClick={() => onApproveProposal(suggestion.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestion.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
@@ -118,7 +122,7 @@ export function WorkItemMenuItems({
         .filter(stage => stage.id !== columnStage)
         .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
-          <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+          <DropdownMenu.Item key={stage.id} disabled={moveDisabled(stage.id)} onClick={() => onMove(stage.id)}>
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
             <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
           </DropdownMenu.Item>

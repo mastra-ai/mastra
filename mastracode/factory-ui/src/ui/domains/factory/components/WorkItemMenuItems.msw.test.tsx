@@ -54,6 +54,7 @@ function renderMenu(
             item={{ ...item, stages: [stage] }}
             columnStage={stage}
             moves={[]}
+            activity="idle"
             {...proposal}
             onMove={onMove}
             onRemove={vi.fn()}

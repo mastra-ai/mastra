@@ -1,5 +1,6 @@
 import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { BoardCardState } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
@@ -180,59 +181,46 @@ export function sessionLink(href: string | undefined): CardAction | undefined {
 
 export function retryButton({
   decisionId,
-  retryingDecisionId,
   onRetry,
 }: {
   decisionId?: string;
-  retryingDecisionId?: string;
   onRetry: (decisionId: string) => void;
 }): CardAction | undefined {
   if (decisionId === undefined) return undefined;
-  const retrying = decisionId === retryingDecisionId;
-  return { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetry(decisionId) };
-}
-
-export function runButton({
-  action,
-  pending,
-  suggestion,
-}: {
-  action?: CardPrimaryAction;
-  /** A session start the card is still resolving; a move needs none, it is optimistic. */
-  pending: boolean;
-  /** The waiting suggestion's label, so the button says which run it releases. */
-  suggestion?: string;
-}): CardAction | undefined {
-  if (action === undefined) return undefined;
-  return {
-    label: pending ? 'Starting…' : action.label,
-    ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
-    disabled: pending,
-    start: action.start,
-  };
+  return { label: 'Retry', start: () => onRetry(decisionId) };
 }
 
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
-  running,
-  waiting,
+  state,
   session,
   retry,
   run,
 }: {
-  running: boolean;
-  /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
-  waiting: boolean;
+  state: BoardCardState;
   session?: CardAction;
   retry?: CardAction;
   run?: CardAction;
 }): CardAction[] {
-  // A running session owns the branch, so no retry, rival run, or parked suggestion can start beside it.
-  const nextRetry = running ? undefined : retry;
-  const nextRun = running ? undefined : run;
-  const main = nextRetry ?? nextRun ?? session;
+  const { activity, status } = state;
+  // Opening an existing session stays useful throughout kickoff and execution.
+  if (activity !== 'idle') {
+    if (session !== undefined) return [session];
+    if (activity === 'running' || activity === 'awaiting') return [];
+    const pendingAction = retry ?? run;
+    if (pendingAction === undefined) return [];
+    const labels = { moving: 'Moving…', starting: 'Starting…', retrying: 'Retrying…' };
+    // Drop the old accessible name too: a disabled suggestion is no longer asking to be started.
+    return [{ ...pendingAction, label: labels[activity], ariaLabel: undefined, disabled: true, urgent: false }];
+  }
+  const waiting = status.kind === 'waiting' || status.kind === 'held';
+  const nextRun =
+    run !== undefined && status.kind === 'waiting'
+      ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
+      : run;
+  const main = retry ?? nextRun ?? session;
   if (main === undefined) return [];
   const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
+  const urgent = (action: CardAction) => action === retry || (waiting && action === nextRun);
   return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }

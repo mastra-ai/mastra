@@ -6,7 +6,7 @@ import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { boardCardStatus } from '../boardCardStatus';
+import { boardCardState, isCardActionPending } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -18,7 +18,6 @@ import {
   cardPrimaryAction,
   resumeStage,
   retryButton,
-  runButton,
   sessionLink,
 } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
@@ -125,7 +124,7 @@ export function WorkItemCard({
         : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
 
   const activity = workItemActivity(item, activityPage);
-  const status = boardCardStatus({
+  const state = boardCardState({
     proposal:
       proposal === undefined || proposedRunLabel === undefined
         ? undefined
@@ -140,11 +139,13 @@ export function WorkItemCard({
               itemStageLabel(item, evaluatingStage),
           },
     preparing: busyLabel,
+    retrying: decision !== undefined && retryingDecisionId === decision.id,
     decision,
     transitionReason,
     sessionStatus,
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
+  const { status, activity: cardActivity } = state;
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
@@ -166,6 +167,7 @@ export function WorkItemCard({
     proposal,
     proposedRunLabel,
     approvingDecisionId,
+    activity: cardActivity,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -216,15 +218,10 @@ export function WorkItemCard({
   // A held card's decision, like a parked suggestion, is the person's to
   // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
-    running: wickStatus !== undefined,
-    waiting: status.kind === 'waiting' || status.kind === 'held',
+    state,
     session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    run: runButton({
-      action: primaryAction,
-      pending: busyLabel !== undefined,
-      suggestion: status.kind === 'waiting' ? status.label : undefined,
-    }),
+    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
+    run: primaryAction,
   });
 
   return (
@@ -233,7 +230,7 @@ export function WorkItemCard({
         ref={morph.cardRef}
         draggable={!evaluating}
         aria-label={item.title}
-        aria-busy={evaluating || busyLabel !== undefined || undefined}
+        aria-busy={isCardActionPending(cardActivity) || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}

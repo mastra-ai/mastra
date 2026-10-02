@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { boardCardState } from './boardCardState';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
@@ -232,23 +233,48 @@ describe('cardActions', () => {
   const run = { label: 'Investigate', start: vi.fn() };
 
   it('leads with the likeliest click and offers a rival run only beside an idle session', () => {
-    const idle = { running: false, waiting: false };
+    const idle = { state: boardCardState({}) };
+    const running = { state: boardCardState({ sessionStatus: 'working' }) };
     const labels = (actions: CardAction[]) => actions.map(action => action.label);
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
-    expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, session, retry, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, retry }))).toEqual([]);
+    expect(labels(cardActions({ ...running, session, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...running, session, retry, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...running, retry }))).toEqual([]);
+    expect(labels(cardActions({ state: boardCardState({ sessionStatus: 'ready' }), session, run }))).toEqual([
+      'Open session',
+    ]);
     expect(cardActions(idle)).toEqual([]);
   });
 
   it('lights only the click the card waits on a person for', () => {
-    const idle = { running: false, waiting: false };
+    const idle = { state: boardCardState({}) };
+    const running = { state: boardCardState({ sessionStatus: 'working' }) };
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
-    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
-    expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
+    expect(lit(cardActions({ ...running, session, run }))).toEqual([]);
+    expect(lit(cardActions({ ...running, session, retry, run }))).toEqual([]);
+    expect(lit(cardActions({ state: boardCardState({ heldAs: 'feature request' }), session, run }))).toEqual([
+      'Investigate',
+    ]);
+  });
+
+  it('replaces the run with a disabled progress action until there is a session to open', () => {
+    const state = boardCardState({ moving: { stage: 'review', label: 'Reviewing' } });
+    expect(cardActions({ state, run: { ...run, ariaLabel: 'Start suggested run: Review' } })).toEqual([
+      expect.objectContaining({ label: 'Moving…', ariaLabel: undefined, disabled: true, urgent: false }),
+    ]);
+    expect(cardActions({ state, session, run })).toEqual([session]);
+  });
+
+  it('names an available suggestion accessibly and clears that name while starting it', () => {
+    const proposal = { label: 'Review', decisionId: 'decision-1' };
+    expect(cardActions({ state: boardCardState({ proposal }), run })).toEqual([
+      expect.objectContaining({ ariaLabel: 'Start suggested run: Review', urgent: true }),
+    ]);
+    expect(cardActions({ state: boardCardState({ proposal, preparing: 'Starting…' }), run })).toEqual([
+      expect.objectContaining({ label: 'Starting…', ariaLabel: undefined, disabled: true, urgent: false }),
+    ]);
   });
 });

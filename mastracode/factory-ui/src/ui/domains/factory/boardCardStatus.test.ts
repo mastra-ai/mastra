@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { boardCardStatus, itemAwaitsPerson } from './boardCardStatus';
+import { boardCardState } from './boardCardState';
+import { cardActions } from './cardPrimaryAction';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
@@ -193,6 +195,38 @@ describe('boardCardStatus', () => {
 
   it('falls back to idle when nothing is in flight', () => {
     expect(boardCardStatus({})).toEqual({ kind: 'idle' });
+  });
+});
+
+describe('boardCardState', () => {
+  it.each(['pending', 'leased', 'retry'] as const)('blocks another run while a %s decision has no session', status => {
+    const state = boardCardState({ decision: decision({ status, lastError: status === 'retry' ? 'Timeout' : null }) });
+    const run = { label: 'Review', start: () => {} };
+    expect(cardActions({ state, run })).toEqual([
+      expect.objectContaining({ label: status === 'retry' ? 'Retrying…' : 'Starting…', disabled: true }),
+    ]);
+  });
+
+  it('keeps a retry request busy before the failed decision refreshes', () => {
+    expect(boardCardState({ decision: decision({ status: 'failed' }), retrying: true })).toEqual({
+      status: { kind: 'busy', label: 'Retrying…' },
+      activity: 'retrying',
+    });
+  });
+
+  it('allows recovery from a final failure while keeping live and parked sessions occupied', () => {
+    expect(boardCardState({ decision: decision({ status: 'failed' }) }).activity).toBe('idle');
+    expect(boardCardState({ sessionStatus: 'ready' }).activity).toBe('awaiting');
+    expect(boardCardState({ sessionStatus: 'initializing' }).activity).toBe('running');
+    expect(boardCardState({ sessionStatus: 'working', decision: decision({ status: 'failed' }) }).activity).toBe(
+      'running',
+    );
+  });
+
+  it('keeps an in-flight effect busy even when a transition error takes the status row', () => {
+    const state = boardCardState({ transitionReason: 'Move rejected', decision: decision({ status: 'pending' }) });
+    expect(state.status).toEqual({ kind: 'error', label: 'Move rejected' });
+    expect(state.activity).toBe('starting');
   });
 });
 
