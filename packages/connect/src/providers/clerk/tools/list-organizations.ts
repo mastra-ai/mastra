@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -48,8 +48,8 @@ export function listOrganizationsTool(proxy: PlatformProxy) {
     outputSchema: listOrganizationsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : Number.parseInt(input.cursor, 10);
-      if (!Number.isInteger(offset) || offset < 0)
+      const offset = input.cursor === undefined ? 0 : /^\d+$/.test(input.cursor) ? Number(input.cursor) : Number.NaN;
+      if (!Number.isSafeInteger(offset) || offset < 0)
         throw new platformProxy.ActionError({
           type: 'invalid_cursor',
           message: 'Cursor must be a non-negative integer.',

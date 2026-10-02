@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -12,9 +12,31 @@ export const listUsersInputSchema = z.object({
     .optional()
     .describe('Search across names, identifiers, email addresses, phone numbers, and usernames.'),
   email_address: z.array(z.string()).max(100).optional().describe('Filter by email addresses.'),
+  phone_number: z.array(z.string()).max(100).optional().describe('Filter by phone numbers.'),
+  username: z.array(z.string()).max(100).optional().describe('Filter by usernames.'),
   user_id: z.array(z.string()).max(100).optional().describe('Filter by Clerk user IDs.'),
   external_id: z.array(z.string()).max(100).optional().describe('Filter by external user IDs.'),
   organization_id: z.array(z.string()).max(100).optional().describe('Filter by organization IDs.'),
+  last_active_at_before: z
+    .number()
+    .int()
+    .optional()
+    .describe('Filter users last active before this Unix timestamp in milliseconds.'),
+  last_active_at_after: z
+    .number()
+    .int()
+    .optional()
+    .describe('Filter users last active after this Unix timestamp in milliseconds.'),
+  created_at_before: z
+    .number()
+    .int()
+    .optional()
+    .describe('Filter users created before this Unix timestamp in milliseconds.'),
+  created_at_after: z
+    .number()
+    .int()
+    .optional()
+    .describe('Filter users created after this Unix timestamp in milliseconds.'),
   order_by: z
     .string()
     .optional()
@@ -40,7 +62,9 @@ const UserSchema = z
   })
   .passthrough();
 
-const ProviderResponseSchema = z.object({ data: z.array(UserSchema), total_count: z.number() });
+const ProviderResponseSchema = z.array(UserSchema);
+
+const ProviderCountSchema = z.object({ total_count: z.number() }).passthrough();
 
 export const listUsersOutputSchema = z.object({
   items: z.array(UserSchema),
@@ -56,34 +80,52 @@ export function listUsersTool(proxy: PlatformProxy) {
     outputSchema: listUsersOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listUsersOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : Number.parseInt(input.cursor, 10);
-      if (!Number.isInteger(offset) || offset < 0) {
+      const offset = input.cursor === undefined ? 0 : /^\d+$/.test(input.cursor) ? Number(input.cursor) : Number.NaN;
+      if (!Number.isSafeInteger(offset) || offset < 0) {
         throw new platformProxy.ActionError({
           type: 'invalid_cursor',
           message: 'Cursor must be a non-negative integer.',
         });
       }
+      const filterParams = {
+        ...(input.query !== undefined && { query: input.query }),
+        ...(input.email_address !== undefined && { email_address: input.email_address }),
+        ...(input.phone_number !== undefined && { phone_number: input.phone_number }),
+        ...(input.username !== undefined && { username: input.username }),
+        ...(input.user_id !== undefined && { user_id: input.user_id }),
+        ...(input.external_id !== undefined && { external_id: input.external_id }),
+        ...(input.organization_id !== undefined && { organization_id: input.organization_id }),
+        ...(input.last_active_at_before !== undefined && {
+          last_active_at_before: String(input.last_active_at_before),
+        }),
+        ...(input.last_active_at_after !== undefined && { last_active_at_after: String(input.last_active_at_after) }),
+        ...(input.created_at_before !== undefined && { created_at_before: String(input.created_at_before) }),
+        ...(input.created_at_after !== undefined && { created_at_after: String(input.created_at_after) }),
+      };
       const response = await platformProxy.get({
         // https://clerk.com/docs/reference/backend-api/tag/Users#operation/GetUserList
         endpoint: '/v1/users',
         params: {
           offset: String(offset),
           ...(input.limit !== undefined && { limit: String(input.limit) }),
-          ...(input.query !== undefined && { query: input.query }),
-          ...(input.email_address !== undefined && { email_address: input.email_address }),
-          ...(input.user_id !== undefined && { user_id: input.user_id }),
-          ...(input.external_id !== undefined && { external_id: input.external_id }),
-          ...(input.organization_id !== undefined && { organization_id: input.organization_id }),
           ...(input.order_by !== undefined && { order_by: input.order_by }),
+          ...filterParams,
         },
         retries: 3,
       });
-      const provider = ProviderResponseSchema.parse(response.data);
-      const nextOffset = offset + provider.data.length;
+      const users = ProviderResponseSchema.parse(response.data);
+      const countResponse = await platformProxy.get({
+        // https://clerk.com/docs/reference/backend-api/tag/Users#operation/GetUsersCount
+        endpoint: '/v1/users/count',
+        params: filterParams,
+        retries: 3,
+      });
+      const total = ProviderCountSchema.parse(countResponse.data).total_count;
+      const nextOffset = offset + users.length;
       return {
-        items: provider.data,
-        ...(nextOffset < provider.total_count && { next_cursor: String(nextOffset) }),
-        total: provider.total_count,
+        items: users,
+        ...(users.length > 0 && nextOffset < total && { next_cursor: String(nextOffset) }),
+        total,
       };
     },
   });
