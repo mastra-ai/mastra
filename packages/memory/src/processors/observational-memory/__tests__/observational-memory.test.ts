@@ -41,6 +41,7 @@ import {
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
 } from '../observation-groups';
+import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
@@ -12690,6 +12691,56 @@ describe('Full Async Buffering Flow', () => {
     // With no op in flight, the next step activates the buffered chunks.
     await step(1);
     expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+  });
+
+  it('should activate a persisted chunk without waiting for the buffer op to finish indexing', async () => {
+    // A buffer op stays registered through its post-persist work (indexing, thread title),
+    // which can take seconds with a real embedder. Only the chunk write
+    // conflicts with activation, so a persisted chunk must activate in the band meanwhile.
+    let releaseIndexing!: () => void;
+    const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
+    const indexSpy = vi
+      .spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups')
+      .mockImplementation(() => indexingHeld);
+    try {
+      const { om, step, waitForAsyncOps, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+      const bufferKey = `obs:thread:${threadId}`;
+
+      // Turn 1 buffers a chunk; the op persists it, then sits in its indexing tail.
+      await step(0);
+      await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+      expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
+      expect(om.buffering.isChunkWriteInProgress(bufferKey)).toBe(false);
+
+      // Turn 2, step 0: the chunk is ready and nothing can append another one.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+      ]);
+      clearTimeout(timer);
+      expect(outcome).toBe('completed');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+
+      // When the op finishes, its buffering bookkeeping must not overwrite activation's reset.
+      releaseIndexing();
+      await turn2Step0;
+      await waitForAsyncOps();
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey)).toBe(0);
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastBufferedAtTokens ?? 0).toBe(0);
+    } finally {
+      releaseIndexing();
+      indexSpy.mockRestore();
+    }
   });
 
   describe('threshold→blockAfter band with a ready chunk at step > 0', () => {

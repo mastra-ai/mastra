@@ -1299,7 +1299,8 @@ describe('buffer()', () => {
     const stored = await storage.listMessages({ threadId, perPage: false });
     const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
     expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
-    expect(markerTypes.includes('data-om-buffering-end')).toBe(transient);
+    // The end marker is emitted once the chunk is stored, before indexing runs.
+    expect(markerTypes.includes('data-om-buffering-end')).toBe(true);
   });
 
   it('should not buffer when no unobserved messages exist', async () => {
