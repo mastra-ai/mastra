@@ -1,5 +1,41 @@
 # @mastra/mongodb
 
+## 1.22.0-alpha.0
+
+### Minor Changes
+
+- `MongoDBVector` takes an `autoEmbed` config in its constructor and reports itself as a self-embedding store, so `Memory`'s semantic recall can use Automated Embedding with no client-side embedder. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+  ```ts
+  new MongoDBVector({ id: 'vec', uri, dbName, autoEmbed: { model: 'voyage-4' } });
+  ```
+
+  A `createIndex` call naming neither its own `autoEmbed` config nor a `dimension` picks up those defaults; naming either one overrides them, so one store can hold both kinds of index.
+
+### Patch Changes
+
+- Fixed vector queries failing for a few seconds after a new index is created. While Atlas first builds a vector search index, a query can fail with "cannot query vector index ... while in state INITIAL_SYNC". `query` now retries across that window instead of throwing, which matters for a caller that queries an index straight after creating it, as semantic recall does on a fresh database. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+- Fixed semantic recall returning a message the search had not selected, along with the wrong surrounding context, when several messages share a timestamp. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+  Messages are ordered by `(createdAt, id)`, but `listMessages` resolved the message named by `include` on `createdAt` alone. Saving messages in one batch gives them the same timestamp routinely, so this was reachable on any query and failed with no error.
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e)]:
+  - @mastra/core@1.75.0-alpha.1
+
+## 1.21.0
+
+### Minor Changes
+
+- Added group filtering and generation ordering to observational memory history. For example, `getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, sortDirection: "ASC" })` finds the earliest retained record containing a group in active observations or persisted buffered chunks. Adapters advertise support through `supportsObservationalMemoryHistorySearch`. Pass `recordId` to read one record by ID; it only matches records for the requested thread or resource. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  Convex users need to redeploy their Mastra server functions for these filters to apply.
+
+### Patch Changes
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.74.0
+
 ## 1.20.1
 
 ### Patch Changes

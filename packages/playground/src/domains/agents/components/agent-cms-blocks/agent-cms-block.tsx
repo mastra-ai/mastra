@@ -13,7 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -97,23 +99,25 @@ const SaveAsPromptBlockDialog = ({
           <DialogTitle>Save as prompt block</DialogTitle>
           <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit}>
           <DialogBody>
-            <TextFieldBlock
-              name="prompt-block-name"
-              label="Name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Tone guidelines"
-              autoFocus
-            />
-            <TextFieldBlock
-              name="prompt-block-description"
-              label="Description (optional)"
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Brief description..."
-            />
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Tone guidelines"
+                autoFocus
+              />
+            </Field>
+            <Field>
+              <FieldLabel>Description (optional)</FieldLabel>
+              <Input
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Brief description..."
+              />
+            </Field>
             {error ? (
               <div role="alert">
                 <Notice variant="destructive">{error}</Notice>
@@ -126,7 +130,7 @@ const SaveAsPromptBlockDialog = ({
               {isPending ? 'Saving...' : 'Save'}
             </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );

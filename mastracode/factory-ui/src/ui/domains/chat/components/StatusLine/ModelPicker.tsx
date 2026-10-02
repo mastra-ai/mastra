@@ -271,7 +271,7 @@ export function ModelPicker() {
                   keywords={['manage', 'model', 'packs', 'settings']}
                   onSelect={() => {
                     setOpen(false);
-                    navigate(`${settingsSectionPath(factoryId, 'models')}#model-packs`);
+                    navigate(`${settingsSectionPath(factoryId, 'personal-models')}#model-packs`);
                   }}
                 >
                   <Settings2 aria-hidden />

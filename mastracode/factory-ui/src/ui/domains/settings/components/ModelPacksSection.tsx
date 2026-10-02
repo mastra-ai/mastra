@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -144,10 +145,8 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
 
       {draft && (
         <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Name
-            </Txt>
+          <Field className="gap-1">
+            <FieldLabel>Name</FieldLabel>
             <Input
               size="sm"
               placeholder="e.g. my-pack"
@@ -155,25 +154,19 @@ export function ModelPacksSection({ models }: { models: AvailableModelOption[] }
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Build model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Build model</FieldLabel>
             {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Plan model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Plan model</FieldLabel>
             {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Txt as="span" variant="caption" className="text-foreground">
-              Fast model
-            </Txt>
+          </Field>
+          <Field className="gap-1">
+            <FieldLabel>Fast model</FieldLabel>
             {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
-          </label>
+          </Field>
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveDraft()}>
               Add

@@ -249,6 +249,7 @@ describe('internal MODEL_GENERATION usage rollup', () => {
         provider: 'mock-provider',
         model: 'mock-model-id',
         usage: { inputTokens: 100, outputTokens: 25 },
+        usageIncomplete: true,
       },
     });
     hiddenAgent.end();
@@ -261,11 +262,53 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     expect(inputMetric!.metric.correlationContext.entityId).toBe('moderation');
     expect(inputMetric!.metric.correlationContext.entityName).toBe('Moderation');
     expect(inputMetric!.metric.value).toBe(100);
+    expect(inputMetric!.metric.labels).toMatchObject({ usageIncomplete: 'true' });
 
     const outputMetric = exporter.metricEvents.find(e => e.metric.name === 'mastra_model_total_output_tokens');
     expect(outputMetric).toBeDefined();
     expect(outputMetric!.metric.correlationContext.entityId).toBe('moderation');
     expect(outputMetric!.metric.value).toBe(25);
+    expect(outputMetric!.metric.labels).toMatchObject({ usageIncomplete: 'true' });
+  });
+
+  it('preserves incomplete usage labels for excluded model spans', async () => {
+    const localExporter = new CollectingExporter();
+    const localTracing = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      exporters: [localExporter],
+    });
+
+    const agentSpan = localTracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'agent run: visible',
+    });
+    const excludedModel = agentSpan.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'mock'",
+    });
+    excludedModel.end({
+      attributes: {
+        provider: 'mock-provider',
+        model: 'mock-model-id',
+        usage: { inputTokens: 10, outputTokens: 25 },
+        usageIncomplete: true,
+      },
+    });
+    agentSpan.end();
+    await localTracing.flush();
+
+    expect(localExporter.endedSpans().some(span => span.type === SpanType.MODEL_GENERATION)).toBe(false);
+    const inputMetric = localExporter.metricEvents.find(e => e.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputMetric?.metric.value).toBe(10);
+    expect(inputMetric?.metric.labels).toMatchObject({ usageIncomplete: 'true' });
+    const outputMetric = localExporter.metricEvents.find(e => e.metric.name === 'mastra_model_total_output_tokens');
+    expect(outputMetric?.metric.value).toBe(25);
+    expect(outputMetric?.metric.labels).toMatchObject({ usageIncomplete: 'true' });
+
+    await localTracing.shutdown();
   });
 
   it('walks past ancestors filtered by excludeSpanTypes', async () => {

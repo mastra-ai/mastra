@@ -2528,7 +2528,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
 ];
 
 /** Trusted scope: the tenant is ANDed onto roots and every related record; NULL never matches. */
-function matchesScope(
+export function matchesScope(
   record: { organizationId?: string | null; resourceId?: string | null },
   scope: TraceQueryTenantScope | undefined,
 ): boolean {
@@ -2544,7 +2544,7 @@ export interface TraceQueryRootSelection {
 }
 
 /**
- * The candidate population shared by every trace-scoped read (Decision 2): current, completed,
+ * The candidate population shared by every trace-scoped read: current, completed,
  * non-pending roots inside the half-open `[from, to)` window that satisfy `where` and `scope`.
  */
 export function selectTraceQueryRoots(

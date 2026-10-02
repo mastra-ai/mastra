@@ -37,6 +37,18 @@ import { getTransformedSchema } from './schema';
 import { packStepMessageMirrors, unpackStepMessageMirrors } from './step-message-mirrors';
 import { dedupeStepRequests, rehydrateStepRequests } from './step-request-dedupe';
 
+const primaryUsageCountKeys = ['inputTokens', 'outputTokens', 'totalTokens'] as const satisfies ReadonlyArray<
+  keyof LanguageModelUsage
+>;
+const detailUsageCountKeys = [
+  'reasoningTokens',
+  'cachedInputTokens',
+  'cacheCreationInputTokens',
+  'cacheCreationInputTokens5m',
+  'cacheCreationInputTokens1h',
+] as const satisfies ReadonlyArray<keyof LanguageModelUsage>;
+const usageCountKeys = [...primaryUsageCountKeys, ...detailUsageCountKeys] as const;
+
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
  * This wraps the output to ensure properties maintain their context when destructured.
@@ -308,6 +320,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     outputTokens: undefined,
     totalTokens: undefined,
   };
+  #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
@@ -378,6 +392,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options,
     messageId,
     initialState,
+    finishUsageIsTotal,
   }: {
     model: {
       modelId: string | undefined;
@@ -389,12 +404,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
     initialState?: any;
+    finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
       this.__setLogger(options.logger);
     }
     this.#options = options;
+    this.#finishUsageIsTotal = finishUsageIsTotal ?? false;
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
@@ -527,6 +544,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
@@ -560,6 +578,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               for (const r of reprocessed) {
                 if (r.blocked) {
@@ -1067,12 +1086,23 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 };
               }
 
-              this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
+              if (self.#finishUsageIsTotal) {
+                self.#usageCount.inputTokens = undefined;
+                self.#usageCount.outputTokens = undefined;
+                self.#usageCount.totalTokens = undefined;
+                delete self.#usageCount.reasoningTokens;
+                delete self.#usageCount.cachedInputTokens;
+                delete self.#usageCount.cacheCreationInputTokens;
+                delete self.#usageCount.cacheCreationInputTokens5m;
+                delete self.#usageCount.cacheCreationInputTokens1h;
+                self.#usageCountMissing.clear();
+              }
+              this.populateUsageCount(chunk.payload.output.usage as Partial<LanguageModelUsage>);
 
               chunk.payload.output.usage = {
-                inputTokens: self.#usageCount.inputTokens ?? 0,
-                outputTokens: self.#usageCount.outputTokens ?? 0,
-                totalTokens: self.#usageCount.totalTokens ?? 0,
+                inputTokens: self.#usageCount.inputTokens,
+                outputTokens: self.#usageCount.outputTokens,
+                totalTokens: self.#getTotalUsage().totalTokens,
                 ...(self.#usageCount.reasoningTokens !== undefined && {
                   reasoningTokens: self.#usageCount.reasoningTokens,
                 }),
@@ -1081,6 +1111,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }),
                 ...(self.#usageCount.cacheCreationInputTokens !== undefined && {
                   cacheCreationInputTokens: self.#usageCount.cacheCreationInputTokens,
+                }),
+                ...(self.#usageCount.cacheCreationInputTokens5m !== undefined && {
+                  cacheCreationInputTokens5m: self.#usageCount.cacheCreationInputTokens5m,
+                }),
+                ...(self.#usageCount.cacheCreationInputTokens1h !== undefined && {
+                  cacheCreationInputTokens1h: self.#usageCount.cacheCreationInputTokens1h,
                 }),
                 ...(self.#usageCount.raw !== undefined && {
                   raw: self.#usageCount.raw,
@@ -1489,7 +1525,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
     if (!this.#consumptionStarted) {
-      void this.consumeStream();
+      this.consumeStream().catch(error => {
+        this.logger?.error('Error consuming stream', error);
+      });
     }
     return promise.promise;
   }
@@ -1641,34 +1679,27 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       return;
     }
 
-    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
-    if (usage.inputTokens !== undefined) {
-      this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
+    // Primary totals describe the whole request, so any omitted contribution
+    // makes that aggregate incomplete. Explicit zeroes remain valid values.
+    for (const key of primaryUsageCountKeys) {
+      const value = usage[key];
+      if (value === undefined) {
+        this.#usageCountMissing.add(key);
+        this.#usageCount[key] = undefined;
+      } else if (!this.#usageCountMissing.has(key)) {
+        this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+      }
     }
-    if (usage.outputTokens !== undefined) {
-      this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
+
+    // Detail counters are present-when-reported and remain additive across
+    // providers that omit unsupported cache or reasoning measurements.
+    for (const key of detailUsageCountKeys) {
+      const value = usage[key];
+      if (value !== undefined) {
+        this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+      }
     }
-    if (usage.totalTokens !== undefined) {
-      this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
-    }
-    if (usage.reasoningTokens !== undefined) {
-      this.#usageCount.reasoningTokens = (this.#usageCount.reasoningTokens ?? 0) + usage.reasoningTokens;
-    }
-    if (usage.cachedInputTokens !== undefined) {
-      this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
-    }
-    if (usage.cacheCreationInputTokens !== undefined) {
-      this.#usageCount.cacheCreationInputTokens =
-        (this.#usageCount.cacheCreationInputTokens ?? 0) + usage.cacheCreationInputTokens;
-    }
-    if (usage.cacheCreationInputTokens5m !== undefined) {
-      this.#usageCount.cacheCreationInputTokens5m =
-        (this.#usageCount.cacheCreationInputTokens5m ?? 0) + usage.cacheCreationInputTokens5m;
-    }
-    if (usage.cacheCreationInputTokens1h !== undefined) {
-      this.#usageCount.cacheCreationInputTokens1h =
-        (this.#usageCount.cacheCreationInputTokens1h ?? 0) + usage.cacheCreationInputTokens1h;
-    }
+
     // raw is provider-specific and not summable; keep the latest step's raw
     if (usage.raw !== undefined) {
       this.#usageCount.raw = usage.raw;
@@ -1680,30 +1711,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       return;
     }
 
-    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
-    if (usage.inputTokens !== undefined && this.#usageCount.inputTokens === undefined) {
-      this.#usageCount.inputTokens = usage.inputTokens;
+    // Finish metadata can fill untouched counters, but cannot repair a primary
+    // counter already known to be incomplete from an earlier contributing step.
+    for (const key of primaryUsageCountKeys) {
+      const value = usage[key];
+      if (value !== undefined && this.#usageCount[key] === undefined && !this.#usageCountMissing.has(key)) {
+        this.#usageCount[key] = value;
+      }
     }
-    if (usage.outputTokens !== undefined && this.#usageCount.outputTokens === undefined) {
-      this.#usageCount.outputTokens = usage.outputTokens;
-    }
-    if (usage.totalTokens !== undefined && this.#usageCount.totalTokens === undefined) {
-      this.#usageCount.totalTokens = usage.totalTokens;
-    }
-    if (usage.reasoningTokens !== undefined && this.#usageCount.reasoningTokens === undefined) {
-      this.#usageCount.reasoningTokens = usage.reasoningTokens;
-    }
-    if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
-      this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
-    }
-    if (usage.cacheCreationInputTokens !== undefined && this.#usageCount.cacheCreationInputTokens === undefined) {
-      this.#usageCount.cacheCreationInputTokens = usage.cacheCreationInputTokens;
-    }
-    if (usage.cacheCreationInputTokens5m !== undefined && this.#usageCount.cacheCreationInputTokens5m === undefined) {
-      this.#usageCount.cacheCreationInputTokens5m = usage.cacheCreationInputTokens5m;
-    }
-    if (usage.cacheCreationInputTokens1h !== undefined && this.#usageCount.cacheCreationInputTokens1h === undefined) {
-      this.#usageCount.cacheCreationInputTokens1h = usage.cacheCreationInputTokens1h;
+    for (const key of detailUsageCountKeys) {
+      const value = usage[key];
+      if (value !== undefined && this.#usageCount[key] === undefined) {
+        this.#usageCount[key] = value;
+      }
     }
     if (usage.raw !== undefined && this.#usageCount.raw === undefined) {
       this.#usageCount.raw = usage.raw;
@@ -1985,6 +2005,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
   /** @internal  */
   _getBaseStream() {
+    // The caller now owns the base stream's reader; delayed-promise getters must
+    // not try to drain it a second time (that would throw "ReadableStream is locked").
+    this.#consumptionStarted = true;
     return this.#baseStream;
   }
 
@@ -2012,11 +2035,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #getTotalUsage(): LanguageModelUsage {
     let total = this.#usageCount.totalTokens;
 
-    if (total === undefined) {
-      const input = this.#usageCount.inputTokens ?? 0;
-      const output = this.#usageCount.outputTokens ?? 0;
-      const reasoning = this.#usageCount.reasoningTokens ?? 0;
-      total = input + output + reasoning;
+    if (
+      total === undefined &&
+      this.#usageCount.inputTokens !== undefined &&
+      this.#usageCount.outputTokens !== undefined
+    ) {
+      total = this.#usageCount.inputTokens + this.#usageCount.outputTokens;
     }
 
     return {
@@ -2192,7 +2216,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       pull(_controller) {
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
-          void self.consumeStream();
+          self.consumeStream().catch(error => {
+            self.logger?.error('Error consuming stream', error);
+          });
         }
       },
 
@@ -2230,6 +2256,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       finishReason: this.#finishReason,
       request: this.#request,
       usageCount: this.#usageCount,
+      usageCountMissing: [...this.#usageCountMissing],
       tripwire: this.#tripwire,
       wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
@@ -2255,6 +2282,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#finishReason = state.finishReason;
     this.#request = state.request;
     this.#usageCount = state.usageCount;
+
+    if (state.usageCountMissing === undefined) {
+      const hasPriorUsage =
+        (Array.isArray(state.bufferedSteps) && state.bufferedSteps.length > 0) ||
+        primaryUsageCountKeys.some(key => state.usageCount?.[key] !== undefined);
+
+      // Legacy snapshots do not record which completed steps omitted primary
+      // usage counters, so existing primary aggregates must fail closed. An
+      // empty snapshot taken before the first step can still accumulate them.
+      this.#usageCountMissing = hasPriorUsage ? new Set(primaryUsageCountKeys) : new Set();
+      if (hasPriorUsage) {
+        for (const key of primaryUsageCountKeys) {
+          this.#usageCount[key] = undefined;
+        }
+      }
+    } else {
+      this.#usageCountMissing = new Set(state.usageCountMissing);
+    }
+
     this.#tripwire = state.tripwire;
     this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);

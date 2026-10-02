@@ -6,3 +6,4 @@
 
 export { MesaFilesystem, type MesaFilesystemOptions } from './filesystem';
 export { mesaFilesystemProvider } from './provider';
+export { repo, type Author, type Layout } from '@mesadev/sdk';

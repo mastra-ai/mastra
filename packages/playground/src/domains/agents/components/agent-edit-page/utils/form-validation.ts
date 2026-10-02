@@ -207,6 +207,7 @@ export const agentFormSchema = z.object({
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
   memory: memoryConfigSchema.optional(),
+  memoryRef: z.object({ type: z.literal('id'), memoryId: z.string() }).optional(),
   variables: z.custom<JsonSchema>().optional(),
   instructionBlocks: z.array(instructionBlockSchema).optional(),
   mcpClients: z

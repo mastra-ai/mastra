@@ -1,6 +1,6 @@
-import { jsonLanguage } from '@codemirror/lang-json';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
@@ -11,7 +11,6 @@ import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, X, Check } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -63,7 +62,6 @@ export const JsonObjectEditor = ({
   const formattedValue = JSON.stringify(value ?? {}, null, 2);
   const [draft, setDraft] = useState<string>(formattedValue);
   const [savedDraft, setSavedDraft] = useState<string>(formattedValue);
-  const theme = useCodemirrorTheme();
 
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
     return getMatchingPresetKey(presets, valueStr);
@@ -144,66 +142,57 @@ export const JsonObjectEditor = ({
   return (
     <TooltipProvider>
       <div>
-        <div className="flex items-center justify-between pb-2">
-          <RequestContextLabel as="label" tooltip={labelTooltip}>
-            {label} (JSON)
-          </RequestContextLabel>
+        <Field>
+          <div className="flex items-center justify-between">
+            <RequestContextLabel tooltip={labelTooltip}>{label} (JSON)</RequestContextLabel>
 
-          <div className="flex items-center gap-2">
-            {headerActions}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={handleFormat} className={buttonClass}>
-                  <Icon>
-                    <Braces />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Format the {label} JSON</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-2">
+              {headerActions}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={handleFormat} className={buttonClass}>
+                    <Icon>
+                      <Braces />
+                    </Icon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Format the {label} JSON</TooltipContent>
+              </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={handleCopy} className={buttonClass}>
-                  <Icon>
-                    <CopyIcon />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy {label}</TooltipContent>
-            </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={handleCopy} className={buttonClass}>
+                    <Icon>
+                      <CopyIcon />
+                    </Icon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy {label}</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-        </div>
 
-        {presets && Object.keys(presets).length > 0 && (
-          <div className="pb-3">
-            <Select value={selectedPreset} onValueChange={handlePresetChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a preset..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__custom__">Custom</SelectItem>
-                {Object.keys(presets).map(key => (
-                  <SelectItem key={key} value={key}>
-                    {key}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        <CodeMirror
-          value={draft}
-          onChange={handleEditorChange}
-          theme={theme}
-          extensions={[jsonLanguage]}
-          className={cn(
-            editorClassName,
-            'overflow-hidden overflow-y-scroll rounded-lg border border-border bg-background p-3',
-            '[&_.cm-editor]:!bg-background [&_.cm-gutters]:!bg-background',
+          {presets && Object.keys(presets).length > 0 && (
+            <Field>
+              <FieldLabel className="sr-only">{label} preset</FieldLabel>
+              <Select value={selectedPreset} onValueChange={handlePresetChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a preset..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__custom__">Custom</SelectItem>
+                  {Object.keys(presets).map(key => (
+                    <SelectItem key={key} value={key}>
+                      {key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
           )}
-        />
+
+          <CodeEditor value={draft} onChange={handleEditorChange} showCopyButton={false} className={editorClassName} />
+        </Field>
 
         <div className="flex justify-end gap-2 pt-2">
           {isDirty && (

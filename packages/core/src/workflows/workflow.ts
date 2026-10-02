@@ -68,7 +68,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -3840,7 +3840,7 @@ export class Run<
     if (await this.hasReachedTerminalStatus()) return;
 
     // Abort any running execution and update in-memory status
-    this.abortController.abort();
+    this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
     this.workflowRunStatus = 'canceled';
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the

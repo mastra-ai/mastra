@@ -1,5 +1,66 @@
 # @mastra/code-sdk
 
+## 1.11.0-alpha.1
+
+### Minor Changes
+
+- Added a `createInitialThread` option to `createMastraCode()`. Set it to `false` to start without a thread; the first message creates one, so a session that's never used leaves no empty thread behind. The default is unchanged. ([#22561](https://github.com/mastra-ai/mastra/pull/22561))
+
+  ```ts
+  createMastraCode({ createInitialThread: false });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e), [`9a3513c`](https://github.com/mastra-ai/mastra/commit/9a3513c18ec2d8b12174620a2a6db968760b9141)]:
+  - @mastra/core@1.75.0-alpha.1
+  - @mastra/memory@1.36.0-alpha.1
+  - @mastra/pg@1.30.0-alpha.0
+
+## 1.10.2-alpha.0
+
+### Patch Changes
+
+- Observational memory and thread-title calls on Anthropic no longer write their whole prompt to the 1-hour prompt cache. Each call sends different conversation content, so that cache entry was never read. They now cache only their shared instructions for 5 minutes, which the next observer call reads. The main agent still uses the 1-hour cache. ([#25739](https://github.com/mastra-ai/mastra/pull/25739))
+
+- Fixed Mastra Code starting a second agent run on a thread that was already running in another project's Mastra Code process. Every local Mastra Code process shares one database, so any of them could pick up a notification meant for another project's thread, see that thread as idle, and run it with its own session and workspace. ([#25741](https://github.com/mastra-ai/mastra/pull/25741))
+
+  Mastra Code processes now coordinate a thread's runs no matter which project they belong to, so a busy thread stays busy for every process. Each process delivers the due notifications of its own sessions' resources itself, and only one process delivers a resource's notifications at a time, so a notification is never run by a process that cannot own its thread.
+
+- Mastra Code now caches prompts for 1 hour instead of 5 minutes on direct Anthropic connections (API key or Claude subscription), and waits for 1 hour of idle time before activating buffered observations on those models. Claude through other providers, such as Amazon Bedrock, keeps the 5-minute behavior. Coming back to a conversation after a break of up to an hour reuses the cached prompt instead of resending it in full. ([#25727](https://github.com/mastra-ai/mastra/pull/25727))
+
+  **Cost tradeoff:** writing a 1-hour cache entry costs 2× the base input price, compared with 1.25× for a 5-minute entry. Cache reads cost the same. Sessions that pause for between 5 minutes and an hour can come out cheaper because they read the cache instead of rewriting it. Sessions that never pause that long pay more for every cache write.
+
+  The 1-hour cache also applies to Anthropic models used for memory observation, reflection, and thread titles, since they go through the same model setup.
+
+- Updated dependencies [[`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8), [`06e3dcf`](https://github.com/mastra-ai/mastra/commit/06e3dcf59aa937d8d5ab4de61b87465dfe38a62d), [`06496a9`](https://github.com/mastra-ai/mastra/commit/06496a961baaa86178efe24be052107ea019d649), [`9d4f647`](https://github.com/mastra-ai/mastra/commit/9d4f647c52ac5701f04ff320399d01b4cc2f0942), [`b9c0fe5`](https://github.com/mastra-ai/mastra/commit/b9c0fe5e4cc4bc1758a7569837ae9e76a6e35839), [`847a426`](https://github.com/mastra-ai/mastra/commit/847a426fc2158fdec7c939e576e8072c7998f2e3), [`9131d74`](https://github.com/mastra-ai/mastra/commit/9131d7459cfbd67037b7ea2515fcf22b60c213f3), [`e1478fc`](https://github.com/mastra-ai/mastra/commit/e1478fc0cb9284f2e6fca7e582381c06749e2c06), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6), [`077dc71`](https://github.com/mastra-ai/mastra/commit/077dc7181a69bd473319ce1c48f7fd2fcdf95b97), [`718207d`](https://github.com/mastra-ai/mastra/commit/718207d5cc37d625bea6ff290fe25a949d3594f6)]:
+  - @mastra/core@1.75.0-alpha.0
+  - @mastra/memory@1.36.0-alpha.0
+
+## 1.10.1
+
+### Patch Changes
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99), [`a86dc42`](https://github.com/mastra-ai/mastra/commit/a86dc424052b8dfbbf7eadb60a9c2acadbc0abc8), [`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.74.0
+  - @mastra/memory@1.35.0
+  - @mastra/libsql@1.25.0
+  - @mastra/pg@1.29.0
+
+## 1.10.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`acb22d7`](https://github.com/mastra-ai/mastra/commit/acb22d75570a734921749c3c9ba590e671bddd9f)]:
+  - @mastra/core@1.73.1-alpha.1
+
+## 1.10.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9), [`580c22b`](https://github.com/mastra-ai/mastra/commit/580c22b8d413bf6e61ab27bb2043b96e4e84bd99)]:
+  - @mastra/core@1.73.1-alpha.0
+
 ## 1.10.0
 
 ### Minor Changes

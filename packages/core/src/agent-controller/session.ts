@@ -381,6 +381,8 @@ export class SessionThread {
    * injected {@link ThreadDataStore}.
    */
   #session: Session | undefined;
+  /** In-flight {@link ensureId} creation, shared by concurrent callers. */
+  #pendingCreate: Promise<string> | undefined;
 
   constructor(getResourceId: () => string) {
     this.#getResourceId = getResourceId;
@@ -421,6 +423,20 @@ export class SessionThread {
       throw new Error('No active thread on this session');
     }
     return this.#threadId;
+  }
+
+  /**
+   * The active thread id, creating and binding a new thread when the session
+   * is unbound. Concurrent callers share one creation.
+   */
+  async ensureId({ requestContext }: { requestContext?: RequestContext } = {}): Promise<string> {
+    if (this.#threadId !== null) return this.#threadId;
+    this.#pendingCreate ??= this.create({ requestContext })
+      .then(thread => thread.id)
+      .finally(() => {
+        this.#pendingCreate = undefined;
+      });
+    return this.#pendingCreate;
   }
 
   /** Bind the session to a thread. */
@@ -3421,8 +3437,9 @@ export class Session<TState = unknown> {
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
       // A teardown during acceptance ends the wait unless the same thread was
-      // re-attached (sending may rebind the subscription on its own).
-      if (tornDown && (!this.stream.isOpen() || this.thread.getId() !== threadId)) return;
+      // re-attached (sending may rebind the subscription on its own). An unbound
+      // session adopts whichever thread acceptance created for it.
+      if (tornDown && (!this.stream.isOpen() || (threadId !== null && this.thread.getId() !== threadId))) return;
       const waits: Promise<unknown>[] = [
         completion,
         this.stream.waitForConsumerFailure(waitersController.signal),
@@ -4055,11 +4072,7 @@ export class Session<TState = unknown> {
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
-      if (!this.thread.getId()) {
-        const thread = await this.thread.create({ requestContext: requestContextInput });
-        this.thread.set({ threadId: thread.id });
-      }
-      const threadId = this.thread.getId()!;
+      const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId, agent, requestContextInput);
@@ -4218,11 +4231,7 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
-    if (!this.thread.getId()) {
-      const thread = await this.thread.create({ requestContext: requestContextInput });
-      this.thread.set({ threadId: thread.id });
-    }
-    const threadId = this.thread.getId()!;
+    const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
     const agent = this.machinery.getAgent();
     await this.thread.ensureSubscription(threadId, agent, requestContextInput);
@@ -4263,11 +4272,7 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     includeStreamOptions?: boolean;
   }) {
-    if (!this.thread.getId()) {
-      const thread = await this.thread.create({ requestContext });
-      this.thread.set({ threadId: thread.id });
-    }
-    const threadId = this.thread.getId()!;
+    const threadId = await this.thread.ensureId({ requestContext });
     await this.thread.ensureSubscription(threadId, undefined, requestContext);
 
     if (!includeStreamOptions) {

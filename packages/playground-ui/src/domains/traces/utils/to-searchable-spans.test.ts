@@ -1,7 +1,7 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { selectSearchableSpans, toSearchableSpans } from './to-searchable-spans';
+import { toSearchableSpans } from './to-searchable-spans';
 
 function span(overrides: Partial<LightSpanRecord> = {}): LightSpanRecord {
   return {
@@ -110,29 +110,5 @@ describe('toSearchableSpans', () => {
       expect(result.searchText).toContain('renamed');
       expect(result.searchText).not.toBe('outdated');
     });
-  });
-});
-
-describe('selectSearchableSpans', () => {
-  it('enriches the spans of a query payload', () => {
-    const result = selectSearchableSpans({ traceId: 'trace-1', spans: [span({ name: 'weather tool' })] });
-
-    expect(result.spans[0]?.searchText).toContain('weather tool');
-  });
-
-  it('keeps the other fields of the payload', () => {
-    const result = selectSearchableSpans({ traceId: 'trace-1', spans: [] });
-
-    expect(result.traceId).toBe('trace-1');
-  });
-
-  it('passes null through, since a query may resolve to null', () => {
-    expect(selectSearchableSpans(null)).toBeNull();
-  });
-
-  it('is a stable module-level reference, so React Query can memoize it', () => {
-    // Re-importing must not produce a new function: an unstable `select` would
-    // re-flatten every span on every render.
-    expect(selectSearchableSpans).toBe(selectSearchableSpans);
   });
 });

@@ -1,5 +1,154 @@
 # @mastra/core
 
+## 1.75.0-alpha.1
+
+### Minor Changes
+
+- Semantic recall now works with a vector store that generates embeddings itself, so a self-embedding store needs no client-side `embedder`. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+  Added `isSelfEmbedding` to `MastraVector`. It defaults to false, so every existing store is unaffected. A store that embeds text itself overrides it to return true, and semantic recall against that store needs no `embedder`:
+
+  ```ts
+  const memory = new Memory({
+    storage,
+    vector: new MongoDBVector({ id: 'vec', uri, dbName, autoEmbed: { model: 'voyage-4' } }),
+    options: { semanticRecall: true },
+  });
+  ```
+
+  A configured `embedder` still takes precedence, so adding one to the example above returns to client-side embedding.
+
+  Messages embedded by the store are kept in an index named `memory_messages_selfembed`, separate from the indexes holding client-supplied vectors.
+
+  Configuring semantic recall with neither an embedder nor a self-embedding store now says so, naming both options.
+
+- Added a `createSession()` option to start a session without creating a thread, and `session.thread.ensureId()` to create one on first use. Sessions that are never used no longer leave empty threads behind. Sending a message or signal creates the thread automatically. The default is unchanged: sessions still get a thread when none matches. ([#22561](https://github.com/mastra-ai/mastra/pull/22561))
+
+  ```ts
+  const session = await controller.createSession({ createInitialThread: false });
+
+  // Returns the current thread, or creates one. Concurrent calls share one thread.
+  const threadId = await session.thread.ensureId();
+  ```
+
+### Patch Changes
+
+- Fixed a process crash with `TypeError: Invalid state: ReadableStream is locked` after a provider errored mid-stream. The crash happened when an agent had output processors, such as `BatchPartsProcessor` or `RegexFilterProcessor`, and a retrying error processor, such as `StreamErrorRetryProcessor`. Output processors no longer carry buffered parts across the retry. A stream that is already being read now reports through `onError` instead of raising an unhandled rejection, which on Node 22 exited the process and dropped every in-flight run. ([#25803](https://github.com/mastra-ai/mastra/pull/25803))
+
+- Fixed `execute_command` and `get_process_output` results for commands stopped by an aborted run. The result now says the command was aborted instead of showing only a kill exit code such as `Exit code: 128`, which agents mistook for a real command failure. This covers foreground commands, background processes killed when the run that started them is aborted, and processes killed while `get_process_output` was waiting on them. ([#25752](https://github.com/mastra-ai/mastra/pull/25752))
+
+  `get_process_output` on a background process that exited without printing anything now returns its exit status (for example `Exit code: 0`) instead of `(no output yet)`, so it no longer looks like the process is still running.
+
+- Fixed executor interruptions so default-engine workflow runs remain recoverable instead of being recorded as canceled. Fixes #24586. ([#24684](https://github.com/mastra-ai/mastra/pull/24684))
+
+- Fixed structured output failing with 400 errors on OpenAI-compatible providers (for example Azure AI Foundry through `@ai-sdk/openai-compatible` with `supportsStructuredOutputs: true`). These providers send a strict JSON schema, but Mastra only prepared schemas for strict mode when the provider name started with `openai`, so requests failed with errors like `'uniqueItems' is not permitted` or `Missing 'subject'`. Schemas are now prepared whenever the model sends a strict JSON schema, and `null` values for optional fields are accepted in the response. Setting `strictJsonSchema: false` in the provider options keeps the schema unchanged. ([#25707](https://github.com/mastra-ai/mastra/pull/25707))
+
+- Tool input validation errors now include the path of each invalid field. Previously, MCP 1.x servers returned errors like `Invalid input: expected array, received string` with no indication of which argument was wrong. Errors now read, for example: ([#25794](https://github.com/mastra-ai/mastra/pull/25794))
+
+  ```
+  - items.0.tags: Invalid input: expected array, received string
+  - options.destination: Invalid input: expected string, received undefined
+  ```
+
+  Fixes #25766.
+
+## 1.75.0-alpha.0
+
+### Minor Changes
+
+- Added support for several processes sharing one notification store, where only some of them can run a given thread. ([#25741](https://github.com/mastra-ai/mastra/pull/25741))
+
+  `dispatchDueNotifications` accepts a `resourceId` to dispatch only that resource's due notifications. A delivery policy can return `hold: true` to leave a due notification pending for another dispatcher, without counting a delivery attempt.
+
+  `hold` only applies when a due notification is dispatched. When a notification is first sent, return an action that does not deliver it, such as `defer`:
+
+  ```ts
+  import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+
+  const agent = new Agent({
+    // ...
+    notifications: {
+      deliveryPolicy: {
+        decide: input =>
+          canRunHere(input.record.resourceId)
+            ? defaultNotificationDeliveryDecision(input)
+            : { action: 'defer', deliverAt: input.now, hold: true },
+      },
+    },
+  });
+  ```
+
+- Added the per-provider object form to the `ObservationalMemoryActivationTTL` type, so `activateAfterIdle` accepts values like `{ default: 'auto', anthropic: '1h' }`. New `ObservationalMemoryActivationTTLValue` and `ObservationalMemoryActivationTTLByProvider` types are exported. ([#25727](https://github.com/mastra-ai/mastra/pull/25727))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8))
+
+- Fixed approval ordering for tools added by input processors, such as `ToolSearchProcessor`. Approving one call now releases the next call's approval request instead of leaving the run stuck. ([#25639](https://github.com/mastra-ai/mastra/pull/25639))
+
+  Fixed `foreach` behavior for all evented workflows. Evented workflows now stay suspended until unfinished iterations resume, and queued iterations start only when capacity is available.
+
+- Persisted channel thread history as individually attributed messages, including attachments and a marker for omitted messages, instead of one text block on first mention. ([#25717](https://github.com/mastra-ai/mastra/pull/25717))
+
+- Preserved extra fields in tool results passed to model messages, client callbacks, and loop callbacks. Client `onOutput` and `toModelOutput` callbacks now receive results containing only a `value` field as that field's value. AI SDK error outputs are stored as failed invocations, skipped by client callbacks, and exposed to response consumers as their underlying error value. ([#25680](https://github.com/mastra-ai/mastra/pull/25680))
+
+- Fixed sendToolApproval to preserve separate approval decisions when custom resume data is provided. Approval-gated calls now reject custom resume data unless it is a non-null object that can carry the decision. ([#25632](https://github.com/mastra-ai/mastra/pull/25632))
+
+- Fixed requests failing with empty assistant content after switching models mid-thread, such as from an OpenAI reasoning model to Claude. When reasoning the new provider cannot accept is removed from history, assistant turns that contained only that reasoning are now left out instead of being sent empty. ([#23050](https://github.com/mastra-ai/mastra/pull/23050))
+
+- Fixed aborting a thread run that had several messages sent to it: the follow-up run now answers all of them in one turn, instead of one message per run (which made you abort once per pending message). Messages added with `queueMessage` still run one at a time after it. ([#25749](https://github.com/mastra-ai/mastra/pull/25749))
+
+- Fixed usage aggregation so omitted provider token counts remain unknown across agent, workflow, and durable streams. Reported cache and reasoning details remain additive. ([#25402](https://github.com/mastra-ai/mastra/pull/25402))
+
+  `AccumulatedUsage` from `@mastra/core/agent/durable` and `WorkflowDataPart['data']['output']['usage']` from `@mastra/ai-sdk` now represent incomplete primary counters as `undefined` instead of measured zeroes. When every input and output count is known, `totalTokens` can still be derived from those complete aggregates even if the provider omitted its total. Derived totals now sum input and output tokens without adding `reasoningTokens`.
+
+  For example, `{ inputTokens: 10, outputTokens: 20, totalTokens: 30 }` followed by `{ outputTokens: 5 }` now produces `{ inputTokens: undefined, outputTokens: 25, totalTokens: undefined }`.
+
+  Observability still records known per-step token contributions and marks their aggregate as incomplete. `TokenCostControl` treats the partial estimated cost as a known lower bound: hard and soft thresholds still apply when that lower bound crosses them, while lower values do not imply the complete cost is under budget. The Responses API returns `usage: null` for an incomplete aggregate instead of fabricating zero-valued counters.
+
+  Durable iteration state written by this version may omit unknown primary counters and cannot be resumed by an older worker after a rollback. (#23469)
+
+## 1.74.0
+
+### Minor Changes
+
+- Added `agent.getMessages()` to tool execution context in standard and durable agent loops. Tools can read the current conversation, including remembered messages and in-run responses, without changing the existing input-only `messages` field. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  ```ts
+  execute: async (input, context) => {
+    const messages = context?.agent?.getMessages?.() ?? [];
+    return { messageCount: messages.length };
+  };
+  ```
+
+  The getter reflects message-list removals, but not transient transforms applied only to the provider prompt. Treat returned messages as read-only.
+
+- Added group filtering and generation ordering to observational memory history. For example, `getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, sortDirection: "ASC" })` finds the earliest retained record containing a group in active observations or persisted buffered chunks. Adapters advertise support through `supportsObservationalMemoryHistorySearch`. Pass `recordId` to read one record by ID; it only matches records for the requested thread or resource. ([#25525](https://github.com/mastra-ai/mastra/pull/25525))
+
+  Convex users need to redeploy their Mastra server functions for these filters to apply.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9))
+
+- Fixed chat channel agents ignoring mentions of their current display name after being renamed. For example, a Slack app renamed from `acme-bot` to `helper` now responds to `@helper` in channels, instead of only recognising its original username. The bot's current profile name is looked up once through the adapter and exposed as `botDisplayName` on the channel context. ([#25652](https://github.com/mastra-ai/mastra/pull/25652))
+
+- Raise transitive security dependency floors (dompurify, js-yaml, @ai-sdk/provider-utils) and bump nested/template deps (nodemailer, fastify, hono, ajv) for the 2026-10-01 Vanta remediation pass. ([#25694](https://github.com/mastra-ai/mastra/pull/25694))
+
+## 1.73.1-alpha.1
+
+### Patch Changes
+
+- Raise transitive security dependency floors (dompurify, js-yaml, @ai-sdk/provider-utils) and bump nested/template deps (nodemailer, fastify, hono, ajv) for the 2026-10-01 Vanta remediation pass. ([#25694](https://github.com/mastra-ai/mastra/pull/25694))
+
+## 1.73.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ac54c46`](https://github.com/mastra-ai/mastra/commit/ac54c4617d1bebffe9e4c1034e084e25528a94c9))
+
+- Fixed chat channel agents ignoring mentions of their current display name after being renamed. For example, a Slack app renamed from `acme-bot` to `helper` now responds to `@helper` in channels, instead of only recognising its original username. The bot's current profile name is looked up once through the adapter and exposed as `botDisplayName` on the channel context. ([#25652](https://github.com/mastra-ai/mastra/pull/25652))
+
 ## 1.73.0
 
 ### Minor Changes
