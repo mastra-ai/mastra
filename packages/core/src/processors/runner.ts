@@ -936,6 +936,7 @@ export class ProcessorRunner {
               observabilityContext,
               requestContext,
               writer,
+              abortSignal,
             );
 
             // Extract the processed part from the result if it exists
