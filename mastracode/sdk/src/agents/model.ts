@@ -14,6 +14,7 @@ import {
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
 import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
+import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { resolveCredentialStore } from './credential-resolver.js';
@@ -156,7 +157,12 @@ export function resolveModelId(modelId: string): string {
  */
 export function resolveModel(
   modelId: string,
-  options?: { thinkingLevel?: ThinkingLevelSetting; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
+  options?: {
+    thinkingLevel?: ThinkingLevelSetting;
+    remapForCodexOAuth?: boolean;
+    requestContext?: RequestContext;
+    anthropicPromptCacheScope?: AnthropicPromptCacheScope;
+  },
 ): GatewayLanguageModel {
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
@@ -220,6 +226,7 @@ export function resolveModel(
     mastraGatewayApiKey: mgApiKey,
     routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
     thinkingLevel: options?.thinkingLevel,
+    anthropicPromptCacheScope: options?.anthropicPromptCacheScope,
     customProviders,
     credentialStore,
   });

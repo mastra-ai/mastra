@@ -365,7 +365,38 @@ describe('Resume API', () => {
       expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
     });
 
-    it('forwards storage-backed approval options into the durable resume path', async () => {
+    it.each([
+      {
+        name: 'merges an approval into custom data for an approval suspension',
+        approved: true,
+        resumeData: { note: 'hello' },
+        requiresApproval: true,
+        expectedResumeData: { approved: true, note: 'hello' },
+      },
+      {
+        name: 'keeps the decline decision authoritative when merging context into custom data',
+        approved: false,
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: { note: 'hello' },
+        requiresApproval: true,
+        expectedResumeData: { approved: false, reason: 'not allowed', note: 'hello' },
+      },
+      {
+        name: 'leaves custom data unchanged for an ordinary tool suspension',
+        approved: true,
+        resumeData: { note: 'hello' },
+        requiresApproval: false,
+        expectedResumeData: { note: 'hello' },
+      },
+      {
+        name: 'keeps the decline decision authoritative without custom data',
+        approved: false,
+        declineContext: { reason: 'not allowed', approved: true } as { reason: string },
+        resumeData: undefined,
+        requiresApproval: true,
+        expectedResumeData: { approved: false, reason: 'not allowed' },
+      },
+    ])('$name', async ({ approved, declineContext, resumeData, requiresApproval, expectedResumeData }) => {
       const baseAgent = new Agent({
         id: 'stored-approval-options-agent',
         name: 'Stored Approval Options Agent',
@@ -386,7 +417,7 @@ describe('Resume API', () => {
             threadId: memory.thread,
             resourceId: memory.resource,
             suspendedAt: new Date(0),
-            toolCalls: [{ toolCallId, requiresApproval: true }],
+            toolCalls: [{ toolCallId, requiresApproval }],
           },
         ],
         total: 1,
@@ -396,7 +427,9 @@ describe('Resume API', () => {
         threadId: memory.thread,
         resourceId: memory.resource,
         toolCallId,
-        approved: true,
+        approved,
+        declineContext,
+        resumeData,
         memory,
       });
 
@@ -405,7 +438,42 @@ describe('Resume API', () => {
         resourceId: memory.resource,
       });
       expect(result).toEqual({ accepted: true, runId, toolCallId });
-      expect(resumeSpy).toHaveBeenCalledWith(runId, { approved: true }, expect.objectContaining({ memory }));
+      expect(resumeSpy).toHaveBeenCalledWith(runId, expectedResumeData, expect.objectContaining({ memory }));
+    });
+
+    it('rejects custom data that cannot carry an approval decision', async () => {
+      const baseAgent = new Agent({
+        id: 'invalid-approval-data-agent',
+        name: 'Invalid Approval Data Agent',
+        instructions: 'Test invalid approval data rejection',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output: undefined } as any);
+      vi.spyOn(durableAgent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [
+          {
+            runId: 'invalid-approval-run',
+            status: 'suspended',
+            threadId: 'invalid-approval-thread',
+            resourceId: 'invalid-approval-resource',
+            suspendedAt: new Date(0),
+            toolCalls: [{ toolCallId: 'invalid-approval-tool-call', requiresApproval: true }],
+          },
+        ],
+        total: 1,
+      });
+
+      await expect(
+        durableAgent.sendToolApproval({
+          threadId: 'invalid-approval-thread',
+          resourceId: 'invalid-approval-resource',
+          toolCallId: 'invalid-approval-tool-call',
+          approved: true,
+          resumeData: 'hello',
+        }),
+      ).rejects.toMatchObject({ id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA' });
+      expect(resumeSpy).not.toHaveBeenCalled();
     });
 
     it('should preserve threadId and resourceId from prepare through resume', async () => {

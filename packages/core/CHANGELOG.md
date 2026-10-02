@@ -1,5 +1,61 @@
 # @mastra/core
 
+## 1.75.0-alpha.0
+
+### Minor Changes
+
+- Added support for several processes sharing one notification store, where only some of them can run a given thread. ([#25741](https://github.com/mastra-ai/mastra/pull/25741))
+
+  `dispatchDueNotifications` accepts a `resourceId` to dispatch only that resource's due notifications. A delivery policy can return `hold: true` to leave a due notification pending for another dispatcher, without counting a delivery attempt.
+
+  `hold` only applies when a due notification is dispatched. When a notification is first sent, return an action that does not deliver it, such as `defer`:
+
+  ```ts
+  import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+
+  const agent = new Agent({
+    // ...
+    notifications: {
+      deliveryPolicy: {
+        decide: input =>
+          canRunHere(input.record.resourceId)
+            ? defaultNotificationDeliveryDecision(input)
+            : { action: 'defer', deliverAt: input.now, hold: true },
+      },
+    },
+  });
+  ```
+
+- Added the per-provider object form to the `ObservationalMemoryActivationTTL` type, so `activateAfterIdle` accepts values like `{ default: 'auto', anthropic: '1h' }`. New `ObservationalMemoryActivationTTLValue` and `ObservationalMemoryActivationTTLByProvider` types are exported. ([#25727](https://github.com/mastra-ai/mastra/pull/25727))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b54fda3`](https://github.com/mastra-ai/mastra/commit/b54fda3f30330d65e52bf34802f0aa4035e30ef8))
+
+- Fixed approval ordering for tools added by input processors, such as `ToolSearchProcessor`. Approving one call now releases the next call's approval request instead of leaving the run stuck. ([#25639](https://github.com/mastra-ai/mastra/pull/25639))
+
+  Fixed `foreach` behavior for all evented workflows. Evented workflows now stay suspended until unfinished iterations resume, and queued iterations start only when capacity is available.
+
+- Persisted channel thread history as individually attributed messages, including attachments and a marker for omitted messages, instead of one text block on first mention. ([#25717](https://github.com/mastra-ai/mastra/pull/25717))
+
+- Preserved extra fields in tool results passed to model messages, client callbacks, and loop callbacks. Client `onOutput` and `toModelOutput` callbacks now receive results containing only a `value` field as that field's value. AI SDK error outputs are stored as failed invocations, skipped by client callbacks, and exposed to response consumers as their underlying error value. ([#25680](https://github.com/mastra-ai/mastra/pull/25680))
+
+- Fixed sendToolApproval to preserve separate approval decisions when custom resume data is provided. Approval-gated calls now reject custom resume data unless it is a non-null object that can carry the decision. ([#25632](https://github.com/mastra-ai/mastra/pull/25632))
+
+- Fixed requests failing with empty assistant content after switching models mid-thread, such as from an OpenAI reasoning model to Claude. When reasoning the new provider cannot accept is removed from history, assistant turns that contained only that reasoning are now left out instead of being sent empty. ([#23050](https://github.com/mastra-ai/mastra/pull/23050))
+
+- Fixed aborting a thread run that had several messages sent to it: the follow-up run now answers all of them in one turn, instead of one message per run (which made you abort once per pending message). Messages added with `queueMessage` still run one at a time after it. ([#25749](https://github.com/mastra-ai/mastra/pull/25749))
+
+- Fixed usage aggregation so omitted provider token counts remain unknown across agent, workflow, and durable streams. Reported cache and reasoning details remain additive. ([#25402](https://github.com/mastra-ai/mastra/pull/25402))
+
+  `AccumulatedUsage` from `@mastra/core/agent/durable` and `WorkflowDataPart['data']['output']['usage']` from `@mastra/ai-sdk` now represent incomplete primary counters as `undefined` instead of measured zeroes. When every input and output count is known, `totalTokens` can still be derived from those complete aggregates even if the provider omitted its total. Derived totals now sum input and output tokens without adding `reasoningTokens`.
+
+  For example, `{ inputTokens: 10, outputTokens: 20, totalTokens: 30 }` followed by `{ outputTokens: 5 }` now produces `{ inputTokens: undefined, outputTokens: 25, totalTokens: undefined }`.
+
+  Observability still records known per-step token contributions and marks their aggregate as incomplete. `TokenCostControl` treats the partial estimated cost as a known lower bound: hard and soft thresholds still apply when that lower bound crosses them, while lower values do not imply the complete cost is under budget. The Responses API returns `usage: null` for an incomplete aggregate instead of fabricating zero-valued counters.
+
+  Durable iteration state written by this version may omit unknown primary counters and cannot be resumed by an older worker after a rollback. (#23469)
+
 ## 1.74.0
 
 ### Minor Changes

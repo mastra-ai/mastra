@@ -178,6 +178,7 @@ function createMockSettings() {
 
 /** Stand-in for the Mastra the controller builds on init(). */
 const mastraStub = {
+  getStorage: vi.fn(() => undefined),
   startWorkers: vi.fn(async () => {}),
   stopWorkers: vi.fn(async () => {}),
   addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
@@ -1840,6 +1841,46 @@ describe('createMastraCode', () => {
     });
 
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
+  });
+
+  async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
+    const { createMastraCode } = await import('../index.js');
+    const mastraCode = await createMastraCode(options);
+    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+    const decision = await decide({
+      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      threadState: 'idle',
+      now: new Date('2026-10-01T00:00:00.000Z'),
+    });
+    await mastraCode.stopNotificationDispatch();
+    await (mastraCode as { signalsPubSub?: { close?: () => Promise<void> } }).signalsPubSub?.close?.();
+    return decision;
+  }
+
+  it("leaves another project's notifications for that project's process, with the socket pubsub on or off", async () => {
+    for (const unixSocketPubSub of [true, false]) {
+      const decision = await decideDelivery({ unixSocketPubSub }, { ownedHere: false });
+      expect(decision).toMatchObject({ action: 'deliver', hold: true });
+      expect(decision.streamOptions).toBeUndefined();
+    }
+  });
+
+  it("leaves this resource's notifications to this process's own dispatch, not the shared schedule", async () => {
+    const decision = await decideDelivery({ unixSocketPubSub: true }, { ownedHere: true });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('does not hold notifications when the embedder configured its own PubSub', async () => {
+    for (const ownedHere of [true, false]) {
+      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
+        'hold',
+      );
+    }
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

@@ -10312,8 +10312,8 @@ importers:
   workspaces/mesa:
     dependencies:
       '@mesadev/sdk':
-        specifier: 0.38.0
-        version: 0.38.0(supports-color@10.2.2)
+        specifier: 0.49.1
+        version: 0.49.1(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -16215,43 +16215,43 @@ packages:
   '@mermaid-js/parser@1.2.0':
     resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
 
-  '@mesadev/mesafs-napi-darwin-arm64@0.38.0':
-    resolution: {integrity: sha512-FODr4To0DHCmwK1RM4CpagNWGr4kJdaThXbBruuNLMAKj5cJBlBVDsvJfAV2BDw2X74e4JUnEJ2cpbJHmhlnTw==}
+  '@mesadev/mesafs-napi-darwin-arm64@0.49.1':
+    resolution: {integrity: sha512-tyhQ8Kn2m7JiLSJt3CxYULU7hLFUJXnMH2sZDcjN3xhOx0yMWeBBszT416Ly9E7XSVjoPjMeBUvhTif5ZwIHfw==}
     cpu: [arm64]
     os: [darwin]
 
-  '@mesadev/mesafs-napi-linux-arm64-gnu@0.38.0':
-    resolution: {integrity: sha512-DYjfgTCBCiKd0M45bi4B3N6d2odjkPxRTRjL0ZdVaksVY4qfeteZc+T3buwH1vrThItZUb/jvJcVsklc8+dQBA==}
+  '@mesadev/mesafs-napi-linux-arm64-gnu@0.49.1':
+    resolution: {integrity: sha512-KsBFB82IY3Cocj29LH0xvo/zuLac9mtwRfgYgo/EHavSCoxdxPBjXYreeloOZwphyEkoKkYOTnoc9iVZpqvAJQ==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@mesadev/mesafs-napi-linux-arm64-musl@0.38.0':
-    resolution: {integrity: sha512-+dyormuEUVO+D88/fQuF4PVq+lwxZDD1a4GFO1QPtJ+X9bjOZa1DlYpSFUE8lqQ/WrXLMdwrgtO2QQBtUCejNg==}
+  '@mesadev/mesafs-napi-linux-arm64-musl@0.49.1':
+    resolution: {integrity: sha512-A6/PF6bg+Uvy4TGTKwJdKXL8JFKld2HluApxhLM5zWlCuBVMH80OcTrdIw7s2T7lb7Ni+YI2KekAHr+kj0EP3A==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@mesadev/mesafs-napi-linux-x64-gnu@0.38.0':
-    resolution: {integrity: sha512-YY2ryOkvoJxfUCpC3ts8ULwsVpZfEL1v/+h63uPKKZsPu3jx6rEhBt9QZ1RR+QO9vMnY83nghI2p+mbHO6uG4Q==}
+  '@mesadev/mesafs-napi-linux-x64-gnu@0.49.1':
+    resolution: {integrity: sha512-/bhDL8ilVRtEbusuBW1WUt0P4VtGtwV7f9hKZaF0ZtOSaMYiB+hp7KRSTTxlV+96rhCtP4/p/SrHxCPLqOKUhg==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@mesadev/mesafs-napi-linux-x64-musl@0.38.0':
-    resolution: {integrity: sha512-R5RZnVWiCR67SCunYQvZWW0ZK2CiUu8ezKRJQT8L8YAzaXM39vxSBUC6J2NJXSyqwCyeIRcCVdlzXzjKy1kcHw==}
+  '@mesadev/mesafs-napi-linux-x64-musl@0.49.1':
+    resolution: {integrity: sha512-2JeM6r23lMBIJPMp+zrd31fvEd+1cjchAywZLqSOdT322XSA5zm3opxWT8lww+a/5vYHPeLxfn0s9ZfU6xEAyw==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@mesadev/mesafs-napi@0.38.0':
-    resolution: {integrity: sha512-40G5kwVOwVouAMZbFnwhhTKWfpsI3b+W0Z+Lpd6v0LJWmZVYEwL88DWv0d5lbliObxFY360yrPJqfRnVBepIqg==}
+  '@mesadev/mesafs-napi@0.49.1':
+    resolution: {integrity: sha512-V7XgStiZe6vA0ZE/8aHHaaIltNyrE62VcgIJsFMdt0aFbfGS6/z8x+Vlu0GAq/w+gM3zaUsiXVPKWOn/1BFpvw==}
 
-  '@mesadev/rest@0.38.0':
-    resolution: {integrity: sha512-FeXHcSaHA9+GkG2tKP4rdmXaSjFPJUWc0I3snKr/cL+Wd+rb9rqP73lWsfS/BlYfi59oHJaaQDP4bXUkkf4WBw==}
+  '@mesadev/rest@0.49.1':
+    resolution: {integrity: sha512-cbkg8iiu7MiVj+7k2L7Twgzo9LV8Ol6KCygbWcJ5Mg2HEcwwsBtjdIIt2JA3hDOjQtK7nj7yzwBRa6pzM54/fA==}
 
-  '@mesadev/sdk@0.38.0':
-    resolution: {integrity: sha512-BPIV97tUVTCpntW/eGgmn9Div0pEmQUNEuicYXgmGytpU/5YuaA+pjow9xLWnKXL3FPeR8nA40xMWdHkV2wK0Q==}
+  '@mesadev/sdk@0.49.1':
+    resolution: {integrity: sha512-a9yebCxGCShzKsd+M5NkYt5Fa1zn2p+WavZJX/bYW+hnL00NHSE+GaPQzyPoQogaiQM/qNNDUolu50eIXS2igQ==}
     engines: {node: '>=18'}
 
   '@microsoft/api-extractor-model@7.33.10':
@@ -27641,6 +27641,7 @@ packages:
 
   just-bash@2.14.5:
     resolution: {integrity: sha512-MCBGnRlDeZ/MM7mcw+ZuSGFMBsggajrmKz6e/hrOAN7syvVZkjiY+Vh2wyCwN/CdcnAX5SxbiQB51n5nrQuX+g==}
+    hasBin: true
 
   jwa@2.0.1:
     resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
@@ -28934,6 +28935,7 @@ packages:
   node-liblzma@2.2.0:
     resolution: {integrity: sha512-s0KzNOWwOJJgPG6wxg6cKohnAl9Wk/oW1KrQaVzJBjQwVcUGPQCzpR46Ximygjqj/3KhOrtJXnYMp/xYAXp75g==}
     engines: {node: '>=16.0.0'}
+    hasBin: true
 
   node-releases@2.0.55:
     resolution: {integrity: sha512-mIrE/Cw9y+9Au6dS5vDKDhQza9YvG6w+ZrS6X+ZzA7yFW/soAeaups4Qzn1bL6g5FVy8WtP79+0j82oPIbqRjQ==}
@@ -30201,6 +30203,7 @@ packages:
     resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
     engines: {node: '>=10'}
     deprecated: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
+    hasBin: true
 
   precinct@12.3.2:
     resolution: {integrity: sha512-JbJevI1K80z8e/WIyDt/4vUN/4qcfBSKKqOjJA4mosPPPb7zODKRJQV7YN7apVWN3k58nZYm/vEsLgEGYmnxwg==}
@@ -31282,6 +31285,7 @@ packages:
 
   seek-bzip@2.0.0:
     resolution: {integrity: sha512-SMguiTnYrhpLdk3PwfzHeotrcwi8bNV4iemL9tx9poR/yeaMYwB9VzR1w7b57DuWpuqR8n6oZboi0hj3AxZxQg==}
+    hasBin: true
 
   select-hose@2.0.0:
     resolution: {integrity: sha512-mEugaLK+YfkijB4fx0e6kImuJdCIt2LxCRcbEYPqRGCs4F2ogyfZU5IAZRdjCP8JPq2AtdNoC/Dux63d9Kiryg==}
@@ -37109,7 +37113,7 @@ snapshots:
 
   '@copilotkit/aimock@1.29.0(vitest@4.1.11)':
     optionalDependencies:
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@couchbase/couchbase-darwin-arm64-napi@4.7.1':
     optional: true
@@ -41027,35 +41031,35 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
-  '@mesadev/mesafs-napi-darwin-arm64@0.38.0':
+  '@mesadev/mesafs-napi-darwin-arm64@0.49.1':
     optional: true
 
-  '@mesadev/mesafs-napi-linux-arm64-gnu@0.38.0':
+  '@mesadev/mesafs-napi-linux-arm64-gnu@0.49.1':
     optional: true
 
-  '@mesadev/mesafs-napi-linux-arm64-musl@0.38.0':
+  '@mesadev/mesafs-napi-linux-arm64-musl@0.49.1':
     optional: true
 
-  '@mesadev/mesafs-napi-linux-x64-gnu@0.38.0':
+  '@mesadev/mesafs-napi-linux-x64-gnu@0.49.1':
     optional: true
 
-  '@mesadev/mesafs-napi-linux-x64-musl@0.38.0':
+  '@mesadev/mesafs-napi-linux-x64-musl@0.49.1':
     optional: true
 
-  '@mesadev/mesafs-napi@0.38.0':
+  '@mesadev/mesafs-napi@0.49.1':
     optionalDependencies:
-      '@mesadev/mesafs-napi-darwin-arm64': 0.38.0
-      '@mesadev/mesafs-napi-linux-arm64-gnu': 0.38.0
-      '@mesadev/mesafs-napi-linux-arm64-musl': 0.38.0
-      '@mesadev/mesafs-napi-linux-x64-gnu': 0.38.0
-      '@mesadev/mesafs-napi-linux-x64-musl': 0.38.0
+      '@mesadev/mesafs-napi-darwin-arm64': 0.49.1
+      '@mesadev/mesafs-napi-linux-arm64-gnu': 0.49.1
+      '@mesadev/mesafs-napi-linux-arm64-musl': 0.49.1
+      '@mesadev/mesafs-napi-linux-x64-gnu': 0.49.1
+      '@mesadev/mesafs-napi-linux-x64-musl': 0.49.1
 
-  '@mesadev/rest@0.38.0': {}
+  '@mesadev/rest@0.49.1': {}
 
-  '@mesadev/sdk@0.38.0(supports-color@10.2.2)':
+  '@mesadev/sdk@0.49.1(supports-color@10.2.2)':
     dependencies:
-      '@mesadev/mesafs-napi': 0.38.0
-      '@mesadev/rest': 0.38.0
+      '@mesadev/mesafs-napi': 0.49.1
+      '@mesadev/rest': 0.49.1
       just-bash: 2.14.5(supports-color@10.2.2)
       zod: 4.6.5
     transitivePeerDependencies:
@@ -45882,7 +45886,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@27.4.0(@noble/hashes@2.4.0)(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@26.1.0(bufferutil@4.1.0)(supports-color@10.2.2))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   '@supabase/auth-js@2.111.0':
     dependencies:

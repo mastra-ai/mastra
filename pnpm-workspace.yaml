@@ -293,9 +293,9 @@ trustPolicyExclude:
   - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
-  # Required for the Mesa workspace filesystem provider. 0.38.0 is published
+  # Required for the Mesa workspace filesystem provider. 0.49.1 is published
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
-  - '@mesadev/sdk@0.38.0'
+  - '@mesadev/sdk@0.49.1'
   # Required for Modal Volume support in @mastra/modal (Sandbox.reloadVolumes and
   # Sandbox.filesystem). 0.10.1 is published by Modal's GitHub Actions workflow but
   # pnpm reports it without the trust evidence older modal versions had.

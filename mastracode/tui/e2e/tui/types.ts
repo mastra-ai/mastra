@@ -96,6 +96,7 @@ export type ScenarioName =
   | 'tui-prompt-resume'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
+  | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
   | 'permission-request-hook'
