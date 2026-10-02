@@ -1,7 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
-import * as coreStorage from '@mastra/core/storage';
 import { MastraCompositeStore, ObservabilityStorage as CoreObservabilityStorage } from '@mastra/core/storage';
 
 import { DuckDBConnection } from './db/index';
@@ -9,6 +8,7 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
+import { spanQueryFeatures } from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -24,7 +24,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'metric-discovery',
   'trace-query',
   'trace-aggregate',
-  ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+  ...spanQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -44,7 +44,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'delta-polling',
   'trace-query',
   'trace-aggregate',
-  ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+  ...spanQueryFeatures,
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',

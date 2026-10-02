@@ -185,6 +185,8 @@ import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
+const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
   tables: Array<{ table: string; engine: string }>;
@@ -953,7 +955,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
-        ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -975,7 +977,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
-      ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',

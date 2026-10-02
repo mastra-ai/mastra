@@ -155,6 +155,8 @@ import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
+const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
 
@@ -378,7 +380,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
-        ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -399,7 +401,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
-      ...(typeof coreStorage.planSpanQuery === 'function' ? ['span-query' as const] : []),
+      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',

@@ -1,5 +1,4 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import * as spanQueryCore from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   SpanQueryResponse,
@@ -97,6 +96,7 @@ import type {
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
+import { spanQueryFeatures } from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
@@ -256,7 +256,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
-        ...(typeof spanQueryCore.planSpanQuery === 'function' ? ['span-query' as const] : []),
+        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -278,7 +278,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'delta-polling',
       'trace-query',
       'trace-aggregate',
-      ...(typeof spanQueryCore.planSpanQuery === 'function' ? ['span-query' as const] : []),
+      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
