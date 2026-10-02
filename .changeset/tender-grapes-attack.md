@@ -19,4 +19,4 @@ await mastra.getEditor()!.agent.create({
 });
 ```
 
-The reference is resolved each time the agent uses memory. If the key isn't registered, the agent runs without memory and a warning names the missing key. Registering it later with `mastra.addMemory()` takes effect on the next call. Existing inline memory configs keep working. Cloning an agent that uses registered memory now stores a reference instead of a copy. Fixes #21890.
+If the key isn't registered, the agent loads without memory and a warning names the missing key. Existing inline memory configs keep working. Cloning an agent that uses registered memory now stores a reference instead of a copy. Fixes #21890.

@@ -1,5 +1,5 @@
 import { Memory } from '@mastra/memory';
-import { Agent, optionalDynamicMemory } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import type { AgentInstructions, ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
@@ -813,6 +813,21 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return result;
   }
 
+  private resolveConditionalMemory(variants: StorageConditionalVariant<StorageMemoryRef>[]) {
+    const registeredMemory = new Map<string, MastraMemory>();
+    const usableVariants = variants.filter(variant => {
+      if (!isMemoryIdRef(variant.value)) return true;
+      const registered = this.resolveRegisteredMemory(variant.value.memoryId);
+      if (registered) registeredMemory.set(variant.value.memoryId, registered);
+      return Boolean(registered);
+    });
+
+    return ({ requestContext }: { requestContext: RequestContext }) => {
+      const resolved = this.accumulateMemoryVariants(usableVariants, requestContext.toJSON());
+      return isMemoryIdRef(resolved) ? registeredMemory.get(resolved.memoryId) : this.resolveStoredMemory(resolved);
+    };
+  }
+
   private async createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
@@ -970,21 +985,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
     // Memory: inline variants merge; a registered-memory reference replaces the accumulated value.
-    // References resolve on each call, so memory registered after hydration is picked up and a
-    // missing reference means "no memory" rather than an error.
-    const staticMemory = storedAgent.memory as StorageMemoryRef | undefined;
+    // References are looked up once here. A conditional variant whose reference is not registered
+    // is skipped (with a warning), as if it were absent.
     const memory = hasConditionalMemory
-      ? optionalDynamicMemory(({ requestContext }) => {
-          const ctx = requestContext.toJSON();
-          const resolved = this.accumulateMemoryVariants(
-            storedAgent.memory as StorageConditionalVariant<StorageMemoryRef>[],
-            ctx,
-          );
-          return this.resolveStoredMemory(resolved);
-        })
-      : isMemoryIdRef(staticMemory)
-        ? optionalDynamicMemory(() => this.resolveStoredMemory(staticMemory))
-        : this.resolveStoredMemory(staticMemory);
+      ? this.resolveConditionalMemory(storedAgent.memory as StorageConditionalVariant<StorageMemoryRef>[])
+      : this.resolveStoredMemory(storedAgent.memory as StorageMemoryRef | undefined);
 
     // Scorers (Record): accumulate by merging objects from all matching variants
     const scorers = hasConditionalScorers

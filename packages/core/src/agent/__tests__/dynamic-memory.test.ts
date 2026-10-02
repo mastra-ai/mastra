@@ -6,7 +6,6 @@ import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
-import { optionalDynamicMemory } from '../utils';
 
 function dynamicMemoryTest(version: 'v1' | 'v2') {
   describe(`${version} - dynamic memory configuration`, () => {
@@ -132,26 +131,6 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
 
       await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
-    });
-
-    it('treats an empty result from an optional memory resolver as no memory, and resolves it once available', async () => {
-      let available: MockMemory | undefined;
-      const agent = new Agent({
-        id: 'optional-memory-agent',
-        name: 'Optional Memory Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: optionalDynamicMemory(() => available),
-      });
-
-      await expect(agent.getMemory()).resolves.toBeUndefined();
-
-      const response =
-        version === 'v1' ? await agent.generateLegacy('test message') : await agent.generate('test message');
-      expect(response.text).toBe('Dummy response');
-
-      available = new MockMemory({ storage: new InMemoryStore() });
-      await expect(agent.getMemory()).resolves.toBe(available);
     });
 
     it('should work with memory in generate method with dynamic configuration', async () => {

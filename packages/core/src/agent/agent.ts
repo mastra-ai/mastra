@@ -248,12 +248,7 @@ import type {
   ModelWithRetries,
   ZodSchema,
 } from './types';
-import {
-  isOptionalDynamicMemory,
-  isSupportedLanguageModel,
-  resolveThreadIdFromArgs,
-  supportedLanguageModelSpecifications,
-} from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
@@ -2545,9 +2540,6 @@ export class Agent<
       resolvedMemory = await Promise.resolve(result);
 
       if (!resolvedMemory) {
-        if (isOptionalDynamicMemory(memoryConfig)) {
-          return undefined;
-        }
         const mastraError = new MastraError({
           id: 'AGENT_GET_MEMORY_FUNCTION_EMPTY_RETURN',
           domain: ErrorDomain.AGENT,
