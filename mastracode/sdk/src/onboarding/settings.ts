@@ -398,8 +398,6 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
   experimentalCrossAgentSignals: boolean;
-  /** Experimental: also discover and message agents running in other projects on this machine (requires cross-agent communication and Unix socket PubSub). */
-  experimentalCrossProjectAgentSignals: boolean;
   /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
   experimentalScheduleTools: boolean;
   /** Poll interval for GitHub PR subscriptions. */
@@ -497,7 +495,6 @@ const DEFAULTS: GlobalSettings = {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
-    experimentalCrossProjectAgentSignals: false,
     experimentalScheduleTools: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
@@ -523,7 +520,6 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
-    left.experimentalCrossProjectAgentSignals === right.experimentalCrossProjectAgentSignals &&
     left.experimentalScheduleTools === right.experimentalScheduleTools &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
@@ -700,10 +696,6 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalCrossAgentSignals === 'boolean'
         ? raw.experimentalCrossAgentSignals
         : DEFAULTS.signals.experimentalCrossAgentSignals,
-    experimentalCrossProjectAgentSignals:
-      typeof raw.experimentalCrossProjectAgentSignals === 'boolean'
-        ? raw.experimentalCrossProjectAgentSignals
-        : DEFAULTS.signals.experimentalCrossProjectAgentSignals,
     experimentalScheduleTools:
       typeof raw.experimentalScheduleTools === 'boolean'
         ? raw.experimentalScheduleTools

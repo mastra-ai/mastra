@@ -169,7 +169,6 @@ function createMockSettings() {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
-      experimentalCrossProjectAgentSignals: false,
       experimentalScheduleTools: false,
       githubPollIntervalMs: 300_000,
     },
@@ -993,14 +992,8 @@ describe('createMastraCode', () => {
       createSignalsPubSubMock.mockClear();
     });
 
-    it('enables shared discovery only when cross-agent, Unix socket PubSub and the setting are all on', async () => {
-      loadSettingsMock.mockReturnValue(
-        signalSettings({
-          unixSocketPubSub: true,
-          experimentalCrossAgentSignals: true,
-          experimentalCrossProjectAgentSignals: true,
-        }),
-      );
+    it('shares peer discovery across projects when cross-agent communication is on', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }));
       const { createMastraCode } = await import('../index.js');
 
       await createMastraCode();
@@ -1009,19 +1002,8 @@ describe('createMastraCode', () => {
       expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
     });
 
-    it('keeps shared discovery off by default', async () => {
-      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }));
-      const { createMastraCode } = await import('../index.js');
-
-      await createMastraCode();
-
-      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
-    });
-
-    it('keeps shared discovery off when cross-agent communication is off', async () => {
-      loadSettingsMock.mockReturnValue(
-        signalSettings({ unixSocketPubSub: true, experimentalCrossProjectAgentSignals: true }),
-      );
+    it('keeps peer discovery in the project when cross-agent communication is off', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true }));
       const { createMastraCode } = await import('../index.js');
 
       await createMastraCode();
@@ -1030,9 +1012,7 @@ describe('createMastraCode', () => {
     });
 
     it('never shares discovery when the Unix socket PubSub is off', async () => {
-      loadSettingsMock.mockReturnValue(
-        signalSettings({ experimentalCrossAgentSignals: true, experimentalCrossProjectAgentSignals: true }),
-      );
+      loadSettingsMock.mockReturnValue(signalSettings({ experimentalCrossAgentSignals: true }));
       const { createMastraCode } = await import('../index.js');
 
       await createMastraCode();
@@ -1046,31 +1026,20 @@ describe('createMastraCode', () => {
     it('does not create the Unix socket PubSub when a pubsub is injected', async () => {
       const { createMastraCode } = await import('../index.js');
 
-      await createMastraCode({
-        pubsub: {} as never,
-        unixSocketPubSub: true,
-        crossAgentSignals: true,
-        crossProjectAgentSignals: true,
-      });
+      await createMastraCode({ pubsub: {} as never, unixSocketPubSub: true, crossAgentSignals: true });
 
       expect(createSignalsPubSubMock).not.toHaveBeenCalled();
     });
 
-    it('lets config override the setting in both directions', async () => {
-      loadSettingsMock.mockReturnValue(
-        signalSettings({
-          unixSocketPubSub: true,
-          experimentalCrossAgentSignals: true,
-          experimentalCrossProjectAgentSignals: true,
-        }),
-      );
+    it('follows the crossAgentSignals config over the setting in both directions', async () => {
+      loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }));
       const { createMastraCode } = await import('../index.js');
 
-      await createMastraCode({ crossProjectAgentSignals: false });
+      await createMastraCode({ crossAgentSignals: false });
       expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
 
       loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true }));
-      await createMastraCode({ crossAgentSignals: true, crossProjectAgentSignals: true });
+      await createMastraCode({ crossAgentSignals: true });
       expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
     });
   });

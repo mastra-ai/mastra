@@ -107,7 +107,6 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     libsqlUrl: '',
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
-    experimentalCrossProjectAgentSignals: false,
     experimentalScheduleTools: false,
     experimentalAgent: null,
     backgroundToolsEnabled: false,
@@ -129,7 +128,6 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
     onExperimentalCrossAgentSignalsChange: vi.fn(),
-    onExperimentalCrossProjectAgentSignalsChange: vi.fn(),
     onExperimentalScheduleToolsChange: vi.fn(),
     onExperimentalAgentChange: vi.fn(),
     onBackgroundToolsChange: vi.fn(),
@@ -243,48 +241,6 @@ describe('SettingsComponent experimental agent submenu', () => {
     item.submenu('', done);
     mocks.selectLists.at(-1).onCancel();
     expect(callbacks.onExperimentalAgentChange).not.toHaveBeenCalled();
-    expect(done).toHaveBeenCalledWith();
-  });
-});
-
-describe('SettingsComponent cross-project agent discovery submenu', () => {
-  const findItem = () =>
-    mocks.lastSettingsList.items.find(
-      (setting: { id: string }) => setting.id === 'experimentalCrossProjectAgentSignals',
-    );
-
-  it('is listed right after cross-agent communication', () => {
-    new SettingsComponent(createConfig(), createCallbacks());
-    const ids = mocks.lastSettingsList.items.map((setting: { id: string }) => setting.id);
-    expect(ids.indexOf('experimentalCrossProjectAgentSignals')).toBe(ids.indexOf('experimentalCrossAgentSignals') + 1);
-  });
-
-  it.each([false, true])('displays and changes the saved setting from %s', async enabled => {
-    const config = createConfig({ experimentalCrossProjectAgentSignals: enabled });
-    const callbacks = createCallbacks();
-    new SettingsComponent(config, callbacks);
-    const item = findItem();
-    expect(item.label).toBe('Experimental cross-project agent discovery');
-    expect(item.currentValue).toBe(enabled ? 'On' : 'Off');
-    expect(item.description).toContain('Requires cross-agent communication');
-    expect(item.description).toContain('restart required');
-    const done = vi.fn();
-    item.submenu('', done);
-    const select = mocks.selectLists.at(-1);
-    expect(select.selectedIndex).toBe(enabled ? 0 : 1);
-    await select.onSelect({ value: enabled ? 'off' : 'on' });
-    expect(callbacks.onExperimentalCrossProjectAgentSignalsChange).toHaveBeenCalledWith(!enabled);
-    expect(config.experimentalCrossProjectAgentSignals).toBe(!enabled);
-    expect(done).toHaveBeenCalledWith(enabled ? 'Off' : 'On');
-  });
-
-  it('does not change the setting when the submenu is cancelled', () => {
-    const callbacks = createCallbacks();
-    new SettingsComponent(createConfig(), callbacks);
-    const done = vi.fn();
-    findItem().submenu('', done);
-    mocks.selectLists.at(-1).onCancel();
-    expect(callbacks.onExperimentalCrossProjectAgentSignalsChange).not.toHaveBeenCalled();
     expect(done).toHaveBeenCalledWith();
   });
 });

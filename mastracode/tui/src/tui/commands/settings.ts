@@ -200,7 +200,6 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
-    experimentalCrossProjectAgentSignals: globalSettings.signals.experimentalCrossProjectAgentSignals,
     experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
     experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
@@ -284,12 +283,6 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental cross-agent communication: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
-      },
-      onExperimentalCrossProjectAgentSignalsChange: enabled => {
-        const current = loadSettings();
-        current.signals.experimentalCrossProjectAgentSignals = enabled;
-        saveSettings(current);
-        ctx.showInfo(`Experimental cross-project agent discovery: ${enabled ? 'on' : 'off'} (restart required)`);
       },
       onExperimentalScheduleToolsChange: enabled => {
         const current = loadSettings();

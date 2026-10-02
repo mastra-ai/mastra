@@ -370,20 +370,11 @@ export interface MastraCodeConfig {
   /**
    * Enable experimental cross-agent communication: thread ownership
    * advertisement, peer discovery, and the agent connection tools. Defaults to
-   * the `signals.experimentalCrossAgentSignals` global setting (off). This does
-   * not gate the PubSub transport itself — cross-agent communication simply
-   * uses the configured PubSub when enabled.
+   * the `signals.experimentalCrossAgentSignals` global setting (off). With the
+   * built-in Unix socket PubSub (`unixSocketPubSub`, no `pubsub` injected),
+   * peer discovery also reaches agents in other projects on this machine.
    */
   crossAgentSignals?: boolean;
-  /**
-   * Enable experimental cross-project agent discovery: agents in other
-   * projects on this machine can discover and message this one, and it can
-   * discover and message them, through a shared local socket scope. Requires
-   * `crossAgentSignals` and the built-in Unix socket PubSub (`unixSocketPubSub`,
-   * with no `pubsub` injected). Defaults to the
-   * `signals.experimentalCrossProjectAgentSignals` global setting (off).
-   */
-  crossProjectAgentSignals?: boolean;
   /**
    * Enable the experimental agent schedule tools (`schedule_create`,
    * `schedule_list`, `schedule_update`, `schedule_run`), which manage the same
@@ -613,19 +604,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Cross-agent communication is experimental and opt-in. It gates the agent
   // connections provider/tools and the session thread-ownership lifecycle.
-  // Only its cross-project extension changes the built-in PubSub transport.
+  // On the built-in PubSub it also makes peer discovery reach other projects.
   const useCrossAgentSignals =
     config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
-  const useCrossProjectAgentSignals =
-    useCrossAgentSignals &&
-    (config?.crossProjectAgentSignals ?? globalSettings.signals?.experimentalCrossProjectAgentSignals ?? false);
 
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
   const ownSignalsPubSub =
     !configuredPubSub && useUnixSocketPubSub
-      ? createSignalsPubSub(project.resourceId, { sharedAgentDiscovery: useCrossProjectAgentSignals })
+      ? createSignalsPubSub(project.resourceId, { sharedAgentDiscovery: useCrossAgentSignals })
       : undefined;
   const signalsPubSub = configuredPubSub ?? ownSignalsPubSub;
   const crossProcessPubSub = config?.crossProcessPubSub ?? Boolean(ownSignalsPubSub);

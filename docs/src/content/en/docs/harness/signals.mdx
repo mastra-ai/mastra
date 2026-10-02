@@ -364,7 +364,7 @@ Use `createNotificationInboxTool()` to give agents one tool for inbox actions in
 
 ## Cross-agent connections in Mastra Code
 
-Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available. It doesn't affect the pub/sub transport itself.
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
 
 ```typescript
 import { createMastraCode } from 'mastracode'
@@ -403,30 +403,16 @@ After a send attempt reaches Core routing, the routing result is authoritative. 
 
 ### Discover agents in other projects
 
-By default, peer discovery only reaches Mastra Code instances in the same project, because each project resource ID gets its own local socket directory under `/tmp/mc`. Cross-project agent discovery is experimental and off by default. It lets an instance in one project list, connect to, and message instances running in other projects on the same machine, and receive their replies.
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub, which Mastra Code turns on by default. It doesn't apply on Windows or when you pass your own `pubsub`.
 
-To turn it on, open `/settings` and set **Experimental cross-agent communication** and **Experimental cross-project agent discovery** to **On**. The change applies after a restart. Every instance that should take part needs both settings and a restart, including the instance that replies. Embedded clients set `crossProjectAgentSignals: true` together with `crossAgentSignals: true` and `unixSocketPubSub: true`:
-
-```typescript
-import { createMastraCode } from 'mastracode'
-
-const mastraCode = await createMastraCode({
-  unixSocketPubSub: true,
-  crossAgentSignals: true,
-  crossProjectAgentSignals: true,
-})
-```
-
-The setting has no effect when cross-agent communication is off, when Unix socket pub/sub is off or unavailable (Windows), or when you pass your own `pubsub`.
-
-Mastra Code already routes a thread's messages and run leases to the socket directory of the thread's project, and finds a thread's owner through a shared `/tmp/mc/_shared` directory. A message reaches its thread whichever project sends it. What stays per project is peer discovery, which lists the threads you can connect to. With the setting on, peer discovery also travels through `/tmp/mc/_shared`. Instances in the same project keep finding each other even when only some of them have the setting on.
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project, and finds a thread's owner through a shared `/tmp/mc/_shared` directory. Peer discovery, which lists the threads you can connect to, runs both in the project's own directory and in `/tmp/mc/_shared`. Instances running older versions still find instances in their own project.
 
 Keep these limits in mind:
 
-- **Trust boundary:** With the setting on, any local process running as your user can list the threads your instances advertise. A process that already knows a thread's ID can message it across projects even without the setting. Only turn this on for machines and accounts you trust.
+- **Trust boundary:** Any local process running as your user can list the threads your instances advertise and message them. Only turn on cross-agent communication for machines and accounts you trust.
 - **Resource IDs:** A resource ID set with `/resource` or `MASTRA_RESOURCE_ID` must be usable as a directory name for other projects to reach it. IDs containing `/`, `\`, or control characters, IDs longer than 128 characters, and `.`, `..`, or `_shared` stay reachable within their project only.
 - **Low-priority signals:** Signals that are persisted instead of delivered are written to the sender's storage. Projects that share the default Mastra Code database see them. A project with its own storage doesn't.
-- **Many instances:** Every instance with the setting on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
+- **Many instances:** Every instance with cross-agent communication on answers every peer discovery request on the machine. With many instances running, `agent_connections_list` can return a partial list when replies arrive after the discovery timeout.
 
 To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 

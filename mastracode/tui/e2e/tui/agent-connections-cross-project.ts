@@ -105,7 +105,6 @@ export const agentConnectionsCrossProjectScenario = {
         config: {
           unixSocketPubSub: true,
           crossAgentSignals: true,
-          crossProjectAgentSignals: true,
         },
       });
       return {

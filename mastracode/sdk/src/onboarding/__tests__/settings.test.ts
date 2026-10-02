@@ -94,7 +94,6 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       unixSocketPubSub: false,
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
-      experimentalCrossProjectAgentSignals: false,
       experimentalScheduleTools: false,
       githubPollIntervalMs: 300_000,
     },
@@ -730,34 +729,6 @@ describe('customProviders parsing/persistence', () => {
       saveSettings(settings, filePath);
 
       expect(loadSettings(filePath).signals.experimentalScheduleTools).toBe(true);
-    });
-  });
-
-  it('defaults experimental cross-project agent discovery off and persists opting in', () => {
-    withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ signals: { experimentalCrossProjectAgentSignals: 'yes' } }), 'utf-8');
-      expect(loadSettings(filePath).signals.experimentalCrossProjectAgentSignals).toBe(false);
-
-      const settings = loadSettings(filePath);
-      settings.signals.experimentalCrossProjectAgentSignals = true;
-      saveSettings(settings, filePath);
-
-      expect(loadSettings(filePath).signals.experimentalCrossProjectAgentSignals).toBe(true);
-      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossProjectAgentSignals).toBe(true);
-    });
-  });
-
-  it('keeps a cross-project discovery change another process saved when saving unchanged signals', () => {
-    withTempSettingsFile(filePath => {
-      writeFileSync(filePath, JSON.stringify({ signals: {} }), 'utf-8');
-      const stale = loadSettings(filePath);
-
-      const other = loadSettings(filePath);
-      other.signals.experimentalCrossProjectAgentSignals = true;
-      saveSettings(other, filePath);
-
-      saveSettings(stale, filePath);
-      expect(loadSettings(filePath).signals.experimentalCrossProjectAgentSignals).toBe(true);
     });
   });
 
