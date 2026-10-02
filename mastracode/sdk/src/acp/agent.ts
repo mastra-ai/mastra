@@ -17,7 +17,11 @@ import type {
   AvailableCommand,
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
-import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
+import {
+  getAvailableThinkingLevelsForModel,
+  isThinkingLevelSetting,
+  resolveThinkingLevelForModel,
+} from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { getCurrentVersion } from '../utils/update-check.js';
 import { withCleanupFailure } from './errors.js';
@@ -277,9 +281,7 @@ export class MastraCodeAcpAgent implements Agent {
   }
 
   private thinkingLevel(entry: SessionEntry): ThinkingLevelSetting {
-    const level = entry.getThinkingLevel?.() ?? 'off';
-    const levels = getAvailableThinkingLevelsForModel(entry.session.model.get() ?? '');
-    return levels.includes(level) ? level : 'xhigh';
+    return resolveThinkingLevelForModel(entry.session.model.get() ?? '', entry.getThinkingLevel?.() ?? 'off');
   }
 
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -300,9 +302,6 @@ export class MastraCodeAcpAgent implements Agent {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
-      }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
       }
       return { configOptions: this.configOptions(entry) };
     });

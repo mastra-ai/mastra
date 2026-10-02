@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { remapOpenAIModelForCodexOAuth } from '../agents/model.js';
-import { getEffectiveThinkingLevel, supportsMaxReasoningEffort } from '../providers/openai-codex.js';
+import { resolveCodexThinkingLevel, supportsMaxReasoningEffort } from '../providers/openai-codex.js';
+import { resolveThinkingLevelForModel } from '../thinking.js';
 
 describe('remapOpenAIModelForCodexOAuth', () => {
   it('maps only explicit GPT-5 models to codex variants for OAuth', () => {
@@ -31,27 +32,32 @@ describe('remapOpenAIModelForCodexOAuth', () => {
   });
 });
 
-describe('getEffectiveThinkingLevel', () => {
+describe('resolveCodexThinkingLevel', () => {
   it('enforces low minimum for GPT-5 models when requested level is off', () => {
-    expect(getEffectiveThinkingLevel('gpt-5.3-codex', 'off')).toBe('low');
-    expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'off')).toBe('low');
+    expect(resolveCodexThinkingLevel('gpt-5.3-codex', 'off')).toBe('low');
+    expect(resolveCodexThinkingLevel('gpt-5.1-codex-mini', 'off')).toBe('low');
   });
 
-  it('preserves requested level for non-GPT-5 models', () => {
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'off')).toBe('off');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'high')).toBe('high');
+  it('leaves off alone outside Codex, where it omits the reasoning effort', () => {
+    expect(resolveThinkingLevelForModel('gpt-5.3-codex', 'off')).toBe('off');
+  });
+
+  it('runs models without reasoning at off whatever level was picked', () => {
+    expect(resolveCodexThinkingLevel('gpt-4.1', 'off')).toBe('off');
+    expect(resolveCodexThinkingLevel('gpt-4.1', 'high')).toBe('off');
   });
 
   it('preserves max for GPT-5.6+ models that support it', () => {
-    expect(getEffectiveThinkingLevel('gpt-5.6', 'max')).toBe('max');
-    expect(getEffectiveThinkingLevel('gpt-5.6-codex', 'max')).toBe('max');
-    expect(getEffectiveThinkingLevel('gpt-6', 'max')).toBe('max');
+    expect(resolveCodexThinkingLevel('gpt-5.6', 'max')).toBe('max');
+    expect(resolveCodexThinkingLevel('gpt-5.6-codex', 'max')).toBe('max');
+    expect(resolveCodexThinkingLevel('gpt-6', 'max')).toBe('max');
   });
 
-  it('clamps max to xhigh for models whose effort scale tops out there', () => {
-    expect(getEffectiveThinkingLevel('gpt-5.3-codex', 'max')).toBe('xhigh');
-    expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'max')).toBe('xhigh');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'max')).toBe('xhigh');
+  it('clamps to the top of each model’s effort scale', () => {
+    expect(resolveCodexThinkingLevel('gpt-5.3-codex', 'max')).toBe('xhigh');
+    expect(resolveCodexThinkingLevel('gpt-5.1-codex-max', 'max')).toBe('xhigh');
+    expect(resolveCodexThinkingLevel('gpt-5.1-codex-mini', 'max')).toBe('high');
+    expect(resolveCodexThinkingLevel('gpt-5', 'xhigh')).toBe('high');
   });
 });
 

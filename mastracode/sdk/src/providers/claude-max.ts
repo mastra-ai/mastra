@@ -12,6 +12,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import { getAnthropicThinkingCapability, resolveThinkingLevelForModel } from '../thinking.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
 import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import type { ThinkingLevel } from './openai-codex.js';
@@ -150,50 +151,16 @@ export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): L
   },
 });
 
-type ActiveThinkingLevel = Exclude<ThinkingLevel, 'off'>;
-
-// Anthropic's effort scale matches mastracode thinking levels 1:1 (minus 'off'),
-// including 'max' — the level OpenAI's scale stops short of.
-const ANTHROPIC_EFFORT: Record<ActiveThinkingLevel, 'low' | 'medium' | 'high' | 'xhigh' | 'max'> = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: 'xhigh',
-  max: 'max',
-};
-
-const ANTHROPIC_XHIGH_EFFORT_RE = /claude-(?:opus-4-[78]|opus-5|sonnet-5|fable-5)/;
-
-function getAnthropicEffort(modelId: string, level: ActiveThinkingLevel) {
-  if (level === 'xhigh' && !ANTHROPIC_XHIGH_EFFORT_RE.test(modelId)) return 'high';
-  return ANTHROPIC_EFFORT[level];
-}
-
 // Extended-thinking budgets for models that predate adaptive thinking/effort.
 // Budgets count toward max_tokens, so they stay well below the smallest
 // output ceiling of the budget-era models (32k on Opus 4.0/4.1).
-const ANTHROPIC_THINKING_BUDGET_TOKENS: Record<ActiveThinkingLevel, number> = {
+const ANTHROPIC_THINKING_BUDGET_TOKENS: Record<Exclude<ThinkingLevel, 'off'>, number> = {
   low: 4096,
   medium: 8192,
   high: 16384,
   xhigh: 24576,
   max: 24576,
 };
-
-/** Claude generations that support adaptive thinking + `output_config.effort`. */
-const ADAPTIVE_THINKING_RE = /claude-(?:sonnet-4-6|opus-4-[678]|opus-5|sonnet-5|fable-5)/;
-/** Older generations that support extended thinking via `budget_tokens`. */
-const BUDGET_THINKING_RE = /claude-(?:3-7|sonnet-4|opus-4|haiku-4-5)/;
-/** Generations with no extended-thinking support at all. */
-const NO_THINKING_RE = /claude-(?:instant|v?2(?:[-.:]|$)|3(?:[-.]|$)|3-5)/;
-
-function getAnthropicThinkingCapability(modelId: string): 'adaptive' | 'budget' | 'none' {
-  if (ADAPTIVE_THINKING_RE.test(modelId)) return 'adaptive';
-  if (BUDGET_THINKING_RE.test(modelId)) return 'budget';
-  if (NO_THINKING_RE.test(modelId)) return 'none';
-  // Unknown (i.e. newer) Claude models: assume the current API surface.
-  return 'adaptive';
-}
 
 /**
  * Middleware that maps the session thinking level onto Anthropic extended
@@ -209,10 +176,10 @@ export function createAnthropicThinkingMiddleware(
   modelId: string,
   thinkingLevel?: ThinkingLevel,
 ): LanguageModelMiddleware | undefined {
-  if (!thinkingLevel || thinkingLevel === 'off') return undefined;
+  if (!thinkingLevel) return undefined;
+  const level = resolveThinkingLevelForModel(modelId, thinkingLevel);
+  if (level === 'off') return undefined;
   const capability = getAnthropicThinkingCapability(modelId);
-  if (capability === 'none') return undefined;
-  const level = thinkingLevel as ActiveThinkingLevel;
 
   return {
     specificationVersion: 'v3',
@@ -233,7 +200,7 @@ export function createAnthropicThinkingMiddleware(
         anthropic: {
           ...anthropicOptions,
           ...(capability === 'adaptive'
-            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: getAnthropicEffort(modelId, level) }
+            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: level }
             : { thinking: { type: 'enabled', budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS[level] } }),
         },
       } as typeof params.providerOptions;

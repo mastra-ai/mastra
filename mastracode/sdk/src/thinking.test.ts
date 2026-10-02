@@ -41,6 +41,39 @@ describe('thinking model capabilities', () => {
   it('keeps max for non-OpenAI models', () => {
     expect(getAvailableThinkingLevelsForModel('anthropic/claude-opus-4-6')).toContain('max');
   });
+
+  it('offers only levels each model runs as themselves', () => {
+    expect(getAvailableThinkingLevelsForModel('openai/gpt-5.5')).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
+    expect(getAvailableThinkingLevelsForModel('anthropic/claude-sonnet-4-6')).toEqual([
+      'off',
+      'low',
+      'medium',
+      'high',
+      'max',
+    ]);
+    expect(getAvailableThinkingLevelsForModel('google/gemini-3-pro-preview')).toEqual(['off', 'low', 'high']);
+    expect(getAvailableThinkingLevelsForModel('google/gemini-2.5-flash')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(getAvailableThinkingLevelsForModel('openai/gpt-5')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(getAvailableThinkingLevelsForModel('openai/o3')).toEqual(['off', 'low', 'medium', 'high']);
+  });
+
+  it('offers only off for models that cannot think', () => {
+    expect(getAvailableThinkingLevelsForModel('anthropic/claude-3-5-sonnet-20241022')).toEqual(['off']);
+    expect(getAvailableThinkingLevelsForModel('google/gemini-2.0-flash')).toEqual(['off']);
+    expect(getAvailableThinkingLevelsForModel('openai/gpt-4o-mini')).toEqual(['off']);
+    expect(getAvailableThinkingLevelsForModel('openai/gpt-5-chat-latest')).toEqual(['off']);
+  });
+
+  it('passes levels through unchanged for unrecognised providers', () => {
+    expect(getAvailableThinkingLevelsForModel('acme/house-model')).toEqual([
+      'off',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]);
+  });
 });
 
 describe('resolveDefaultThinkingLevel', () => {
