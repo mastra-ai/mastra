@@ -1,5 +1,4 @@
 import {
-  TRACE_AGGREGATE_COST_ATTACHMENTS,
   TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX,
   TRACE_AGGREGATE_INTERVALS,
   TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS,
@@ -143,12 +142,13 @@ export type TrustedTraceAggregateOrderBy =
  *   priced row; its cost is the sum of its priced rows' `estimatedCost`. Unpriced rows contribute
  *   nothing to cost, cost unit, or coverage. `cost.sum` sums over priced traces, `cost.avg`
  *   divides by their count.
- * - **Cost attachments.** Whenever any `cost.*` measure is requested, every row also carries
+ * - **Row cost.** Whenever any `cost.*` measure is requested, every row also carries
  *   `cost.coverage` (priced traces ÷ usage-bearing traces; null when the group has no
- *   usage-bearing traces) and `costUnit` (the priced rows' single `costUnit`, `'mixed'` when they
+ *   usage-bearing traces) and `cost.unit` (the priced rows' single `costUnit`, `'mixed'` when they
  *   use more than one, null when there are no priced rows; a null unit counts as its own value).
- *   `cost.sum` and `cost.avg` are null when the group has no priced traces or `costUnit` is
- *   `'mixed'`. Attachments cannot be requested, filtered on, or ordered by.
+ *   `cost.sum` and `cost.avg` measures are null when the group has no priced traces or
+ *   `cost.unit` is `'mixed'`. Row cost fields are not measures: they cannot be requested,
+ *   filtered on, or ordered by.
  * - Measures are computed independently for the whole-window group (for `having` / `orderBy`) and
  *   for each bucket row.
  */
@@ -306,10 +306,6 @@ function planMeasure(
   issues: TraceQueryIssue[],
 ): TrustedTraceAggregateMeasure | undefined {
   const name = normalizeTraceAggregateMeasureName(raw);
-  if (isCostAttachment(name)) {
-    issues.push({ code: 'field_not_allowed', path, message: COST_ATTACHMENT_MESSAGE });
-    return undefined;
-  }
   const parsed = parseTraceAggregateMeasure(name);
   if (parsed?.type === 'canonical') return { type: 'canonical', name: parsed.measure };
   if (parsed?.type === 'countDistinct') {
@@ -432,7 +428,7 @@ function resolveHavingMeasure(
   state.issues.push({
     code: 'field_not_allowed',
     path,
-    message: isCostAttachment(name) ? COST_ATTACHMENT_MESSAGE : 'having may only reference requested measures or count',
+    message: 'having may only reference requested measures or count',
   });
   return undefined;
 }
@@ -451,18 +447,9 @@ function planOrderBy(
   issues.push({
     code: 'field_not_allowed',
     path: ['orderBy', 'field'],
-    message: isCostAttachment(field)
-      ? COST_ATTACHMENT_MESSAGE
-      : 'orderBy must reference a requested measure, count, or a requested dimension',
+    message: 'orderBy must reference a requested measure, count, or a requested dimension',
   });
   return undefined;
-}
-
-const COST_ATTACHMENT_MESSAGE =
-  'cost.coverage and costUnit are returned with any cost measure and cannot be requested, filtered, or ordered by';
-
-function isCostAttachment(name: string): boolean {
-  return (TRACE_AGGREGATE_COST_ATTACHMENTS as readonly string[]).includes(name);
 }
 
 function toFiniteNumber(value: TraceQueryLiteral): number | undefined {

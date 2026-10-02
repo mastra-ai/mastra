@@ -332,14 +332,15 @@ describe('trace-aggregate token and cost conformance cases', () => {
     expect(traceAggregateResponseMismatch(actual, testCase)).toBeNull();
   });
 
-  it('hand-written expectations satisfy the response contract and attach coverage and unit to cost requests', () => {
+  it('hand-written expectations satisfy the response contract and attach row cost to cost requests', () => {
     for (const testCase of TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES) {
       expect(() => traceAggregateResponseSchema.parse(testCase.expected), testCase.name).not.toThrow();
       expect(testCase.tolerance, testCase.name).toBeUndefined();
       const requested = testCase.request.measures;
-      const attachments = requested.some(measure => measure.startsWith('cost.')) ? ['cost.coverage', 'costUnit'] : [];
+      const hasCost = requested.some(measure => measure.startsWith('cost.'));
       for (const row of testCase.expected.rows) {
-        expect(Object.keys(row.measures).sort(), testCase.name).toEqual([...requested, ...attachments].sort());
+        expect(Object.keys(row.measures).sort(), testCase.name).toEqual([...requested].sort());
+        expect(row.cost !== undefined, testCase.name).toBe(hasCost);
       }
     }
   });

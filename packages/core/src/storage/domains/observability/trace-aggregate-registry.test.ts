@@ -272,6 +272,7 @@ describe('trace aggregate measure registry', () => {
       'tokens.cost.sum',
       'cost',
       'cost.coverage',
+      'cost.unit',
       'costUnit',
       'errorrate',
       'Count',

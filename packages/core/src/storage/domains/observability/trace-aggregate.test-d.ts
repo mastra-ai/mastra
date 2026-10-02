@@ -1,9 +1,9 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type {
   TRACE_AGGREGATE_FIXED_MEASURES,
-  TraceAggregateCostAttachment,
   TraceAggregateMeasure,
   TraceAggregateRow,
+  TraceAggregateRowCost,
 } from './trace-aggregate';
 
 type FixedMeasure = (typeof TRACE_AGGREGATE_FIXED_MEASURES)[number];
@@ -24,10 +24,10 @@ describe('TraceAggregateMeasure type', () => {
     expectTypeOf<'costUnit'>().not.toMatchTypeOf<TraceAggregateMeasure>();
   });
 
-  it('keys response measures by measure name or cost attachment', () => {
-    expectTypeOf<keyof TraceAggregateRow['measures']>().toEqualTypeOf<
-      TraceAggregateMeasure | TraceAggregateCostAttachment
-    >();
-    expectTypeOf<TraceAggregateRow['measures']['cost.sum']>().toEqualTypeOf<number | string | null>();
+  it('keys response measures by measure name with numeric or null values', () => {
+    expectTypeOf<keyof TraceAggregateRow['measures']>().toEqualTypeOf<TraceAggregateMeasure>();
+    expectTypeOf<TraceAggregateRow['measures']['count']>().toEqualTypeOf<number | null>();
+    expectTypeOf<TraceAggregateRow['cost']>().toEqualTypeOf<TraceAggregateRowCost | undefined>();
+    expectTypeOf<TraceAggregateRowCost>().toEqualTypeOf<{ coverage: number | null; unit: string | null }>();
   });
 });

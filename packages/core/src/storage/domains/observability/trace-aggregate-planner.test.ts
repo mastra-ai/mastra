@@ -186,28 +186,11 @@ describe('planTraceAggregate', () => {
       ]);
     });
 
-    it('rejects the cost attachments as measures, having paths, and orderBy fields', () => {
-      const message = expect.stringContaining('cost.coverage and costUnit');
-      for (const attachment of ['cost.coverage', 'costUnit']) {
-        const measureError = validationError(() =>
-          planTraceAggregate({
-            ...parseTraceAggregateRequest({ timeRange, measures: ['cost.sum'] }),
-            measures: ['cost.sum', attachment] as never,
-          }),
-        );
-        expect(measureError.issues).toContainEqual({ code: 'field_not_allowed', path: ['measures', 1], message });
-
-        const request = { timeRange, measures: ['cost.sum'] };
-        expect(
-          expectIssue({ ...request, having: gt(attachment, 0.5) }, 'field_not_allowed', ['having', 'left', 'path'])
-            .message,
-        ).toEqual(message);
-        expect(
-          expectIssue({ ...request, orderBy: { field: attachment, direction: 'desc' } }, 'field_not_allowed', [
-            'orderBy',
-            'field',
-          ]).message,
-        ).toEqual(message);
+    it('rejects having and orderBy on row cost fields', () => {
+      const request = { timeRange, measures: ['cost.sum'] };
+      for (const field of ['cost.coverage', 'cost.unit', 'costUnit']) {
+        expectIssue({ ...request, having: gt(field, 0.5) }, 'field_not_allowed', ['having', 'left', 'path']);
+        expectIssue({ ...request, orderBy: { field, direction: 'desc' } }, 'field_not_allowed', ['orderBy', 'field']);
       }
     });
   });

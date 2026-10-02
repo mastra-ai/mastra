@@ -12,6 +12,7 @@ import {
   type TraceAggregateRequest,
   type TraceAggregateResponse,
   type TraceAggregateRow,
+  type TraceAggregateRowCost,
   type TraceQueryTenantScope,
   type TrustedTraceAggregateHavingPredicate,
   type TrustedTraceAggregateMeasureName,
@@ -139,8 +140,14 @@ function durationMs(root: RawTraceQuerySpan): number {
   return Date.parse(root.endedAt!) - Date.parse(root.startedAt);
 }
 
-type MeasureValue = number | string | null;
-type MeasureValues = Map<TrustedTraceAggregateMeasureName | 'cost.coverage' | 'costUnit', MeasureValue>;
+type MeasureValue = number | null;
+type MeasureValues = Map<TrustedTraceAggregateMeasureName, MeasureValue>;
+
+interface GroupValues {
+  measures: MeasureValues;
+  /** Present when any `cost.*` measure is requested. */
+  cost?: TraceAggregateRowCost;
+}
 
 function hasCostMeasure(plan: TrustedTraceAggregatePlan): boolean {
   return plan.measures.some(measure => measure.type === 'canonical' && measure.name.startsWith('cost.'));
@@ -150,7 +157,7 @@ function computeMeasures(
   roots: RawTraceQuerySpan[],
   plan: TrustedTraceAggregatePlan,
   usage: Map<string, TraceUsage>,
-): MeasureValues {
+): GroupValues {
   const values: MeasureValues = new Map();
   const count = roots.length;
   const usageBearing = roots.flatMap(root => usage.get(root.traceId!) ?? []);
@@ -223,14 +230,14 @@ function computeMeasures(
       }
     }
   }
-  if (hasCostMeasure(plan)) {
-    values.set('cost.coverage', usageBearing.length === 0 ? null : priced.length / usageBearing.length);
-    values.set(
-      'costUnit',
-      priced.length === 0 ? null : mixedUnits ? TRACE_AGGREGATE_MIXED_COST_UNIT : [...costUnits][0]!,
-    );
-  }
-  return values;
+  if (!hasCostMeasure(plan)) return { measures: values };
+  return {
+    measures: values,
+    cost: {
+      coverage: usageBearing.length === 0 ? null : priced.length / usageBearing.length,
+      unit: priced.length === 0 ? null : mixedUnits ? TRACE_AGGREGATE_MIXED_COST_UNIT : [...costUnits][0]!,
+    },
+  };
 }
 
 /**
@@ -251,13 +258,13 @@ function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measure
       return result === null ? null : !result;
     }
     case 'membership': {
-      const value = measures.get(predicate.measure) as number | null;
+      const value = measures.get(predicate.measure)!;
       if (value === null) return null;
       const member = predicate.values.includes(value);
       return predicate.operator === 'in' ? member : !member;
     }
     case 'comparison': {
-      const value = measures.get(predicate.measure) as number | null;
+      const value = measures.get(predicate.measure)!;
       if (value === null) return null;
       switch (predicate.operator) {
         case 'eq':
@@ -280,16 +287,21 @@ function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measure
 interface Group {
   dimensions: (string | null)[];
   roots: RawTraceQuerySpan[];
-  measures: MeasureValues;
+  values: GroupValues;
 }
 
 /** Nulls sort after every non-null value regardless of direction; only non-null pairs honor `direction`. */
-function compareNullable(left: MeasureValue, right: MeasureValue, direction: 'asc' | 'desc'): number {
+function compareNullable<T extends number | string>(
+  left: T | null,
+  right: T | null,
+  direction: 'asc' | 'desc',
+): number {
   if (left === null || right === null) {
     if (left === right) return 0;
     return left === null ? 1 : -1;
   }
-  const order = typeof left === 'number' ? left - (right as number) : compareTraceQueryStrings(left, right as string);
+  const order =
+    typeof left === 'number' ? left - (right as number) : compareTraceQueryStrings(left as string, right as string);
   return direction === 'desc' ? -order : order;
 }
 
@@ -297,7 +309,11 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
   const orderBy = plan.orderBy;
   const primary =
     orderBy.target === 'measure'
-      ? compareNullable(left.measures.get(orderBy.measure)!, right.measures.get(orderBy.measure)!, orderBy.direction)
+      ? compareNullable(
+          left.values.measures.get(orderBy.measure)!,
+          right.values.measures.get(orderBy.measure)!,
+          orderBy.direction,
+        )
       : compareNullable(
           left.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
           right.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
@@ -311,13 +327,12 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
   return 0;
 }
 
-function projectMeasures(measures: MeasureValues, plan: TrustedTraceAggregatePlan): TraceAggregateRow['measures'] {
-  const projected = Object.fromEntries(plan.measures.map(measure => [measure.name, measures.get(measure.name)!]));
-  if (hasCostMeasure(plan)) {
-    projected['cost.coverage'] = measures.get('cost.coverage')!;
-    projected.costUnit = measures.get('costUnit')!;
-  }
-  return projected as TraceAggregateRow['measures'];
+function projectValues(
+  values: GroupValues,
+  plan: TrustedTraceAggregatePlan,
+): Pick<TraceAggregateRow, 'measures' | 'cost'> {
+  const measures = Object.fromEntries(plan.measures.map(measure => [measure.name, values.measures.get(measure.name)!]));
+  return { measures, ...(values.cost && { cost: values.cost }) };
 }
 
 function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggregateRow['dimensions'] {
@@ -341,17 +356,17 @@ export function evaluateTraceAggregate(
     const key = JSON.stringify(dimensions);
     let group = groupsByKey.get(key);
     if (!group) {
-      group = { dimensions, roots: [], measures: new Map() };
+      group = { dimensions, roots: [], values: { measures: new Map() } };
       groupsByKey.set(key, group);
     }
     group.roots.push(root);
   }
 
   const groups = [...groupsByKey.values()];
-  for (const group of groups) group.measures = computeMeasures(group.roots, plan, usage);
+  for (const group of groups) group.values = computeMeasures(group.roots, plan, usage);
 
   const surviving = plan.having
-    ? groups.filter(group => evaluateHaving(plan.having!, group.measures) === true)
+    ? groups.filter(group => evaluateHaving(plan.having!, group.values.measures) === true)
     : groups;
   surviving.sort((left, right) => compareGroups(left, right, plan));
 
@@ -362,7 +377,7 @@ export function evaluateTraceAggregate(
   for (const group of kept) {
     const dimensions = plan.dimensions.length > 0 ? rowDimensions(group, plan) : undefined;
     if (!plan.interval) {
-      rows.push({ ...(dimensions && { dimensions }), measures: projectMeasures(group.measures, plan) });
+      rows.push({ ...(dimensions && { dimensions }), ...projectValues(group.values, plan) });
       continue;
     }
     const intervalMs = TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
@@ -377,7 +392,7 @@ export function evaluateTraceAggregate(
       rows.push({
         ...(dimensions && { dimensions }),
         bucket: new Date(bucketMs).toISOString(),
-        measures: projectMeasures(computeMeasures(buckets.get(bucketMs)!, plan, usage), plan),
+        ...projectValues(computeMeasures(buckets.get(bucketMs)!, plan, usage), plan),
       });
     }
   }
@@ -709,7 +724,8 @@ export interface TraceAggregateExpectedResponse {
   rows: Array<{
     dimensions?: Record<string, string | null>;
     bucket?: string;
-    measures: Record<string, number | string | null>;
+    measures: Record<string, number | null>;
+    cost?: TraceAggregateRowCost;
   }>;
   truncated: boolean;
 }
@@ -723,7 +739,7 @@ export interface TraceAggregateConformanceCase {
    * Absolute per-measure tolerance for store conformance. Percentile semantics are
    * backend-native (`percentile_cont` on PostgreSQL, `quantile` on ClickHouse), so
    * only `duration.p*` measures carry a tolerance; counts, sums (including tokens and cost),
-   * rates, and `cost.coverage` stay exact.
+   * rates, and row `cost` stay exact.
    */
   tolerance?: Record<string, number>;
 }
@@ -769,7 +785,7 @@ export function traceAggregateResponseMismatch(
     }
     for (const key of Object.keys(expectedRow.measures)) {
       const expectedValue = expectedRow.measures[key]!;
-      const actualValue = (actualRow.measures as Record<string, number | string | null>)[key]!;
+      const actualValue = (actualRow.measures as Record<string, number | null>)[key]!;
       const allowed = tolerance[key];
       const matches =
         allowed !== undefined && typeof actualValue === 'number' && typeof expectedValue === 'number'
@@ -779,6 +795,15 @@ export function traceAggregateResponseMismatch(
         const within = allowed === undefined ? '' : ` (±${allowed})`;
         return `${at}.measures.${key}: expected ${expectedValue}${within}, got ${actualValue}`;
       }
+    }
+    const actualCost = actualRow.cost;
+    const expectedCost = expectedRow.cost;
+    const costMatches =
+      actualCost === undefined || expectedCost === undefined
+        ? actualCost === expectedCost
+        : actualCost.coverage === expectedCost.coverage && actualCost.unit === expectedCost.unit;
+    if (!costMatches) {
+      return `${at}.cost: expected ${JSON.stringify(expectedRow.cost)}, got ${JSON.stringify(actualRow.cost)}`;
     }
   }
   return null;
@@ -1446,7 +1471,7 @@ const schedulerDims = { entityName: 'scheduler' };
 
 const augDay = (d: number) => `2026-08-${String(d).padStart(2, '0')}T00:00:00.000Z`;
 
-const noUsage = { 'cost.sum': null, 'cost.coverage': null, costUnit: null };
+const noCost = { coverage: null, unit: null };
 
 export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
   {
@@ -1469,9 +1494,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 3000,
             'tokens.output.sum': 600,
             'cost.sum': 1.75,
-            'cost.coverage': 1,
-            costUnit: 'usd',
           },
+          cost: { coverage: 1, unit: 'usd' },
         },
         {
           dimensions: supportDims,
@@ -1481,9 +1505,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 500,
             'tokens.output.sum': 100,
             'cost.sum': null,
-            'cost.coverage': 0,
-            costUnit: null,
           },
+          cost: { coverage: 0, unit: null },
         },
         {
           dimensions: supportDims,
@@ -1493,9 +1516,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 3000,
             'tokens.output.sum': 600,
             'cost.sum': 2,
-            'cost.coverage': 1,
-            costUnit: 'usd',
           },
+          cost: { coverage: 1, unit: 'usd' },
         },
         {
           dimensions: plannerDims,
@@ -1505,9 +1527,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 1000,
             'tokens.output.sum': 300,
             'cost.sum': 1.25,
-            'cost.coverage': 1,
-            costUnit: 'usd',
           },
+          cost: { coverage: 1, unit: 'usd' },
         },
         // billing and triage tie on 0.25 and break on entityName ascending.
         {
@@ -1518,9 +1539,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 1600,
             'tokens.output.sum': 200,
             'cost.sum': 0.25,
-            'cost.coverage': 0.5,
-            costUnit: 'usd',
           },
+          cost: { coverage: 0.5, unit: 'usd' },
         },
         {
           dimensions: triageDims,
@@ -1530,9 +1550,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 100,
             'tokens.output.sum': 20,
             'cost.sum': 0.25,
-            'cost.coverage': 1,
-            costUnit: 'usd',
           },
+          cost: { coverage: 1, unit: 'usd' },
         },
         // research is `mixed` over the whole window, so its null cost sorts last; each bucket has
         // a single unit and is priced.
@@ -1544,9 +1563,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 800,
             'tokens.output.sum': 100,
             'cost.sum': 0.75,
-            'cost.coverage': 1,
-            costUnit: 'usd',
           },
+          cost: { coverage: 1, unit: 'usd' },
         },
         {
           dimensions: researchDims,
@@ -1556,26 +1574,27 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.input.sum': 1200,
             'tokens.output.sum': 300,
             'cost.sum': 1.5,
-            'cost.coverage': 1,
-            costUnit: 'eur',
           },
+          cost: { coverage: 1, unit: 'eur' },
         },
         {
           dimensions: schedulerDims,
           bucket: augDay(21),
-          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, ...noUsage },
+          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, 'cost.sum': null },
+          cost: noCost,
         },
         {
           dimensions: schedulerDims,
           bucket: augDay(22),
-          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, ...noUsage },
+          measures: { count: 1, 'tokens.input.sum': null, 'tokens.output.sum': null, 'cost.sum': null },
+          cost: noCost,
         },
       ],
       truncated: false,
     },
   },
   {
-    name: 'whole-window cost per agent: mixed units return null cost with costUnit mixed',
+    name: 'whole-window cost per agent: mixed units return null cost with unit mixed',
     request: {
       timeRange: tokenRange,
       groupBy: ['entityName'],
@@ -1586,25 +1605,30 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
       rows: [
         {
           dimensions: supportDims,
-          measures: { 'cost.sum': 3.75, 'cost.avg': 1.25, 'cost.coverage': 0.75, costUnit: 'usd' },
+          measures: { 'cost.sum': 3.75, 'cost.avg': 1.25 },
+          cost: { coverage: 0.75, unit: 'usd' },
         },
         {
           dimensions: plannerDims,
-          measures: { 'cost.sum': 1.25, 'cost.avg': 1.25, 'cost.coverage': 1, costUnit: 'usd' },
+          measures: { 'cost.sum': 1.25, 'cost.avg': 1.25 },
+          cost: { coverage: 1, unit: 'usd' },
         },
         {
           dimensions: billingDims,
-          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25, 'cost.coverage': 0.5, costUnit: 'usd' },
+          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25 },
+          cost: { coverage: 0.5, unit: 'usd' },
         },
         {
           dimensions: triageDims,
-          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25, 'cost.coverage': 1, costUnit: 'usd' },
+          measures: { 'cost.sum': 0.25, 'cost.avg': 0.25 },
+          cost: { coverage: 1, unit: 'usd' },
         },
         {
           dimensions: researchDims,
-          measures: { 'cost.sum': null, 'cost.avg': null, 'cost.coverage': 1, costUnit: 'mixed' },
+          measures: { 'cost.sum': null, 'cost.avg': null },
+          cost: { coverage: 1, unit: 'mixed' },
         },
-        { dimensions: schedulerDims, measures: { 'cost.avg': null, ...noUsage } },
+        { dimensions: schedulerDims, measures: { 'cost.avg': null, 'cost.sum': null }, cost: noCost },
       ],
       truncated: false,
     },
@@ -1648,9 +1672,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
             'tokens.cached.avg': 80,
             'cost.sum': 5,
             'cost.avg': 1.25,
-            'cost.coverage': 0.8,
-            costUnit: 'usd',
           },
+          cost: { coverage: 0.8, unit: 'usd' },
         },
       ],
       truncated: false,
@@ -1663,7 +1686,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
       rows: [
         {
           // 12 traces; 10 usage-bearing; 8 priced (not sup-3, bil-1).
-          measures: { count: 12, 'tokens.total.sum': 13420, 'cost.sum': null, 'cost.coverage': 0.8, costUnit: 'mixed' },
+          measures: { count: 12, 'tokens.total.sum': 13420, 'cost.sum': null },
+          cost: { coverage: 0.8, unit: 'mixed' },
         },
       ],
       truncated: false,
@@ -1698,8 +1722,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     },
     expected: {
       rows: [
-        { dimensions: supportDims, measures: { 'cost.sum': 3.75, 'cost.coverage': 0.75, costUnit: 'usd' } },
-        { dimensions: plannerDims, measures: { 'cost.sum': 1.25, 'cost.coverage': 1, costUnit: 'usd' } },
+        { dimensions: supportDims, measures: { 'cost.sum': 3.75 }, cost: { coverage: 0.75, unit: 'usd' } },
+        { dimensions: plannerDims, measures: { 'cost.sum': 1.25 }, cost: { coverage: 1, unit: 'usd' } },
       ],
       truncated: false,
     },
@@ -1714,8 +1738,8 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     },
     expected: {
       rows: [
-        { dimensions: supportDims, measures: { 'cost.sum': 3.75, 'cost.coverage': 0.75, costUnit: 'usd' } },
-        { dimensions: plannerDims, measures: { 'cost.sum': 1.25, 'cost.coverage': 1, costUnit: 'usd' } },
+        { dimensions: supportDims, measures: { 'cost.sum': 3.75 }, cost: { coverage: 0.75, unit: 'usd' } },
+        { dimensions: plannerDims, measures: { 'cost.sum': 1.25 }, cost: { coverage: 1, unit: 'usd' } },
       ],
       truncated: false,
     },
@@ -1756,7 +1780,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
       measures: ['tokens.input.sum', 'cost.sum'],
     },
     expected: {
-      rows: [{ measures: { 'tokens.input.sum': 7100, 'cost.sum': 2.25, 'cost.coverage': 1, costUnit: 'usd' } }],
+      rows: [{ measures: { 'tokens.input.sum': 7100, 'cost.sum': 2.25 }, cost: { coverage: 1, unit: 'usd' } }],
       truncated: false,
     },
   },
@@ -1768,7 +1792,7 @@ export const TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES: TraceAggregateConformanceC
     },
     scope: { organizationId: 'org-a' },
     expected: {
-      rows: [{ measures: { 'tokens.input.sum': 100, 'cost.sum': 0.25, 'cost.coverage': 1, costUnit: 'usd' } }],
+      rows: [{ measures: { 'tokens.input.sum': 100, 'cost.sum': 0.25 }, cost: { coverage: 1, unit: 'usd' } }],
       truncated: false,
     },
   },
