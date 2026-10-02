@@ -1,6 +1,6 @@
-import { useMastraClient } from '@mastra/react';
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@mastra/react/hooks';
 import { useQuery } from '@tanstack/react-query';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import { useMastraClient } from '@/mastra-client-context';
 
 const TRACE_SPAN_SCORES_REFETCH_INTERVAL_MS = 15_000;
 

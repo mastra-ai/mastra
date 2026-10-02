@@ -1,10 +1,9 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@mastra/react/hooks';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useInView } from '@/hooks/use-in-view';
-import { toast } from '@/utils/toast';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
+import { useInView } from '../shared/use-in-view';
+import { useMastraClient } from '@/mastra-client-context';
 
 const SCORES_PER_PAGE = 25;
 const SCORES_REFETCH_INTERVAL_MS = 15_000;
@@ -93,7 +92,6 @@ export const useScorer = (scorerId: string) => {
         const errorObj = error instanceof Error ? error : new Error('Error fetching scorer');
         setError(errorObj);
         console.error('Error fetching scorer', error);
-        toast.error('Error fetching scorer');
       } finally {
         setIsLoading(false);
       }

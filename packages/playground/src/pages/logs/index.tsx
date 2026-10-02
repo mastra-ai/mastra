@@ -9,7 +9,6 @@ import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
 import { LogsToolbar } from '@mastra/playground-ui/domains/logs/components/logs-toolbar';
 import { NoLogsInfo } from '@mastra/playground-ui/domains/logs/components/no-logs-info';
-import { useLogs } from '@mastra/playground-ui/domains/logs/hooks/use-logs';
 import { useLogsFilterPersistence } from '@mastra/playground-ui/domains/logs/hooks/use-logs-filter-persistence';
 import { useLogsListNavigation } from '@mastra/playground-ui/domains/logs/hooks/use-logs-list-navigation';
 import { useLogsUrlState } from '@mastra/playground-ui/domains/logs/hooks/use-logs-url-state';
@@ -25,6 +24,7 @@ import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-
 import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
+import { useLogs } from '@mastra/react/hooks';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';

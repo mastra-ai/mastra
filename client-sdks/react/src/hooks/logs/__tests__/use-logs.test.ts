@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getLogsRefetchInterval } from './use-logs';
+import { getLogsRefetchInterval } from '../use-logs';
 
 describe('getLogsRefetchInterval', () => {
   it('disables polling when the storage provider cannot list logs', () => {

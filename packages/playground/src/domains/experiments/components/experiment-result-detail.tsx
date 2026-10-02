@@ -1,12 +1,13 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { useTraceSpanScores, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
 import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useTraceSpanScores } from '@mastra/react/hooks';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';

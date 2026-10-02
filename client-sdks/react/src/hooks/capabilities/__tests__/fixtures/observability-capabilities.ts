@@ -18,6 +18,7 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
+    traceQueryContextIds: true,
     threadQuery: true,
     feedback: true,
   },
@@ -39,6 +40,7 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: false,
     traceQueryDiscovery: false,
     traceQueryTenantScope: false,
+    traceQueryContextIds: false,
     threadQuery: false,
   },
 };

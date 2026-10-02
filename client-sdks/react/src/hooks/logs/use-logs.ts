@@ -1,11 +1,11 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
-import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '@mastra/react/hooks';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationError } from '../query-utils';
 
-import type { LogRecord } from '../types';
-import { useInView } from '@/hooks/use-in-view';
+import { useInView } from '../shared/use-in-view';
+import type { LogRecord } from './types';
+import { useMastraClient } from '@/mastra-client-context';
 
 type ListLogsArgs = NonNullable<Parameters<MastraClient['listLogsVNext']>[0]>;
 type ListLogsResponse = Awaited<ReturnType<MastraClient['listLogsVNext']>>;

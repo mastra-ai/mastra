@@ -8,7 +8,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useFeedbackAvailable, useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { AddTraceMocksToItemDialog } from '@mastra/playground-ui/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/components/trace-as-item-dialog';
-import { useTraceSpanScores, ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
@@ -57,6 +57,7 @@ import type { TraceQueryRelatedScope } from '@mastra/playground-ui/domains/trace
 import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
+import { useTraceSpanScores } from '@mastra/react/hooks';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
