@@ -19,6 +19,33 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 type Engine = 'plain' | 'durable' | 'evented';
 type ApprovalOrder = 'forward' | 'reverse' | 'concurrent';
 
+function createSingleCallModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start' as const, warnings: [] },
+        {
+          type: 'response-metadata' as const,
+          id: 'tool-call-response',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'tool-call' as const,
+          toolCallType: 'function' as const,
+          toolCallId: 'call-a',
+          toolName: 'suspendingTool',
+          input: JSON.stringify({ item: 'A' }),
+          providerExecuted: false,
+        },
+        { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
+      ]),
+    }),
+  });
+}
+
 function createTwoCallModel() {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
@@ -115,6 +142,79 @@ async function waitForSuspendedSnapshot(storage: InMemoryStore, runId: string) {
 afterEach(() => {
   agentThreadStreamRuntime.resetForTests();
   globalRunRegistry.clear();
+});
+
+it('waits for async onSuspended before closing a re-suspended durable resume stream', async () => {
+  const pubsub = new EventEmitterPubSub();
+  const storage = new InMemoryStore();
+  const suspendingTool = createTool({
+    id: 'suspendingTool',
+    description: 'Suspends again when resumed',
+    inputSchema: z.object({ item: z.string() }),
+    execute: async ({ item }, context) => context?.agent?.suspend({ item, resumed: !!context?.agent?.resumeData }),
+  });
+  const baseAgent = new Agent({
+    id: 'durable-resuspension-callback-agent',
+    name: 'Durable resuspension callback agent',
+    instructions: 'Run the suspending tool.',
+    model: createSingleCallModel() as LanguageModelV2,
+    tools: { suspendingTool },
+  });
+  const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+  new Mastra({ agents: { agent: durableAgent }, storage, logger: false });
+
+  let initialSuspension: unknown;
+  const initial = await durableAgent.stream('Run the suspending tool.', {
+    onSuspended: data => {
+      initialSuspension = data;
+    },
+  });
+
+  let releaseCallback!: () => void;
+  const callbackDelay = new Promise<void>(resolve => {
+    releaseCallback = resolve;
+  });
+  let callbackStarted = false;
+  let callbackFinished = false;
+  let streamEnded = false;
+  let consumeResumedStream: Promise<void> | undefined;
+
+  try {
+    await vi.waitFor(() => expect(initialSuspension).toBeDefined());
+    await waitForSuspendedSnapshot(storage, initial.runId);
+
+    const resumed = await durableAgent.resumeStream(
+      { confirmed: true },
+      {
+        runId: initial.runId,
+        toolCallId: 'call-a',
+        onSuspended: async () => {
+          callbackStarted = true;
+          await callbackDelay;
+          callbackFinished = true;
+        },
+      },
+    );
+    consumeResumedStream = (async () => {
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the resumed segment through its re-suspension boundary.
+      }
+      streamEnded = true;
+    })();
+
+    await vi.waitFor(() => expect(callbackStarted).toBe(true));
+    expect(streamEnded).toBe(false);
+
+    releaseCallback();
+    await withTimeout(consumeResumedStream, 'resumed fullStream');
+    expect(callbackFinished).toBe(true);
+    expect(streamEnded).toBe(true);
+  } finally {
+    releaseCallback();
+    await consumeResumedStream?.catch(() => undefined);
+    initial.cleanup();
+    await pubsub.close();
+  }
 });
 
 describe.each(['plain', 'durable', 'evented'] as const)('%s agent queued schema-less tool approvals', engine => {
