@@ -1,5 +1,41 @@
 # @mastra/auth-studio
 
+## 1.3.8
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
+## 1.3.7
+
+### Patch Changes
+
+- Improved Studio authentication portability by hashing credential cache keys with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 1.3.7-alpha.0
+
+### Patch Changes
+
+- Improved Studio authentication portability by hashing credential cache keys with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 1.3.6
+
+### Patch Changes
+
+- Fixed deployments pinned to an organization (`MASTRA_ORGANIZATION_ID`) serving members under whatever organization their shared Mastra session cookie happened to be on. A member is now served in the pinned organization with their role in that organization, and bearer tokens are verified against it. Signing in to one deployment no longer changes which organization another deployment treats you as. ([#23427](https://github.com/mastra-ai/mastra/pull/23427))
+
+## 1.3.6-alpha.0
+
+### Patch Changes
+
+- Fixed deployments pinned to an organization (`MASTRA_ORGANIZATION_ID`) serving members under whatever organization their shared Mastra session cookie happened to be on. A member is now served in the pinned organization with their role in that organization, and bearer tokens are verified against it. Signing in to one deployment no longer changes which organization another deployment treats you as. ([#23427](https://github.com/mastra-ai/mastra/pull/23427))
+
 ## 1.3.5
 
 ### Patch Changes

@@ -1,6 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
+import { CompositeAuth } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
@@ -469,7 +470,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     if (typeof authConfig.mapUserToResourceId === 'function') {
       try {
         const resourceId = authConfig.mapUserToResourceId(user);
-        if (resourceId) {
+        // CompositeAuth validates the authenticating provider's mapper. It can
+        // return undefined when that provider never configured a mapper.
+        if (resourceId !== undefined || !(authConfig instanceof CompositeAuth)) {
+          if (typeof resourceId !== 'string' || !resourceId.trim()) {
+            throw new Error('mapUserToResourceId must return a non-empty string for the authenticated user');
+          }
           requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
         }
       } catch (mapError) {

@@ -1,3 +1,5 @@
+import { isAuditAction, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -7,7 +9,6 @@ import {
   Check,
   ChevronRight,
   Eye,
-  FolderGit2,
   GitCommitHorizontal,
   Hammer,
   Inbox,
@@ -55,44 +56,48 @@ function actorName(by: string | undefined, roster: Map<string, FactoryMentionMem
   return roster.get(by)?.name ?? 'Someone';
 }
 
-const DEED_GLYPHS: Record<string, LucideIcon> = {
+const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
   run: Play,
   git: GitCommitHorizontal,
   agent: Bot,
-  worktree: FolderGit2,
   intake: Inbox,
   work_item: SquarePen,
 };
 
-/** The verb that makes the rail read as prose; anything new falls back to its own label. */
-const DEED_PHRASES: Record<string, string> = {
-  'run.started': 'started a run on',
-  'run.approved': 'approved the run on',
-  'run.dismissed': 'dismissed the run on',
-  'git.commit': 'committed to',
-  'git.push': 'pushed to',
-  'git.pr_opened': 'opened a pull request for',
-  'agent.commit': 'committed to',
-  'agent.push': 'pushed to',
-  'agent.pr_opened': 'opened a pull request for',
-  'worktree.created': 'set up a worktree for',
-  'worktree.deleted': 'cleaned up the worktree of',
-  'work_item.comment_created': 'commented:',
-  'work_item.comment_edited': 'edited a comment:',
-  'work_item.comment_deleted': 'deleted a comment:',
-  'work_item.comment_mentioned': 'mentioned someone:',
-  'work_item.created': 'created',
-  'work_item.updated': 'updated',
-  'work_item.deleted': 'deleted',
-  'work_item.transition_rejected': 'was blocked moving',
-  'intake.config_updated': 'changed intake settings on',
-  'intake.binding_updated': 'changed an intake binding on',
+/** The verb that makes the rail read as prose; a row off the registry falls back to its own label. */
+const DEED_PHRASES: Record<AuditAction, string> = {
+  'factory.run.started': 'started a run on',
+  'factory.run.ended': 'ended a run on',
+  'factory.run.queued': 'queued a run on',
+  'factory.run.rejected': 'rejected the run on',
+  'factory.run.approved': 'approved the run on',
+  'factory.run.dismissed': 'dismissed the run on',
+  'factory.run.retry': 'retried the run on',
+  'factory.git.commit': 'committed to',
+  'factory.git.push': 'pushed to',
+  'factory.git.pr_opened': 'opened a pull request for',
+  'factory.agent.commit': 'committed to',
+  'factory.agent.push': 'pushed to',
+  'factory.agent.pr_opened': 'opened a pull request for',
+  'factory.agent.signaled': 'signaled',
+  'factory.work_item.created': 'created',
+  'factory.work_item.updated': 'updated',
+  'factory.work_item.deleted': 'deleted',
+  'factory.work_item.stage_moved': 'moved',
+  'factory.work_item.transition_rejected': 'was blocked moving',
+  'factory.work_item.comment_created': 'commented:',
+  'factory.work_item.comment_edited': 'edited a comment:',
+  'factory.work_item.comment_deleted': 'deleted a comment:',
+  'factory.work_item.comment_mentioned': 'mentioned someone:',
+  'factory.work_item.labels_reconciled': 'reconciled the labels on',
+  'factory.intake.config_updated': 'changed intake settings on',
+  'factory.intake.binding_updated': 'changed an intake binding on',
+  'factory.intake.label_route_updated': 'changed an intake label route on',
 };
 
 /** Some events name nothing — an intake setting has no title — so the verb drops its preposition. */
 function deedPhrase(action: string, named: boolean): string {
-  const [, namespace, leaf] = action.split('.');
-  const phrase = DEED_PHRASES[`${namespace}.${leaf}`] ?? auditActionLabel(action).toLowerCase();
+  const phrase = isAuditAction(action) ? DEED_PHRASES[action] : auditActionLabel(action).toLowerCase();
   return named ? phrase : phrase.replace(/ (?:on|to|for|of)$/, '');
 }
 
@@ -103,9 +108,9 @@ function entryTone(entry: ActivityEntry): BadgeVariant {
 }
 
 function entryGlyph(entry: ActivityEntry): LucideIcon {
-  return entry.kind === 'move'
-    ? (STAGE_GLYPHS[entry.stages.at(-1) ?? ''] ?? ListFilter)
-    : (DEED_GLYPHS[entry.action.split('.')[1] ?? ''] ?? SquarePen);
+  if (entry.kind === 'move') return STAGE_GLYPHS[entry.stages.at(-1) ?? ''] ?? ListFilter;
+  const namespace = parseAuditAction(entry.action)?.namespace;
+  return namespace ? DEED_GLYPHS[namespace] : SquarePen;
 }
 
 function Node({ entry }: { entry: ActivityEntry }) {
@@ -126,7 +131,7 @@ function Actor({ by, avatarUrl, name }: { by: string | undefined; avatarUrl?: st
   const Glyph = ACTOR_GLYPHS.find(([prefix]) => by?.startsWith(prefix))?.[1] ?? User;
 
   return (
-    <span className="border-border1 bg-surface3 text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
+    <span className="border-border bg-card text-muted-foreground h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
       <Glyph className="size-[13px]" aria-hidden />
     </span>
   );
@@ -138,10 +143,16 @@ function StageChain({ stages }: { stages: string[] }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {folded > 0 ? <span className="text-ui-xs text-icon3 tabular-nums">+{folded}</span> : null}
+      {folded > 0 ? (
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+          +{folded}
+        </Txt>
+      ) : null}
       {shown.map((stage, index) => (
         <span key={`${stage}-${index}`} className="flex items-center gap-1">
-          {index > 0 || folded > 0 ? <ChevronRight size={11} className="text-icon2 shrink-0" aria-hidden /> : null}
+          {index > 0 || folded > 0 ? (
+            <ChevronRight size={11} className="text-placeholder shrink-0" aria-hidden />
+          ) : null}
           <StageBadge stage={stage} />
         </span>
       ))}
@@ -156,7 +167,7 @@ function entryTarget(entry: ActivityEntry): { id: string; board: string } | unde
 /** Only a card the board still holds opens. */
 function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factoryProjectId: string | undefined }) {
   const target = entryTarget(entry);
-  const shape = 'text-icon6 min-w-0 truncate font-medium';
+  const shape = 'text-foreground min-w-0 truncate font-medium';
 
   if (target === undefined) return <span className={shape}>{entry.title}</span>;
 
@@ -182,8 +193,8 @@ function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; f
         const target = entryTarget(entry);
         const body = (
           <>
-            <Txt as="span" variant="ui-sm" className="text-icon4 min-w-0 flex-1 truncate">
-              {entry.title === '' ? <span className="text-icon2">—</span> : entry.title}
+            <Txt as="span" variant="caption" className="text-muted-foreground min-w-0 flex-1 truncate">
+              {entry.title === '' ? <span className="text-placeholder">—</span> : entry.title}
             </Txt>
             <Time at={entry.at} />
           </>
@@ -222,25 +233,27 @@ function Block({
 
   return (
     <RailRow mark={<Node entry={first} />} connected={connected}>
-      <Txt as="div" variant="ui-sm" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
+      <Txt as="div" variant="caption" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
-        <span className="text-icon6 shrink-0 font-medium">{name}</span>
-        <span className="text-icon3 shrink-0">
+        <span className="text-foreground shrink-0 font-medium">{name}</span>
+        <span className="text-muted-foreground shrink-0">
           {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
         </span>
         {grouped && first.kind === 'move' ? (
-          <span className="text-icon6 shrink-0 font-medium">{block.entries.length} cards</span>
+          <span className="text-foreground shrink-0 font-medium">{block.entries.length} cards</span>
         ) : (
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
             {grouped ? (
-              <span className="text-ui-xs text-icon3 shrink-0 tabular-nums">+{block.entries.length - 1}</span>
+              <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+                +{block.entries.length - 1}
+              </Txt>
             ) : null}
           </>
         )}
         {first.kind === 'move' ? (
           <>
-            <span className="text-icon3 shrink-0">to</span>
+            <span className="text-muted-foreground shrink-0">to</span>
             <StageChain stages={first.stages} />
           </>
         ) : null}

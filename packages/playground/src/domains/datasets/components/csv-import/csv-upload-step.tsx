@@ -1,6 +1,9 @@
 'use client';
 
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload } from 'lucide-react';
@@ -72,10 +75,11 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Hidden file input */}
-      <input
+    <Field invalid={Boolean(error)} className="flex flex-col gap-3">
+      <FieldLabel className="sr-only">CSV file</FieldLabel>
+      <Input
         ref={inputRef}
+        name="csv-file"
         type="file"
         accept=".csv"
         onChange={handleFileChange}
@@ -83,7 +87,6 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         disabled={isParsing}
       />
 
-      {/* Dropzone */}
       <div
         onClick={handleClick}
         onDragOver={handleDragOver}
@@ -91,14 +94,14 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-[160px] rounded-lg border-2 border-dashed p-4',
           'cursor-pointer transition-colors',
           // Default state
-          'border-surface4 bg-surface2',
+          'border-border bg-background',
           // Drag over state
-          isDragOver && 'border-accent1/50 bg-accent1/5',
+          isDragOver && 'border-success-edge bg-success-subtle',
           // Error state
-          error && 'border-accent2/50 bg-accent2/5',
+          error && 'border-destructive-edge bg-destructive-subtle',
           // Disabled during parsing
           isParsing && 'cursor-wait opacity-60',
         )}
@@ -106,23 +109,28 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-neutral4 text-sm">Parsing CSV...</span>
+            <Txt as="span" tone="muted">
+              Parsing CSV...
+            </Txt>
           </>
         ) : (
           <>
-            <Icon className="text-neutral4">
+            <Icon className="text-muted-foreground">
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-neutral1 text-sm font-medium">Click to upload or drag and drop</span>
-              <span className="text-neutral4 text-xs">CSV files only</span>
+              <Txt as="span" variant="subheading" tone="faint">
+                Click to upload or drag and drop
+              </Txt>
+              <Txt as="span" variant="caption" tone="muted">
+                CSV files only
+              </Txt>
             </div>
           </>
         )}
       </div>
 
-      {/* Error message */}
-      {error && <div className="text-accent2 text-sm">{error}</div>}
-    </div>
+      <FieldError>{error}</FieldError>
+    </Field>
   );
 }

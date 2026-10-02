@@ -1,22 +1,33 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { useScorer, useScoresByScorerId } from '@mastra/playground-ui/domains/scores';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { PencilIcon, Play } from 'lucide-react';
+import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
+import { navCrumb, scorerCrumb } from '@/domains/navigation/crumbs';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
+import { ScoresColumnsMenu } from '@/domains/scores/components/scores-columns';
 import { ScoresList } from '@/domains/scores/components/scores-list';
+import type { ScoresSortKey } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
-import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { RouteHeaderActions } from '@/lib/route-header';
+import { useScoresColumns } from '@/domains/scores/hooks/use-scores-columns';
+
+const crumbs = [navCrumb('/scorers'), scorerCrumb];
+const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -32,11 +43,13 @@ export default function Scorer() {
   });
 
   const { scorer, error: scorerError } = useScorer(scorerId!);
+  const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
-  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows({});
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: SCORES_SORT_KEYS });
   const {
-    data: scores = [],
+    data: loadedScores = [],
     isLoading: isLoadingScores,
     error: scoresError,
     isFetchingNextPage,
@@ -47,6 +60,15 @@ export default function Scorer() {
     entityId: selectedEntityOption?.value === 'all' ? undefined : selectedEntityOption?.value,
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
+  // The legacy scorer route has no server-side sort, so only loaded pages are ordered.
+  const scores = useMemo(
+    () =>
+      sortBy(loadedScores, sort, {
+        date: score => score.createdAt,
+        score: score => (typeof score.score === 'number' ? score.score : undefined),
+      }),
+    [loadedScores, sort],
+  );
 
   const agentOptions: EntityOptions[] = useMemo(
     () =>
@@ -159,14 +181,7 @@ export default function Scorer() {
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  const scorerHeaderActions =
-    scorer?.scorer?.source === 'stored' ? (
-      <RouteHeaderActions owner="scorer-detail">
-        <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`} size="sm">
-          <PencilIcon /> Edit
-        </Button>
-      </RouteHeaderActions>
-    ) : null;
+  const isStoredScorer = scorer?.source === 'stored';
 
   const runDialog = scorerId ? (
     <ExperimentTriggerDialog
@@ -177,6 +192,21 @@ export default function Scorer() {
     />
   ) : null;
 
+  const scorerActionsMenu = isStoredScorer ? (
+    <DropdownMenu>
+      <DropdownMenu.Trigger asChild>
+        <Button size="lg" aria-label="Scorer actions menu">
+          <MoreVertical />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" className="w-48">
+        <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
+          <Pencil /> Edit Scorer
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ) : null;
+
   const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
 
   if (showEmptyState) {
@@ -185,51 +215,67 @@ export default function Scorer() {
       (agentsError instanceof Error ? agentsError.message : undefined) ??
       (workflowsError instanceof Error ? workflowsError.message : undefined) ??
       'An unexpected error occurred';
+    const hasError = isUnauthorized || isForbidden || hasOtherError;
 
     return (
-      <PageLayout width="wide" height="full" className="grid-rows-[1fr]">
-        {scorerHeaderActions}
-        <PageLayout.MainArea isCentered>
+      <PageLayout
+        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+        actionRow={
+          !hasError && scorerActionsMenu ? (
+            <ActionRow>
+              <ActionRow.End>{scorerActionsMenu}</ActionRow.End>
+            </ActionRow>
+          ) : undefined
+        }
+      >
+        <h1 className="sr-only">{scorerId}</h1>
+        <div className="flex h-full items-center justify-center">
           {isUnauthorized ? (
             <SessionExpired />
           ) : isForbidden ? (
             <PermissionDenied resource="scorers" />
           ) : hasOtherError ? (
-            <ErrorState title="Failed to load scorer" message={errorMessage} />
+            <EmptyState tone="error" titleSlot="Failed to load scorer" descriptionSlot={errorMessage} />
           ) : (
             <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}
-        </PageLayout.MainArea>
+        </div>
         {runDialog}
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      {scorerHeaderActions}
-      <PageLayout.TopArea>
-        <div className="flex items-center justify-between gap-3">
-          <ScoresTools
-            selectedEntity={selectedEntityOption}
-            entityOptions={entityOptions}
-            onEntityChange={handleSelectedEntityChange}
-            onReset={() => {
-              setSearchParams(prev => {
-                const next = new URLSearchParams(prev);
-                next.set('entity', 'all');
-                return next;
-              });
-            }}
-            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-          />
-          <Button variant="primary" onClick={() => setRunDialogOpen(true)}>
-            <Play />
-            Run Experiment
-          </Button>
-        </div>
-      </PageLayout.TopArea>
-
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <ScoresTools
+              selectedEntity={selectedEntityOption}
+              entityOptions={entityOptions}
+              onEntityChange={handleSelectedEntityChange}
+              onReset={() => {
+                setSearchParams(prev => {
+                  const next = new URLSearchParams(prev);
+                  next.set('entity', 'all');
+                  return next;
+                });
+              }}
+              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+            />
+          </ActionRow.Start>
+          <ActionRow.End>
+            <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
+              Run Experiment
+            </Button>
+            {scorerActionsMenu}
+          </ActionRow.End>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">{scorerId}</h1>
       <ScoresList
         scores={scores}
         isLoading={isLoadingScores}
@@ -239,6 +285,9 @@ export default function Scorer() {
         setEndOfListElement={setEndOfListElement}
         onScoreClick={handleScoreClick}
         errorMsg={scoresError?.message}
+        columnsState={columnsState}
+        sort={sort}
+        onSortChange={onSortChange}
       />
       {runDialog}
     </PageLayout>

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
 import { applyCompatLayer } from '../utils';
+import { AnthropicSchemaCompatLayer } from './anthropic';
 import { GoogleSchemaCompatLayer } from './google';
 import { createSuite } from './test-suite';
 
@@ -60,6 +61,28 @@ describe('GoogleSchemaCompatLayer', () => {
       expect(layer.shouldApply()).toBe(true);
     });
 
+    it('should apply for Gemini models served through Google Vertex', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'googleVertex.generative-ai',
+        modelId: 'gemini-2.5-pro',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it('should not apply for Claude models served through Google Vertex', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'googleVertex.anthropic.messages',
+        modelId: 'claude-sonnet-4-5',
+        supportsStructuredOutputs: false,
+      };
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      expect(layer.shouldApply()).toBe(false);
+    });
+
     it('should not apply for non-Google models', () => {
       const modelInfo: ModelInformation = {
         provider: 'openai',
@@ -82,6 +105,44 @@ describe('GoogleSchemaCompatLayer', () => {
 
       const layer = new GoogleSchemaCompatLayer(modelInfo);
       expect(layer.getSchemaTarget()).toBe('jsonSchema7');
+    });
+  });
+
+  describe('compatibility layer selection', () => {
+    it('uses Anthropic compatibility for Claude models served through Google Vertex', () => {
+      const modelInfo: ModelInformation = {
+        provider: 'googleVertex.anthropic.messages',
+        modelId: 'claude-sonnet-4-5',
+        supportsStructuredOutputs: false,
+      };
+      const googleLayer = new GoogleSchemaCompatLayer(modelInfo);
+      const anthropicLayer = new AnthropicSchemaCompatLayer(modelInfo);
+
+      expect(googleLayer.shouldApply()).toBe(false);
+      expect(anthropicLayer.shouldApply()).toBe(true);
+
+      const schema = applyCompatLayer({
+        schema: {
+          type: 'object',
+          properties: {
+            nullableString: {
+              type: ['string', 'null'],
+            },
+          },
+        },
+        compatLayers: [googleLayer, anthropicLayer],
+        mode: 'jsonSchema',
+      });
+
+      expect(schema).toMatchObject({
+        type: 'object',
+        properties: {
+          nullableString: {
+            type: ['string', 'null'],
+          },
+        },
+      });
+      expect((schema as any).properties.nullableString.nullable).toBeUndefined();
     });
   });
 

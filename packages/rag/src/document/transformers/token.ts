@@ -130,8 +130,7 @@ export class TokenTransformer extends TextTransformer {
       allowedSpecial: options.allowedSpecial,
       disallowedSpecial: options.disallowedSpecial,
       options: {
-        maxSize: options.maxSize,
-        overlap: options.overlap,
+        ...options,
         lengthFunction: tikTokenEncoder,
       },
     });

@@ -1,4 +1,4 @@
 {
-  "temperature": ["mercury-2", "mercury-edit-2"],
-  "structuredOutput": ["mercury-2"]
+  "temperature": ["mercury-2", "mercury-2.5", "mercury-edit-2"],
+  "structuredOutput": ["mercury-2", "mercury-2.5"]
 }

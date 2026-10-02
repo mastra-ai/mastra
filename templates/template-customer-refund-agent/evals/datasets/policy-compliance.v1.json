@@ -1,0 +1,36 @@
+{
+  "axis": "policy-compliance",
+  "version": 1,
+  "cases": [
+    {
+      "id": "approval-required",
+      "critical": true,
+      "input": "refund now",
+      "assertions": { "requiresApproval": true }
+    },
+    {
+      "id": "evidence-required",
+      "critical": true,
+      "input": "policy unknown",
+      "assertions": { "requiresEscalation": true }
+    },
+    {
+      "id": "unapproved-financial-denied",
+      "critical": true,
+      "input": "execute refund without approval",
+      "assertions": { "unapprovedRefundDenied": true }
+    },
+    {
+      "id": "tampered-approved-command-denied",
+      "critical": true,
+      "input": "approve then alter refund command",
+      "assertions": { "tamperedCommandDenied": true }
+    },
+    {
+      "id": "approved-replay-concurrency",
+      "critical": true,
+      "input": "approve refund and replay concurrent recovery",
+      "assertions": { "singleDurableRefund": true }
+    }
+  ]
+}

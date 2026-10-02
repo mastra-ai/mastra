@@ -43,7 +43,7 @@ export function ExperimentResultSpanPane({
       <Column.Content>
         <MainHeader withMargins={false}>
           <MainHeader.Column>
-            <MainHeader.Title size="smaller">
+            <MainHeader.Title>
               <BracesIcon /> Span {getShortId(spanId)}
             </MainHeader.Title>
           </MainHeader.Column>

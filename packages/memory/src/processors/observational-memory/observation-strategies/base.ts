@@ -5,10 +5,12 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
+import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
+import { withRetry } from '../retry';
 import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
@@ -48,6 +50,7 @@ export interface StrategyDeps {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
 }
@@ -115,11 +118,13 @@ export abstract class ObservationStrategy {
           observationTokens: processed.observationTokens,
           threadId,
           writer,
+          messageList: this.opts.messageList,
           abortSignal,
           mainAgent: this.opts.agent,
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
@@ -136,7 +141,8 @@ export abstract class ObservationStrategy {
             cycleId,
             operationType: 'observation',
             startedAt: new Date().toISOString(),
-            error: error instanceof Error ? error.message : String(error),
+            error: formatOmError(error),
+            ...getOmFailureMetadata(error, this.observationConfig.failurePolicy),
             recordId: record.id,
             threadId,
           },
@@ -147,8 +153,14 @@ export abstract class ObservationStrategy {
         return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
       }
 
-      // Sync + resource-scoped: same contract as pre-#14453 — rethrow after failed markers.
       omError('[OM] Observation failed', error);
+      if (
+        this.observationConfig.failurePolicy === 'continue' &&
+        isOmModelExecutionError(error) &&
+        error.failureKind === 'observer-model'
+      ) {
+        return { observed: false, error };
+      }
       throw error;
     }
   }
@@ -315,8 +327,9 @@ export abstract class ObservationStrategy {
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
-    resourceId?: string,
-    observedAt?: Date,
+    resourceId: string | undefined,
+    observedAt: Date | undefined,
+    recordId: string,
   ): Promise<void> {
     if (!resourceId || !this.deps.onIndexObservations) {
       return;
@@ -329,14 +342,19 @@ export abstract class ObservationStrategy {
 
     await Promise.all(
       groups.map(group =>
-        this.deps.onIndexObservations!({
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId,
-          resourceId,
-          observedAt,
-        }),
+        withRetry(
+          () =>
+            this.deps.onIndexObservations!({
+              text: group.content,
+              groupId: group.id,
+              range: group.range,
+              threadId,
+              resourceId,
+              observedAt,
+              recordId,
+            }),
+          { label: 'index-observations', abortSignal: this.opts.abortSignal },
+        ),
       ),
     );
   }

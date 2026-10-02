@@ -161,7 +161,7 @@ test.describe('Viewer Role', () => {
       await expect(permissionDenied).toBeVisible();
 
       // The run/trigger button should NOT be visible for viewers
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(runButton).not.toBeVisible();
     });
 
@@ -279,7 +279,7 @@ test.describe('Viewer Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Look for run button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
 
       // Viewer should see button disabled or not visible
       const viewerButtonVisible = await runButton.isVisible();
@@ -309,7 +309,7 @@ test.describe('Viewer Role', () => {
       await expect(viewerPermissionDenied).toBeVisible();
 
       // Run button should NOT be visible for viewer
-      const viewerRunButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      const viewerRunButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(viewerRunButton).not.toBeVisible();
 
       // Now check as member (who has workflows:* permission)
@@ -321,7 +321,7 @@ test.describe('Viewer Role', () => {
       await page.reload();
 
       // Member should have workflows:* permission, so button should be visible and enabled
-      const memberRunButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const memberRunButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(memberRunButton).toBeVisible();
       await expect(memberRunButton).not.toBeDisabled();
 
@@ -429,7 +429,7 @@ test.describe('Viewer Role', () => {
 
       // Viewer has workflows:read but NOT workflows:execute
       // The run button should NOT be visible; permission message should be shown instead
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i });
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(runButton).not.toBeVisible();
 
       // Permission denied message should be visible

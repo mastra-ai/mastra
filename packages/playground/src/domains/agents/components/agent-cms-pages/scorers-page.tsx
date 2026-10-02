@@ -1,15 +1,14 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
+import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -31,8 +30,8 @@ export function ScorersPage() {
     if (!scorers) return [];
     return Object.entries(scorers).map(([id, scorer]) => ({
       value: id,
-      label: (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id,
-      description: (scorer as { scorer?: { config?: { description?: string } } }).scorer?.config?.description || '',
+      label: scorer.scorer?.config?.name || id,
+      description: scorer.scorer?.config?.description || '',
     }));
   }, [scorers]);
 
@@ -101,7 +100,7 @@ export function ScorersPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <SectionHeader
             title="Scorers"
@@ -114,17 +113,7 @@ export function ScorersPage() {
             <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search scorers"
-              placeholder="Search scorers"
-              onChange={event => setSearch(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput label="Search scorers" placeholder="Search scorers" value={search} onValueChange={setSearch} />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -134,7 +123,7 @@ export function ScorersPage() {
 
                 return (
                   <div key={scorer.value} className="flex flex-col">
-                    <Entity className="bg-surface2">
+                    <Entity className="bg-background">
                       <EntityContent>
                         <EntityName>{scorer.label}</EntityName>
                         <EntityDescription>
@@ -142,8 +131,8 @@ export function ScorersPage() {
                             type="text"
                             disabled={isDisabled}
                             className={cn(
-                              'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                              !isDisabled && 'border-border1 border-dashed ',
+                              'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                              !isDisabled && 'border-dashed border-border',
                             )}
                             value={
                               isSelected
@@ -156,7 +145,6 @@ export function ScorersPage() {
                           {isSelected && (
                             <div className="pt-2">
                               <ScorerConfigPanel
-                                scorerId={scorer.value}
                                 samplingConfig={selectedScorers?.[scorer.value]?.sampling}
                                 onSamplingChange={config => handleSamplingChange(scorer.value, config)}
                                 readOnly={readOnly}
@@ -191,13 +179,12 @@ export function ScorersPage() {
 }
 
 interface ScorerConfigPanelProps {
-  scorerId: string;
   samplingConfig?: ScorerConfig['sampling'];
   onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   readOnly?: boolean;
 }
 
-function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnly = false }: ScorerConfigPanelProps) {
+function ScorerConfigPanel({ samplingConfig, onSamplingChange, readOnly = false }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
 
   const handleTypeChange = (type: string) => {
@@ -217,37 +204,24 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
-          Sampling
-        </Label>
-        <RadioGroup
-          id={`sampling-type-${scorerId}`}
-          value={samplingType}
-          onValueChange={handleTypeChange}
-          className="flex flex-col gap-2"
-          disabled={readOnly}
-        >
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-neutral5 cursor-pointer">
-              None (evaluate all)
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-neutral5 cursor-pointer">
-              Ratio (percentage)
-            </Label>
-          </div>
-        </RadioGroup>
+        <Field disabled={readOnly}>
+          <Fieldset className="gap-2" render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} />}>
+            <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
+            <FieldItem>
+              <RadioGroupItem value="none" />
+              <FieldLabel>None (evaluate all)</FieldLabel>
+            </FieldItem>
+            <FieldItem>
+              <RadioGroupItem value="ratio" />
+              <FieldLabel>Ratio (percentage)</FieldLabel>
+            </FieldItem>
+          </Fieldset>
+        </Field>
 
         {samplingType === 'ratio' && (
-          <div className="mt-2 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
-              Sample Rate (0-1)
-            </Label>
+          <Field disabled={readOnly} className="mt-2 gap-1.5">
+            <FieldLabel>Sample Rate (0-1)</FieldLabel>
             <Input
-              id={`rate-${scorerId}`}
               type="number"
               min="0"
               max="1"
@@ -255,9 +229,8 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
               className="h-8"
-              disabled={readOnly}
             />
-          </div>
+          </Field>
         )}
       </div>
     </div>

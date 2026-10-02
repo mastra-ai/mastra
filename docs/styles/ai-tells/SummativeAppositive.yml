@@ -1,0 +1,63 @@
+---
+extends: existence
+message: "AI summative appositive: '%s'. The label noun restates the clause before it. Put the claim in its own sentence, or stop at the comma."
+level: error
+nonword: true
+ignorecase: true
+# The summative appositive: a finished clause, a comma, and then an
+# abstraction noun that names what the clause just was, with a relative
+# clause hung off it ("the index is rebuilt on every read, a cost that
+# shows up in the benchmarks"; "the caller sees one row, a distinction
+# the old path never made"; "it drops the header, something no caller
+# expects"; "the sweeper runs last, which is exactly the point"). The
+# sentence had ended. The appositive reopens it to grade the claim (a
+# cost, a win, a risk, a guarantee) and then repeats the claim in the
+# relative clause, so the reader gets the fact twice and the label once.
+# It is a padding beat: the model delivers the "and that matters
+# because" turn without any of the words that used to mark it, and the
+# sibling of the coordinated reveal in CoordinatedReveal, where the
+# restatement rides on ", and" instead of an appositive (2026-09).
+#
+# The plain form puts the claim in a second sentence or stops at the
+# comma: "The index is rebuilt on every read. The benchmarks show it."
+#
+# Vale cannot see a restatement, so the tokens take the comma, the
+# indefinite article, a label noun, and the word that opens the
+# relative clause: "that" or "which," "worth" ("a detail worth noting"),
+# or the determiner or pronoun of a contact clause ("a guarantee the
+# old path never made," "a cost no caller pays," "a fact we rely on").
+# The label nouns are the evaluative abstractions agent prose reaches
+# for; a concrete noun after the comma ("Alice, a friend of mine";
+# "gofmt, a tool that rewrites files") is an ordinary appositive naming
+# a thing and stays out because its noun is not listed. "Pattern" is
+# refused ahead of a matching verb so a regex definition ("a pattern
+# that matches the filenames") stays quiet.
+#
+# Costs across the Go and Python standard libraries: the whole noun set
+# measures one, a contact clause in a Python comment ("This is actually
+# a requirement, an assumption we need to make"), which is the
+# construction itself and fires by design; the "something" spelling
+# measures zero; ", which is exactly what" one ("which is exactly what
+# updateUnprunedRoots does"), also the construction. Only twenty lines
+# in either corpus put ", a <noun> that" on the page at all, and every
+# one names a thing ("a type that," "an interface that," "a logger
+# that"). Measured out: ", which is what" and ", which is why" without
+# the intensifier, at thirteen and seven hits ("which is what we want,"
+# "which is why we have to"), which is how humans write the same
+# afterthought; the intensifier is what marks the AI spelling.
+tokens:
+  # --- The label noun with its relative clause, contact clause, or
+  # "worth" ("a cost that shows up on every read," "a distinction the
+  # caller never sees," "a fact we rely on," "a detail worth noting").
+  - ", an? (?:cost|fact|pattern(?! (?:that|which) match(?:es|ed|ing)?\\b)|distinction|property|guarantee|constraint|trade-off|tradeoff|detail|choice|design|shape|move|gap|decision|consequence|side effect|limitation|feature|behaviou?r|assumption|risk|win|signal|tell|habit|caveat|subtlety|nuance|quirk|tension|asymmetry|invariant|reminder|lesson|problem|promise|compromise|convenience|trap|hazard|symptom|requirement|mismatch|difference|restriction|contract|boundary|price|penalty|benefit) (?:that|which|worth|the|no|every|each|this|these|its|their|our|your|my|most|few|some|many|any|nobody|no one|none|nothing|someone|everyone|i|we|you|they|it|he|she|one)\\b"
+
+  # --- The pronoun spelling, the label left blank ("something no
+  # caller expects," "something that determines the whole design,"
+  # "something worth knowing").
+  - ", something (?:that|which|worth|the|no|every|each|this|these|its|their|our|your|my|most|few|nobody|no one|none|i|we|you|they|it|he|she|one)\\b"
+
+  # --- The relative clause alone, with the intensifier that marks it
+  # ("which is exactly the point," "which is precisely what the cache
+  # is for"). The bare "which is what" stays out; see the comment above.
+  - ", which (?:is|was) (?:exactly|precisely) (?:the|what|why|how)\\b"
+  - ", which (?:is|was) the (?:whole )?point\\b(?! (?:at|where|in|on|from|to|of the (?:cursor|line|curve|graph))\\b)"

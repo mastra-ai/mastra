@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Plug, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -38,21 +39,22 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
         <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-        <Txt variant="ui-md" className="text-neutral4 flex-1" as="div">
+        <Txt variant="body" tone="muted" className="flex-1" as="div">
           {platform.name}
         </Txt>
         {!platform.isConfigured ? (
-          <Badge variant="yellow" size="sm" indicator="dot">
+          <Badge variant="warning" size="sm" indicator="dot">
             Not configured
           </Badge>
         ) : installation ? (
-          <Badge variant="green" size="sm" indicator="dot">
+          <Badge variant="success" size="sm" indicator="dot">
             Connected
           </Badge>
         ) : null}
 
         {!platform.isConfigured ? (
           <Button
+            icon={<Settings2 />}
             size="sm"
             variant="ghost"
             disabled
@@ -62,6 +64,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : installation ? (
           <Button
+            icon={<Settings2 />}
             size="sm"
             variant="default"
             onClick={() => setDialogOpen(true)}
@@ -71,6 +74,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : (
           <Button
+            icon={<Plug />}
             size="sm"
             variant="default"
             onClick={handleConnect}

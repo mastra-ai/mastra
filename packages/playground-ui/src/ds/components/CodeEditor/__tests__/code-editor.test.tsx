@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -64,6 +65,31 @@ describe('CodeEditor — what it shows', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
 
     expect(lastProps()?.['aria-label']).toBe('Code editor');
+  });
+
+  it('associates validation state with the editable content', () => {
+    render(
+      <CodeEditor
+        id="input-provider-options"
+        value="{}"
+        showCopyButton={false}
+        aria-label="Provider options"
+        aria-invalid
+        aria-describedby="error-provider-options"
+      />,
+    );
+
+    const parent = document.createElement('div');
+    const view = new EditorView({
+      state: EditorState.create({ extensions: lastProps()?.extensions ?? [] }),
+      parent,
+    });
+
+    expect(view.contentDOM.id).toBe('input-provider-options');
+    expect(view.contentDOM.getAttribute('aria-label')).toBe('Provider options');
+    expect(view.contentDOM.getAttribute('aria-invalid')).toBe('true');
+    expect(view.contentDOM.getAttribute('aria-describedby')).toBe('error-provider-options');
+    view.destroy();
   });
 });
 
@@ -195,16 +221,9 @@ describe('CodeEditor — passing its settings through', () => {
     expect(lastProps()?.style).toEqual({ height: '100%' });
   });
 
-  it('takes the frame the caller asks for', () => {
-    const { container } = render(<CodeEditor value="x" showCopyButton={false} />);
-    expect((container.firstElementChild as HTMLElement).classList.contains('border-border1')).toBe(true);
-
-    cleanup();
-
-    const embedded = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
-    const root = embedded.container.firstElementChild as HTMLElement;
-    expect(root.classList.contains('border-none')).toBe(true);
-    expect(root.classList.contains('border-border1')).toBe(false);
+  it('drops its border in the embedded variant', () => {
+    const { container } = render(<CodeEditor value="x" showCopyButton={false} variant="embedded" />);
+    expect((container.firstElementChild as HTMLElement).classList.contains('border-none')).toBe(true);
   });
 
   it('rebuilds its extensions when the language changes', () => {

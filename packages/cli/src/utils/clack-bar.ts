@@ -1,18 +1,26 @@
+import { S_BAR } from '@clack/prompts';
 import pc from 'picocolors';
 
+import { createDeployLogWriter } from './deploy-log-format.js';
+import type { DeployLogWriter, DeployLogWriterOptions } from './deploy-log-format.js';
+
 let _bar: string | undefined;
-async function getBar(): Promise<string> {
-  if (_bar === undefined) {
-    const { S_BAR } = await import('@clack/prompts');
-    _bar = pc.gray(S_BAR);
-  }
+function getBar(): string {
+  _bar ??= pc.gray(S_BAR);
   return _bar;
 }
 
 /** Write a line to stdout prefixed with the clack pipe for visual continuity. */
 export async function writeBarLine(line: string): Promise<void> {
-  const bar = await getBar();
-  process.stdout.write(`${bar}  ${line}\n`);
+  process.stdout.write(`${getBar()}  ${line}\n`);
+}
+
+/**
+ * Deploy log writer whose lines are nested under the current clack step.
+ * See {@link createDeployLogWriter} for the formatting and tail behaviour.
+ */
+export function createBarLogWriter(options: Omit<DeployLogWriterOptions, 'prefix'> = {}): DeployLogWriter {
+  return createDeployLogWriter({ ...options, prefix: `${getBar()}  ` });
 }
 
 /**
@@ -22,7 +30,7 @@ export async function writeBarLine(line: string): Promise<void> {
  */
 export async function withBarPrefix<T>(fn: () => Promise<T>): Promise<T> {
   const originalWrite = process.stdout.write.bind(process.stdout);
-  const prefix = await getBar();
+  const prefix = getBar();
 
   process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
     const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString();

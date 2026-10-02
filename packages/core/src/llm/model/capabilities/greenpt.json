@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4.1-flash",
     "gemma-3-27b-it",
     "gemma4",
     "gpt-oss-120b",
@@ -19,6 +20,7 @@
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "devstral-2-123b-instruct-2512",
     "gemma-3-27b-it",
     "gemma4",
@@ -33,6 +35,8 @@
     "glm-5.2-ponytail",
     "glm-5.2-ponytail-lite",
     "glm-5.2-ponytail-ultra",
+    "glm-5.3",
+    "glm-5.3-flash",
     "gpt-oss-120b",
     "green-l",
     "green-l-raw",
@@ -54,6 +58,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-3-27b-it",
     "gemma4",
     "glm-5.1",
@@ -67,6 +72,8 @@
     "glm-5.2-ponytail",
     "glm-5.2-ponytail-lite",
     "glm-5.2-ponytail-ultra",
+    "glm-5.3",
+    "glm-5.3-flash",
     "gpt-oss-120b",
     "green-r",
     "green-r-raw",

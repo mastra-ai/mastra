@@ -30,10 +30,12 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
-import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
+import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
+import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
+import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -89,16 +91,6 @@ function credentialEncryption() {
   });
 }
 
-function investigateIntakeIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-  } as const;
-}
-
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
 // signals) ride Redis Streams so multiple web server processes can share one
 // event bus. RedisStreamsPubSub also implements LeaseProvider, so the factory
@@ -106,7 +98,14 @@ function investigateIntakeIssue(context: FactoryStageRuleContext) {
 // in favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev)
 // the in-process default applies.
 const redisUrl = process.env.REDIS_URL;
-const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+// Backstop TTL for idle streams: every write (publish, group creation, nack
+// retry) refreshes it — reads do not — so actively written topics never
+// expire. Open-ended topics (per-thread streams, feed
+// topics) are never clearTopic'd, and topics whose eager cleanup was missed
+// (e.g. a crashed run, or a reply landing after the requester's clearTopic)
+// would otherwise stay in Redis forever.
+const STREAM_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl, streamIdleTtlMs: STREAM_IDLE_TTL_MS }) : undefined;
 if (redisUrl) {
   // Redact credentials before logging (REDIS_URL may embed a password).
   let redisTarget = 'redis';
@@ -155,11 +154,22 @@ if (authDisabled) {
 }
 const secretEncryption = auth === null ? undefined : credentialEncryption();
 
+// Platform-backed integrations are installed by the factory only when Platform
+// credentials are present — the same check it makes internally.
+const platformCredentialsConfigured = Boolean(
+  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim(),
+);
+
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
 // a GithubIntegration so the app still gets a real GitHub connection — Connect
 // GitHub in onboarding, the repo picker, and webhooks. A partial group stays
 // disabled so the status route can report exactly what's missing.
+//
+// This integration carries the deployment's GitHub event-rule overrides. When
+// the group is absent the factory installs the Platform-backed integration
+// instead, and `platform.github` (below) hands it the same overrides — only one
+// of the two is ever installed.
 const githubAppId = process.env.GITHUB_APP_ID?.trim();
 const githubPrivateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
 const githubClientId = process.env.GITHUB_APP_CLIENT_ID?.trim();
@@ -180,6 +190,22 @@ const github =
       })
     : undefined;
 
+// Direct GitLab fallback for self-hosted / local deploys. GitLab Personal
+// and Group Access Tokens use the same API/Git authentication; the explicit
+// type records the credential's reach for diagnostics and setup guidance.
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlabAccessTokenType = process.env.GITLAB_ACCESS_TOKEN_TYPE?.trim();
+const gitlab = gitlabAccessToken
+  ? new GitLabIntegration({
+      accessToken: gitlabAccessToken,
+      ...(gitlabAccessTokenType === 'personal' || gitlabAccessTokenType === 'group'
+        ? { accessTokenType: gitlabAccessTokenType }
+        : {}),
+      ...(process.env.GITLAB_BASE_URL?.trim() ? { baseUrl: process.env.GITLAB_BASE_URL.trim() } : {}),
+      ...(process.env.GITLAB_WEBHOOK_SECRET?.trim() ? { webhookSecret: process.env.GITLAB_WEBHOOK_SECRET.trim() } : {}),
+    })
+  : undefined;
+
 // Direct Linear OAuth fallback for self-hosted / local deploys. As with the
 // GitHub fallback, only a complete credential group enables the integration;
 // partial configuration remains available to the diagnostics routes.
@@ -192,6 +218,40 @@ const linear =
         clientSecret: linearClientSecret,
       })
     : undefined;
+
+// Jira Cloud intake. A complete direct Basic-auth credential group takes
+// precedence. Otherwise Platform credentials enable automatic discovery of
+// visible `jira` connections. Partial direct configuration falls back
+// to Platform Jira when Platform credentials are available.
+const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraEmail = process.env.JIRA_EMAIL?.trim();
+const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
+const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
+if (jiraDirectVars.some(Boolean) && !jiraDirectVars.every(Boolean)) {
+  // A partial group silently disables direct Jira (no /web/jira routes mount),
+  // so tell the operator which knob is missing instead of showing nothing.
+  console.warn(
+    'Direct Jira intake is disabled: JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN must all be set together.',
+  );
+}
+const jira =
+  jiraBaseUrl && jiraEmail && jiraApiToken
+    ? new JiraIntegration({
+        baseUrl: jiraBaseUrl,
+        email: jiraEmail,
+        apiToken: jiraApiToken,
+      })
+    : platformCredentialsConfigured
+      ? new PlatformJiraIntegration()
+      : undefined;
+
+// Direct incident.io follow-up intake for self-hosted / local deploys. A
+// single deployment-global API key wires the integration; the constructor
+// throws without one, so construction is gated on the env var. When the key
+// is absent, the factory installs the Platform-backed integration itself if
+// Platform credentials are configured.
+const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
+const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
 
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
@@ -288,38 +348,41 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+const integrations = [
+  ...(github ? [github] : []),
+  ...(gitlab ? [gitlab] : []),
+  ...(linear ? [linear] : []),
+  ...(jira ? [jira] : []),
+  ...(incidentio ? [incidentio] : []),
+  ...(slack ? [slack] : []),
+];
 
-export const factoryRules = defaultFactoryRules({
-  version: 'mastracode-web-v1',
-  overrides: {
-    work: {
-      intake: {
-        issue: { onEnter: investigateIntakeIssue },
-      },
-    },
-  },
-});
+export const factoryConfigVersion = 'mastracode-web-v1';
 
-const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
-  key => Boolean(process.env[key]?.trim()),
-);
+const hasPlatformSandboxEnv =
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
-  rules: factoryRules,
+  configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    if (hasPlatformSandboxEnv) {
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
+        // Physical VM id from a prior start (undefined on first start) so
+        // resume reattaches the original VM instead of provisioning a replacement.
+        sandboxId: ctx.sandboxId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
 
-    if (process.env.E2B_API_KEY?.trim()) {
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
+        sandboxId: ctx.sandboxId,
         template: createE2BRepoTemplate(ctx),
       });
     }
@@ -371,9 +434,13 @@ const preparedArgs = await factory.prepare();
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors).
+// `server` config (middleware + apiRoutes + cors). Keep the worker-relevant
+// properties explicit so deploy builds can statically detect the worker topology.
 export const mastra = new Mastra({
   ...preparedArgs,
+  storage: preparedArgs.storage,
+  pubsub: preparedArgs.pubsub,
+  workers: preparedArgs.workers,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

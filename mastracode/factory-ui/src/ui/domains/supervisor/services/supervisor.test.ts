@@ -16,12 +16,12 @@ describe('supervisor prompts', () => {
   it('labels hostile-looking finding content as untrusted evidence', () => {
     const prompt = findingPrompt({
       id: 'finding-1',
-      kind: 'decision-failed',
+      kind: 'decision-stuck',
       title: hostileTitle,
       workItemId: 'item-1',
       workItemNumber: 123,
       evidence: 'The decision failed.',
-      ageMs: 1000,
+      beganAt: '2026-09-03T04:59:59.000Z',
       suggestedRepair: null,
     });
 

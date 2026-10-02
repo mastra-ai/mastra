@@ -7,7 +7,7 @@ description: "Browse Vancine model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/vancine.svg" alt="Vancine logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vancine
 
-Access 10 Vancine models through Mastra's model router. Authentication is handled automatically using the `VANCINE_API_KEY` environment variable.
+Access 8 Vancine models through Mastra's model router. Authentication is handled automatically using the `VANCINE_API_KEY` environment variable.
 
 Learn more in the [Vancine documentation](https://vancine.com/docs).
 
@@ -46,19 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "vancine/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.22,
-    "outputCost": 0.66
-  },
-  {
-    "model": "vancine/deepseek-v4-flash-vision-exp",
+    "model": "vancine/deepseek-v4.1-flash",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -66,20 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.22,
-    "outputCost": 0.66
-  },
-  {
-    "model": "vancine/deepseek-v4-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.66,
-    "outputCost": 1.98
+    "inputCost": 0.24,
+    "outputCost": 0.96
   },
   {
     "model": "vancine/glm-5.3",
@@ -102,8 +78,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.06,
-    "outputCost": 0.2
+    "inputCost": 0.12,
+    "outputCost": 0.4
   },
   {
     "model": "vancine/hy4-preview",
@@ -203,5 +179,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

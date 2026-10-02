@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { presentTool, stringifyToolValue } from './tool-presentation';
+import { hasToolArguments, isTaskTool, presentTool, stringifyToolValue, toolEdit } from './tool-presentation';
 
 describe('presentTool', () => {
   it('maps stable workspace aliases to humanized actions with their salient argument', () => {
@@ -33,6 +33,23 @@ describe('presentTool', () => {
     });
   });
 
+  it("adds a command's description, keeping the label, detail, and command for consumers that pick fields", () => {
+    const command = "cd packages/core && rg -n 'processor' src | head -20";
+    const presentation = presentTool('execute_command', { description: 'Finding  the processor\n wiring', command });
+    expect(presentation).toMatchObject({
+      label: 'Run',
+      detail: "rg -n 'processor' src | head -20",
+      description: 'Finding the processor wiring',
+      command,
+    });
+  });
+
+  it('falls back to the command when the description is blank', () => {
+    const presentation = presentTool('execute_command', { description: '  ', command: 'git status' });
+    expect(presentation).toMatchObject({ label: 'Run', detail: 'git status', command: 'git status' });
+    expect(presentation.description).toBeUndefined();
+  });
+
   it('strips the raw workspace prefix before lookup', () => {
     expect(presentTool('mastra_workspace_read_file', { path: 'a.ts' })).toMatchObject({
       label: 'Read',
@@ -60,5 +77,51 @@ describe('stringifyToolValue', () => {
     cyclic.self = cyclic;
     expect(stringifyToolValue(cyclic)).toBe('[object Object]');
     expect(stringifyToolValue(undefined)).toBe('undefined');
+  });
+});
+
+describe('toolEdit', () => {
+  it('reads a replacement as the two sides of a diff, an empty new side included', () => {
+    expect(toolEdit('mastra_workspace_edit_file', { path: 'a.ts', old_string: 'x', new_string: '' })).toEqual({
+      path: 'a.ts',
+      oldText: 'x',
+      newText: '',
+    });
+  });
+
+  it('reads a written file as its content', () => {
+    expect(toolEdit('write_file', { path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
+  });
+
+  it('leaves other calls to the raw arguments', () => {
+    expect(toolEdit('view', { path: 'a.ts' })).toBeUndefined();
+    expect(toolEdit('edit_file', { path: 'a.ts' })).toBeUndefined();
+  });
+});
+
+describe('isTaskTool', () => {
+  it('names the four task tools the docked task list draws, and nothing else', () => {
+    expect(['task_write', 'task_update', 'task_complete', 'task_check'].every(isTaskTool)).toBe(true);
+    expect(['view', 'task', 'ask_user'].some(isTaskTool)).toBe(false);
+  });
+});
+
+describe('hasToolArguments', () => {
+  it('has nothing to show before any input arrives', () => {
+    expect(hasToolArguments({ toolName: 'view', args: undefined, argsText: '' })).toBe(false);
+  });
+
+  it('has nothing to show for a tool called without arguments', () => {
+    expect(hasToolArguments({ toolName: 'list_agents', args: {}, argsText: '{}' })).toBe(false);
+  });
+
+  it('shows partial streamed input before it parses', () => {
+    expect(hasToolArguments({ toolName: 'view', args: undefined, argsText: '{"path":"src' })).toBe(true);
+  });
+
+  it('shows an edit even when ordinary arguments are hidden', () => {
+    const args = { path: 'a.ts', old_string: 'a', new_string: 'b' };
+    expect(hasToolArguments({ toolName: 'edit_file', args, hideArguments: true })).toBe(true);
+    expect(hasToolArguments({ toolName: 'view', args: { path: 'a.ts' }, hideArguments: true })).toBe(false);
   });
 });

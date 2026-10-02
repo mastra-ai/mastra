@@ -4,47 +4,36 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
+import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
 import { useState } from 'react';
 
 import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
-import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
-import { SettingsCard } from './SettingsCard';
-import { SettingsSubsection } from './SettingsSubsection';
-import { Segmented, SoundPicker, ThinkingLevelPicker } from './SettingsFields';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-type NotificationMode = AgentControllerSessionSettings['notifications'];
-const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'bell', label: 'Bell' },
-  { value: 'system', label: 'System' },
-  { value: 'both', label: 'Both' },
-];
+import { SettingsSubsection } from './SettingsSubsection';
+import { SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
 export function GeneralSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
     saveDoneSound(next);
-    // Preview the pick so the user hears what they chose.
+
     playDoneSound(next);
   };
   return (
     <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
-      <SettingsCard>
-        <SettingsRow variant="factory" label="Theme" description="Color scheme for the interface">
+      <SettingsContainer>
+        <SettingsRow label="Theme" description="Color scheme for the interface">
           <ThemeToggle />
         </SettingsRow>
-        <SettingsRow
-          variant="factory"
-          label="Completion sound"
-          description="Played when an agent run finishes in a workspace"
-        >
+        <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
           <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }
@@ -56,11 +45,7 @@ interface ModelSettingsProps {
 
 export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow
-      variant="factory"
-      label="Thinking level"
-      description="Reasoning budget for your chats — overrides the Factory defaults"
-    >
+    <SettingsRow label="Thinking level" description="Reasoning budget for your chats — overrides the Factory defaults">
       <ThinkingLevelPicker
         ariaLabel="Thinking level"
         value={settings?.thinkingLevel ?? 'off'}
@@ -75,7 +60,6 @@ interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
   permissions: PermissionRules | null;
-  pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
@@ -83,7 +67,6 @@ export function BehaviorSettings({
   settings,
   onBehaviorChange,
   permissions,
-  pendingPermissionCategory,
   setPermissionForCategory,
 }: BehaviorSettingsProps) {
   const notificationMode = settings?.notifications ?? 'off';
@@ -94,8 +77,8 @@ export function BehaviorSettings({
         title="General"
         description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
       >
-        <SettingsCard>
-          <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
+        <SettingsContainer>
+          <SettingsRow label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
             <Toggle
               ariaLabel="Auto-approve tools"
               checked={!!settings?.yolo}
@@ -103,7 +86,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
-          <SettingsRow variant="factory" label="Smart editing" description="Use AST-aware edits when available">
+          <SettingsRow label="Smart editing" description="Use AST-aware edits when available">
             <Toggle
               ariaLabel="Smart editing"
               checked={!!settings?.smartEditing}
@@ -111,22 +94,22 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
-          <SettingsRow variant="factory" label="Notifications" description="How completion alerts are delivered">
-            <Segmented
-              ariaLabel="Notifications"
+          <SettingsRow label="Notifications" description="How completion alerts are delivered">
+            <SegmentedControl
+              aria-label="Notifications"
               value={notificationMode}
               disabled={!settings}
-              options={NOTIFICATION_MODES}
-              onChange={v => onBehaviorChange({ notifications: v })}
-            />
+              onValueChange={v => onBehaviorChange({ notifications: v })}
+            >
+              <SegmentedControlItem value="off">Off</SegmentedControlItem>
+              <SegmentedControlItem value="bell">Bell</SegmentedControlItem>
+              <SegmentedControlItem value="system">System</SegmentedControlItem>
+              <SegmentedControlItem value="both">Both</SegmentedControlItem>
+            </SegmentedControl>
           </SettingsRow>
-        </SettingsCard>
+        </SettingsContainer>
       </SettingsSubsection>
-      <PermissionsSection
-        permissions={permissions}
-        pendingPermissionCategory={pendingPermissionCategory}
-        setPermissionForCategory={setPermissionForCategory}
-      />
+      <PermissionsSection permissions={permissions} setPermissionForCategory={setPermissionForCategory} />
     </div>
   );
 }
@@ -138,37 +121,49 @@ const TOOL_CATEGORIES: { value: ToolCategory; label: string; hint: string }[] = 
   { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers' },
   { value: 'other', label: 'Other', hint: 'Anything not in the above categories' },
 ];
-const PERMISSION_POLICIES: { value: PermissionPolicy; label: string }[] = [
-  { value: 'allow', label: 'Allow' },
-  { value: 'ask', label: 'Ask' },
-  { value: 'deny', label: 'Deny' },
-];
-
 function PermissionsSection({
   permissions,
-  pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'setPermissionForCategory'>) {
   return (
     <SettingsSubsection
       scope="factory"
       title="Tool permissions"
       description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts."
     >
-      <SettingsCard>
+      <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-          <SettingsRow variant="factory" key={value} label={label} description={hint}>
-            <Segmented
-              ariaLabel={`${label} permission`}
-              value={permissions?.categories?.[value] ?? 'ask'}
-              disabled={!permissions || pendingPermissionCategory === value}
-              options={PERMISSION_POLICIES}
+          <SettingsRow key={value} label={label} description={hint}>
+            <PermissionPolicyControl
+              category={label}
+              policy={permissions?.categories?.[value] ?? 'ask'}
+              disabled={!permissions}
               onChange={policy => void setPermissionForCategory(value, policy)}
             />
           </SettingsRow>
         ))}
-      </SettingsCard>
+      </SettingsContainer>
     </SettingsSubsection>
+  );
+}
+
+function PermissionPolicyControl({
+  category,
+  policy,
+  disabled,
+  onChange,
+}: {
+  category: string;
+  policy: PermissionPolicy;
+  disabled: boolean;
+  onChange: (policy: PermissionPolicy) => void;
+}) {
+  return (
+    <SegmentedControl aria-label={`${category} permission`} value={policy} disabled={disabled} onValueChange={onChange}>
+      <SegmentedControlItem value="allow">Allow</SegmentedControlItem>
+      <SegmentedControlItem value="ask">Ask</SegmentedControlItem>
+      <SegmentedControlItem value="deny">Deny</SegmentedControlItem>
+    </SegmentedControl>
   );
 }
 

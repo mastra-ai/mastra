@@ -353,7 +353,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toEqual({
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toEqual({
         toolCallId: 'tool-call-approval-1',
         toolName: 'weatherTool',
         args: { city: 'London' },
@@ -361,6 +361,153 @@ describe('useChat forwards clientTools', () => {
     });
     expect(result.current.isRunning).toBe(false);
     expect(result.current.isAwaitingToolApproval).toBe(true);
+  });
+
+  it('hydrates messages from the thread-history chunk when withInitialHistory is set', async () => {
+    keepSubscriptionOpen = true;
+    nextSubscribeChunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: {
+          hasMore: false,
+          messages: [
+            {
+              id: 'stored-1',
+              role: 'user',
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+              threadId: 'thread-1',
+              resourceId: 'resource-1',
+              content: { format: 2, parts: [{ type: 'text', text: 'from storage' }] },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+          withInitialHistory: { perPage: 20 },
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.messages.map(message => message.id)).toEqual(['stored-1']));
+    expect(subscribeToThreadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 'thread-1', withInitialHistory: { perPage: 20 } }),
+    );
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it('applies a tool result that arrives right behind thread-history to the stored tool call', async () => {
+    keepSubscriptionOpen = true;
+    nextSubscribeChunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: {
+          hasMore: false,
+          messages: [
+            {
+              id: 'assistant-1',
+              role: 'assistant',
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+              threadId: 'thread-1',
+              resourceId: 'resource-1',
+              content: {
+                format: 2,
+                parts: [
+                  {
+                    type: 'tool-invocation',
+                    toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
+        type: 'tool-result',
+        runId: 'run-1',
+        from: 'AGENT',
+        payload: { toolCallId: 'call-1', toolName: 'lookup', result: { ok: true } },
+      },
+    ];
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+          withInitialHistory: { perPage: 20 },
+        }),
+      { wrapper },
+    );
+
+    const toolState = () =>
+      (result.current.messages[0]?.content.parts[0] as { toolInvocation?: { state?: string } } | undefined)
+        ?.toolInvocation?.state;
+    await waitFor(() => expect(result.current.messages.map(message => message.id)).toEqual(['assistant-1']));
+    await waitFor(() => expect(toolState()).toBe('result'));
+    unmount();
+  });
+
+  it('does not show one resource thread history under another resource', async () => {
+    keepSubscriptionOpen = true;
+    nextSubscribeChunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: {
+          hasMore: false,
+          messages: [
+            {
+              id: 'resource-1-message',
+              role: 'user',
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+              threadId: 'thread-1',
+              resourceId: 'resource-1',
+              content: { format: 2, parts: [{ type: 'text', text: 'resource 1 only' }] },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result, rerender, unmount } = renderHook(
+      ({ resourceId }: { resourceId: string }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId,
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+          withInitialHistory: { perPage: 20 },
+        }),
+      { wrapper, initialProps: { resourceId: 'resource-1' } },
+    );
+
+    await waitFor(() => expect(result.current.messages.map(message => message.id)).toEqual(['resource-1-message']));
+
+    nextSubscribeChunks = [];
+    rerender({ resourceId: 'resource-2' });
+
+    await waitFor(() =>
+      expect(subscribeToThreadMock).toHaveBeenLastCalledWith(expect.objectContaining({ resourceId: 'resource-2' })),
+    );
+    expect(result.current.messages.map(message => message.id)).not.toContain('resource-1-message');
+    unmount();
   });
 
   it('sends a new message for server-side queueing while waiting for subscription tool approval', async () => {
@@ -458,7 +605,7 @@ describe('useChat forwards clientTools', () => {
       const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.mode).toBe('stream');
       if (metadata?.mode !== 'stream') throw new Error('expected stream metadata');
-      expect(metadata.requireApprovalMetadata?.weatherTool).toBeDefined();
+      expect(metadata.requireApprovalMetadata?.['tool-call-approval-1']).toBeDefined();
     });
 
     await act(async () => {
@@ -477,6 +624,100 @@ describe('useChat forwards clientTools', () => {
     expect(result.current.isAwaitingToolApproval).toBe(false);
 
     unmount();
+  });
+
+  it('approves a durable run that streams no start chunk', async () => {
+    // Inngest durable agents emit the approval without a preceding `start`.
+    nextSubscribeChunks = [
+      {
+        type: 'tool-call',
+        runId: 'run-durable',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-durable',
+        from: 'AGENT',
+        payload: { toolName: 'weatherTool', toolCallId: 'tool-call-approval-1', args: { city: 'London' } },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+    expect(result.current.isRunning).toBe(false);
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(sendToolApprovalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 'thread-1', toolCallId: 'tool-call-approval-1', approved: true }),
+    );
+    expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
+  describe('tool-call-resumed (#24280)', () => {
+    const suspendedThenResumed = (suspended: string[], resumed: string[]) => [
+      ...suspended.flatMap(id => [
+        {
+          type: 'tool-call',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {} },
+        },
+        {
+          type: 'tool-call-suspended',
+          runId: 'run-resumed',
+          from: 'AGENT',
+          payload: { toolName: 'askUser', toolCallId: id, args: {}, suspendPayload: {}, resumeSchema: '' },
+        },
+      ]),
+      ...resumed.map(id => ({
+        type: 'tool-call-resumed',
+        runId: 'run-resumed',
+        from: 'AGENT',
+        payload: { toolName: 'askUser', toolCallId: id, kind: 'suspension' },
+      })),
+    ];
+
+    const render = () =>
+      renderHook(
+        () =>
+          useChat({ agentId: 'test-agent', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
+        { wrapper },
+      );
+
+    it('keeps awaiting while another suspension is still pending', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+      unmount();
+    });
+
+    it('clears the live awaiting flag once every suspension is resumed', async () => {
+      nextSubscribeChunks = suspendedThenResumed(['tc-a', 'tc-b'], ['tc-a', 'tc-b']);
+      keepSubscriptionOpen = true;
+      const { result, unmount } = render();
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalled());
+      await new Promise(r => setTimeout(r, 50));
+      expect(result.current.isAwaitingToolApproval).toBe(false);
+      unmount();
+    });
   });
 
   it('keeps subscription approval pending when the server ACK fails', async () => {
@@ -1058,6 +1299,32 @@ describe('useChat forwards clientTools', () => {
     expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientTools).toBe(clientTools);
   });
 
+  it('passes clientToolsResolver to sendMessage ifIdle.streamOptions', async () => {
+    const clientToolsResolver = vi.fn(() => clientTools);
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+        clientToolsResolver,
+      });
+    });
+
+    const messageCalls = sendMessageMock.mock.calls as unknown as Array<[any]>;
+    expect(messageCalls[0]?.[0].ifIdle.streamOptions.clientToolsResolver).toBe(clientToolsResolver);
+  });
+
   it('keeps per-send clientTools and continuation options on sendMessage', async () => {
     keepSubscriptionOpen = true;
     const perSendClientTools = {
@@ -1237,6 +1504,46 @@ describe('useChat forwards clientTools', () => {
     expect(part.output).toEqual({ declined: true });
   });
 
+  it('associates active network messages with their execution until completion', async () => {
+    let complete = () => {};
+    const gate = new Promise<void>(resolve => {
+      complete = resolve;
+    });
+    let respond = () => {};
+    const responseGate = new Promise<void>(resolve => {
+      respond = resolve;
+    });
+    networkMock.mockImplementationOnce(async () => {
+      await responseGate;
+      return {
+        processDataStream: async ({ onChunk }) => {
+          await onChunk(toolExecutionStartChunk('lookupWeather', 'network-tool'));
+          await gate;
+        },
+      };
+    });
+    const { result } = renderHook(() => useChat({ agentId: 'test-agent' }), { wrapper });
+    let sending: Promise<void> | undefined;
+    await act(async () => {
+      sending = result.current.sendMessage({ mode: 'network', message: 'Check weather' });
+    });
+    expect(result.current.isRunning).toBe(true);
+    expect(result.current.activeRunId).toEqual(expect.any(String));
+    const pendingRunId = result.current.activeRunId;
+    expect(result.current.messages.some(message => message.role === 'assistant')).toBe(false);
+    await act(async () => {
+      respond();
+    });
+    expect(result.current.activeRunId).toBe(pendingRunId);
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.content.metadata?.runId).toBe(result.current.activeRunId);
+    await act(async () => {
+      complete();
+      await sending;
+    });
+    expect(result.current.activeRunId).toBeUndefined();
+  });
+
   it('seeds the user message exactly once when sendMessage uses network mode', async () => {
     nextNetworkChunks = [
       toolExecutionStartChunk('lookupWeather', 'tc-net-dedupe'),
@@ -1380,6 +1687,64 @@ describe('useChat optimistic pending user message', () => {
       expect(metadata?.status).toBe('pending');
       expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(message.id);
     }
+  });
+
+  it('shows a first message once when its history snapshot lands before the thread echo', async () => {
+    const echo = Promise.withResolvers<unknown>();
+    subscribeToThreadMock.mockImplementationOnce(async () => ({
+      abort: threadSubscriptionAbortMock,
+      unsubscribe: threadSubscriptionUnsubscribeMock,
+      processDataStream: async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> | void }) => {
+        await onChunk(await echo.promise);
+        await Promise.withResolvers<never>().promise;
+      },
+    }));
+    const noHistory: MastraDBMessage[] = [];
+    const { result, rerender } = renderHook(
+      ({ initialMessages }: { initialMessages: MastraDBMessage[] }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+          enableThreadSignals: true,
+        }),
+      { wrapper, initialProps: { initialMessages: noHistory } },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+    const clientMessageId = result.current.messages[0]?.id;
+
+    const persistedSignal: MastraDBMessage = {
+      id: 'sig-1',
+      role: 'signal',
+      type: 'user',
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'hello' }],
+        metadata: { signal: { id: 'sig-1', type: 'user', tagName: 'user', metadata: { clientMessageId } } },
+      },
+    };
+    rerender({ initialMessages: [persistedSignal] });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
+    expect(result.current.messages[0]?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
+
+    await act(async () => {
+      echo.resolve({
+        type: 'data-user-message',
+        runId: 'run-1',
+        data: { id: 'sig-1', type: 'user', contents: 'hello', metadata: { clientMessageId } },
+      });
+      await echo.promise;
+    });
+
+    expect(result.current.messages.map(message => message.id)).toEqual(['sig-1']);
   });
 
   it('does not mark the user message pending on the legacy stream path', async () => {

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -86,7 +85,7 @@ export class PosthogAnalytics {
         if (distinctId && !this.isHostnameDerivedDistinctId(distinctId)) {
           const config = {
             distinctId,
-            sessionId: sessionId || randomUUID(),
+            sessionId: sessionId || globalThis.crypto.randomUUID(),
           };
           if (config.sessionId !== sessionId) {
             this.writeCliConfig(config, configPath);
@@ -100,7 +99,7 @@ export class PosthogAnalytics {
 
     const config = {
       distinctId: this.createDistinctId(),
-      sessionId: randomUUID(),
+      sessionId: globalThis.crypto.randomUUID(),
     };
     this.writeCliConfig(config, configPath);
     return config;
@@ -142,7 +141,7 @@ export class PosthogAnalytics {
   }
 
   private createDistinctId(): string {
-    return `mastra-${randomUUID()}`;
+    return `mastra-${globalThis.crypto.randomUUID()}`;
   }
 
   private isHostnameDerivedDistinctId(distinctId: string): boolean {
@@ -285,6 +284,27 @@ export class PosthogAnalytics {
       });
 
       throw error;
+    }
+  }
+
+  /**
+   * Evaluate a PostHog feature flag. Platform flags can override the CLI's
+   * anonymous telemetry id with the authenticated platform identity while
+   * retaining organization group context. Fails closed on any error.
+   */
+  async isFeatureEnabled(
+    flag: string,
+    options?: { distinctId?: string; groups?: Record<string, string> },
+  ): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const flags = await this.client.evaluateFlags(options?.distinctId ?? this.distinctId, {
+        groups: options?.groups,
+        flagKeys: [flag],
+      });
+      return flags.getFlag(flag) === true;
+    } catch {
+      return false;
     }
   }
 

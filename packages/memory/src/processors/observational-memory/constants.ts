@@ -17,6 +17,7 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
       },
     },
     maxTokensPerBatch: 10_000,
+    observeAttachments: ['image/*', 'application/pdf'],
     // Async buffering defaults (enabled by default)
     bufferTokens: 0.2 as number | undefined, // Buffer every 20% of messageTokens
     bufferActivation: 0.8 as number | undefined, // Activate to retain 20% of threshold
@@ -61,12 +62,29 @@ Any messages following this reminder are newer and should take priority.`;
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
 /**
+ * Preamble used when observations are thread-scoped: they describe earlier parts
+ * of the current conversation, not other conversations.
+ */
+export const OBSERVATION_CONTEXT_PROMPT_THREAD = `The following observations block contains your memory of earlier parts of this current conversation. Everything recorded here (including IDs, artifacts, and tool results) came from this conversation and is available for you to reuse.`;
+
+/**
+ * Returns the observations preamble matching the memory scope.
+ * - `'thread'`: observations are earlier parts of the current conversation.
+ * - `'resource'`: observations span past conversations with this user.
+ */
+export function getObservationContextPrompt(scope: 'thread' | 'resource' = 'thread'): string {
+  return scope === 'resource' ? OBSERVATION_CONTEXT_PROMPT : OBSERVATION_CONTEXT_PROMPT_THREAD;
+}
+
+/**
  * Instructions that tell the model how to interpret and use observations.
  * Place AFTER the `<observations>` block so the model sees the data before the rules.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 
 KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
+
+USER STATEMENTS VS ASSISTANT SUGGESTIONS: Treat what the user said about their own life, plans, decisions, and dates as authoritative, unless data or their own later messages say otherwise. Treat what the assistant said, such as proposed schedules, example dates, and recommendations, as suggestions rather than facts about what happened, unless the user adopted or confirmed them. What the assistant did, such as editing a file, running a command, or calling a tool, is a record of what happened.
 
 PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
 
@@ -89,11 +107,14 @@ SYSTEM REMINDERS: Messages wrapped in <system-reminder>...</system-reminder> con
  * @param searchEnabled - Whether semantic search (`retrieval: { vector: true }`) is
  *   available. When false, the guidance only covers \`threads\`/\`messages\` browsing so
  *   the agent is not steered toward a mode that cannot work.
+ * @param observationPagingEnabled - Whether the storage adapter supports original
+ *   observation-group paging. Only used when search is enabled.
  */
 export function getRetrievalInstructions(
   scope: 'thread' | 'resource' = 'resource',
   customInstructions?: string,
   searchEnabled = true,
+  observationPagingEnabled = searchEnabled,
 ): string {
   const isResource = scope === 'resource';
 
@@ -101,11 +122,11 @@ export function getRetrievalInstructions(
     ? `### Choosing a mode
 The recall tool works across ALL of this user's conversation threads, not just the current one.
 
-- Use \`mode: "search"\` with a \`query\` when you don't know which thread contains the answer. Each result includes its thread ID and the raw message IDs it came from, which you can use as a \`cursor\`.
-- Use \`mode: "messages"\` when you already know the thread — pass \`threadId\` to read another thread, or a \`cursor\` from an observation-group range or a search result.
+- Use \`mode: "search"\` with a \`query\` to find relevant history, even when you already know the thread. Each result includes its thread ID, observation group ID, and source message range.
+- Use \`mode: "messages"\` for original wording or details behind an observation — pass \`threadId\` to read another thread and a \`cursor\` from the source message range.
 - Use \`mode: "threads"\` to list the user's threads (IDs, titles, dates) when you need to discover where something was discussed. Use \`before\`/\`after\` to narrow by date.
 
-**If search results look irrelevant, do not give up.** Search only covers content that has been indexed — a short or recent conversation may exist in raw message history before any observation of it was created. When search returns nothing suitable but the user is clearly referring to a past conversation, call \`mode: "threads"\` to find candidate threads (titles and dates are strong clues), then read them with \`mode: "messages"\`. If a search result already gives you a thread ID, go straight to \`mode: "messages"\`.`
+**If search results look irrelevant, do not give up.** Search only covers content that has been indexed — a short or recent conversation may exist in raw message history before any observation of it was created. When search returns nothing suitable but the user is clearly referring to a past conversation, call \`mode: "threads"\` to find candidate threads (titles and dates are strong clues), then read them with \`mode: "messages"\`. Use a useful hit as an entry point to the surrounding history rather than treating it as the whole answer.`
     : `### Choosing a mode
 The recall tool works across ALL of this user's conversation threads, not just the current one.
 
@@ -127,19 +148,62 @@ The recall tool is limited to the current conversation thread.
 
   const modeSection = isResource ? resourceModeSection : threadModeSection;
 
-  const notNeededScopeBullet = isResource
-    ? `- No relevant observation range exists AND ${searchEnabled ? '`search`/`threads`' : '`threads`'} turned up nothing — but remember that raw history may exist for threads that have no observations yet, so check before concluding the information is unavailable`
-    : `- There is no relevant range in your observations for the topic`;
+  const pagingEnabled = searchEnabled && observationPagingEnabled;
+  const lookupSteps = [
+    `**Search to locate.** Run a few differently worded queries rather than relying on one. When you roughly know when something happened, or need events from different periods, repeat the search with \`after\`/\`before\` date windows. Date filters apply to when an observation was recorded, not necessarily to dates mentioned inside it, so widen or remove them when nothing fits. If nothing useful comes up, try the user's message verbatim as the search query.`,
+    ...(pagingEnabled
+      ? [
+          `**Page observations for context.** Open a relevant hit with \`mode: "observations"\` and its \`groupId\` to read the full group and the dated conclusions and decisions around it, without loading every tool call or diff. Do this for truncated excerpts, for dates you need to pin down, and for events that unfolded over several turns. To understand what led to an event and what followed, page both before and after the anchor.`,
+        ]
+      : []),
+    `**Read source messages to confirm.** When exact wording, numbers, code, who said what, or conflicting accounts matter, read the raw messages from the hit's source range. The range connects the summary view to the raw-message view.`,
+  ];
+
+  const searchSection = searchEnabled
+    ? `### Finding evidence
+Search matches are entry points, not a complete timeline. Similarity selects the matches; they are displayed by observation date. A missing search hit is not evidence that an event did not happen.
+
+${pagingEnabled ? 'Observations and messages are two views of the same conversation history, not separate archives. Use search to find an entry point, observations for breadth, and messages for depth:' : 'Use search to find an entry point and messages for depth:'}
+${lookupSteps.map((step, i) => `${i + 1}. ${step}`).join('\n')}
+
+When searches keep returning the same groups, often as already-in-context references, stop rephrasing: ${pagingEnabled ? 'page from those groups or read their source messages' : 'read their source messages'} instead.
+
+"Excerpt already in current context" marks a hit whose text an earlier search result already shows. "Group already in current context" marks a group that is already in your observations or whose source messages are still in the conversation. "Source range overlaps current context" marks a group whose source messages are still in the conversation. Search keeps these references and tries lower-ranked matches to fill the requested number of excerpts. This backfill is bounded: fewer excerpts do not mean history is exhausted. Use the evidence already present rather than repeating the same lookup. You can still ${pagingEnabled ? 'page a referenced group' : "read a referenced group's source messages"} when you need all of it, or search again if that context is no longer available.
+
+If search still finds nothing useful, browse raw messages${isResource ? ' or discover other threads' : ' in this thread'} before concluding the information is unavailable. Raw history may exist for threads that have no observations yet.`
+    : '';
+
+  const observationSection = pagingEnabled
+    ? `### Paging original observations
+Use \`mode: "observations"\` around a relevant search hit to fill in missing details, check earlier or later events, and recover context omitted from a reflection or search result.
+
+- Copy the hit's \`groupId\`${isResource ? ' and \`threadId\`' : ''} exactly as shown. Omit \`direction\` to read the full anchor group and following groups, including text truncated in search.
+- Use \`direction: "before"\` or \`direction: "after"\` to read groups strictly before or after that anchor. Pages contain 5 groups by default; \`limit\` allows up to 20. Dense groups can be large; use \`limit: 1\` or \`limit: 2\` for a quick skim.
+- Follow the returned continuation calls, using the first or last group ID on each page as the next anchor. \`groupId\` is an observation cursor; \`cursor\` is a raw message ID. Do not interchange them.
+- \`hasMore\` reports whether more groups exist in the requested direction (after when direction is omitted). A full page can still have \`hasMore: false\`; stop in that direction without making an empty follow-up call. Explicit start/end markers describe retained observation history, not whether older raw messages exist. When newer messages have not been observed yet, the end marker says how many and gives the \`mode: "messages"\` call that reads them.
+- Search results mark where other observation groups may sit between two hits from the same thread. Page from those hits instead of repeatedly searching for the same isolated hit.
+- These pages contain original observations, not reflections. For exact wording or details absent from the observations, use \`mode: "messages"\` with a message ID from the group's \`_range\`.
+
+Stop once the relevant evidence is sufficient. If retained history is incomplete, say what is unknown rather than guessing.`
+    : '';
 
   const base = `## Recall — looking up source messages
 
-Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
+Your memory contains observation groups with IDs and source message ranges, shown as \`## Group\` headings with \`_range: startId:endId\` or as \`<observation-group>\` tags. Use the **recall** tool to recover retained original observations and source messages.
+
+Historical notes may describe older versions of tools. Use the currently provided tool schema and these instructions for available modes and arguments; treat recalled tool descriptions as evidence about past behavior, not the current tool contract.
+
+### Reflections are lossy
+Groups marked \`kind="reflection"\` (rendered as \`_kind: reflection_\`) are lossy summaries. Use them for a broad understanding of what happened, not as an exhaustive record. If something is absent from a reflection, that does not mean it did not happen. Use recall to check the original evidence before drawing that conclusion. Original observations can omit details too; read the source messages when precise wording or evidence matters.
 
 ### When to use recall
 - The user asks you to **repeat, show, or reproduce** something from a past conversation
 - The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
 - Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
-- You want to **verify or expand on** an observation before responding${
+- You want to **verify or expand on** an observation before responding
+- The answer depends on historical dates, order, or duration: verify both event dates and that they refer to the events the user means. Distinguish a plan, an actual start, a later update, and a repeated mention instead of choosing a nearby date from a summary
+- An observation records something the assistant proposed, such as a schedule, date, or plan, and your observations don't show what the user decided. Read the raw messages around it to find the user's decision before treating the proposal as what happened
+- Relevant details are missing, ambiguous, or conflicting in the current observations${
     isResource
       ? `
 - The user references another conversation that your observations don't cover — even if you have no observations yet, their other threads may contain it`
@@ -148,7 +212,9 @@ Your memory is comprised of observations which are sometimes wrapped in <observa
 
 **Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
 
-${modeSection}
+For questions about what was discussed or decided and why, start with recall when the original evidence is not already visible. Current source code or general documentation can establish what happens now, but not necessarily the past discussion or rationale. Retrieve the recorded decisions first; inspect current code separately if the answer also depends on today's implementation. Distinguish recorded reasons from your own inference, and use source messages when observation summaries omit the rationale.
+
+${[modeSection, searchSection, observationSection].filter(Boolean).join('\n\n')}
 
 ### How to use recall with a cursor
 Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
@@ -159,8 +225,8 @@ Each range has the format \`startId:endId\` where both are message IDs separated
 4. If the first page doesn't have what you need, increment the page number to keep paginating.
 5. Check \`hasNextPage\`/\`hasPrevPage\` in the result to know if more pages exist in each direction.
 
-### Detail levels
-By default recall returns **low** detail: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
+### Raw-message detail levels
+In \`mode: "messages"\`, recall returns **low** detail by default: truncated text and tool names only. Each message shows its ID and each part has a positional index like \`[p0]\`, \`[p1]\`, etc.
 
 - Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
 - Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
@@ -177,8 +243,8 @@ If a single part is larger than the token budget, the \`partIndex\` result is \`
 
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
-- The question is about general preferences or facts that don't require source text
-${notNeededScopeBullet}
+- The question is general knowledge that doesn't depend on this user's history
+- The necessary original evidence is already visible, unambiguous, and not contradicted by other observations; do not repeat a lookup just to call the tool
 
 Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
 

@@ -1,6 +1,7 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
@@ -10,6 +11,7 @@ import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
 import { DatasetItemsLayout } from './dataset-items-layout';
 import { DatasetItemsList } from './dataset-items-list';
+import type { DatasetItemsSortKey } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
 
 export interface DatasetItemsProps {
@@ -18,6 +20,8 @@ export interface DatasetItemsProps {
   leftSlot?: React.ReactNode;
   /** Page-level actions rendered at the end of the toolbar row. */
   rightSlot?: React.ReactNode;
+  /** Page-level content rendered on its own row, between the toolbar and the list. */
+  belowToolbarSlot?: React.ReactNode;
   isLoading: boolean;
   onItemClick: (itemId: string) => void;
   /** Id of the item currently open in the URL-driven item panel, if any. */
@@ -42,6 +46,9 @@ export interface DatasetItemsProps {
   onSearchChange?: (query: string) => void;
   // Version props
   currentDatasetVersion?: number;
+  // Server-side sort props
+  sort?: ListSort<DatasetItemsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: DatasetItemsSortKey) => void;
 }
 
 /**
@@ -57,6 +64,7 @@ export function DatasetItems({
   items,
   leftSlot,
   rightSlot,
+  belowToolbarSlot,
   isLoading,
   onItemClick,
   featuredItemId,
@@ -75,6 +83,8 @@ export function DatasetItems({
   activeSearchQuery,
   onSearchChange,
   currentDatasetVersion,
+  sort,
+  onSortChange,
 }: DatasetItemsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion, handleVersionChange } = useDatasetItemsUrlState(
@@ -125,7 +135,7 @@ export function DatasetItems({
     { name: 'input', label: 'Input', size: 'minmax(10rem,1fr)' },
     { name: 'groundTruth', label: 'Ground Truth', size: 'minmax(10rem,1fr)' },
     { name: 'trajectory', label: 'Trajectory', size: '8rem' },
-    { name: 'date', label: 'Created', size: '10rem' },
+    { name: 'date', label: 'Created', size: '10rem', sortKey: 'createdAt' as const },
   ];
 
   // Checkboxes are always available on the current version; older versions are read-only.
@@ -154,6 +164,8 @@ export function DatasetItems({
         onReturnToLatestVersion={() => handleVersionChange(null)}
       />
 
+      {belowToolbarSlot}
+
       <DatasetItemsList
         items={items}
         isLoading={isLoading}
@@ -172,6 +184,8 @@ export function DatasetItems({
         onImportClick={onImportClick}
         onImportJsonClick={onImportJsonClick}
         searchQuery={activeSearchQuery ?? searchQuery}
+        sort={sort}
+        onSortChange={onSortChange}
       />
     </>
   );

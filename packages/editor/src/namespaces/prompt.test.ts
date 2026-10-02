@@ -128,4 +128,24 @@ describe('EditorPromptNamespace', () => {
     const otherVersions = await promptStore!.listVersions({ blockId: 'other-block' });
     expect(await prompt.getById('pinned-block', { versionId: otherVersions.versions[0]!.id })).toBeNull();
   });
+
+  it('bypasses the default cache for versionNumber: 0 with warm and cold caches', async () => {
+    const storage = new InMemoryStore();
+    const prompt = createPromptNamespace(storage);
+
+    await prompt.create({
+      id: 'version-zero-block',
+      name: 'Version Zero Block',
+      content: 'Latest content',
+    });
+
+    // create() populated the namespace's default cache, so this exercises the warm path.
+    const warmResult = await prompt.getById('version-zero-block', { versionNumber: 0 });
+    expect(warmResult).toBeNull();
+
+    // Cold cache should reach version resolution and return the same result.
+    prompt.clearCache('version-zero-block');
+    const coldResult = await prompt.getById('version-zero-block', { versionNumber: 0 });
+    expect(coldResult).toBeNull();
+  });
 });

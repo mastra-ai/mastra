@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { FactoryStorage, UniqueViolationError } from '@mastra/core/storage';
 import type {
   CollectionColumnSpec,
@@ -15,6 +13,7 @@ import type {
 import pg from 'pg';
 import type { Pool, PoolClient } from 'pg';
 
+import { toPgJson } from './db/sanitize-json';
 import { PostgresStore } from './index';
 
 export type PgFactoryStorageConfig =
@@ -131,7 +130,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
         return Boolean(value);
       case 'json':
         // Explicit stringify: node-pg would otherwise turn JS arrays into pg arrays.
-        return JSON.stringify(value);
+        return toPgJson(value);
       case 'bigint':
       case 'integer':
         return Number(value);
@@ -313,7 +312,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
 
     const values: Record<string, unknown> = { ...row };
     if (schema.columns[pk]!.type === 'uuid-pk' && values[pk] === undefined) {
-      values[pk] = randomUUID();
+      values[pk] = globalThis.crypto.randomUUID();
     }
 
     const columns = Object.keys(values).filter(column => values[column] !== undefined);
@@ -385,8 +384,13 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     const assignments = columns.map((column, i) => `"${column}" = $${i + 1}`).join(', ');
     const filter = this.#buildWhere(schema, where, columns.length + 1);
     const args = [...columns.map(column => this.#serialize(this.#column(schema, column), set[column])), ...filter.args];
-    const result = await queryable.query(`UPDATE "${schema.name}" SET ${assignments} WHERE ${filter.sql}`, args);
-    return result.rowCount ?? 0;
+    try {
+      const result = await queryable.query(`UPDATE "${schema.name}" SET ${assignments} WHERE ${filter.sql}`, args);
+      return result.rowCount ?? 0;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
+      throw error;
+    }
   }
 
   async deleteMany(collection: string, where: CollectionWhere): Promise<number> {
@@ -613,6 +617,19 @@ export class PgFactoryStorage extends FactoryStorage {
     for (const [name, spec] of Object.entries(schema.columns)) {
       if (!spec.nullable || spec.type === 'uuid-pk' || spec.primaryKey) continue;
       await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
+    }
+
+    // Widening evolution: a column now declared bigint may still be the
+    // INTEGER an older schema created, which epoch-ms values overflow.
+    for (const [name, spec] of Object.entries(schema.columns)) {
+      if (spec.type !== 'bigint') continue;
+      const { rows } = await this.#pool.query<{ data_type: string }>(
+        `SELECT data_type FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+        [schema.name, name],
+      );
+      if (rows[0]?.data_type === 'integer') {
+        await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" TYPE BIGINT`);
+      }
     }
 
     for (const index of schema.uniqueIndexes ?? []) {

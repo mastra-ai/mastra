@@ -99,11 +99,11 @@ describe('ComposerModelSettings', () => {
 
     expect(await screen.findByText('Chat Method')).not.toBeNull();
     // v2 model defaults to the modern Generate/Stream Subscription/Stream options (no Legacy variants).
-    expect(document.getElementById('generate')).not.toBeNull();
-    expect(document.getElementById('streamSubscription')).not.toBeNull();
-    expect(document.getElementById('stream')).not.toBeNull();
-    expect(document.getElementById('generateLegacy')).toBeNull();
-    expect(document.getElementById('streamLegacy')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Generate' })).not.toBeNull();
+    expect(screen.getByRole('radio', { name: 'Stream subscription (default)' })).not.toBeNull();
+    expect(screen.getByRole('radio', { name: 'Stream' })).not.toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Generate (Legacy)' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Stream (Legacy)' })).toBeNull();
   });
 
   it('persists legacy stream as an explicit no-subscription fallback', async () => {
@@ -111,10 +111,9 @@ describe('ComposerModelSettings', () => {
     renderSettings();
     await openPopover();
 
-    const legacyStream = document.getElementById('stream');
-    expect(legacyStream).not.toBeNull();
+    const legacyStream = screen.getByRole('radio', { name: 'Stream' });
     await act(async () => {
-      fireEvent.click(legacyStream!);
+      fireEvent.click(legacyStream);
     });
 
     const stored = JSON.parse(window.localStorage.getItem(`mastra-agent-store-${AGENT_ID}`) ?? '{}');
@@ -133,8 +132,10 @@ describe('ComposerModelSettings', () => {
     renderSettings();
     await openPopover();
 
-    expect((document.getElementById('stream') as HTMLInputElement | null)?.checked).toBe(true);
-    expect((document.getElementById('streamSubscription') as HTMLInputElement | null)?.disabled).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Stream' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'Stream subscription (default)' }).hasAttribute('data-disabled')).toBe(
+      true,
+    );
   });
 
   it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {

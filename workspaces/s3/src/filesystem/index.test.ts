@@ -31,6 +31,38 @@ vi.mock('@aws-sdk/client-s3', () => ({
 }));
 
 describe('S3Filesystem', () => {
+  describe('initialization access checks', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('checks only the configured prefix, including its directory boundary', async () => {
+      const { ListObjectsV2Command, HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: '/resource/thread/' });
+      await fs.init();
+      expect(ListObjectsV2Command).toHaveBeenCalledWith({
+        Bucket: 'test',
+        Prefix: 'resource/thread/',
+        MaxKeys: 1,
+      });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+
+    it('retains the bucket check when no prefix is configured', async () => {
+      const { HeadBucketCommand, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto' });
+      await fs.init();
+      expect(HeadBucketCommand).toHaveBeenCalledWith({ Bucket: 'test' });
+      expect(ListObjectsV2Command).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to broader access when the prefix is denied', async () => {
+      const { HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      const fs = new S3Filesystem({ bucket: 'test', region: 'auto', prefix: 'resource/thread' });
+      vi.mocked(fs.client.send).mockRejectedValueOnce({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
+      await expect(fs.init()).rejects.toMatchObject({ status: 403 });
+      expect(HeadBucketCommand).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Constructor & Options', () => {
     it('generates unique id if not provided', () => {
       const fs1 = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });

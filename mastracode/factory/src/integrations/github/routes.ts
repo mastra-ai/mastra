@@ -11,7 +11,6 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -21,11 +20,13 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
+import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -225,7 +226,7 @@ function parseResourceNumber(raw: string | undefined): number | null {
   return parsed > 0 ? parsed : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set<string>([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -357,7 +358,10 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (rejected) throw rejected.reason;
+  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
+  if (rejected) {
+    console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
+  }
 }
 
 /**
@@ -793,6 +797,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             author: pr.author,
             assignees: pr.assignees ?? [],
             requestedReviewers: pr.requestedReviewers ?? [],
+            labels: pr.labels ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,
@@ -1279,7 +1284,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
 
         const requestedTitle = body.title;
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {
@@ -1372,6 +1377,14 @@ function buildProjectGitRoutes({
           return c.json({ error: 'Session not found' }, 404);
         }
         try {
+          // Drain the turn's queued filesystem capture while the thread and sandbox still exist.
+          // A failed drain only costs the snapshot; it must not block teardown.
+          await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+            console.warn('[GitHub Sessions] Failed to drain filesystem capture before delete', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           await controller?.deleteSession({ resourceId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {

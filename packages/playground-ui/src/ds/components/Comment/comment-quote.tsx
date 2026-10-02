@@ -1,0 +1,47 @@
+import { X } from 'lucide-react';
+
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/lib/utils';
+
+export interface CommentQuoteProps {
+  authorName?: string;
+  quote: string;
+  /** Given only while the quote is a draft the writer can still drop. */
+  onDismiss?: () => void;
+  className?: string;
+}
+
+/** The passage a reply answers, above the reply itself or inside the composer writing it. */
+export function CommentQuote({ authorName, quote, onDismiss, className }: CommentQuoteProps) {
+  return (
+    <blockquote
+      data-slot="comment-quote"
+      className={cn(
+        'm-0 flex min-w-0 gap-2 border-l-2 border-border-strong pl-2 text-caption text-muted-foreground',
+        className,
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        {authorName ? (
+          <Txt as="span" variant="column">
+            {authorName}{' '}
+          </Txt>
+        ) : null}
+        <span className="line-clamp-2 wrap-anywhere whitespace-pre-line">{quote}</span>
+      </span>
+      {onDismiss ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Remove quote"
+          onClick={onDismiss}
+          className="shrink-0"
+        >
+          <X size={12} aria-hidden />
+        </Button>
+      ) : null}
+    </blockquote>
+  );
+}

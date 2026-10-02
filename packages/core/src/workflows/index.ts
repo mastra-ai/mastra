@@ -1,4 +1,17 @@
-export * from './workflow';
+export {
+  createMappingStep,
+  createStepFromAgent,
+  createStepFromClassifier,
+  createStepFromTool,
+  predicateToCondition,
+  mapVariable,
+  createStep,
+  cloneStep,
+  isProcessor,
+  Workflow,
+  Run,
+} from './workflow';
+export type { AgentStepOptions, AnyWorkflow, ClassifierStepOptions, ClassifierStepOutput } from './workflow';
 export { getEntryId, getEntryWorkflow } from './step-entry';
 export * from './execution-engine';
 export * from './default';

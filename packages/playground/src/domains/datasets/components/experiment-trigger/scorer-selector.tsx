@@ -1,5 +1,5 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export interface ScorerSelectorProps {
@@ -7,7 +7,7 @@ export interface ScorerSelectorProps {
   setSelectedScorers: (scorers: string[]) => void;
   disabled?: boolean;
   container?: React.RefObject<HTMLElement | null>;
-  label?: string;
+  label?: React.ReactNode;
   helperText?: string;
 }
 
@@ -29,9 +29,8 @@ export function ScorerSelector({
     }));
 
   return (
-    <div className="grid gap-2">
-      <Label>{label}</Label>
-      {helperText ? <p className="text-muted-foreground text-xs">{helperText}</p> : null}
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
       <Combobox
         multiple
         options={options}
@@ -43,6 +42,7 @@ export function ScorerSelector({
         disabled={disabled || isLoading}
         container={container}
       />
-    </div>
+      {helperText && <FieldDescription>{helperText}</FieldDescription>}
+    </Field>
   );
 }

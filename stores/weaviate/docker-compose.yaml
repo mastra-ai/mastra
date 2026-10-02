@@ -1,0 +1,20 @@
+services:
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.28.2
+    ports:
+      - '8080:8080' # REST API port
+      - '50051:50051' # gRPC port
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    environment:
+      - QUERY_DEFAULTS_LIMIT=25
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=none
+      - ENABLE_API_BASED_MODULES=true
+      - CLUSTER_HOSTNAME=node1
+    restart: on-failure:0
+
+volumes:
+  weaviate_data:
+    driver: local

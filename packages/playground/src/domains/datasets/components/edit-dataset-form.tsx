@@ -1,22 +1,26 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { Check, X } from 'lucide-react';
 import { useReducer } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
+import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
-import type { DatasetTargetType } from './target-type-options';
-import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from './target-type-options';
 
 export interface EditDatasetFormProps {
   dataset: {
     id: string;
     name: string;
     description?: string;
-    targetType?: string | null;
     inputSchema?: Record<string, unknown> | null;
     groundTruthSchema?: Record<string, unknown> | null;
     requestContextSchema?: Record<string, unknown> | null;
+    scorerIds?: string[] | null;
   };
   onSuccess: () => void;
   onCancel: () => void;
@@ -28,27 +32,27 @@ type SchemaValue = Record<string, unknown> | null;
 type EditDatasetFormState = {
   name: string;
   description: string;
-  targetType: DatasetTargetType | '';
   inputSchema: SchemaValue;
   groundTruthSchema: SchemaValue;
   requestContextSchema: SchemaValue;
+  scorerIds: string[];
   validationError: string | null;
 };
 
 type EditDatasetFormAction =
   | { type: 'setStringField'; field: 'name' | 'description'; value: string }
-  | { type: 'setTargetType'; value: DatasetTargetType | '' }
   | { type: 'setSchemas'; inputSchema: SchemaValue; groundTruthSchema: SchemaValue; requestContextSchema: SchemaValue }
+  | { type: 'setScorerIds'; scorerIds: string[] }
   | { type: 'setValidationError'; validationError: string | null };
 
 function getInitialFormState(dataset: Dataset): EditDatasetFormState {
   return {
     name: dataset.name,
     description: dataset.description ?? '',
-    targetType: isDatasetTargetType(dataset.targetType) ? dataset.targetType : '',
     inputSchema: dataset.inputSchema ?? null,
     groundTruthSchema: dataset.groundTruthSchema ?? null,
     requestContextSchema: dataset.requestContextSchema ?? null,
+    scorerIds: dataset.scorerIds ?? [],
     validationError: null,
   };
 }
@@ -57,8 +61,6 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
   switch (action.type) {
     case 'setStringField':
       return { ...state, [action.field]: action.value };
-    case 'setTargetType':
-      return { ...state, targetType: action.value };
     case 'setSchemas':
       return {
         ...state,
@@ -67,6 +69,8 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
         requestContextSchema: action.requestContextSchema,
         validationError: null,
       };
+    case 'setScorerIds':
+      return { ...state, scorerIds: action.scorerIds };
     case 'setValidationError':
       return { ...state, validationError: action.validationError };
     default:
@@ -105,10 +109,10 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         datasetId: dataset.id,
         name: formState.name.trim(),
         description: formState.description.trim() || undefined,
-        targetType: formState.targetType || undefined,
         inputSchema: formState.inputSchema,
         groundTruthSchema: formState.groundTruthSchema,
         requestContextSchema: formState.requestContextSchema,
+        scorerIds: formState.scorerIds.length > 0 ? formState.scorerIds : null,
       });
 
       toast.success('Dataset updated successfully');
@@ -131,34 +135,33 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <TextFieldBlock
-        name="edit-dataset-name"
-        label="Name"
-        required
-        value={formState.name}
-        onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
-        placeholder="Enter dataset name"
-        autoFocus
-      />
+    <Form onSubmit={handleSubmit}>
+      <Field>
+        <FieldLabel required>Name</FieldLabel>
+        <Input
+          required
+          value={formState.name}
+          onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
+          placeholder="Enter dataset name"
+          autoFocus
+        />
+      </Field>
 
-      <TextFieldBlock
-        name="edit-dataset-description"
-        label="Description"
-        value={formState.description}
-        onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
-        placeholder="Enter dataset description (optional)"
-      />
+      <Field>
+        <FieldLabel>Description</FieldLabel>
+        <Input
+          value={formState.description}
+          onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
+          placeholder="Enter dataset description (optional)"
+        />
+      </Field>
 
-      <SelectFieldBlock
-        label="Target type"
-        name="edit-dataset-target-type"
-        placeholder="Select a target type (optional)"
-        options={[...DATASET_TARGET_TYPE_OPTIONS]}
-        value={formState.targetType}
-        onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
-        helpText="What this dataset evaluates. Drives the Target column and the Target filter."
+      <ScorerSelector
+        selectedScorers={formState.scorerIds}
+        setSelectedScorers={scorerIds => dispatch({ type: 'setScorerIds', scorerIds })}
         disabled={updateDataset.isPending}
+        label={DEFAULT_SCORERS_LABEL}
+        helperText={DEFAULT_SCORERS_HELPER_TEXT}
       />
 
       <SchemaConfigSection
@@ -170,20 +173,25 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
       />
 
-      {formState.validationError && (
-        <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
-          <p className="text-sm text-red-200">{formState.validationError}</p>
+      {formState.validationError ? (
+        <div role="alert">
+          <Notice variant="destructive">{formState.validationError}</Notice>
         </div>
-      )}
+      ) : null}
 
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" onClick={onCancel}>
+        <Button icon={<X />} type="button" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
+        <Button
+          icon={<Check />}
+          type="submit"
+          variant="primary"
+          disabled={updateDataset.isPending || !formState.name.trim()}
+        >
           {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

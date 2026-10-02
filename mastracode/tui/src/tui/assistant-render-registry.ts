@@ -130,7 +130,8 @@ export class AssistantRenderRegistry {
 
   queueActive(messageId: string, message: MastraDBMessage, afterApply?: () => void): AssistantQueueResult | undefined {
     const segment = this.getActive(messageId);
-    return segment ? this.queueSegment(segment, message, afterApply) : undefined;
+    if (!segment) return undefined;
+    return this.queueSegment(segment, message, afterApply);
   }
 
   queueActiveTerminalStatus(messageId: string, terminalStatus: AssistantTerminalStatus): boolean {
@@ -308,11 +309,11 @@ export function ensureAssistantRenderSegment(
   precedingToolCallId?: string,
 ): AssistantMessageComponent {
   const key = getAssistantSegmentKey(messageId, precedingToolCallId);
-  const { segment, created } = state.assistantRenderRegistry.start(
-    messageId,
-    key,
-    () => new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme()),
-  );
+  const { segment, created } = state.assistantRenderRegistry.start(messageId, key, () => {
+    const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+    component.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
+    return component;
+  });
   state.streamingComponent = segment.component;
   if (created) addChild(segment.component);
   return segment.component;

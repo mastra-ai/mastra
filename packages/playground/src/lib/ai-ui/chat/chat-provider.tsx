@@ -1,33 +1,20 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
-import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
-import { useChat, useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import type { ReactNode } from 'react';
 import {
   ChatAgentContext,
   ChatMessagesContext,
   ChatRunningContext,
   ChatSendContext,
   ChatTasksContext,
-} from './chat-context';
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
 import type {
   AgentContextValue,
   MessagesContextValue,
   RunningContextValue,
   SendContextValue,
   TasksContextValue,
-} from './chat-context';
-import { useChatSendHandler } from './use-chat-send-handler';
-import { useObservationalMemoryContext } from '@/domains/agents/context';
-import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
-import { useMemoryConfig } from '@/domains/memory/hooks';
-import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import {
   buildGlobalOmPartsByCycleId,
   convertOmPartsInMastraMessage,
@@ -35,9 +22,23 @@ import {
   injectBufferingEnds,
   markOmMarkersAsDisconnected,
   scanOmInitialState,
-} from '@/services/om-parts-converter';
-import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
-import { ToolCallProvider } from '@/services/tool-call-provider';
+} from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
+import type { OmTerminalExtractionCache } from '@mastra/playground-ui/domains/chat/om/om-parts-converter';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useEntityTracingOptions } from '@mastra/playground-ui/domains/run-options/hooks/use-entity-tracing-options';
+import { useChat, useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { useChatSendHandler } from './use-chat-send-handler';
+import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
+import { usePlaygroundModelOptional } from '@/domains/agents/context/playground-model-context';
+import { useMemoryConfig } from '@/domains/memory/hooks';
+import { getCanSendWhileStreaming } from '@/services/mastra-runtime-state';
 import type { ChatProps } from '@/types';
 
 /**
@@ -61,7 +62,7 @@ export function ChatProvider({
   agentVersionId,
   supportsMemory,
 }: Readonly<{ children: ReactNode }> & ChatProps) {
-  const { settings: tracingSettings } = useTracingSettings();
+  const [tracingOptions] = useEntityTracingOptions('agent', agentId);
   const modelOverride = usePlaygroundModelOptional()?.modelOverride;
 
   // Errors emitted as `error` chunks (or thrown by sendMessage) are not persisted
@@ -101,6 +102,7 @@ export function ChatProvider({
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
+    activeRunId,
     isAwaitingToolApproval,
     setMessages,
     approveToolCall,
@@ -117,6 +119,9 @@ export function ChatProvider({
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
+    onSignalSent: () => {
+      void refreshThreadList?.();
+    },
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
@@ -127,7 +132,7 @@ export function ChatProvider({
   const queryClient = useQueryClient();
   const baseClient = useMastraClient();
 
-  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const omConfig = memoryConfigData?.config?.observationalMemory as unknown;
   const isOMEnabled =
     omConfig === true ||
@@ -284,7 +289,7 @@ export function ChatProvider({
     chatWithGenerate,
     maxSteps,
     isOMEnabled,
-    tracingOptions: tracingSettings?.tracingOptions,
+    tracingOptions,
     threadSignalsUnsupportedRef,
     isRunningStream,
     sendMessage,
@@ -331,8 +336,8 @@ export function ChatProvider({
 
   const messagesValue = useMemo<MessagesContextValue>(() => ({ messages: renderMessages }), [renderMessages]);
   const runningValue = useMemo<RunningContextValue>(
-    () => ({ isRunning, cancelRun: cancel, canSendWhileStreaming }),
-    [isRunning, cancel, canSendWhileStreaming],
+    () => ({ isRunning, activeRunId, cancelRun: cancel, canSendWhileStreaming }),
+    [isRunning, activeRunId, cancel, canSendWhileStreaming],
   );
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);

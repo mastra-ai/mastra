@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
+import { mastraCoreRule } from './rules/mastraCoreRule.js';
 import { lint } from './index.js';
 
 vi.mock('@clack/prompts', () => ({
@@ -19,6 +20,79 @@ vi.mock('@mastra/deployer', () => ({
 vi.mock('../../utils/run-build.js', () => ({
   runBuild: vi.fn(),
 }));
+
+describe('lint package inventory', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'mastra-lint-inventory-test-'));
+    // A real project error prevents these inventory tests from invoking the bundler.
+    writeFileSync(join(tmpDir, 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
+    vi.spyOn(mastraCoreRule, 'run');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it.each(['^1.0.0', '1.0.0-alpha.1'])('uses optional declarations and precedence for %s', async version => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@mastra/example': '0.0.1-alpha.1' },
+        devDependencies: { '@mastra/example': '^0.0.2' },
+        optionalDependencies: {
+          '@mastra/core': '^1.0.0',
+          '@mastra/example': version,
+          mastra: '^1.0.0',
+          unrelated: '^1.0.0',
+          'mastra-extra': '^1.0.0',
+        },
+      }),
+    );
+
+    const result = await lint({ root: tmpDir });
+
+    expect(result.error).toBeUndefined();
+    expect(result.issues.some(issue => issue.code === 'INVALID_TSCONFIG')).toBe(true);
+    expect(result.issues.some(issue => issue.code === 'MISSING_MASTRA_CORE')).toBe(false);
+    expect(mastraCoreRule.run).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        mastraPackages: [
+          { name: '@mastra/example', version, isAlpha: version.includes('alpha') },
+          { name: '@mastra/core', version: '^1.0.0', isAlpha: false },
+          { name: 'mastra', version: '^1.0.0', isAlpha: false },
+        ],
+      }),
+    );
+  });
+
+  it('preserves regular and development inventory without optional declarations', async () => {
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@mastra/core': '^1.0.0', '@mastra/example': '^1.0.0' },
+        devDependencies: { '@mastra/example': '2.0.0-alpha.1', mastra: '^1.0.0' },
+      }),
+    );
+
+    const result = await lint({ root: tmpDir });
+
+    expect(result.error).toBeUndefined();
+    expect(result.issues.some(issue => issue.code === 'INVALID_TSCONFIG')).toBe(true);
+    expect(result.issues.some(issue => issue.code === 'MISSING_MASTRA_CORE')).toBe(false);
+    expect(mastraCoreRule.run).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        mastraPackages: [
+          { name: '@mastra/core', version: '^1.0.0', isAlpha: false },
+          { name: '@mastra/example', version: '2.0.0-alpha.1', isAlpha: true },
+          { name: 'mastra', version: '^1.0.0', isAlpha: false },
+        ],
+      }),
+    );
+  });
+});
 
 describe('lint --preflight env file handling', () => {
   let tmpDir: string;

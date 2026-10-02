@@ -21,6 +21,6 @@
     "get-port": "^7.1.0",
     "mastra": "*",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   }
 }

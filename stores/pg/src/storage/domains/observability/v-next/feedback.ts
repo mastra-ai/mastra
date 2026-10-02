@@ -11,6 +11,7 @@ import { listFeedbackArgsSchema } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
@@ -47,8 +48,16 @@ import {
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
-import { FEEDBACK_TYPED_COLUMNS } from './signal-schema';
+import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
 import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
+
+const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
+const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
+  column => column.name,
+)
+  .filter(column => !FEEDBACK_CONFLICT_KEYS.has(column))
+  .map(column => `"${column}" = EXCLUDED."${column}"`)
+  .join(', ')}`;
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the feedback signal
@@ -98,7 +107,7 @@ function pushFeedbackIdentity(
 
 export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row]);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -108,8 +117,9 @@ export async function batchCreateFeedback(
   args: BatchCreateFeedbackArgs,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
-  const rows = args.feedbacks.map(feedbackRecordToRow);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows);
+  const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
+  const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
+  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
   if (insert) await client.query(insert.text, insert.values);
 }
 
@@ -136,6 +146,32 @@ export async function updateFeedbackReviewStatus(
     });
   }
   return rowToFeedbackRecord(row);
+}
+
+// ---------------------------------------------------------------------------
+// Deletes
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(client: DbClient, schema: string, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const table = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
+  const values: unknown[] = [...args.feedbackIds];
+  const placeholders = args.feedbackIds.map((_, i) => `$${i + 1}`).join(', ');
+  const conditions = [`"feedbackId" IN (${placeholders})`];
+  if (args.organizationId !== undefined) {
+    values.push(args.organizationId);
+    conditions.push(`"organizationId" = $${values.length}`);
+  }
+  if (args.resourceId !== undefined) {
+    values.push(args.resourceId);
+    conditions.push(`"resourceId" = $${values.length}`);
+  }
+  await client.query(`DELETE FROM ${table} WHERE ${conditions.join(' AND ')}`, values);
 }
 
 // ---------------------------------------------------------------------------

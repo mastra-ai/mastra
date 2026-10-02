@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a new integration for Mastra! Please provide as much detail as possible about the service you'd like to see integrated.
+        Thanks for suggesting a new integration for Mastra! Please provide as much detail as possible about the service you'd like to see integrated. A maintainer needs to approve your request before you or other community members can open PRs for it.
 
   - type: textarea
     attributes:

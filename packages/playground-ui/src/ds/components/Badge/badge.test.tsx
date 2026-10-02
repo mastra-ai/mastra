@@ -7,10 +7,10 @@ import type { BadgeSize, BadgeVariant } from './Badge';
 
 const variants = [
   'neutral',
-  'green',
-  'red',
-  'blue',
-  'yellow',
+  'success',
+  'destructive',
+  'info',
+  'warning',
   'purple',
   'orange',
   'cyan',
@@ -26,6 +26,24 @@ afterEach(() => {
 });
 
 describe('Badge', () => {
+  it.each([
+    ['green', 'success'],
+    ['red', 'destructive'],
+    ['amber', 'warning'],
+    ['blue', 'info'],
+  ] as const)('keeps the %s category indicator apart from the %s status indicator', (hue, status) => {
+    render(
+      <>
+        <Badge variant={hue} indicator="dot">
+          {hue}
+        </Badge>
+        <Badge variant={status} indicator="dot">
+          {status}
+        </Badge>
+      </>,
+    );
+    expect(indicatorOf(screen.getByText(hue))).not.toBe(indicatorOf(screen.getByText(status)));
+  });
   describe('when rendered inside text', () => {
     it('uses phrasing content and forwards span attributes', () => {
       render(
@@ -38,22 +56,7 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(badge.classList.contains('bg-neutral6/5')).toBe(true);
-      expect(badge.classList.contains('text-badge-neutral-fg')).toBe(true);
-      expect(Array.from(badge.classList)).toEqual(
-        expect.arrayContaining([
-          'rounded-[7px]',
-          'inset-ring-1',
-          'inset-ring-current/5',
-          'inset-shadow-xs',
-          'inset-shadow-white/5',
-          'dark:inset-shadow-[0_3px_10px_-2px_white]',
-          'dark:inset-shadow-white/7',
-          'dark:bg-linear-to-b',
-          'dark:from-white/3',
-          'dark:to-white/0',
-        ]),
-      );
+      expect(Array.from(badge.classList)).toEqual(expect.arrayContaining(['rounded-[7px]', 'shadow-inset']));
     });
   });
 
@@ -69,19 +72,18 @@ describe('Badge', () => {
       expect(indicator?.textContent).toBe('');
     });
 
-    it('only animates pulse indicators and keeps their selected color', () => {
+    it('only animates pulse indicators', () => {
       const { container, rerender } = render(
-        <Badge variant="blue" indicator="pulse">
+        <Badge variant="info" indicator="pulse">
           Live
         </Badge>,
       );
 
       const pulse = container.querySelector('[aria-hidden="true"]');
-      expect(pulse?.classList.contains('bg-badge-blue')).toBe(true);
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(
-        <Badge variant="blue" indicator="dot">
+        <Badge variant="info" indicator="dot">
           Connected
         </Badge>,
       );
@@ -97,7 +99,7 @@ describe('Badge', () => {
       render(
         <>
           <Badge variant={variant}>default</Badge>
-          <Badge variant={variant} emphasis="muted">
+          <Badge variant={variant} emphasis="subtle">
             muted
           </Badge>
         </>,

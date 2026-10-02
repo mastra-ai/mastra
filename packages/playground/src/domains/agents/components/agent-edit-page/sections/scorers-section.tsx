@@ -1,10 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import {
+  Field,
+  FieldError,
+  FieldItem,
+  FieldLabel,
+  Fieldset,
+  FieldsetLegend,
+} from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { Trash2, ChevronRight } from 'lucide-react';
@@ -32,8 +40,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
     if (!scorers) return [];
     return Object.entries(scorers).map(([id, scorer]) => ({
       value: id,
-      label: (scorer as { scorer?: { config?: { name?: string } } }).scorer?.config?.name || id,
-      description: (scorer as { scorer?: { config?: { description?: string } } }).scorer?.config?.description || '',
+      label: scorer.scorer?.config?.name || id,
+      description: scorer.scorer?.config?.description || '',
     }));
   }, [scorers]);
 
@@ -43,7 +51,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Controller
         name="scorers"
         control={control}
@@ -85,29 +93,32 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-surface3 flex items-center justify-between p-3">
+                <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
-                    <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
-                      Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
+                      Scorers{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border1 border-t p-3">
+                  <div className="border-t border-border p-3">
                     <div className="flex flex-col gap-2">
-                      <Combobox
-                        multiple
-                        options={options}
-                        value={selectedIds}
-                        onValueChange={handleValueChange}
-                        placeholder="Select scorers..."
-                        searchPlaceholder="Search scorers..."
-                        emptyText="No scorers available"
-                        disabled={isLoading || readOnly}
-                        error={error}
-                      />
+                      <Field invalid={Boolean(error)}>
+                        <Combobox
+                          multiple
+                          aria-label="Scorers"
+                          options={options}
+                          value={selectedIds}
+                          onValueChange={handleValueChange}
+                          placeholder="Select scorers..."
+                          searchPlaceholder="Search scorers..."
+                          emptyText="No scorers available"
+                          disabled={isLoading || readOnly}
+                        />
+                        <FieldError>{error}</FieldError>
+                      </Field>
 
                       {selectedOptions.length > 0 && (
                         <div className="mt-2 flex flex-col gap-3">
@@ -179,10 +190,12 @@ function ScorerConfigPanel({
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon size="sm">
-            <JudgeIcon className="text-neutral3" />
+          <Icon size="xs">
+            <JudgeIcon className="text-muted-foreground" />
           </Icon>
-          <span className="text-neutral6 text-xs font-medium">{scorerName}</span>
+          <Txt as="span" variant="column" tone="ink">
+            {scorerName}
+          </Txt>
         </div>
         {!readOnly && (
           <Button type="button" tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -196,43 +209,30 @@ function ScorerConfigPanel({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this scorer..."
-        className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-xs"
+        className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
         size="sm"
         disabled={readOnly}
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
-          Sampling
-        </Label>
-        <RadioGroup
-          id={`sampling-type-${scorerId}`}
-          value={samplingType}
-          onValueChange={handleTypeChange}
-          className="flex flex-col gap-2"
-          disabled={readOnly}
-        >
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-neutral5 cursor-pointer text-sm">
-              None (evaluate all)
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-neutral5 cursor-pointer text-sm">
-              Ratio (percentage)
-            </Label>
-          </div>
-        </RadioGroup>
+        <Field disabled={readOnly}>
+          <Fieldset className="gap-2" render={<RadioGroup value={samplingType} onValueChange={handleTypeChange} />}>
+            <FieldsetLegend className="text-muted-foreground">Sampling</FieldsetLegend>
+            <FieldItem>
+              <RadioGroupItem value="none" />
+              <FieldLabel>None (evaluate all)</FieldLabel>
+            </FieldItem>
+            <FieldItem>
+              <RadioGroupItem value="ratio" />
+              <FieldLabel>Ratio (percentage)</FieldLabel>
+            </FieldItem>
+          </Fieldset>
+        </Field>
 
         {samplingType === 'ratio' && (
-          <div className="mt-1 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
-              Sample Rate (0-1)
-            </Label>
+          <Field disabled={readOnly} className="mt-1 gap-1.5">
+            <FieldLabel>Sample Rate (0-1)</FieldLabel>
             <Input
-              id={`rate-${scorerId}`}
               type="number"
               min="0"
               max="1"
@@ -240,9 +240,8 @@ function ScorerConfigPanel({
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
               className="h-8"
-              disabled={readOnly}
             />
-          </div>
+          </Field>
         )}
       </div>
     </div>

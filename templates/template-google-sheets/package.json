@@ -25,7 +25,7 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
-    "hono": "^4.12.2",
+    "hono": "^4.13.7",
     "zod": "^4.3.6"
   },
   "devDependencies": {

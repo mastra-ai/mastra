@@ -1,0 +1,15 @@
+extends: existence
+message: "Replace '%s' with the specific operation or comparison."
+level: error
+nonword: true
+ignorecase: true
+tokens:
+  - '\bstrand(?:s|ed|ing)\b(?! (?:of|from)\b)'
+  - '\bswamp(?:s|ed|ing)?\b(?! (?:of|land|water|cooler|cabbage|thing)\b)'
+  - '\bdwarf(?:s|ed|ing)\b'
+  - '\b(?:crowds?|crowded|crowding) out\b'
+  - '\blean(?:s|ed|ing)? (?:on|heavily on|hard on|entirely on) (?:the|a|an|its|their|this|that|each|every|one|[a-z]+)\b(?! (?:wall|walls|fence|fences|railing|railings|counter|doorframe|post|posts|tree|trees|car|truck|desk|table|shoulder|shoulders|arm|arms)\b)'
+  - '\bcrack(?:s|ed|ing)? open\b'
+  - '\bsheds? light\b'
+  - '\bseat(?:s|ed|ing)? (?:the|a|an|its|their|this|that|each|every|it|them)\b'
+  - '\btrail(?:s|ed|ing)? (?:the|a|an|its|their|this|that) (?:[a-z]+ )?(?:value|version|release|tag|pin|newest|latest|head|tip|main)\b'

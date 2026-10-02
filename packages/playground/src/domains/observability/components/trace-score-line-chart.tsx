@@ -1,10 +1,17 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse } from '@mastra/client-js';
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
 import { useMemo } from 'react';
 import { buildScoreChartData } from './trace-score-line-chart.utils';
 
-const SERIES_COLORS = ['#22c55e', '#4f83f1', '#8b5cf6', '#fb923c', '#f472b6', '#facc15'];
+const SERIES_COLORS = [
+  'var(--chart-green)',
+  'var(--chart-blue)',
+  'var(--chart-purple)',
+  'var(--chart-orange)',
+  'var(--chart-pink)',
+  'var(--chart-amber)',
+];
 
 export function TraceScoreLineChart({
   scoresData,
@@ -35,7 +42,7 @@ export function TraceScoreLineChart({
   if (data.length === 0) return null;
 
   return (
-    <Card appearance="surface" className={className}>
+    <Card className={className}>
       <CardContent>
         <MetricsLineChart
           data={data}

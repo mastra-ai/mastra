@@ -1,0 +1,321 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { ArrowLeftIcon, BotIcon } from 'lucide-react';
+
+import { PageHeader } from './page-header';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+
+function StoryFrame({ children }: { children: React.ReactNode }) {
+  return <div className="w-[min(42rem,calc(100vw-7rem))] py-10">{children}</div>;
+}
+
+type PageHeaderStoryProps = {
+  description: string;
+  isLoading: boolean;
+  metaBeside: boolean;
+  showAction: boolean;
+  showDescription: boolean;
+  showIcon: boolean;
+  showMeta: boolean;
+  showTitle: boolean;
+  title: string;
+};
+
+function PageHeaderStory({
+  description,
+  isLoading,
+  metaBeside,
+  showAction,
+  showDescription,
+  showIcon,
+  showMeta,
+  showTitle,
+  title,
+}: PageHeaderStoryProps) {
+  return (
+    <StoryFrame>
+      <PageHeader>
+        {showIcon && (
+          <PageHeader.Icon>
+            <BotIcon strokeWidth={2.5} />
+          </PageHeader.Icon>
+        )}
+        {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
+        {showMeta && (
+          <PageHeader.Meta beside={metaBeside}>
+            <Badge variant="success">Active</Badge>
+            {!metaBeside && <span className="font-mono text-meta text-placeholder">agent_8f3a91b2</span>}
+          </PageHeader.Meta>
+        )}
+        {showDescription && <PageHeader.Description isLoading={isLoading}>{description}</PageHeader.Description>}
+        {showAction && (
+          <PageHeader.Action>
+            <Button size="sm">Edit agent</Button>
+          </PageHeader.Action>
+        )}
+      </PageHeader>
+    </StoryFrame>
+  );
+}
+
+const meta = {
+  title: 'Layout/PageHeader',
+  component: PageHeaderStory,
+  parameters: { layout: 'centered' },
+  args: {
+    description: 'Searches trusted sources and writes cited summaries.',
+    isLoading: false,
+    metaBeside: false,
+    showAction: true,
+    showDescription: true,
+    showIcon: false,
+    showMeta: false,
+    showTitle: true,
+    title: 'Research agent',
+  },
+  argTypes: {
+    title: { control: 'text' },
+    description: { control: 'text' },
+    metaBeside: { control: 'boolean' },
+    isLoading: { control: 'boolean' },
+    showIcon: { control: 'boolean' },
+    showTitle: { control: 'boolean' },
+    showMeta: { control: 'boolean' },
+    showDescription: { control: 'boolean' },
+    showAction: { control: 'boolean' },
+  },
+} satisfies Meta<typeof PageHeaderStory>;
+
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const Default: Story = {};
+
+export const AllSlots: Story = {
+  args: {
+    showIcon: true,
+    showMeta: true,
+  },
+};
+
+export const MetaBeside: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="success">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Action>
+          <Button size="sm">Settings</Button>
+        </PageHeader.Action>
+        <PageHeader.Description>Runtime configuration for the production environment.</PageHeader.Description>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const MetaBesideLargeIcon: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Icon>
+          <span className="grid size-8 place-items-center">
+            <BotIcon />
+          </span>
+        </PageHeader.Icon>
+        <PageHeader.Title>Frontend Notion</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green" emphasis="subtle" size="sm">
+            Active
+          </Badge>
+        </PageHeader.Meta>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EyebrowBackLink: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#alerts">
+            <ArrowLeftIcon aria-hidden />
+            Back to alerts
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Action>
+          <Button size="sm">Save draft</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EverySlotWrapping: Story = {
+  render: () => (
+    <div className="w-80 py-10">
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#agents">
+            <ArrowLeftIcon aria-hidden />
+            Back to agents
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Icon>
+          <BotIcon strokeWidth={2.5} />
+        </PageHeader.Icon>
+        <PageHeader.Title>Customer support escalation agent</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Description>Routes urgent tickets to the on-call team.</PageHeader.Description>
+        <PageHeader.Action>
+          <Button size="sm">Edit</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
+export const MetaBoth: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="success">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Meta>
+          <span className="font-mono text-meta text-placeholder">env_01j9</span>
+        </PageHeader.Meta>
+        <PageHeader.Action>
+          <Button size="sm">Settings</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const MetaText: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>production</PageHeader.Title>
+        <PageHeader.Meta beside>Updated 2 hours ago</PageHeader.Meta>
+        <PageHeader.Description>Runtime configuration for the production environment.</PageHeader.Description>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const IconOnly: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Icon>
+          <BotIcon strokeWidth={2.5} />
+        </PageHeader.Icon>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const TitleOnly: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>Title only</PageHeader.Title>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const MetaOnly: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Meta>
+          <Badge variant="success">Meta only</Badge>
+        </PageHeader.Meta>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const DescriptionOnly: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Description>Description only</PageHeader.Description>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const ActionOnly: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Action>
+          <Button size="sm">Action only</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const LargeAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>API Keys</PageHeader.Title>
+        <PageHeader.Action>
+          <Button variant="primary" size="lg">
+            Create API key
+          </Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const TallAction: Story = {
+  render: () => (
+    <div className="grid w-[min(42rem,calc(100vw-7rem))] gap-6 py-10">
+      <PageHeader>
+        <PageHeader.Title>Environment variables</PageHeader.Title>
+      </PageHeader>
+      <PageHeader>
+        <PageHeader.Title>Environments</PageHeader.Title>
+        <PageHeader.Action>
+          <div className="flex flex-col gap-2">
+            <Button size="sm">Create environment</Button>
+            <Button size="sm">Import</Button>
+          </div>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
+export const Loading: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader className="overflow-x-auto">
+        <PageHeader.Title isLoading />
+        <PageHeader.Description isLoading />
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const Empty: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader />
+    </StoryFrame>
+  ),
+};

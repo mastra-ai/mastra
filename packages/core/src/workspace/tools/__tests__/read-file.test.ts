@@ -19,6 +19,31 @@ describe('workspace_read_file', () => {
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
+  it.each([25, 100])('returns well-formed Unicode with a %s-token budget', async maxOutputTokens => {
+    const content = 'a'.repeat(100) + '😀' + 'b'.repeat(100);
+    await fs.writeFile(path.join(tempDir, 'unicode.txt'), content, 'utf8');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: { [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { maxOutputTokens } },
+    });
+    const tools = await createWorkspaceTools(workspace);
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'unicode.txt', showLineNumbers: false },
+      { workspace },
+    );
+
+    expect(typeof result).toBe('string');
+    if (typeof result !== 'string') throw new Error('Expected text output');
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    if (maxOutputTokens === 25) {
+      expect(result).toContain('a'.repeat(100) + '\uFFFD');
+      expect(result).toContain('[output truncated:');
+    } else {
+      expect(result).toContain(content);
+      expect(result).not.toContain('[output truncated:');
+    }
+  });
+
   it('should read file content with line numbers by default', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
@@ -252,7 +277,9 @@ describe('workspace_read_file', () => {
     expect(pdfResult).toMatchObject({ __workspaceMedia: true, mediaType: 'application/pdf' });
   });
 
-  it('should respect explicit encoding for media files (opt out of media result)', async () => {
+  it('should surface configured media even when an explicit encoding is provided (strict-schema providers)', async () => {
+    // Strict-schema providers always populate the optional `encoding` arg, so a
+    // configured media type must still surface as a media part regardless.
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     await fs.writeFile(path.join(tempDir, 'pixel.png'), png);
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
@@ -263,9 +290,7 @@ describe('workspace_read_file', () => {
       { workspace },
     );
 
-    expect(typeof result).toBe('string');
-    expect(result).toContain('pixel.png');
-    expect(result).toContain('base64');
+    expect(result).toMatchObject({ __workspaceMedia: true, mediaType: 'image/png' });
   });
 
   it('should not return media result when mediaTypes is disabled via config', async () => {
@@ -390,6 +415,22 @@ describe('workspace_read_file', () => {
     expect(result).not.toContain('binary file not readable as text');
   });
 
+  it('should read files whose extension matches an Object.prototype member as text', async () => {
+    // Extensions like .constructor / .__proto__ must not resolve to inherited object
+    // properties; they should fall back to application/octet-stream and read as text.
+    await fs.writeFile(path.join(tempDir, 'file.constructor'), 'plain text contents');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'file.constructor' },
+      { workspace },
+    )) as string;
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('plain text contents');
+  });
+
   it('should read extensionless files as text', async () => {
     // Files like Makefile, Dockerfile, LICENSE etc. have no extension.
     await fs.writeFile(path.join(tempDir, 'Dockerfile'), 'FROM node:20\nWORKDIR /app');
@@ -441,19 +482,21 @@ describe('workspace_read_file', () => {
     expect(result).toContain('binary file not readable as text');
   });
 
-  it('should still read binary files as base64 when encoding is explicit', async () => {
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    await fs.writeFile(path.join(tempDir, 'pixel.png'), png);
+  it('should still read non-media binary files as base64 when encoding is explicit', async () => {
+    // A zip isn't a configured media type, so an explicit encoding still lets
+    // the caller dump its raw bytes as base64.
+    const zipBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01, 0x02, 0xff]);
+    await fs.writeFile(path.join(tempDir, 'archive.zip'), zipBytes);
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = await createWorkspaceTools(workspace);
 
     const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
-      { path: 'pixel.png', encoding: 'base64' },
+      { path: 'archive.zip', encoding: 'base64' },
       { workspace },
     )) as string;
 
     expect(typeof result).toBe('string');
-    expect(result).toContain(png.toString('base64'));
+    expect(result).toContain(zipBytes.toString('base64'));
   });
 
   it('should not surface SVG as a media part by default', async () => {
@@ -516,6 +559,29 @@ describe('workspace_read_file', () => {
     expect(result).toContain('exceeds maxMediaBytes');
     expect(result).toContain('big.png');
     expect(result).toContain('image/png');
+  });
+
+  it('should read oversized media as raw bytes when an explicit encoding is provided', async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(2048)]);
+    await fs.writeFile(path.join(tempDir, 'big.png'), png);
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      tools: {
+        [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+          maxMediaBytes: 1024,
+        },
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'big.png', encoding: 'base64' },
+      { workspace },
+    )) as string;
+
+    expect(typeof result).toBe('string');
+    expect(result).not.toMatchObject({ __workspaceMedia: true });
+    expect(result).toContain(png.toString('base64'));
   });
 
   it('should still inline media within the maxMediaBytes cap', async () => {

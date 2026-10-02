@@ -26,8 +26,6 @@ export function ChannelDialog({
 }: ChannelDialogProps) {
   const [view, setView] = useState<ChannelDialogView>(initialView);
 
-  // Reset back to the publish view whenever the dialog reopens, so the next
-  // open does not flash the disconnect-confirm content.
   useEffect(() => {
     if (open) setView(initialView);
   }, [open, initialView]);
@@ -35,7 +33,7 @@ export function ChannelDialog({
   const close = () => onOpenChange(false);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} intent={view === 'confirm-disconnect' ? 'destructive' : 'default'}>
       <DialogContent data-testid={`publish-channel-dialog-${platform.id}`}>
         {view === 'publish' ? (
           <PublishChannelContent

@@ -19,19 +19,22 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <CollapsibleTrigger className="group border-surface5 flex w-full items-center gap-2 border-t px-4 py-3 text-left">
-      <span className="text-icon6 text-sm font-semibold">{title}</span>
+    <CollapsibleTrigger className="group border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
+      <span className="text-foreground text-sm font-semibold">{title}</span>
       {count !== undefined ? (
-        <span className="bg-surface4 text-icon4 rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
+        <span className="bg-fill text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px]">{count}</span>
       ) : null}
-      <ChevronDown size={14} className="text-icon3 ml-auto transition-transform group-data-[state=open]:rotate-180" />
+      <ChevronDown
+        size={14}
+        className="text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180"
+      />
     </CollapsibleTrigger>
   );
 }
 
 function RungBadge({ rung }: { rung: KnowledgeRung }) {
   return (
-    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-medium text-purple-300">
+    <span className="bg-badge-purple-strong text-badge-purple-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
       {RUNG_LABELS[rung].toLowerCase()}
     </span>
   );
@@ -45,7 +48,7 @@ function RecordText({ text, onNodeRef }: { text: string; onNodeRef?: (name: stri
           <button
             key={index}
             type="button"
-            className="rounded bg-purple-500/15 px-1 font-medium text-purple-300 hover:bg-purple-500/30"
+            className="bg-badge-purple-subtle text-badge-purple-foreground hover:bg-badge-purple-strong rounded px-1 font-medium"
             onClick={event => {
               event.stopPropagation();
               onNodeRef?.(segment.value);
@@ -109,14 +112,14 @@ function RecordCard({
         'rounded-lg border transition-colors',
         // A10: pinned knowledge records stand out — the same amber accent the graph
         // uses, with a faint amber wash behind the card.
-        record.pinned ? 'bg-amber-400/10' : 'bg-surface3/60',
+        record.pinned ? 'bg-badge-amber-subtle' : 'bg-card',
         expanded
           ? record.pinned
-            ? 'border-amber-400/70'
-            : 'border-purple-400/50'
+            ? 'border-badge-amber-indicator'
+            : 'border-badge-purple-edge'
           : record.pinned
-            ? 'border-amber-400/40'
-            : 'border-surface5',
+            ? 'border-badge-amber-edge'
+            : 'border-border',
       ].join(' ')}
     >
       <div
@@ -131,27 +134,27 @@ function RecordCard({
           }
         }}
       >
-        <div className="text-icon5 text-xs leading-relaxed">
+        <div className="text-foreground text-xs leading-relaxed">
           <RecordText text={record.text} onNodeRef={onNodeRef} />
           {record.pinned ? (
-            <Pin size={11} className="ml-1 inline text-amber-400" aria-label="Pinned knowledge record" />
+            <Pin size={11} className="text-badge-amber-indicator ml-1 inline" aria-label="Pinned knowledge record" />
           ) : null}
         </div>
-        <div className="text-icon3 mt-1.5 flex items-center gap-2 text-[10px]">
+        <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-[10px]">
           <RungBadge rung={record.rung} />
-          {record.relation === 'mentions' ? <span className="text-icon3">mentions</span> : null}
+          {record.relation === 'mentions' ? <span className="text-muted-foreground">mentions</span> : null}
           <span>captured {relativeTime(record.capturedAt)}</span>
         </div>
       </div>
       {expanded ? (
-        <div data-testid="knowledge-record-detail" className="border-surface5 border-t px-3 py-2.5 text-[11px]">
-          <dl className="text-icon4 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
+        <div data-testid="knowledge-record-detail" className="border-border border-t px-3 py-2.5 text-[11px]">
+          <dl className="text-muted-foreground grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
             <dt>Captured in session</dt>
             <dd>
               {record.sourceThreadId ? (
                 <button
                   type="button"
-                  className="flex items-center gap-1 text-purple-300 hover:underline"
+                  className="text-badge-purple-indicator flex items-center gap-1 hover:underline"
                   onClick={() => onOpenThread?.(record.sourceThreadId)}
                 >
                   <span className="max-w-40 truncate">{record.sourceThreadId}</span>
@@ -177,20 +180,20 @@ function RecordCard({
           {reason ? (
             <div
               data-testid="knowledge-record-reason"
-              className="mt-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-2"
+              className="border-badge-amber-edge bg-badge-amber-subtle mt-2 rounded-md border p-2"
             >
-              <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-amber-300 uppercase">
+              <div className="text-badge-amber-foreground mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase">
                 <Sparkles size={10} /> Reasoning
               </div>
-              <p className="text-icon5 text-[11px] leading-relaxed italic">{reason}</p>
+              <p className="text-foreground text-[11px] leading-relaxed italic">{reason}</p>
             </div>
           ) : (
-            <p className="text-icon3 mt-2 text-[10px] italic">
+            <p className="text-muted-foreground mt-2 text-[10px] italic">
               No capture reasoning was recorded for this knowledge record.
             </p>
           )}
           {otherMetadata.length > 0 ? (
-            <dl className="text-icon3 mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
+            <dl className="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
               {otherMetadata.map(([key, value]) => (
                 <div key={key} className="contents">
                   <dt>{key}</dt>
@@ -233,11 +236,11 @@ export function KnowledgeFlyout({
   return (
     <aside
       data-testid="knowledge-flyout"
-      className="border-surface5 bg-surface2/95 absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l shadow-2xl backdrop-blur transition-transform duration-300"
+      className="border-border bg-background shadow-overlay absolute inset-y-0 right-0 z-20 flex w-[380px] flex-col overflow-hidden rounded-l-xl border-l transition-transform duration-300"
       aria-label="Knowledge node details"
     >
       {nodeQuery.isPending ? (
-        <div className="text-icon3 p-4 text-sm">Loading knowledge node…</div>
+        <div className="text-muted-foreground p-4 text-sm">Loading knowledge node…</div>
       ) : nodeQuery.isError ? (
         <div className="p-4">
           <Notice variant="destructive">Unable to load this knowledge node.</Notice>
@@ -246,9 +249,9 @@ export function KnowledgeFlyout({
         <>
           <header className="flex items-start gap-2 px-4 py-3">
             <div className="min-w-0">
-              <h2 className="text-icon6 truncate text-base font-semibold">{nodeQuery.data.node.name}</h2>
+              <h2 className="text-foreground truncate text-base font-semibold">{nodeQuery.data.node.name}</h2>
               <div className="mt-1 flex items-center gap-2">
-                <span className="bg-surface4 text-icon4 rounded px-1.5 py-0.5 text-[10px]">
+                <span className="bg-fill text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
                   {nodeQuery.data.node.kind}
                 </span>
                 <RungBadge rung={nodeQuery.data.node.rung} />
@@ -257,7 +260,7 @@ export function KnowledgeFlyout({
             <button
               type="button"
               aria-label="Close details"
-              className="text-icon3 hover:text-icon6 ml-auto rounded p-1"
+              className="text-muted-foreground hover:text-foreground ml-auto rounded p-1"
               onClick={onClose}
             >
               <X size={16} />
@@ -269,7 +272,7 @@ export function KnowledgeFlyout({
               <Collapsible defaultOpen>
                 <SectionHeader title="Content" />
                 <CollapsibleContent>
-                  <p className="text-icon5 px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
+                  <p className="text-foreground px-4 pb-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
                     <RecordText text={nodeQuery.data.node.content} onNodeRef={onNodeRef} />
                   </p>
                 </CollapsibleContent>
@@ -279,17 +282,21 @@ export function KnowledgeFlyout({
             <Collapsible defaultOpen>
               <SectionHeader title="Knowledge node" />
               <CollapsibleContent>
-                <dl className="text-icon4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
+                <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-3 text-xs">
                   <dt>Kind</dt>
-                  <dd className="text-icon5 text-right">{nodeQuery.data.node.kind}</dd>
+                  <dd className="text-foreground text-right">{nodeQuery.data.node.kind}</dd>
                   <dt>Scope</dt>
-                  <dd className="text-icon5 text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
+                  <dd className="text-foreground text-right break-all">{nodeQuery.data.node.scope.join(' → ')}</dd>
                   <dt>Created</dt>
-                  <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.createdAt).toLocaleString()}</dd>
+                  <dd className="text-foreground text-right">
+                    {new Date(nodeQuery.data.node.createdAt).toLocaleString()}
+                  </dd>
                   <dt>Updated</dt>
-                  <dd className="text-icon5 text-right">{new Date(nodeQuery.data.node.updatedAt).toLocaleString()}</dd>
+                  <dd className="text-foreground text-right">
+                    {new Date(nodeQuery.data.node.updatedAt).toLocaleString()}
+                  </dd>
                   <dt>Knowledge records</dt>
-                  <dd className="text-icon5 text-right">{nodeQuery.data.records.length}</dd>
+                  <dd className="text-foreground text-right">{nodeQuery.data.records.length}</dd>
                 </dl>
               </CollapsibleContent>
             </Collapsible>
@@ -299,12 +306,14 @@ export function KnowledgeFlyout({
               <CollapsibleContent>
                 <div className="flex flex-col gap-2 px-4 pb-3">
                   {nodeQuery.data.records.length === 0 ? (
-                    <p className="text-icon3 text-xs">No knowledge records about this node yet.</p>
+                    <p className="text-muted-foreground text-xs">No knowledge records about this node yet.</p>
                   ) : (
                     nodeQuery.data.records.map(record => (
                       <div
                         key={record.id}
-                        className={record.id === focusRecordId ? 'rounded-lg ring-2 ring-purple-400/60' : undefined}
+                        className={
+                          record.id === focusRecordId ? 'ring-badge-purple-indicator rounded-lg ring-2' : undefined
+                        }
                       >
                         <RecordCard
                           record={record}

@@ -3,16 +3,18 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
+import { runsPullRequestCreate } from '../../session/shell-commands.js';
 import type {
   ProjectRepository,
   ProjectSourceControlConnection,
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import type { IntegrationTools } from '../base.js';
 import type { GithubIntegration } from './integration.js';
 import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
-import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
+import { getGithubRefreshTarget, getRegisteredGithubPatKind, requireGithubTokenInjector } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -194,7 +196,11 @@ export async function upsertFactoryTriageComment(
 }
 
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
-  const target = await resolveSessionTarget(requestContext, github);
+  const inject = requireGithubTokenInjector(requestContext);
+  // The workspace resolver records the target only after authorizing the
+  // caller against the GitHub-backed session that owns this sandbox.
+  const target = getGithubRefreshTarget(requestContext);
+  if (!target) throw new Error('The active session is not backed by a GitHub workspace.');
   // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
   // installation token (which 403s on integration-restricted endpoints). The
   // workspace records which PAT kind the sandbox was provisioned with, so a
@@ -205,23 +211,19 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     getRegisteredGithubPatKind(requestContext),
   );
   if (pat) {
-    injectGithubToken(requestContext, pat);
+    inject(pat);
     return;
   }
-  const access = await github.versionControl.getRepositoryAccess({
-    orgId: target.orgId,
-    repositoryId: target.repository.id,
-  });
+  const access = await github.versionControl.getRepositoryAccess(target);
   const token = access.authorization?.token;
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
-  injectGithubToken(requestContext, token);
+  inject(token);
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  if (!isGithubProjectSession(requestContext)) return {};
-
-  return {
-    github_refresh_token: createTool({
+  const tools: IntegrationTools = {};
+  if (getGithubRefreshTarget(requestContext)) {
+    tools.github_refresh_token = createTool({
       id: 'github_refresh_token',
       description:
         'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
@@ -230,7 +232,12 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         await refreshGithubToken(requestContext, github);
         return { refreshed: true };
       },
-    }),
+    });
+  }
+  if (!isGithubProjectSession(requestContext)) return tools;
+
+  return {
+    ...tools,
     github_upsert_factory_triage_comment: createTool({
       id: 'github_upsert_factory_triage_comment',
       description:
@@ -261,23 +268,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
   };
 }
 
-export function stripHeredocBodies(command: string): string {
-  const lines = command.split('\n');
-  const executableLines: string[] = [];
-  let delimiter: string | undefined;
-
-  for (const line of lines) {
-    if (delimiter) {
-      if (line.trim() === delimiter) delimiter = undefined;
-      continue;
-    }
-    executableLines.push(line);
-    const heredoc = line.match(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    delimiter = heredoc?.[2];
-  }
-
-  return executableLines.join('\n');
-}
+const GITHUB_PULL_REQUEST_URL = /^https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+\/?$/;
 
 export function parseCreatedPullRequest(context: {
   toolName: string;
@@ -285,14 +276,16 @@ export function parseCreatedPullRequest(context: {
   output?: unknown;
   error?: unknown;
 }) {
-  if (context.toolName !== 'execute_command' || context.error) return undefined;
-  const command = (context.input as { command?: unknown } | undefined)?.command;
-  if (
-    typeof command !== 'string' ||
-    !/(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/.test(stripHeredocBodies(command))
-  ) {
-    return undefined;
+  if (context.error) return undefined;
+  // The provider-neutral change-request tool reports the created PR directly;
+  // subscribe on it exactly as on a successful `gh pr create`.
+  if (context.toolName === 'source_control_create_change_request') {
+    const url = (context.output as { url?: unknown } | undefined)?.url;
+    return typeof url === 'string' && GITHUB_PULL_REQUEST_URL.test(url) ? url.replace(/\/$/, '') : undefined;
   }
+  if (context.toolName !== 'execute_command') return undefined;
+  const command = (context.input as { command?: unknown } | undefined)?.command;
+  if (typeof command !== 'string' || !runsPullRequestCreate(command)) return undefined;
   const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
   const stdout = typeof context.output === 'string' ? context.output : (output?.stdout ?? output?.result);
   if (typeof stdout !== 'string') return undefined;

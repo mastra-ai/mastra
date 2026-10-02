@@ -47,6 +47,8 @@ import type {
   VersionControl,
 } from '../../capabilities/version-control.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
+import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -154,6 +156,8 @@ export interface ListRepoOpenIssuesOptions {
 }
 
 export interface GithubIntegrationConfig {
+  /** Replace an event handler, or disable it with null; omitted events keep defaults. */
+  rules?: GithubRuleOverrides;
   /** GitHub App id (the numeric id, as a string). */
   appId: string;
   /**
@@ -188,6 +192,11 @@ const REQUIRED_FIELDS = ['appId', 'privateKey', 'clientId', 'clientSecret', 'slu
 export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
+  readonly #rules: GithubEventRules;
+
+  get rules(): GithubEventRules {
+    return this.#rules;
+  }
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
@@ -301,6 +310,21 @@ export class GithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
@@ -365,6 +389,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   constructor(config: GithubIntegrationConfig) {
+    this.#rules = resolveGithubRules(config.rules);
     const missing = REQUIRED_FIELDS.filter(field => !config[field]);
     if (missing.length > 0) {
       throw new Error(

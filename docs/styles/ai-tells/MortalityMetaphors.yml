@@ -1,0 +1,90 @@
+---
+extends: existence
+message: "AI mortality metaphor: '%s'. Say what stopped, or what was kept. Disable this rule for biology or process-lifecycle prose."
+level: error
+nonword: true
+ignorecase: true
+# Life, death, and survival handed to a process or a row: a run that "dies
+# part way through," a fetch that "dies," a row that "survives unchanged,"
+# a key that "survives" the rewrite, a value that "outlives" its scope, a
+# record kept "for its whole life." A documentation-corpus audit (2026-09)
+# counted forty-five of these with no rule reading the class. The plain
+# sentence says the process exited, the fetch failed, the row was kept, or
+# the value is still referenced.
+#
+# The subject slot is open behind a determiner, in the FigurativeLives
+# mold, with a relative-pronoun companion for the phrasing the audit saw most
+# ("a run that dies"), and the exceptions name what literally lives and
+# dies: people, animals, plants, cells, and the batteries and bulbs whose
+# dying is ordinary English. Threads and processes are not excepted, since
+# "a run that dies" is the figure the rule exists for; the cost of that is
+# the process-lifecycle register of runtime prose, about twenty matches
+# across the Go and Python standard libraries ("if the parent dies," "until
+# the thread dies," "waits on this goroutine to die"), and prose about
+# process lifetimes disables the rule. "Survives" matches nine ("the
+# forking thread survives," "sweepgen survive across freeing"), and
+# "outlives" nineteen, all Go's escape analysis ("outlives the statement"),
+# a compiler term of art that fires here by the same call and disables
+# with the same note. The dead adjectives ("dead values," "dead code,"
+# "dead-letter") stay out: "dead values" is the compiler's own vocabulary
+# fourteen times over, and "dead code" everyone's.
+#
+# "Survives the rebase untouched" moved here from FigurativeIdioms, and
+# "lives and dies with" stays in FigurativeLives. The totality construction
+# ("survives all restarts") is UniversalObject's; the object lookahead
+# leaves it there.
+exceptions:
+  # People and creatures
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)patients?"
+  - "(?i)parents?"
+  - "(?i)soldiers?"
+  - "(?i)victims?"
+  - "(?i)survivors?"
+  - "(?i)populations?"
+  - "(?i)animals?"
+  - "(?i)plants?"
+  - "(?i)trees?"
+  - "(?i)cells?"
+  - "(?i)species"
+  - "(?i)organisms?"
+  - "(?i)bacteria"
+  - "(?i)cats?"
+  - "(?i)dogs?"
+  - "(?i)birds?"
+  - "(?i)fish"
+  # Things whose dying is ordinary English
+  - "(?i)batter(?:y|ies)"
+  - "(?i)bulbs?"
+  - "(?i)lamps?"
+  - "(?i)lights?"
+  - "(?i)engines?"
+  - "(?i)motors?"
+  - "(?i)stars?"
+tokens:
+  # --- Death: a determiner-gated subject that dies, or a relative clause
+  # or modal that puts the verb after its subject ("a run that dies part
+  # way through," "say it dies during the third stage," "a fetch that
+  # dies doesn't leave a half-written file," "the process can die
+  # mid-write"). The lookahead keeps the fade idioms ("dies down," "dies
+  # off") and the human phrases ("died of," "died peacefully") out.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:that |which |then |never |still |also |just |simply )?(?:dies|died|dying)\\b(?! (?:down|off|out|hard|young|old|of|peacefully)\\b)"
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:that |which )?(?:can|could|may|might|will|would|should|must|to|cannot|can't) (?:not |never |also |still )?die\\b(?! (?:down|off|out|hard|young|old|of|peacefully)\\b)"
+  - "\\b(?:it|they|which|that) (?:then |never |still |also |just |simply )?(?:dies|died)\\b(?! (?:down|off|out|hard|young|old|of|peacefully)\\b)"
+
+  # --- Survival: the row or key that outlasts the operation ("every row
+  # survives unchanged," "a primary key survives," "the blobs that repo
+  # references survive too," "survives the rebase untouched"). The object
+  # lookahead leaves "survives all restarts" to UniversalObject.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:that |which |then |never |still |also |just |simply )?(?:survives?|survived|surviving)\\b(?! (?:all|every)\\b)"
+  - "\\b(?:survives?|survived|surviving) (?:a|an|the|this|that|these|those|each|its|their|both|any|unchanged|intact|untouched|as|into|too|to|as-is)\\b"
+
+  # --- Outliving and the lifespan ("the cache entry outlives the
+  # request," "kept for its whole life").
+  - "\\boutliv(?:es?|ed|ing)\\b"
+  - "\\bfor (?:its|their|the) (?:whole|entire|full) (?:life|lifetime)\\b"

@@ -3,6 +3,8 @@ import { Button, buttonVariants } from '@mastra/playground-ui/components/Button'
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -40,7 +42,7 @@ export function CardDetailsHint() {
   return (
     <span
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
     </span>
@@ -70,26 +72,37 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
   if (status.kind === 'busy') {
     return (
-      <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex shrink-0 items-center gap-1.5">
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        role="status"
+        aria-live="polite"
+        className="flex shrink-0 items-center gap-1.5"
+      >
         <Spinner size="sm" aria-hidden className="size-3" />
         {status.label}
-      </span>
+      </Txt>
     );
   }
 
   const message = (
-    <span
+    <Txt
+      as="span"
+      variant="meta"
       role="alert"
       tabIndex={status.detail === undefined ? undefined : 0}
       className={cn(
-        'text-ui-xs text-error flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined &&
-          'focus-visible:outline-accent1 relative cursor-help underline decoration-dotted underline-offset-2 outline-none focus-visible:outline-2',
+        'text-destructive-foreground flex w-full min-w-0 items-start gap-1.5',
+        status.detail !== undefined && [
+          'relative cursor-help underline decoration-dotted underline-offset-2',
+          focusRing,
+        ],
       )}
     >
       <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
       <span className="min-w-0 wrap-anywhere">{status.label}</span>
-    </span>
+    </Txt>
   );
 
   if (status.detail === undefined) return message;
@@ -106,36 +119,47 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
 
 function labelDotClass(label: string): string {
   const normalized = label.toLowerCase();
-  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-accent2';
-  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-accent6';
-  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-accent1';
-  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-accent3';
-  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-accent6';
-  return 'bg-icon3';
+  if (normalized.includes('bug') || normalized.includes('error')) return 'bg-badge-red-indicator';
+  if (normalized.includes('approval') || normalized.includes('priority')) return 'bg-badge-amber-indicator';
+  if (normalized.includes('triage') || normalized.includes('ready')) return 'bg-badge-green-indicator';
+  if (normalized.includes('cli') || normalized.includes('linear')) return 'bg-badge-blue-indicator';
+  if (normalized.includes('work') || normalized.includes('trio')) return 'bg-badge-amber-indicator';
+  return 'bg-muted-foreground';
 }
 
-export function CardLabels({ labels }: { labels: readonly string[] }) {
+export function CardLabels({
+  labels,
+  colors = {},
+}: {
+  labels: readonly string[];
+  colors?: Readonly<Record<string, string>>;
+}) {
   const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
   return (
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">
         {displayLabels.map(label => (
-          <span
+          <Txt
+            as="span"
+            variant="meta"
+            tone="muted"
             key={label}
-            className="border-border1 text-ui-xs text-icon4 inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
+            className="border-border inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded-full border px-1.5"
             title={label}
           >
-            <span className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
+            <span
+              className={cn('size-1 shrink-0 rounded-full', labelDotClass(label))}
+              style={colors[label] ? { backgroundColor: colors[label] } : undefined}
+              aria-hidden
+            />
             <span className="truncate">{label}</span>
-          </span>
+          </Txt>
         ))}
       </div>
     </ScrollArea>
   );
 }
-
-/** Pinned to the card's bottom: the likeliest click first, lit only while the card waits on a person, the rest stacked under it, `trailing` at the right. */
 export function CardActions({
   actions,
   beforeStart,
@@ -152,21 +176,19 @@ export function CardActions({
   const [main] = actions;
   return (
     <div className="mt-auto flex items-center justify-between gap-2">
-      <div className="board-card-actions relative z-10 flex">
+      <div className="board-card-actions relative z-10 flex min-w-0">
         {actions.map(action => (
           <CardActionButton key={action.label} action={action} main={action === main} beforeStart={beforeStart} />
         ))}
         {children}
       </div>
-      {trailing}
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   );
 }
 
 function pillVariant(action: CardAction, main: boolean) {
-  if (!main) return 'outline';
-  if (action.urgent && !action.disabled) return 'primary';
-  return 'default';
+  return main && action.urgent && !action.disabled ? 'primary' : 'default';
 }
 
 function CardActionButton({
@@ -179,11 +201,21 @@ function CardActionButton({
   beforeStart?: () => void;
 }) {
   const variant = pillVariant(action, main);
+  // The lead action keeps its label whole; a narrow column eats into the ones behind it.
+  const width = main ? 'shrink-0' : 'min-w-0';
   // Both through Button, so the two pills can never differ by a class.
   if ('href' in action) {
     return (
-      <Button as={Link} to={action.href} draggable={false} variant={variant} size="sm" aria-label={action.ariaLabel}>
-        {action.label}
+      <Button
+        as={Link}
+        to={action.href}
+        draggable={false}
+        variant={variant}
+        size="sm"
+        aria-label={action.ariaLabel}
+        className={width}
+      >
+        <span className="truncate">{action.label}</span>
       </Button>
     );
   }
@@ -194,12 +226,13 @@ function CardActionButton({
       size="sm"
       aria-label={action.ariaLabel}
       disabled={action.disabled}
+      className={width}
       onClick={() => {
         beforeStart?.();
         action.start();
       }}
     >
-      {action.label}
+      <span className="truncate">{action.label}</span>
     </Button>
   );
 }

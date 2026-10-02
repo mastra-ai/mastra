@@ -77,6 +77,19 @@ describe('preflightBuildOutput', () => {
         provider: 'redis',
         envVarName: 'REDIS_URL',
       });
+      // Managed redis is not released yet: the structured autofix stays (it's
+      // gated by the platform's provider catalog), but printed remediation
+      // must not advertise provisioning a managed redis.
+      expect(issue?.fix).toBe('Add REDIS_URL to your env file.');
+    });
+
+    it('advertises managed provisioning in the fix text for self-serve providers (DATABASE_URL)', async () => {
+      writeBundle(`const url = process.env.DATABASE_URL;`);
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('DATABASE_URL'));
+      expect(issue?.fix).toBe(
+        'Add DATABASE_URL to your env file, or let `mastra deploy` provision a managed neon for this environment.',
+      );
     });
 
     it('does not attach an autofix to non-provider missing env vars', async () => {
@@ -90,6 +103,19 @@ describe('preflightBuildOutput', () => {
       writeBundle(`const k = process.env.ANTHROPIC_API_KEY;`);
       const issues = await preflightBuildOutput(tmpDir, { ANTHROPIC_API_KEY: 'sk-x' });
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('treats empty and invalid provider env vars as missing so deploy can offer managed databases', async () => {
+      writeBundle(`const db = process.env.DATABASE_URL; const redis = process.env.REDIS_URL;`);
+
+      const issues = await preflightBuildOutput(tmpDir, { DATABASE_URL: 'non-url', REDIS_URL: '   ' });
+
+      expect(
+        issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('DATABASE_URL'))?.autofix,
+      ).toMatchObject({ provider: 'neon' });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('REDIS_URL'))?.autofix).toMatchObject({
+        provider: 'redis',
+      });
     });
 
     describe('LOCALHOST_ENV_VAR', () => {
@@ -582,6 +608,132 @@ describe('preflightBuildOutput', () => {
     const issues = await preflightBuildOutput(tmpDir, {});
     const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
     expect(missing?.message).toContain('SECRET_KEY');
+  });
+
+  describe('workers need REDIS_URL', () => {
+    const writeWorkersManifest = (manifest: unknown) => {
+      writeFileSync(join(tmpDir, '.mastra', 'output', 'workers.json'), JSON.stringify(manifest));
+    };
+
+    it('flags MISSING_ENV_VAR with a redis autofix when workers are enabled and no REDIS_URL is provided', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('Background tasks'));
+      expect(issue).toBeDefined();
+      expect(issue?.severity).toBe('warning');
+      expect(issue?.autofix).toEqual({
+        kind: 'create-managed-database',
+        provider: 'redis',
+        envVarName: 'REDIS_URL',
+      });
+    });
+
+    it('flags an invalid REDIS_URL so deploy can offer managed Redis', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'non-url' }, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue?.autofix).toMatchObject({ provider: 'redis' });
+    });
+
+    it('does not flag when REDIS_URL is present in the env file', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        { REDIS_URL: 'redis://prod.example:6379' },
+        { checkWorkers: true },
+      );
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('does not flag when REDIS_URL is injected by a platform-managed database', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { managedEnvVarNames: ['REDIS_URL'], checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('does not flag when workers.json is absent (older deployer or no background tasks)', async () => {
+      writeBundle(`export default {};`);
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('does not flag when workers.json is null (extractor found no manifest)', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest(null);
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('does not flag when workers.json has enabled: false', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({ enabled: false });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('does not flag when workers.json is malformed JSON', async () => {
+      writeBundle(`export default {};`);
+      writeFileSync(join(tmpDir, '.mastra', 'output', 'workers.json'), '{ not-json');
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('skips the check entirely without checkWorkers (legacy studio/server deploys strip the manifest)', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, {});
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
   });
 });
 

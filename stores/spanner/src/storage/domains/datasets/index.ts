@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -6,6 +5,7 @@ import {
   createStorageErrorId,
   DatasetsStorage,
   normalizePerPage,
+  resolveListOrderBy,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
@@ -34,6 +34,7 @@ import type {
   UpdateDatasetInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -43,6 +44,20 @@ import { transformFromSpannerRow } from '../utils';
 function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(value as string);
 }
+
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+// Project authored JSON as text, keeping SQL NULL distinct from JSON null.
+const ITEM_SELECT_COLUMNS = Object.keys(TABLE_SCHEMAS[TABLE_DATASET_ITEMS])
+  .map(column => {
+    const name = quoteIdent(column, 'column name');
+    return ['input', 'groundTruth', 'expectedTrajectory'].includes(column)
+      ? `CASE WHEN ${name} IS NULL THEN NULL ELSE TO_JSON_STRING(${name}) END AS ${name}`
+      : name;
+  })
+  .join(', ');
 
 function rowToDataset(row: Record<string, any>): DatasetRecord {
   const t = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_DATASETS, row });
@@ -54,10 +69,10 @@ function rowToDataset(row: Record<string, any>): DatasetRecord {
     inputSchema: t.inputSchema ?? undefined,
     groundTruthSchema: t.groundTruthSchema ?? undefined,
     requestContextSchema: t.requestContextSchema ?? undefined,
-    tags: t.tags ?? null,
-    targetType: t.targetType ?? null,
-    targetIds: t.targetIds ?? null,
-    scorerIds: t.scorerIds ?? null,
+    tags: t.tags ?? undefined,
+    targetType: t.targetType ?? undefined,
+    targetIds: t.targetIds ?? undefined,
+    scorerIds: t.scorerIds ?? undefined,
     version: Number(t.version ?? 0),
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
@@ -70,6 +85,7 @@ function rowToDataset(row: Record<string, any>): DatasetRecord {
 
 function rowToItem(row: Record<string, any>): DatasetItem {
   const t = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_DATASET_ITEMS, row });
+  const emptyValue = t.metadata?.__purged === true ? null : undefined;
   return {
     id: String(t.id),
     datasetId: String(t.datasetId),
@@ -78,14 +94,14 @@ function rowToItem(row: Record<string, any>): DatasetItem {
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
     input: t.input,
-    groundTruth: t.groundTruth ?? undefined,
-    expectedTrajectory: t.expectedTrajectory ?? undefined,
-    toolMocks: t.toolMocks ?? undefined,
-    unmockedToolPolicy: t.unmockedToolPolicy ?? undefined,
-    scorerIds: t.scorerIds ?? undefined,
-    requestContext: t.requestContext ?? undefined,
+    groundTruth: row.groundTruth == null ? emptyValue : t.groundTruth,
+    expectedTrajectory: row.expectedTrajectory == null ? emptyValue : t.expectedTrajectory,
+    toolMocks: t.toolMocks ?? emptyValue,
+    unmockedToolPolicy: t.unmockedToolPolicy ?? emptyValue,
+    scorerIds: t.scorerIds ?? emptyValue,
+    requestContext: t.requestContext ?? emptyValue,
     metadata: t.metadata ?? undefined,
-    source: t.source ?? undefined,
+    source: t.source ?? emptyValue,
     createdAt: toDate(t.createdAt),
     updatedAt: toDate(t.updatedAt),
   };
@@ -215,18 +231,14 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   private async experimentTablesExist(): Promise<boolean> {
-    try {
-      const [rows] = await this.database.run({
-        sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
-              WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
-        params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
-        json: true,
-      });
-      const row = rows?.[0] as { c?: number | string } | undefined;
-      return Number(row?.c ?? 0) === 2;
-    } catch {
-      return false;
-    }
+    const [rows] = await this.database.run({
+      sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
+      params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
+      json: true,
+    });
+    const row = rows?.[0] as { c?: number | string } | undefined;
+    return Number(row?.c ?? 0) === 2;
   }
 
   // ==========================================================================
@@ -236,7 +248,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const record: DatasetRecord = {
         id,
@@ -246,10 +258,10 @@ export class DatasetsSpanner extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         requestContextSchema: input.requestContextSchema ?? undefined,
-        tags: null,
-        targetType: input.targetType ?? null,
-        targetIds: input.targetIds ?? null,
-        scorerIds: input.scorerIds ?? null,
+        tags: undefined,
+        targetType: input.targetType ?? undefined,
+        targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -468,6 +480,10 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -530,7 +546,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT * FROM ${tableName} ${whereClause}
-              ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...filterParams, limit, offset },
         types: filterTypes,
@@ -605,7 +621,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   private async insertVersionRow(tx: Transaction, datasetId: string, version: number, now: Date): Promise<void> {
     await this.db.insert({
       tableName: TABLE_DATASET_VERSIONS,
-      record: { id: randomUUID(), datasetId, version, createdAt: now },
+      record: { id: globalThis.crypto.randomUUID(), datasetId, version, createdAt: now },
       transaction: tx,
     });
   }
@@ -623,9 +639,9 @@ export class DatasetsSpanner extends DatasetsStorage {
   }
 
   /** Reads the current live row for an item (validTo IS NULL, not deleted). */
-  private async loadCurrentItemRow(itemId: string): Promise<DatasetItemRow | null> {
-    const [rows] = await this.database.run({
-      sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
+  private async loadCurrentItemRow(tx: Transaction, itemId: string): Promise<DatasetItemRow | null> {
+    const [rows] = await tx.run({
+      sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
             WHERE ${quoteIdent('id', 'column name')} = @id
               AND ${quoteIdent('validTo', 'column name')} IS NULL
               AND ${quoteIdent('isDeleted', 'column name')} = FALSE LIMIT 1`,
@@ -643,7 +659,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
       const now = new Date();
-      const itemId = randomUUID();
+      const itemId = globalThis.crypto.randomUUID();
       let created: DatasetItem | null = null;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
@@ -659,9 +675,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: false,
-                input: args.input,
-                groundTruth: args.groundTruth ?? null,
-                expectedTrajectory: args.expectedTrajectory ?? null,
+                input: jsonDataArg(args.input),
+                groundTruth: jsonDataArg(args.groundTruth),
+                expectedTrajectory: jsonDataArg(args.expectedTrajectory),
                 toolMocks: args.toolMocks ?? null,
                 unmockedToolPolicy: args.unmockedToolPolicy ?? null,
                 scorerIds: args.scorerIds ?? null,
@@ -718,44 +734,53 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
-      const existing = await this.loadCurrentItemRow(args.id);
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item not found: ${args.id}`,
-          details: { id: args.id },
-        });
-      }
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
-          details: { id: args.id, datasetId: args.datasetId },
-        });
-      }
-
-      const merged = {
-        input: args.input !== undefined ? args.input : existing.input,
-        groundTruth: args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth,
-        expectedTrajectory:
-          args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory,
-        toolMocks: args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks,
-        unmockedToolPolicy:
-          args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy,
-        scorerIds: args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds,
-        requestContext: args.requestContext !== undefined ? args.requestContext : existing.requestContext,
-        metadata: args.metadata !== undefined ? args.metadata : existing.metadata,
-        source: args.source !== undefined ? args.source : existing.source,
-      };
       const now = new Date();
       let updated: DatasetItem | null = null;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const existing = await this.loadCurrentItemRow(tx, args.id);
+            if (!existing) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'NOT_FOUND'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item not found: ${args.id}`,
+                details: { id: args.id },
+              });
+            }
+            if (existing.datasetId !== args.datasetId) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'UPDATE_DATASET_ITEM', 'DATASET_MISMATCH'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
+                details: { id: args.id, datasetId: args.datasetId },
+              });
+            }
+            if (existing.metadata?.__purged === true) {
+              throw new MastraError({
+                id: 'DATASET_ITEM_PURGED',
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { datasetId: args.datasetId, itemId: args.id },
+                text: `Purged dataset item cannot be updated: ${args.id}`,
+              });
+            }
+
+            const merged = {
+              input: args.input !== undefined ? args.input : existing.input,
+              groundTruth: args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth,
+              expectedTrajectory:
+                args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory,
+              toolMocks: args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks,
+              unmockedToolPolicy:
+                args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy,
+              scorerIds: args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds,
+              requestContext: args.requestContext !== undefined ? args.requestContext : existing.requestContext,
+              metadata: args.metadata !== undefined ? args.metadata : existing.metadata,
+              source: args.source !== undefined ? args.source : existing.source,
+            };
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
@@ -769,9 +794,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: false,
-                input: merged.input,
-                groundTruth: merged.groundTruth ?? null,
-                expectedTrajectory: merged.expectedTrajectory ?? null,
+                input: jsonDataArg(merged.input),
+                groundTruth: jsonDataArg(merged.groundTruth),
+                expectedTrajectory: jsonDataArg(merged.expectedTrajectory),
                 toolMocks: merged.toolMocks ?? null,
                 unmockedToolPolicy: merged.unmockedToolPolicy ?? null,
                 scorerIds: merged.scorerIds ?? null,
@@ -829,21 +854,24 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doDeleteItem(args: DeleteDatasetItemInput): Promise<void> {
     try {
-      const existing = await this.loadCurrentItemRow(args.id);
-      if (!existing) return;
-      if (existing.datasetId !== args.datasetId) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'DELETE_DATASET_ITEM', 'DATASET_MISMATCH'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
-          details: { id: args.id, datasetId: args.datasetId },
-        });
-      }
       const now = new Date();
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const existing = await this.loadCurrentItemRow(tx, args.id);
+            if (!existing) {
+              await tx.commit();
+              return;
+            }
+            if (existing.datasetId !== args.datasetId) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'DELETE_DATASET_ITEM', 'DATASET_MISMATCH'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Dataset item ${args.id} does not belong to dataset ${args.datasetId}`,
+                details: { id: args.id, datasetId: args.datasetId },
+              });
+            }
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
@@ -857,9 +885,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                 projectId,
                 validTo: null,
                 isDeleted: true,
-                input: existing.input,
-                groundTruth: existing.groundTruth ?? null,
-                expectedTrajectory: existing.expectedTrajectory ?? null,
+                input: jsonDataArg(existing.input),
+                groundTruth: jsonDataArg(existing.groundTruth),
+                expectedTrajectory: jsonDataArg(existing.expectedTrajectory),
                 toolMocks: existing.toolMocks ?? null,
                 unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
                 scorerIds: existing.scorerIds ?? null,
@@ -895,7 +923,99 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    try {
+      const experimentTablesExist = await this.experimentTablesExist();
+      const purgedAt = new Date().toISOString();
+
+      await this.db.runWithAbortRetry(() =>
+        this.database.runTransactionAsync(async tx => {
+          try {
+            // Experiment-result writes use the same no-op DML mutation. The shared
+            // exclusive lock ensures the losing transaction retries after purge.
+            const [datasetRowCount] = await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASETS, 'table name')}
+                    SET ${quoteIdent('version', 'column name')} = ${quoteIdent('version', 'column name')}
+                    WHERE ${quoteIdent('id', 'column name')} = @datasetId`,
+              params: { datasetId },
+            });
+            if (Number(datasetRowCount) === 0) {
+              await tx.commit();
+              return;
+            }
+
+            const [rows] = await tx.run({
+              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId LIMIT 1`,
+              params: { id, datasetId },
+              json: true,
+            });
+            if (!rows?.[0]) {
+              await tx.commit();
+              return;
+            }
+
+            await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} SET
+                    ${quoteIdent('input', 'column name')} = JSON 'null',
+                    ${quoteIdent('groundTruth', 'column name')} = NULL,
+                    ${quoteIdent('expectedTrajectory', 'column name')} = NULL,
+                    ${quoteIdent('toolMocks', 'column name')} = NULL,
+                    ${quoteIdent('unmockedToolPolicy', 'column name')} = NULL,
+                    ${quoteIdent('scorerIds', 'column name')} = NULL,
+                    ${quoteIdent('requestContext', 'column name')} = NULL,
+                    ${quoteIdent('metadata', 'column name')} = JSON_OBJECT('__purged', TRUE, 'purgedAt', @purgedAt),
+                    ${quoteIdent('source', 'column name')} = NULL
+                    WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId`,
+              params: { id, datasetId, purgedAt },
+            });
+
+            if (experimentTablesExist) {
+              await tx.runUpdate({
+                sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} SET
+                      ${quoteIdent('input', 'column name')} = JSON 'null',
+                      ${quoteIdent('output', 'column name')} = NULL,
+                      ${quoteIdent('groundTruth', 'column name')} = NULL,
+                      ${quoteIdent('error', 'column name')} = NULL,
+                      ${quoteIdent('toolMockReport', 'column name')} = NULL,
+                      ${quoteIdent('tags', 'column name')} = NULL,
+                      ${quoteIdent('comment', 'column name')} = NULL,
+                      ${quoteIdent('metadata', 'column name')} = JSON_OBJECT('__purged', TRUE, 'purgedAt', @purgedAt)
+                      WHERE ${quoteIdent('itemId', 'column name')} = @id
+                        AND ${quoteIdent('experimentId', 'column name')} IN (
+                          SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                          WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId
+                        )`,
+                params: { id, datasetId, purgedAt },
+              });
+            }
+            await tx.commit();
+          } catch (err) {
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
+            throw err;
+          }
+        }),
+      );
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'PURGE_ITEM', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id },
+        },
+        error,
+      );
+    }
+  }
+
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -943,8 +1063,8 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName} ${whereSql}
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,
@@ -978,7 +1098,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       let sql: string;
       const params: Record<string, any> = { id: args.id };
       if (args.datasetVersion !== undefined) {
-        sql = `SELECT * FROM ${tableName}
+        sql = `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
                WHERE ${quoteIdent('id', 'column name')} = @id
                  AND ${quoteIdent('datasetVersion', 'column name')} <= @datasetVersion
                  AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @datasetVersion)
@@ -987,7 +1107,7 @@ export class DatasetsSpanner extends DatasetsStorage {
                LIMIT 1`;
         params.datasetVersion = args.datasetVersion;
       } else {
-        sql = `SELECT * FROM ${tableName}
+        sql = `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
                WHERE ${quoteIdent('id', 'column name')} = @id
                  AND ${quoteIdent('validTo', 'column name')} IS NULL
                  AND ${quoteIdent('isDeleted', 'column name')} = FALSE LIMIT 1`;
@@ -1012,7 +1132,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName}
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
               WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId
                 AND ${quoteIdent('datasetVersion', 'column name')} <= @version
                 AND (${quoteIdent('validTo', 'column name')} IS NULL OR ${quoteIdent('validTo', 'column name')} > @version)
@@ -1039,7 +1159,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       const tableName = quoteIdent(TABLE_DATASET_ITEMS, 'table name');
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName}
+        sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableName}
               WHERE ${quoteIdent('id', 'column name')} = @id
               ORDER BY ${quoteIdent('datasetVersion', 'column name')} DESC`,
         params: { id: itemId },
@@ -1066,7 +1186,7 @@ export class DatasetsSpanner extends DatasetsStorage {
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
       const now = new Date();
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       await this.db.insert({
         tableName: TABLE_DATASET_VERSIONS,
         record: { id, datasetId, version, createdAt: now },
@@ -1162,14 +1282,14 @@ export class DatasetsSpanner extends DatasetsStorage {
             let historyRows: DatasetItemRow[] = [];
             if (externalIds.length > 0) {
               const [rows] = await tx.run({
-                sql: `SELECT * FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId AND ${quoteIdent('externalId', 'column name')} IN UNNEST(@externalIds) ORDER BY ${quoteIdent('datasetVersion', 'column name')}`,
+                sql: `SELECT ${ITEM_SELECT_COLUMNS} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @datasetId AND ${quoteIdent('externalId', 'column name')} IN UNNEST(@externalIds) ORDER BY ${quoteIdent('datasetVersion', 'column name')}`,
                 params: { datasetId: input.datasetId, externalIds },
                 types: { externalIds: { type: 'array', child: 'string' } },
                 json: true,
               });
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
-            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
             const resolved = new Map<string, DatasetItem>(
               [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
             );
@@ -1202,7 +1322,14 @@ export class DatasetsSpanner extends DatasetsStorage {
                 };
                 await this.db.insert({
                   tableName: TABLE_DATASET_ITEMS,
-                  record: { ...item, validTo: null, isDeleted: false },
+                  record: {
+                    ...item,
+                    input: jsonDataArg(item.input),
+                    groundTruth: jsonDataArg(item.groundTruth),
+                    expectedTrajectory: jsonDataArg(item.expectedTrajectory),
+                    validTo: null,
+                    isDeleted: false,
+                  },
                   transaction: tx,
                 });
                 resolved.set(item.id, item);
@@ -1236,18 +1363,21 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
-      // Resolve current rows up front and keep only those belonging to the dataset.
-      const current: DatasetItemRow[] = [];
-      for (const itemId of input.itemIds) {
-        const row = await this.loadCurrentItemRow(itemId);
-        if (row && row.datasetId === input.datasetId) current.push(row);
-      }
-      if (current.length === 0) return;
-
       const now = new Date();
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            // Resolve current rows up front and keep only those belonging to the dataset.
+            const current: DatasetItemRow[] = [];
+            for (const itemId of input.itemIds) {
+              const row = await this.loadCurrentItemRow(tx, itemId);
+              if (row && row.datasetId === input.datasetId) current.push(row);
+            }
+            if (current.length === 0) {
+              await tx.commit();
+              return;
+            }
+
             const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, input.datasetId, now);
             for (const existing of current) {
               await this.closeCurrentRow(tx, existing.id, newVersion);
@@ -1262,9 +1392,9 @@ export class DatasetsSpanner extends DatasetsStorage {
                   projectId,
                   validTo: null,
                   isDeleted: true,
-                  input: existing.input,
-                  groundTruth: existing.groundTruth ?? null,
-                  expectedTrajectory: existing.expectedTrajectory ?? null,
+                  input: jsonDataArg(existing.input),
+                  groundTruth: jsonDataArg(existing.groundTruth),
+                  expectedTrajectory: jsonDataArg(existing.expectedTrajectory),
                   toolMocks: existing.toolMocks ?? null,
                   unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
                   scorerIds: existing.scorerIds ?? null,

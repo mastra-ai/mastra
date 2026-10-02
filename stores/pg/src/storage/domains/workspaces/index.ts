@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   WorkspacesStorage,
@@ -22,9 +23,10 @@ import type {
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
 } from '@mastra/core/storage/domains/workspaces';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -50,8 +52,8 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (WorkspacesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -70,7 +72,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of WorkspacesPG.MANAGED_TABLES) {
@@ -92,7 +94,7 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return WorkspacesPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -145,9 +147,17 @@ export class WorkspacesPG extends WorkspacesStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageWorkspaceType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageWorkspaceType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -186,7 +196,7 @@ export class WorkspacesPG extends WorkspacesStorage {
           'draft',
           null,
           workspace.authorId ?? null,
-          workspace.metadata ? JSON.stringify(workspace.metadata) : null,
+          workspace.metadata ? toPgJson(workspace.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
@@ -248,7 +258,7 @@ export class WorkspacesPG extends WorkspacesStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
 
-      const existingWorkspace = await this.getById(id);
+      const existingWorkspace = await this.#getById(this.#db.client, id);
       if (!existingWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
@@ -272,7 +282,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
 
       if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
+        const latestVersion = await this.#getLatestVersion(this.#db.client, id);
         if (!latestVersion) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NO_VERSIONS'),
@@ -294,11 +304,17 @@ export class WorkspacesPG extends WorkspacesStorage {
         } = latestVersion;
 
         const newConfig = { ...latestConfig, ...configFields };
+        const normalized = (value: unknown) => {
+          const json = toPgJson(value);
+          return json === undefined ? undefined : JSON.parse(json);
+        };
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+            !isDeepStrictEqual(
+              normalized(configFields[field as keyof typeof configFields]),
+              normalized(latestConfig[field as keyof typeof latestConfig]),
+            ),
         );
 
         if (changedFields.length > 0) {
@@ -341,9 +357,10 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       if (metadata !== undefined) {
-        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...metadata };
+        const normalizedMetadata = JSON.parse(toPgJson(metadata));
+        const mergedMetadata = { ...(existingWorkspace.metadata || {}), ...normalizedMetadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -355,15 +372,9 @@ export class WorkspacesPG extends WorkspacesStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2 || versionCreated) {
-        // More than just updatedAt and updatedAtZ, or a new version was created
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedWorkspace = await this.getById(id);
+      const updatedWorkspace = await this.#getById(this.#db.client, id);
       if (!updatedWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
@@ -441,13 +452,13 @@ export class WorkspacesPG extends WorkspacesStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -464,7 +475,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -525,15 +536,15 @@ export class WorkspacesPG extends WorkspacesStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          input.filesystem ? JSON.stringify(input.filesystem) : null,
-          input.sandbox ? JSON.stringify(input.sandbox) : null,
-          input.mounts ? JSON.stringify(input.mounts) : null,
-          input.search ? JSON.stringify(input.search) : null,
-          input.skills ? JSON.stringify(input.skills) : null,
-          input.tools ? JSON.stringify(input.tools) : null,
+          input.filesystem ? toPgJson(input.filesystem) : null,
+          input.sandbox ? toPgJson(input.sandbox) : null,
+          input.mounts ? toPgJson(input.mounts) : null,
+          input.search ? toPgJson(input.search) : null,
+          input.skills ? toPgJson(input.skills) : null,
+          input.tools ? toPgJson(input.tools) : null,
           input.autoSync ?? false,
           input.operationTimeout ?? null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,
@@ -564,7 +575,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -591,7 +602,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 AND "versionNumber" = $2`,
         [workspaceId, versionNumber],
       );
@@ -616,12 +627,20 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   async getLatestVersion(workspaceId: string): Promise<WorkspaceVersion | null> {
+    return this.#getLatestVersion(this.#db.readClient, workspaceId);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getLatestVersion(client: DbClient, workspaceId: string): Promise<WorkspaceVersion | null> {
     try {
       const tableName = getTableName({
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await client.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [workspaceId],
       );
@@ -670,7 +689,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`,
         [workspaceId],
       );
@@ -687,7 +706,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [workspaceId, limitValue, offset],
       );
@@ -770,9 +789,10 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`, [
-        workspaceId,
-      ]);
+      const result = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`,
+        [workspaceId],
+      );
       return parseInt(result.count, 10);
     } catch (error) {
       if (error instanceof MastraError) throw error;

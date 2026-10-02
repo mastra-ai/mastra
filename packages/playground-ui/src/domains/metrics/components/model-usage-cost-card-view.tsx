@@ -3,7 +3,8 @@ import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
-import { formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { METRICS_DATA_LIST_PROPS } from './metrics-utils';
+import { formatCost } from '@/lib/cost';
 
 export interface ModelUsageCostCardViewProps {
   rows: ModelUsageRow[] | undefined;
@@ -74,7 +75,7 @@ export function ModelUsageCostCardView({
                 const href = getRowHref?.(row);
                 const rowCells = (
                   <>
-                    <DataList.RowHeaderCell className="text-ui-sm">{row.model}</DataList.RowHeaderCell>
+                    <DataList.RowHeaderCell className="text-caption">{row.model}</DataList.RowHeaderCell>
                     <DataList.NumberCell>{row.input}</DataList.NumberCell>
                     <DataList.NumberCell>{row.output}</DataList.NumberCell>
                     <DataList.NumberCell>{row.cacheRead}</DataList.NumberCell>

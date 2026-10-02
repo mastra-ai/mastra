@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -50,15 +51,15 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
 
         <div className="flex flex-col gap-1">
           {providers.map(provider => {
-            const bg = stringToColor(provider.name);
-            const text = stringToColor(provider.name, 25);
             const count = toolCountsByProvider[provider.id] ?? 0;
 
             return (
-              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
+              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-background">
                 <div
-                  className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
-                  style={{ backgroundColor: bg, color: text }}
+                  className={cn(
+                    'flex size-11 shrink-0 items-center justify-center rounded-lg uppercase shadow-inset',
+                    hueFillClass(hueForName(provider.name)),
+                  )}
                 >
                   {provider.name[0]}
                 </div>
@@ -74,7 +75,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
                       {count} {count === 1 ? 'tool' : 'tools'}
                     </Badge>
                   )}
-                  <Badge variant="green">Available</Badge>
+                  <Badge variant="success">Available</Badge>
                 </div>
               </Entity>
             );

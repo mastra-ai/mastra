@@ -1,12 +1,12 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import type { TargetType } from '@/domains/datasets/components/experiment-trigger/target-selector';
 import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface RerunExperimentButtonProps {
   experiment: DatasetExperiment;
@@ -37,8 +37,8 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
         variant="primary"
         onClick={() => setOpen(true)}
         tooltip="Run this experiment again with the same configuration"
+        icon={<Play />}
       >
-        <Play />
         Rerun
       </Button>
       {/* Mounted on demand and keyed on the resolved scorers so the dialog seeds its state

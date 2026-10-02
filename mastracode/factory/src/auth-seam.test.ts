@@ -3,7 +3,15 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildAuthRoutes, getWorkOSProvider, isWorkOSAuth, mountFactoryAuth, factoryAuthTenant } from './auth.js';
+import {
+  buildAuthRoutes,
+  createFactoryRouteAuth,
+  getWorkOSProvider,
+  isWorkOSAuth,
+  mountFactoryAuth,
+  factoryAuthTenant,
+} from './auth.js';
+import { handleServerError } from './server-error.js';
 
 /**
  * Provider-seam behavior: the auth module operates on an explicitly-passed
@@ -97,10 +105,77 @@ describe('active provider resolution', () => {
   });
 });
 
-describe('mountFactoryAuth with an explicit custom provider', () => {
-  function buildApp(provider: IMastraAuthProvider) {
+describe('Factory route auth organization selection', () => {
+  function buildRouteApp(provider: IMastraAuthProvider) {
     const app = new Hono();
-    const enabled = mountFactoryAuth(app, { provider });
+    const auth = createFactoryRouteAuth(provider);
+    app.onError(handleServerError);
+    app.get('/web/projects', async c => {
+      const user = await auth.ensureUser(c);
+      if (!user) return c.json({ error: 'unauthorized' }, 401);
+      return c.json(auth.tenant(c));
+    });
+    return app;
+  }
+
+  it('selects a requested bearer organization inside the custom route auth seam', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({
+        id: 'user_123',
+        organizationId: 'org_1',
+        memberOrgIds: ['org_1', 'org_2'],
+      })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: {
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+  });
+
+  it('rejects an inaccessible bearer organization inside the custom route auth seam', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({
+        id: 'user_123',
+        organizationId: 'org_1',
+        memberOrgIds: ['org_1'],
+      })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: {
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_other',
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+  });
+
+  it('ignores the organization header for cookie-authenticated custom routes', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({ id: 'user_123', organizationId: 'org_cookie' })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: { 'X-Mastra-Organization-Id': 'org_other' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
+  });
+});
+
+describe('mountFactoryAuth with an explicit custom provider', () => {
+  function buildApp(provider: IMastraAuthProvider, publicUrl?: string) {
+    const app = new Hono();
+    const enabled = mountFactoryAuth(app, { provider, publicUrl });
     app.get('*', c => c.text('ok'));
     return { app, enabled };
   }
@@ -112,6 +187,70 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     const res = await app.request('/auth/login?returnTo=/dashboard');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('https://fake.example/login');
+  });
+
+  it('blocks Mastra platform login on a custom domain before calling the provider', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://platform.mastra.ai/v1/auth/login');
+    const provider = fakeProvider({ name: 'mastra-studio', ...ssoCapability({ getLoginUrl }) });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/login?returnTo=/dashboard');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/signin?error=custom_domain_unsupported&returnTo=%2Fdashboard');
+    expect(getLoginUrl).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('allows Mastra platform login on a Mastra-hosted domain', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://platform.mastra.ai/v1/auth/login');
+    const provider = fakeProvider({ name: 'mastra-studio', ...ssoCapability({ getLoginUrl }) });
+    const { app } = buildApp(provider, 'https://acme.factory.mastra.cloud');
+
+    const res = await app.request('/auth/login');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://platform.mastra.ai/v1/auth/login');
+    expect(getLoginUrl).toHaveBeenCalledOnce();
+  });
+
+  it('allows a non-platform provider on a custom domain', async () => {
+    const getLoginUrl = vi.fn(async () => 'https://fake.example/login');
+    const provider = fakeProvider(ssoCapability({ getLoginUrl }));
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/login');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://fake.example/login');
+    expect(getLoginUrl).toHaveBeenCalledOnce();
+  });
+
+  it('reports unsupported custom-domain platform auth from /auth/me', async () => {
+    const provider = fakeProvider({
+      name: 'mastra-studio',
+      authenticateToken: vi.fn(async () => null),
+      ...ssoCapability(),
+    });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/me');
+
+    expect(await res.json()).toEqual({
+      authenticated: false,
+      user: null,
+      provider: 'mastra-studio',
+      customDomainUnsupported: true,
+    });
+  });
+
+  it('does not report custom-domain blocking for another provider', async () => {
+    const provider = fakeProvider({ authenticateToken: vi.fn(async () => null), ...ssoCapability() });
+    const { app } = buildApp(provider, 'https://factory.acme.com');
+
+    const res = await app.request('/auth/me');
+
+    expect(await res.json()).toEqual({ authenticated: false, user: null, provider: 'fake' });
   });
 
   it('proxies /auth/api/* to an HTTP-handler-shaped provider', async () => {
@@ -171,6 +310,7 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       user: { userId: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' },
       provider: 'fake',
     });

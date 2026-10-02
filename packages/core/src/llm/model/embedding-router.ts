@@ -283,7 +283,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
     const result = await this.providerModel.doEmbed({ ...args, headers });
     // Ensure warnings is always an array — AI SDK v6's embedMany spreads
     // result.warnings and crashes if it's undefined.
-    const warnings = (result as { warnings?: unknown[] }).warnings ?? [];
+    const warnings = result.warnings ?? [];
     return { ...result, warnings } as Awaited<ReturnType<EmbeddingModelV2<VALUE>['doEmbed']>>;
   }
 }

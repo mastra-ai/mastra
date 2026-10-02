@@ -23,7 +23,7 @@ export function stripMastraCreatedAt<T>(value: T): T {
 
   if (value && typeof value === 'object') {
     const normalizedEntries = Object.entries(value).map(([key, nestedValue]) => {
-      if (key === 'createdAt') {
+      if (key === 'createdAt' || key === 'startedAt') {
         return null;
       }
 

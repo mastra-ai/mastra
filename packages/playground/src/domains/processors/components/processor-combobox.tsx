@@ -1,9 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useProcessors } from '../hooks/use-processors';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ProcessorComboboxProps {
   value?: string;
@@ -15,6 +15,8 @@ export interface ProcessorComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  'aria-label'?: string;
+  align?: ComboboxProps['align'];
 }
 
 export function ProcessorCombobox({
@@ -27,6 +29,8 @@ export function ProcessorCombobox({
   disabled = false,
   variant,
   size,
+  'aria-label': ariaLabel,
+  align,
 }: ProcessorComboboxProps) {
   const { data: processors = {}, isLoading, isError, error } = useProcessors();
   const { navigate, paths } = useLinkComponent();
@@ -73,6 +77,8 @@ export function ProcessorCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      aria-label={ariaLabel}
+      align={align}
     />
   );
 }

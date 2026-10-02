@@ -93,14 +93,22 @@ function getEngineNameAndArgs(engine: string): { name: string; args: string } | 
 
 function hasBalancedParens(s: string): boolean {
   let depth = 0;
-  for (const c of s) {
-    if (c === '(') depth++;
+  let quote: string | undefined;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = undefined;
+      continue;
+    }
+    if (c === '`' || c === '"' || c === "'") quote = c;
+    else if (c === '(') depth++;
     else if (c === ')') {
       depth--;
       if (depth < 0) return false;
     }
   }
-  return depth === 0;
+  return depth === 0 && quote === undefined;
 }
 
 export function buildReplicatedTableEngine(engine: string, replication?: ClickhouseReplicationConfig): string {
@@ -180,27 +188,61 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
 }
 
 function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationConfig): string {
-  return sql.replace(/ENGINE\s*=\s*(\w+)\s*/gi, (match, engineName: string, offset: number, source: string) => {
-    const argsStart = offset + match.length;
-    if (source[argsStart] !== '(') {
-      return `ENGINE = ${buildReplicatedTableEngine(engineName, replication)}`;
-    }
+  const enginePattern = /ENGINE\s*=\s*(\w+)/gi;
+  let result = '';
+  let consumedUntil = 0;
 
-    let depth = 0;
-    for (let i = argsStart; i < source.length; i++) {
-      const char = source[i];
-      if (char === '(') depth++;
-      else if (char === ')') {
-        depth--;
-        if (depth === 0) {
-          const engine = `${engineName}${source.slice(argsStart, i + 1)}`;
-          return `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+  for (let match = enginePattern.exec(sql); match; match = enginePattern.exec(sql)) {
+    const engineName = match[1];
+    if (!engineName) continue;
+
+    let engineEnd = enginePattern.lastIndex;
+    let argsStart = engineEnd;
+    while (/\s/.test(sql[argsStart] ?? '')) argsStart++;
+    let engine = engineName;
+
+    if (sql[argsStart] === '(') {
+      let depth = 0;
+      let closingParenEnd: number | undefined;
+      // Track quoted regions so parentheses inside quoted identifiers
+      // (`col)`, "col)") or string literals ('...)') do not affect depth.
+      let quote: string | undefined;
+      for (let i = argsStart; i < sql.length; i++) {
+        const char = sql[i];
+        if (quote) {
+          if (char === '\\') i++;
+          else if (char === quote) quote = undefined;
+          continue;
+        }
+        if (char === '`' || char === '"' || char === "'") {
+          quote = char;
+        } else if (char === '(') depth++;
+        else if (char === ')') {
+          depth--;
+          if (depth === 0) {
+            closingParenEnd = i + 1;
+            break;
+          }
         }
       }
+
+      if (closingParenEnd === undefined) {
+        result += sql.slice(consumedUntil, enginePattern.lastIndex);
+        consumedUntil = enginePattern.lastIndex;
+        continue;
+      }
+
+      engineEnd = closingParenEnd;
+      engine = `${engineName}${sql.slice(argsStart, engineEnd)}`;
     }
 
-    return match;
-  });
+    result += sql.slice(consumedUntil, match.index);
+    result += `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+    consumedUntil = engineEnd;
+    enginePattern.lastIndex = engineEnd;
+  }
+
+  return result + sql.slice(consumedUntil);
 }
 
 export function applyReplicationToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {

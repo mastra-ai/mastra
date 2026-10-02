@@ -91,9 +91,9 @@ function createState() {
         },
         bufferingMessages: false,
         bufferingObservations: false,
+        queuedFollowUps: 0,
       })),
     },
-    followUps: { count: vi.fn(() => 0) },
     identity: { getResourceId: vi.fn(() => 'resource-1') },
     thread: { getId: vi.fn(() => 'thread-1') },
     mode: {
@@ -154,7 +154,10 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.session.followUps.count.mockReturnValue(1);
+    state.session.displayState.get.mockReturnValue({
+      ...state.session.displayState.get(),
+      queuedFollowUps: 1,
+    });
 
     updateStatusLine(state);
 
@@ -170,6 +173,16 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
+  });
+
+  it('shows the landed fallback pack and failed source pack', () => {
+    const state = createState();
+    state.fallbackStatus = { usingPack: 'OpenAI', failedPack: 'Anthropic' };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('Using fallback OpenAI (Anthropic failed)');
   });
 
   it('shows active elapsed time directly after the model name', () => {

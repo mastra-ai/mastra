@@ -22,6 +22,7 @@ jobs:
       has_examples: ${{ steps.filter.outputs.has_examples }}
       has_agents_inputs: ${{ steps.filter.outputs.has_agents_inputs }}
       has_peerdeps_inputs: ${{ steps.filter.outputs.has_peerdeps_inputs }}
+      has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -51,15 +52,57 @@ jobs:
           fi
 
           printf '%s\n' "$ALL" > /tmp/changed-files.txt
-          node -e '
-            const fs = require("node:fs");
-            const { qualityAssuranceInputs } = require("./.github/scripts/ci-routing.cjs");
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { qualityAssuranceInputs } from "./.github/scripts/ci-routing.cjs";
+            import { discoverPackages, findPackagesMissingDocs } from "./.github/scripts/check-package-readmes.mjs";
             const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
-            const { hasAgentsInputs, hasPeerdepsInputs, agentsReasons, peerdepsReasons } = qualityAssuranceInputs(changedFiles);
+            const packageReadmePaths = discoverPackages(process.cwd()).map(pkg => `${pkg.relativeDirectory}/README.md`);
+            const packagesMissingDocs = findPackagesMissingDocs(process.cwd());
+            const { hasAgentsInputs, hasPeerdepsInputs, hasReadmeInputs, agentsReasons, peerdepsReasons, readmeReasons, missingPackageDocs } = qualityAssuranceInputs(changedFiles, packageReadmePaths, packagesMissingDocs);
             const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\n`);
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n`);
+            const formatMissingDocs = packages => packages.length === 0 ? "none" : packages.map(pkg => `\`${pkg.relativeDirectory}\` (missing ${pkg.missing.join(", ")})`).join(", ");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\nhas_readme_inputs=${hasReadmeInputs}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n- README validation: \`${hasReadmeInputs}\` — ${formatReasons(readmeReasons)}; packages missing docs: ${formatMissingDocs(missingPackageDocs)}\n`);
           '
+
+  changeset-check:
+    name: Validate changeset packages
+    runs-on: starsling-ubuntu-24.04-2
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          # Changesets resolves the merge-base with main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Test changeset package validator
+        run: node --test .github/scripts/check-changeset-packages.test.mjs
+
+      # Check all pending changesets, including on changeset-only PRs.
+      - name: Reject unknown or ignored changeset packages
+        run: node .github/scripts/check-changeset-packages.mjs
+
+      # The automated Changesets release PR only rewrites package.json versions,
+      # changelogs and .changeset/pre.json: the changesets it consumes are already
+      # in the merge base, so `--since origin/main` never sees a new changeset and
+      # the status check fails on every regeneration of that PR. Skip it — its
+      # changesets were validated on the PRs that introduced them. The branch name
+      # alone is not a trusted signal, since a fork can pick any name, so the skip
+      # also requires the head to live in this repository.
+      #
+      # actions/checkout fetches main as origin/main, not a local main branch.
+      - name: Validate changeset release plan
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
+        run: pnpm changeset-cli status --since origin/main
 
   lint:
     name: Lint
@@ -109,6 +152,13 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+      # The build transpiles without type checking, so a type error here would
+      # otherwise reach main unnoticed: nothing else in CI runs this package's
+      # `check` script, because the root `typecheck` task only visits packages
+      # that define a `typecheck` script and this one is named `check`.
+      - name: Validate Mastra Code types
+        run: pnpm --filter ./mastracode/sdk check
 
       - name: Validate generated files are committed
         run: bash .github/scripts/check-clean-worktree.bash
@@ -170,6 +220,31 @@ jobs:
 
       - name: Run AGENTS.md validator
         run: node .github/scripts/validate-agents-md.mjs
+
+  readme-check:
+    name: Validate package READMEs
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          package-manager-cache: false
+          install-dependencies: false
+
+      - name: Run README validator
+        run: node .github/scripts/check-package-readmes.mjs
 
   peerdeps-check:
     name: Validate peer dependencies

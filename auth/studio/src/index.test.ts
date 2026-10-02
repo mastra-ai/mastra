@@ -1,6 +1,26 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { MastraAuthStudio, MastraRBACStudio } from './index';
 import type { StudioUser } from './index';
+
+// Run every test from a scratch cwd so an ambient `.mastra-project.json`
+// (present at the repo root in CI) can't leak into the constructor's new
+// project-config fallback and set `organizationId` behind the tests' backs.
+let __originalCwd: string;
+let __scratchCwd: string;
+
+beforeAll(() => {
+  __originalCwd = process.cwd();
+  __scratchCwd = mkdtempSync(join(tmpdir(), 'mastra-auth-studio-tests-'));
+  process.chdir(__scratchCwd);
+});
+
+afterAll(() => {
+  process.chdir(__originalCwd);
+  rmSync(__scratchCwd, { recursive: true, force: true });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,6 +127,89 @@ describe('MastraAuthStudio', () => {
       const headers = a.getSessionHeaders({ id: 'sess', userId: 'u1' } as any);
       expect(headers['Set-Cookie']).not.toContain('Domain=');
       expect(headers['Set-Cookie']).not.toContain('Secure');
+    });
+
+    // Local-dev fallback: `.mastra-project.json` in cwd carries the linked
+    // org id, so `pnpm mastra dev` should pin AuthKit to the deployment org
+    // without requiring `MASTRA_ORGANIZATION_ID` to also be exported.
+    describe('organizationId fallback to .mastra-project.json', () => {
+      let tmpDir: string;
+      let originalCwd: string;
+
+      beforeEach(() => {
+        originalCwd = process.cwd();
+        tmpDir = mkdtempSync(join(tmpdir(), 'mastra-auth-studio-'));
+        process.chdir(tmpDir);
+        delete process.env.MASTRA_ORGANIZATION_ID;
+      });
+
+      afterEach(() => {
+        process.chdir(originalCwd);
+        rmSync(tmpDir, { recursive: true, force: true });
+      });
+
+      it('reads organizationId from .mastra-project.json when neither option nor env is set', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-config');
+      });
+
+      it('prefers the explicit constructor option over .mastra-project.json', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-from-option' });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-option');
+      });
+
+      it('prefers MASTRA_ORGANIZATION_ID over .mastra-project.json', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 'org-from-config' }),
+        );
+        process.env.MASTRA_ORGANIZATION_ID = 'org-from-env';
+
+        try {
+          const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+          const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+          expect(new URL(url).searchParams.get('organization_id')).toBe('org-from-env');
+        } finally {
+          delete process.env.MASTRA_ORGANIZATION_ID;
+        }
+      });
+
+      it('omits organization_id when .mastra-project.json is missing', () => {
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
+
+      it('ignores .mastra-project.json when the file is malformed JSON', () => {
+        writeFileSync(join(tmpDir, '.mastra-project.json'), '{ not json ');
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
+
+      it('ignores .mastra-project.json when organizationId is missing or wrong type', () => {
+        writeFileSync(
+          join(tmpDir, '.mastra-project.json'),
+          JSON.stringify({ projectId: 'proj_1', projectName: 'demo', organizationId: 42 }),
+        );
+
+        const a = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
+        const url = a.getLoginUrl('https://app.mastra.ai/callback', '');
+        expect(new URL(url).searchParams.has('organization_id')).toBe(false);
+      });
     });
   });
 
@@ -1257,25 +1360,61 @@ describe('MastraAuthStudio org-scoping', () => {
     expect(user).toBeNull();
   });
 
-  it('should allow user when current org differs but memberOrgIds includes instance org (cross-org access)', async () => {
-    // This is the core fix: user's "current" org is org-1, but they're also a member of org-owner
-    // The deployed studio belongs to org-owner, so access should be allowed
+  it('serves a member whose session cookie sits on another org as a member of the pinned org', async () => {
     const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
 
-    const multiOrgResponse = {
+    const cookieOnOtherOrg = {
       ...mockMeResponse,
-      organizationId: 'org-1', // user's current org
-      memberOrgIds: ['org-1', 'org-owner'], // user is member of both orgs
+      organizationId: 'org-1',
+      role: 'admin',
+      memberOrgIds: ['org-1', 'org-owner'],
     };
-
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(multiOrgResponse), { status: 200 }));
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(cookieOnOtherOrg), { status: 200 }));
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          organizations: [
+            { id: 'org-1', role: 'admin', isCurrent: true },
+            { id: 'org-owner', role: 'member', isCurrent: false },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
 
     const req = mockRequest({ cookie: 'wos-session=sealed-token' });
     const user = await auth.authenticateToken('', req);
 
-    expect(user).not.toBeNull();
-    expect(user!.organizationId).toBe('org-1'); // current org unchanged
-    expect(user!.memberOrgIds).toContain('org-owner'); // but they're a member of instance org
+    expect(user).toMatchObject({ organizationId: 'org-owner', role: 'member', memberOrgIds: ['org-1', 'org-owner'] });
+    expect(user!.permissions).toBeUndefined();
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      `${SHARED_API}/auth/orgs`,
+      expect.objectContaining({ headers: expect.objectContaining({ Cookie: 'wos-session=sealed-token' }) }),
+    );
+
+    const again = await auth.authenticateToken('', req);
+    expect(again!.organizationId).toBe('org-owner');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks the shared API to verify a bearer token against the pinned org', async () => {
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ...mockVerifyResponse, organizationId: 'org-owner', memberOrgIds: ['org-2', 'org-owner'] }),
+        { status: 200 },
+      ),
+    );
+
+    const user = await auth.authenticateToken('cli-token', mockRequest());
+
+    expect(user!.organizationId).toBe('org-owner');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `${SHARED_API}/auth/verify`,
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer cli-token', 'x-organization-id': 'org-owner' }),
+      }),
+    );
   });
 });
 

@@ -1,5 +1,6 @@
 import { MastraWorker } from '@mastra/core/worker';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { runFactoryHealthCheck } from './health.js';
@@ -11,15 +12,22 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
 
   readonly #projects: FactoryProjectsStorage;
   readonly #workItems: WorkItemsStorage;
+  readonly #boards: BoardRegistry;
   readonly #intervalMs: number;
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
 
-  constructor(input: { projects: FactoryProjectsStorage; workItems: WorkItemsStorage; intervalMs?: number }) {
+  constructor(input: {
+    projects: FactoryProjectsStorage;
+    workItems: WorkItemsStorage;
+    boards: BoardRegistry;
+    intervalMs?: number;
+  }) {
     super();
     this.#projects = input.projects;
     this.#workItems = input.workItems;
+    this.#boards = input.boards;
     this.#intervalMs = input.intervalMs ?? DEFAULT_SUPERVISOR_HEALTH_INTERVAL_MS;
   }
 
@@ -67,6 +75,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
           if (!project) return;
           const report = await runFactoryHealthCheck(
             this.#workItems,
+            this.#boards,
             { orgId: project.orgId, factoryProjectId: project.id },
             { now },
           );

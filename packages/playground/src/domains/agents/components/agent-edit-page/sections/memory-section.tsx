@@ -1,6 +1,6 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
@@ -39,34 +39,27 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
   const embedders = embeddersData?.embedders ?? [];
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="bg-surface3 flex w-full items-center gap-1 p-3">
-          <ChevronRight className="text-neutral3 h-4 w-4" />
-          <SectionTitle icon={<MemoryIcon className="text-neutral3" />}>
-            Memory{isEnabled && <span className="text-accent1 font-normal">(enabled)</span>}
+        <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <SectionTitle icon={<MemoryIcon className="text-muted-foreground" />}>
+            Memory{isEnabled && <span className="text-success-indicator">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-border1 flex flex-col gap-4 border-t p-3">
+          <div className="flex flex-col gap-4 border-t border-border p-3">
             <Controller
               name="memory.enabled"
               control={control}
               render={({ field }) => (
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="memory-enabled" className="text-neutral5 text-sm">
-                      Enable Memory
-                    </Label>
-                    <span className="text-neutral3 text-xs">Store and retrieve conversation history</span>
-                  </div>
-                  <Switch
-                    id="memory-enabled"
-                    checked={field.value ?? false}
-                    onCheckedChange={field.onChange}
-                    disabled={readOnly}
-                  />
-                </div>
+                <Field orientation="horizontal" disabled={readOnly}>
+                  <FieldContent className="gap-0.5">
+                    <FieldLabel>Enable Memory</FieldLabel>
+                    <FieldDescription className="mt-0">Store and retrieve conversation history</FieldDescription>
+                  </FieldContent>
+                  <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                </Field>
               )}
             />
 
@@ -76,13 +69,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.lastMessages"
                   control={control}
                   render={({ field }) => (
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="memory-last-messages" className="text-neutral4 text-xs">
-                        Last Messages
-                      </Label>
-                      <span className="text-neutral3 text-xs">Number of recent messages to include in context</span>
+                    <Field className="gap-1.5">
+                      <FieldLabel>Last Messages</FieldLabel>
+                      <FieldDescription className="mt-0">
+                        Number of recent messages to include in context
+                      </FieldDescription>
                       <Input
-                        id="memory-last-messages"
                         type="number"
                         min="1"
                         step="1"
@@ -92,10 +84,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           field.onChange(value === '' ? false : parseInt(value, 10));
                         }}
                         placeholder="40"
-                        className="bg-surface3"
+                        className="bg-card"
                         disabled={readOnly}
                       />
-                    </div>
+                    </Field>
                   )}
                 />
 
@@ -103,20 +95,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.semanticRecall"
                   control={control}
                   render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-semantic-recall" className="text-neutral5 text-sm">
-                          Semantic Recall
-                        </Label>
-                        <span className="text-neutral3 text-xs">Enable semantic search in memory</span>
-                      </div>
-                      <Switch
-                        id="memory-semantic-recall"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
+                    <Field orientation="horizontal" disabled={readOnly}>
+                      <FieldContent className="gap-0.5">
+                        <FieldLabel>Semantic Recall</FieldLabel>
+                        <FieldDescription className="mt-0">Enable semantic search in memory</FieldDescription>
+                      </FieldContent>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </Field>
                   )}
                 />
 
@@ -126,13 +111,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       name="memory.vector"
                       control={control}
                       render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-vector" className="text-neutral4 text-xs">
-                            Vector Store
-                          </Label>
-                          <span className="text-neutral3 text-xs">Select a vector store for semantic search</span>
+                        <Field className="gap-1.5">
+                          <FieldLabel>Vector Store</FieldLabel>
+                          <FieldDescription className="mt-0">
+                            Select a vector store for semantic search
+                          </FieldDescription>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-vector" className="bg-surface3">
+                            <SelectTrigger className="bg-card">
                               <SelectValue placeholder="Select a vector store" />
                             </SelectTrigger>
                             <SelectContent>
@@ -143,7 +128,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
+                        </Field>
                       )}
                     />
 
@@ -151,13 +136,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       name="memory.embedder"
                       control={control}
                       render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-embedder" className="text-neutral4 text-xs">
-                            Embedder Model
-                          </Label>
-                          <span className="text-neutral3 text-xs">Select an embedding model for semantic search</span>
+                        <Field className="gap-1.5">
+                          <FieldLabel>Embedder Model</FieldLabel>
+                          <FieldDescription className="mt-0">
+                            Select an embedding model for semantic search
+                          </FieldDescription>
                           <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-embedder" className="bg-surface3">
+                            <SelectTrigger className="bg-card">
                               <SelectValue placeholder="Select an embedder model" />
                             </SelectTrigger>
                             <SelectContent>
@@ -168,7 +153,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
+                        </Field>
                       )}
                     />
                   </>
@@ -178,20 +163,15 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.readOnly"
                   control={control}
                   render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-read-only" className="text-neutral5 text-sm">
-                          Read Only
-                        </Label>
-                        <span className="text-neutral3 text-xs">Memory is read-only (no new messages stored)</span>
-                      </div>
-                      <Switch
-                        id="memory-read-only"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
+                    <Field orientation="horizontal" disabled={readOnly}>
+                      <FieldContent className="gap-0.5">
+                        <FieldLabel>Read Only</FieldLabel>
+                        <FieldDescription className="mt-0">
+                          Memory is read-only (no new messages stored)
+                        </FieldDescription>
+                      </FieldContent>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </Field>
                   )}
                 />
 
@@ -199,30 +179,25 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                   name="memory.observationalMemory.enabled"
                   control={control}
                   render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-0.5">
-                        <Label htmlFor="memory-observational" className="text-neutral5 text-sm">
-                          Observational Memory
-                        </Label>
-                        <span className="text-neutral3 text-xs">
+                    <Field orientation="horizontal" disabled={readOnly}>
+                      <FieldContent className="gap-0.5">
+                        <FieldLabel>Observational Memory</FieldLabel>
+                        <FieldDescription className="mt-0">
                           Automatically observe and reflect on conversations to build long-term memory
-                        </span>
-                      </div>
-                      <Switch
-                        id="memory-observational"
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                        disabled={readOnly}
-                      />
-                    </div>
+                        </FieldDescription>
+                      </FieldContent>
+                      <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                    </Field>
                   )}
                 />
 
                 {observationalMemoryEnabled && (
-                  <div className="border-border1 ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-neutral4 text-xs">Provider</Label>
-                      <span className="text-neutral3 text-xs">Provider for the observer and reflector agents</span>
+                  <div className="ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                    <Field className="gap-1.5">
+                      <FieldLabel>Provider</FieldLabel>
+                      <FieldDescription className="mt-0">
+                        Provider for the observer and reflector agents
+                      </FieldDescription>
                       <Controller
                         name="memory.observationalMemory.model.provider"
                         control={control}
@@ -238,11 +213,11 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           </div>
                         )}
                       />
-                    </div>
+                    </Field>
 
-                    <div className="flex flex-col gap-1.5">
-                      <Label className="text-neutral4 text-xs">Model</Label>
-                      <span className="text-neutral3 text-xs">Model for the observer and reflector agents</span>
+                    <Field className="gap-1.5">
+                      <FieldLabel>Model</FieldLabel>
+                      <FieldDescription className="mt-0">Model for the observer and reflector agents</FieldDescription>
                       <Controller
                         name="memory.observationalMemory.model.name"
                         control={control}
@@ -252,21 +227,19 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                           </div>
                         )}
                       />
-                    </div>
+                    </Field>
 
                     <Controller
                       name="memory.observationalMemory.scope"
                       control={control}
                       render={({ field }) => (
-                        <div className="flex flex-col gap-1.5">
-                          <Label htmlFor="memory-om-scope" className="text-neutral4 text-xs">
-                            Scope
-                          </Label>
-                          <span className="text-neutral3 text-xs">
+                        <Field className="gap-1.5">
+                          <FieldLabel>Scope</FieldLabel>
+                          <FieldDescription className="mt-0">
                             Whether observations are scoped per thread or shared across all threads for a resource
-                          </span>
+                          </FieldDescription>
                           <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
-                            <SelectTrigger id="memory-om-scope" className="bg-surface3">
+                            <SelectTrigger className="bg-card">
                               <SelectValue placeholder="Select scope" />
                             </SelectTrigger>
                             <SelectContent>
@@ -274,7 +247,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                               <SelectItem value="resource">Resource</SelectItem>
                             </SelectContent>
                           </Select>
-                        </div>
+                        </Field>
                       )}
                     />
 
@@ -282,40 +255,32 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                       name="memory.observationalMemory.shareTokenBudget"
                       control={control}
                       render={({ field }) => (
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col gap-0.5">
-                            <Label htmlFor="memory-om-share-budget" className="text-neutral5 text-sm">
-                              Share Token Budget
-                            </Label>
-                            <span className="text-neutral3 text-xs">
+                        <Field orientation="horizontal" disabled={readOnly}>
+                          <FieldContent className="gap-0.5">
+                            <FieldLabel>Share Token Budget</FieldLabel>
+                            <FieldDescription className="mt-0">
                               Share token budget between observation and reflection
-                            </span>
-                          </div>
-                          <Switch
-                            id="memory-om-share-budget"
-                            checked={field.value ?? false}
-                            onCheckedChange={field.onChange}
-                            disabled={readOnly}
-                          />
-                        </div>
+                            </FieldDescription>
+                          </FieldContent>
+                          <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+                        </Field>
                       )}
                     />
 
-                    {/* Observer Configuration */}
                     <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
                       <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight
-                          className={`text-neutral3 h-3 w-3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
+                          className={`h-3 w-3 text-muted-foreground transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-neutral5 cursor-pointer text-sm">Observer</Label>
+                        <span className="cursor-pointer text-label text-foreground">Observer</span>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-neutral4 text-xs">Provider Override</Label>
-                            <span className="text-neutral3 text-xs">
+                        <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                          <Field className="gap-1.5">
+                            <FieldLabel>Provider Override</FieldLabel>
+                            <FieldDescription className="mt-0">
                               Override the default model provider for the observer
-                            </span>
+                            </FieldDescription>
                             <Controller
                               name="memory.observationalMemory.observation.model.provider"
                               control={control}
@@ -331,11 +296,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 </div>
                               )}
                             />
-                          </div>
+                          </Field>
 
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-neutral4 text-xs">Model Override</Label>
-                            <span className="text-neutral3 text-xs">Override the default model for the observer</span>
+                          <Field className="gap-1.5">
+                            <FieldLabel>Model Override</FieldLabel>
+                            <FieldDescription className="mt-0">
+                              Override the default model for the observer
+                            </FieldDescription>
                             <Controller
                               name="memory.observationalMemory.observation.model.name"
                               control={control}
@@ -349,34 +316,31 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 </div>
                               )}
                             />
-                          </div>
+                          </Field>
 
                           <Controller
                             name="memory.observationalMemory.observation.messageTokens"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-msg-tokens" className="text-neutral4 text-xs">
-                                  Message Tokens
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Message Tokens</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Token count of unobserved messages that triggers observation (default: 30000)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-obs-msg-tokens"
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="30000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -384,28 +348,25 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.observation.maxTokensPerBatch"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-batch" className="text-neutral4 text-xs">
-                                  Max Tokens Per Batch
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Max Tokens Per Batch</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Maximum tokens per batch when observing multiple threads (default: 10000)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-obs-batch"
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="10000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -413,16 +374,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.observation.bufferTokens"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-buffer" className="text-neutral4 text-xs">
-                                  Buffer Tokens
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Buffer Tokens</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Token interval for async buffering (fraction of messageTokens or absolute count, empty
                                   to use default 0.2, set 0 to disable)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-obs-buffer"
                                   type="number"
                                   min="0"
                                   step="0.1"
@@ -437,10 +395,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     }
                                   }}
                                   placeholder="0.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -448,15 +406,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.observation.bufferActivation"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-buf-act" className="text-neutral4 text-xs">
-                                  Buffer Activation
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Buffer Activation</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Ratio (0-1) of buffered observations to activate (default: 0.8)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-obs-buf-act"
                                   type="number"
                                   min="0"
                                   max="1"
@@ -467,10 +422,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="0.8"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -478,15 +433,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.observation.blockAfter"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-obs-block" className="text-neutral4 text-xs">
-                                  Block After
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Block After</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-obs-block"
                                   type="number"
                                   min="0"
                                   step="0.1"
@@ -496,31 +448,30 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="1.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
 
-                    {/* Reflector Configuration */}
                     <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
                       <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight
-                          className={`text-neutral3 h-3 w-3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
+                          className={`h-3 w-3 text-muted-foreground transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-neutral5 cursor-pointer text-sm">Reflector</Label>
+                        <span className="cursor-pointer text-label text-foreground">Reflector</span>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="border-border1 mt-2 ml-2 flex flex-col gap-4 border-l-2 pl-3">
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-neutral4 text-xs">Provider Override</Label>
-                            <span className="text-neutral3 text-xs">
+                        <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border pl-3">
+                          <Field className="gap-1.5">
+                            <FieldLabel>Provider Override</FieldLabel>
+                            <FieldDescription className="mt-0">
                               Override the default model provider for the reflector
-                            </span>
+                            </FieldDescription>
                             <Controller
                               name="memory.observationalMemory.reflection.model.provider"
                               control={control}
@@ -536,11 +487,13 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 </div>
                               )}
                             />
-                          </div>
+                          </Field>
 
-                          <div className="flex flex-col gap-1.5">
-                            <Label className="text-neutral4 text-xs">Model Override</Label>
-                            <span className="text-neutral3 text-xs">Override the default model for the reflector</span>
+                          <Field className="gap-1.5">
+                            <FieldLabel>Model Override</FieldLabel>
+                            <FieldDescription className="mt-0">
+                              Override the default model for the reflector
+                            </FieldDescription>
                             <Controller
                               name="memory.observationalMemory.reflection.model.name"
                               control={control}
@@ -554,34 +507,31 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                 </div>
                               )}
                             />
-                          </div>
+                          </Field>
 
                           <Controller
                             name="memory.observationalMemory.reflection.observationTokens"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-obs-tokens" className="text-neutral4 text-xs">
-                                  Observation Tokens
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Observation Tokens</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Token count of observations that triggers reflection (default: 40000)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-ref-obs-tokens"
                                   type="number"
                                   min="1"
-                                  step="1000"
+                                  step="1"
                                   value={field.value ?? ''}
                                   onChange={e => {
                                     const v = e.target.value;
                                     field.onChange(v === '' ? undefined : parseInt(v, 10));
                                   }}
                                   placeholder="40000"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -589,15 +539,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.reflection.blockAfter"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-block" className="text-neutral4 text-xs">
-                                  Block After
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Block After</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Multiplier or absolute token count for synchronous blocking (default: 1.2)
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-ref-block"
                                   type="number"
                                   min="0"
                                   step="0.1"
@@ -607,10 +554,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="1.2"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
 
@@ -618,15 +565,12 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                             name="memory.observationalMemory.reflection.bufferActivation"
                             control={control}
                             render={({ field }) => (
-                              <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="memory-om-ref-buf-act" className="text-neutral4 text-xs">
-                                  Buffer Activation
-                                </Label>
-                                <span className="text-neutral3 text-xs">
+                              <Field className="gap-1.5">
+                                <FieldLabel>Buffer Activation</FieldLabel>
+                                <FieldDescription className="mt-0">
                                   Ratio (0-1) controlling when async reflection buffering starts
-                                </span>
+                                </FieldDescription>
                                 <Input
-                                  id="memory-om-ref-buf-act"
                                   type="number"
                                   min="0"
                                   max="1"
@@ -637,10 +581,10 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
                                   placeholder="0.8"
-                                  className="bg-surface3"
+                                  className="bg-card"
                                   disabled={readOnly}
                                 />
-                              </div>
+                              </Field>
                             )}
                           />
                         </div>

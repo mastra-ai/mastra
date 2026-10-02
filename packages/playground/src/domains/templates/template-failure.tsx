@@ -1,3 +1,5 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FrownIcon, AlertTriangleIcon } from 'lucide-react';
 import { Container } from './shared';
@@ -26,7 +28,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const getIconAndTitle = () => {
     if (isValidationError) {
       return {
-        icon: <AlertTriangleIcon className="text-yellow-500" />,
+        icon: <AlertTriangleIcon className="text-warning-foreground" />,
         title: 'Template Installed with Warnings',
       };
     }
@@ -39,31 +41,33 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="text-neutral3 mb-8 content-center space-y-4">
+    <Container className="mb-5 content-center space-y-4 text-muted-foreground">
       {/* Main Error Display */}
-      <div className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
+      <div className={cn('grid content-center items-center justify-items-center gap-4', '[&>svg]:h-8 [&>svg]:w-8')}>
         {icon}
         <div className="space-y-2 text-center">
-          <p className="text-ui-md text-neutral5 font-medium">{title}</p>
-          <p className="text-ui-md text-neutral3">{getUserFriendlyMessage()}</p>
+          <Txt variant="subheading" tone="ink">
+            {title}
+          </Txt>
+          <Txt tone="muted">{getUserFriendlyMessage()}</Txt>
         </div>
       </div>
 
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
-        <details className="text-xs">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
+        <details className="text-caption">
+          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>
             Show Validation Issues ({validationErrors.length})
           </summary>
-          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-gray-100 p-3 text-left text-xs dark:bg-gray-800">
+          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-muted p-3 text-left text-caption">
             {validationErrors.map((error, index) => (
-              <div key={index} className="border-l-2 border-red-400 pl-2">
-                <div className="font-medium text-red-600 dark:text-red-400">
+              <div key={index} className="border-l-2 border-destructive-indicator pl-2">
+                <div className="font-medium text-destructive-foreground">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </div>
-                <div className="mt-1 font-mono text-xs wrap-break-word whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                <pre className="mt-1 text-caption wrap-break-word whitespace-pre-wrap text-muted-foreground">
                   {error.message}
-                </div>
+                </pre>
               </div>
             ))}
           </div>
@@ -72,12 +76,10 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
 
       {/* General Error Details */}
       {errorString && !isValidationError && (
-        <details className="text-xs">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
-            Show Details
-          </summary>
-          <div className="mt-4 max-h-60 overflow-auto rounded bg-gray-100 p-3 text-left font-mono text-xs dark:bg-gray-800">
-            <div className="wrap-break-word whitespace-pre-wrap">{errorString}</div>
+        <details className="text-caption">
+          <summary className={cn(quietTextHover, 'cursor-pointer text-center select-none')}>Show Details</summary>
+          <div className="mt-4 max-h-60 overflow-auto rounded bg-muted p-3 text-left text-caption">
+            <pre className="wrap-break-word whitespace-pre-wrap">{errorString}</pre>
           </div>
         </details>
       )}

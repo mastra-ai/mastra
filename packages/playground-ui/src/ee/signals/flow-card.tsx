@@ -1,10 +1,11 @@
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, getSignalRecordNodeValue } from './sankey-signals-data';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { SortableSignalHeaders } from './sortable-signal-headers';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { Card, CardContent } from '@/ds/components/Card';
 import { Sankey, SankeyChart } from '@/ds/components/SankeyChart';
 import type { SankeyChartColumn, SankeyChartNodeSelection, SankeyChartRecord } from '@/ds/components/SankeyChart';
+import { Txt } from '@/ds/components/Txt';
 
 export function FlowCard({
   columns,
@@ -47,15 +48,19 @@ export function FlowCard({
       aria-label="Trace signal theme flow"
       as="section"
       className="relative min-w-0"
-      elevation="elevated"
+      elevation="raised"
       title={drillInDisabledReason}
     >
-      <span
+      <Txt
+        as="span"
+        variant="meta"
+        tone="muted"
+        font="mono"
         aria-hidden="true"
-        className="bg-surface2 text-neutral3 absolute top-0 left-5 -translate-y-1/2 px-2 font-mono text-[10px] tracking-[0.18em]"
+        className="absolute top-0 left-5 -translate-y-1/2 bg-background px-2 tracking-[0.18em]"
       >
         SIGNALS
-      </span>
+      </Txt>
       <CardContent className="px-0 pt-4 pb-2 sm:pt-5 sm:pb-3">
         <SortableSignalHeaders
           signalNames={headerSignalNames}
@@ -64,19 +69,19 @@ export function FlowCard({
         />
         <div
           aria-label="Themes"
-          className="text-neutral3 flex items-center gap-2 py-1 font-mono text-[10px] tracking-[0.18em]"
+          className="flex items-center gap-2 py-1 font-mono text-meta tracking-[0.18em] text-muted-foreground"
           role="separator"
         >
-          <span aria-hidden="true" className="bg-border1 h-px w-5" />
+          <span aria-hidden="true" className="h-px w-5 bg-border" />
           THEMES
-          <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+          <span aria-hidden="true" className="h-px flex-1 bg-border" />
         </div>
         <div aria-busy={reorderDisabled} data-testid="sankey-order-transition">
           <Sankey
             data={records}
             columns={chartColumns}
             columnOrder={chartColumns.map(column => column.id)}
-            getColumnHue={column => getSignalHue(column.id)}
+            getColumnColor={column => getSignalColor(column.id)}
             getRecordNodeId={getSignalRecordNodeId}
             getRecordNodeLabel={getSignalRecordNodeLabel}
             getRecordNodeValue={getSignalRecordNodeValue}

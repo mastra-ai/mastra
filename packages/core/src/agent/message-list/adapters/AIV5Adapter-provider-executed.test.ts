@@ -121,3 +121,97 @@ describe('AIV5Adapter.toUIMessage — providerExecuted propagation', () => {
     expect(regularPart.providerExecuted).toBeUndefined();
   });
 });
+
+/**
+ * Tests for providerExecuted flag survival through a toUIMessage → fromUIMessage
+ * round-trip. A UI host (e.g. AG-UI) that re-serializes an assistant message must
+ * not strip providerExecuted from a hosted tool_search, otherwise the replayed
+ * result is downgraded to a client-mode tool_search_output and the Responses API
+ * rejects the request. This mirrors the fromModelMessage preservation.
+ */
+describe('AIV5Adapter.fromUIMessage — providerExecuted round-trip', () => {
+  const makeDbMessage = (parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+    id: 'msg-1',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts,
+    },
+  });
+
+  const findToolInvocationPart = (dbMsg: MastraDBMessage, toolCallId: string) =>
+    dbMsg.content.parts.find(
+      (p): p is Extract<MastraDBMessage['content']['parts'][number], { type: 'tool-invocation' }> =>
+        p.type === 'tool-invocation' && p.toolInvocation.toolCallId === toolCallId,
+    );
+
+  it('should preserve providerExecuted on a hosted tool_search result across a UI round-trip', () => {
+    const dbMsg = makeDbMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tsc_123',
+          toolName: 'tool_search',
+          args: { query: 'find weather tools' },
+          result: { tools: ['get_weather'] },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+
+    const uiMsg = AIV5Adapter.toUIMessage(dbMsg);
+    const roundTripped = AIV5Adapter.fromUIMessage(uiMsg);
+
+    const toolPart = findToolInvocationPart(roundTripped, 'tsc_123');
+    expect(toolPart).toBeDefined();
+    expect(toolPart!.toolInvocation.state).toBe('result');
+    expect((toolPart as { providerExecuted?: boolean }).providerExecuted).toBe(true);
+  });
+
+  it('should preserve providerExecuted on a hosted tool_search call across a UI round-trip', () => {
+    const dbMsg = makeDbMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tsc_456',
+          toolName: 'tool_search',
+          args: { query: 'find weather tools' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+
+    const uiMsg = AIV5Adapter.toUIMessage(dbMsg);
+    const roundTripped = AIV5Adapter.fromUIMessage(uiMsg);
+
+    const toolPart = findToolInvocationPart(roundTripped, 'tsc_456');
+    expect(toolPart).toBeDefined();
+    expect(toolPart!.toolInvocation.state).toBe('call');
+    expect((toolPart as { providerExecuted?: boolean }).providerExecuted).toBe(true);
+  });
+
+  it('should NOT add providerExecuted for a regular tool across a UI round-trip', () => {
+    const dbMsg = makeDbMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'get_company_info',
+          args: { name: 'test' },
+          result: { company: 'Acme' },
+        },
+      } as any,
+    ]);
+
+    const uiMsg = AIV5Adapter.toUIMessage(dbMsg);
+    const roundTripped = AIV5Adapter.fromUIMessage(uiMsg);
+
+    const toolPart = findToolInvocationPart(roundTripped, 'call-1');
+    expect(toolPart).toBeDefined();
+    expect((toolPart as { providerExecuted?: boolean }).providerExecuted).toBeUndefined();
+  });
+});

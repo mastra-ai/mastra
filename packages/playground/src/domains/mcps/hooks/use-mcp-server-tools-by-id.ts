@@ -8,7 +8,7 @@ export const useMCPServerToolsById = (serverId: string | null) => {
     queryKey: ['mcpserver-tools', serverId],
     queryFn: async () => {
       const response = await client.getMcpServerTools(serverId!);
-      return Object.fromEntries(response.tools.map(tool => [tool.id, tool]));
+      return Object.fromEntries(response.tools.map(tool => [tool.name, tool]));
     },
     enabled: Boolean(serverId),
     retry: false,

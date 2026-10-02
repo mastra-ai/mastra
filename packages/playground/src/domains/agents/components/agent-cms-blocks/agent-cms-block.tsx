@@ -4,18 +4,23 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
@@ -80,7 +85,6 @@ const SaveAsPromptBlockDialog = ({
     [name, description, onSave],
   );
 
-  // Reset form when dialog closes
   useEffect(() => {
     if (!open) {
       setName('');
@@ -89,48 +93,44 @@ const SaveAsPromptBlockDialog = ({
   }, [open]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Save as prompt block</DialogTitle>
           <DialogDescription>Create a reusable prompt block from this content.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <DialogBody className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="prompt-block-name">Name</Label>
+        <Form onSubmit={handleSubmit}>
+          <DialogBody>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
               <Input
-                id="prompt-block-name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Tone guidelines"
                 autoFocus
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="prompt-block-description">Description (optional)</Label>
+            </Field>
+            <Field>
+              <FieldLabel>Description (optional)</FieldLabel>
               <Input
-                id="prompt-block-description"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Brief description..."
               />
-            </div>
-            {error && (
-              <Txt variant="ui-xs" className="text-error">
-                {error}
-              </Txt>
-            )}
+            </Field>
+            {error ? (
+              <div role="alert">
+                <Notice variant="destructive">{error}</Notice>
+              </div>
+            ) : null}
           </DialogBody>
-          <DialogFooter className="px-6 pt-4">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
+          <DialogFooter>
+            <DialogCancel>Cancel</DialogCancel>
+            <DialogAction type="submit" disabled={!name.trim()}>
               {isPending ? 'Saving...' : 'Save'}
-            </Button>
+            </DialogAction>
           </DialogFooter>
-        </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -194,11 +194,13 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
-        {/* Left gutter — drag handle (visible on hover/focus-within) */}
+      <div className="group relative rounded-md hover:bg-fill-subtle">
         {!readOnly && (
           <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
-            <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
+            <div
+              {...dragHandleProps}
+              className={cn('cursor-grab active:cursor-grabbing', quietTextHover, controlStateColorTransition)}
+            >
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Icon>
@@ -211,7 +213,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
         {!readOnly && (
           <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
             <DisplayConditionsDialog
@@ -240,7 +241,6 @@ const InlineBlockContent = ({
           </div>
         )}
 
-        {/* CodeEditor — seamless, no border */}
         <CodeEditor
           ref={editorRef}
           value={block.content}

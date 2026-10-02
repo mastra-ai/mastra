@@ -1,37 +1,28 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { SpanRecord } from '../types';
+import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import {
-  formatSpanDuration,
-  formatSpanPanelTimestamp,
-  getTokenLimitMessage,
-  isTokenLimitExceeded,
-} from '../utils/span-utils';
+  SpanErrorRenderer,
+  SpanInputRenderer,
+  SpanOutputRenderer,
+  SpanPayloadSection,
+  SpanProcessorAttributes,
+} from './span-payload';
+import { asCoreSpan } from './span-payload/span-payload-registry';
+import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { TraceIdButton } from './trace-id-button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
-import { truncateString } from '@/lib/truncate-string';
+import { cn } from '@/lib/utils';
 
-function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
-  return (
-    <>
-      <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
-        {icon}
-        {sectionTitle}
-      </span>
-      <span>
-        › Span <b className="text-neutral3">#{span.spanId}</b>
-      </span>
-      <span>
-        › Trace <b className="text-neutral3">#{span.traceId}</b>
-      </span>
-    </>
-  );
-}
+// Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -39,7 +30,6 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
-  onClose: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
   activeTab?: string;
@@ -49,7 +39,7 @@ export interface SpanDataPanelViewProps {
    * whatever feedback UI the consumer wants.
    */
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   /**
    * Whether this span is the displayed root of the current view (trace root or
@@ -66,7 +56,6 @@ export function SpanDataPanelView({
   spanId,
   span,
   isLoading,
-  onClose,
   onPrevious,
   onNext,
   activeTab,
@@ -76,22 +65,26 @@ export function SpanDataPanelView({
   isAnchor,
   className,
 }: SpanDataPanelViewProps) {
+  // Not a DataPanel: this is the span column rendered inside `TraceDataPanelView`,
+  // which already provides the panel chrome.
   return (
-    <DataPanel className={className}>
-      {/* 32px buttons + border would overflow min-h-14 by 1px; keep this header level with its neighbours. */}
-      <DataPanel.Header className="py-2">
-        <DataPanel.Heading className="whitespace-nowrap">
-          Span <b># {truncateString(spanId, 12)}</b>
-        </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+    <section className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
+      <DataPanel.Header>
+        <DataPanel.HeaderContent>
+          <DataPanel.Heading>
+            Span
+            <TraceIdButton id={spanId} />
+          </DataPanel.Heading>
+          {span && <SpanSummaryDescription span={span} />}
+        </DataPanel.HeaderContent>
+        <DataPanel.HeaderActions>
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
-            previousLabel="Previous span"
-            nextLabel="Next span"
+            previousLabel="Go to previous span"
+            nextLabel="Go to next span"
           />
-          <DataPanel.CloseButton onClick={onClose} />
-        </ButtonsGroup>
+        </DataPanel.HeaderActions>
       </DataPanel.Header>
 
       {isLoading ? (
@@ -110,7 +103,7 @@ export function SpanDataPanelView({
           isAnchor={isAnchor}
         />
       )}
-    </DataPanel>
+    </section>
   );
 }
 
@@ -133,10 +126,12 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  const duration = formatSpanDuration(span.startedAt, span.endedAt);
-  const startedAt = formatSpanPanelTimestamp(span.startedAt);
-  const endedAt = formatSpanPanelTimestamp(span.endedAt);
   const usage = span.attributes?.usage as TokenUsage | undefined;
+  const hasContext =
+    (isAnchor ?? span.parentSpanId == null) &&
+    Boolean(
+      span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
+    );
 
   const detailsBody = (
     <>
@@ -148,185 +143,139 @@ function SpanDataPanelContent({
         </div>
       )}
 
+      <SpanPayloadSection title="Error" raw={span.error} className="mb-3">
+        <SpanErrorRenderer span={span} />
+      </SpanPayloadSection>
+
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
-      <DataKeysAndValues>
-        {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
-         *  lightweight payload, so they only have values once the full span is loaded. */}
-        {(isAnchor ?? span.parentSpanId == null) && (
-          <>
-            {span.traceId && (
-              <>
-                <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Trace Id to clipboard" copyValue={span.traceId}>
-                  {span.traceId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.tags && span.tags.length > 0 && (
-              <>
-                <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-              </>
-            )}
-            {span.runId && (
-              <>
-                <DataKeysAndValues.Key>Run Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Run Id to clipboard" copyValue={span.runId}>
-                  {span.runId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.threadId && (
-              <>
-                <DataKeysAndValues.Key>Thread Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Thread Id to clipboard" copyValue={span.threadId}>
-                  {span.threadId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.sessionId && (
-              <>
-                <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Session Id to clipboard"
-                  copyValue={span.sessionId}
-                >
-                  {span.sessionId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.requestId && (
-              <>
-                <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Request Id to clipboard"
-                  copyValue={span.requestId}
-                >
-                  {span.requestId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.resourceId && (
-              <>
-                <DataKeysAndValues.Key>Resource Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Resource Id to clipboard"
-                  copyValue={span.resourceId}
-                >
-                  {span.resourceId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.userId && (
-              <>
-                <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
-                  {span.userId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.organizationId && (
-              <>
-                <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Organization Id to clipboard"
-                  copyValue={span.organizationId}
-                >
-                  {span.organizationId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.experimentId && (
-              <>
-                <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Experiment Id to clipboard"
-                  copyValue={span.experimentId}
-                >
-                  {span.experimentId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-          </>
-        )}
-        {span.name && (
-          <>
-            <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.name}</DataKeysAndValues.Value>
-          </>
-        )}
-        {span.spanType && (
-          <>
-            <DataKeysAndValues.Key>Type</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.spanType}</DataKeysAndValues.Value>
-          </>
-        )}
-        {startedAt && (
-          <>
-            <DataKeysAndValues.Key>Started</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{startedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {endedAt && (
-          <>
-            <DataKeysAndValues.Key>Ended</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{endedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {duration && (
-          <>
-            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{duration}</DataKeysAndValues.Value>
-          </>
-        )}
-      </DataKeysAndValues>
+      {hasContext && (
+        <DataKeysAndValues>
+          {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
+           *  lightweight payload, so they only have values once the full span is loaded. */}
+          {(isAnchor ?? span.parentSpanId == null) && (
+            <>
+              {span.tags && span.tags.length > 0 && (
+                <>
+                  <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
+                  <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
+                </>
+              )}
+              {span.sessionId && (
+                <>
+                  <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Session Id to clipboard"
+                    copyValue={span.sessionId}
+                  >
+                    {span.sessionId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.requestId && (
+                <>
+                  <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Request Id to clipboard"
+                    copyValue={span.requestId}
+                  >
+                    {span.requestId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.userId && (
+                <>
+                  <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
+                    {span.userId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.organizationId && (
+                <>
+                  <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Organization Id to clipboard"
+                    copyValue={span.organizationId}
+                  >
+                    {span.organizationId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+              {span.experimentId && (
+                <>
+                  <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy Experiment Id to clipboard"
+                    copyValue={span.experimentId}
+                  >
+                    {span.experimentId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                </>
+              )}
+            </>
+          )}
+        </DataKeysAndValues>
+      )}
 
-      <div className="mt-3 grid gap-3">
-        <DataPanel.CodeSection
+      <div className={cn('grid gap-4', hasContext && 'mt-4')}>
+        <SpanPayloadSection
           title="Input"
-          dialogTitle={buildDialogTitle('Input', <FileInputIcon />, { spanId, traceId })}
           icon={<FileInputIcon />}
-          codeStr={JSON.stringify(span.input ?? null, null, 2)}
-        />
-        <DataPanel.CodeSection
+          raw={span.input}
+          hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+        >
+          <SpanInputRenderer span={span} />
+        </SpanPayloadSection>
+        <SpanPayloadSection
           title="Output"
-          dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, { spanId, traceId })}
           icon={<FileOutputIcon />}
-          codeStr={JSON.stringify(span.output ?? null, null, 2)}
-        />
-        <DataPanel.CodeSection
-          title="Metadata"
-          dialogTitle={buildDialogTitle('Metadata', <BracesIcon />, { spanId, traceId })}
-          icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
-        />
-        <DataPanel.CodeSection
+          raw={span.output}
+          hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+        >
+          <SpanOutputRenderer span={span} />
+        </SpanPayloadSection>
+        <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
+          {null}
+        </SpanPayloadSection>
+        <SpanPayloadSection
           title="Attributes"
-          dialogTitle={buildDialogTitle('Attributes', <BracesIcon />, { spanId, traceId })}
           icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
-        />
+          raw={span.attributes}
+          hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
+        >
+          <SpanProcessorAttributes span={span} />
+        </SpanPayloadSection>
       </div>
     </>
   );
 
   // No extra tab slots → render details directly without the Tabs/TabList wrapper.
   if (!feedbackTabSlot) {
-    return <DataPanel.Content>{detailsBody}</DataPanel.Content>;
+    return <div className={BODY_CLASS}>{detailsBody}</div>;
   }
 
+  // Same chrome as the trace column: tab list in a header row, content scrolling beneath it.
   return (
-    <DataPanel.Content>
-      <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
-        <TabList variant="pill-ghost" className="px-0">
+    <Tabs
+      defaultTab="details"
+      value={activeTab}
+      onValueChange={onTabChange}
+      className="grid min-h-0 flex-1 grid-rows-[auto_1fr]"
+    >
+      <DataPanel.Header>
+        <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
         </TabList>
+      </DataPanel.Header>
 
-        <TabContent value="details">{detailsBody}</TabContent>
-        <TabContent value="feedback">{feedbackTabSlot({ span, traceId, spanId })}</TabContent>
-      </Tabs>
-    </DataPanel.Content>
+      <TabContent value="details" flush>
+        <div className={BODY_CLASS}>{detailsBody}</div>
+      </TabContent>
+      <TabContent value="feedback" flush>
+        <div className={BODY_CLASS}>{feedbackTabSlot({ span, traceId, spanId })}</div>
+      </TabContent>
+    </Tabs>
   );
 }

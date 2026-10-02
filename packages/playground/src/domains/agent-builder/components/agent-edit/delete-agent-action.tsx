@@ -66,7 +66,7 @@ const DeleteAgentDialog = ({
             undone.
           </AlertDialog.Description>
         </AlertDialog.Header>
-        <AlertDialog.Body className="pt-0">
+        <AlertDialog.Body>
           <AgentImpactWarnings agentId={agentId} variant="delete" enabled={open} />
         </AlertDialog.Body>
         <AlertDialog.Footer>
@@ -74,12 +74,11 @@ const DeleteAgentDialog = ({
             Cancel
           </AlertDialog.Cancel>
           <Button
-            variant="primary"
+            icon={<Trash2 />}
+            variant="destructive"
             data-testid="agent-builder-delete-agent-confirm"
             disabled={isPending || isDependentsLoading}
             onClick={() => {
-              // Use a plain button (not AlertDialog.Close) so the dialog stays
-              // open while the request is in flight and on error.
               onConfirm();
             }}
           >
@@ -103,6 +102,7 @@ export const DeleteAgentPanelButton = ({ agentId, agentName, disabled = false }:
   return (
     <>
       <Button
+        icon={<Trash2 />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="agent-builder-delete-agent"
@@ -131,7 +131,7 @@ export const DeleteAgentMenuItem = ({ agentId, agentName, disabled = false }: De
       <DropdownMenu.Item
         data-testid="agent-builder-mobile-menu-delete"
         disabled={disabled}
-        className="text-red-500 focus:text-red-400"
+        variant="destructive"
         onSelect={event => {
           event.preventDefault();
           setOpen(true);

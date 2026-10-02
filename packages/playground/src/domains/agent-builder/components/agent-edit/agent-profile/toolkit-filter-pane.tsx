@@ -1,10 +1,12 @@
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { SearchIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -35,41 +37,42 @@ const ToolkitFilterRow = memo(
     const agentColor = useAgentColor();
     const checkboxStyle = checked
       ? {
-          backgroundColor: agentColor.background,
-          borderColor: agentColor.background,
-          color: agentColor.foreground,
+          backgroundColor: agentColor.tint,
+          borderColor: agentColor.tint,
+          color: 'var(--background)',
         }
       : undefined;
 
     return (
       <li className="flex items-center gap-1">
-        <label
-          data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
-          data-checked={checked ? 'true' : 'false'}
-          className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
-            disabled && 'cursor-not-allowed opacity-60',
-          )}
-        >
-          <Checkbox
-            checked={checked}
-            disabled={disabled}
-            onCheckedChange={() => onToggle(item.id)}
-            style={checkboxStyle}
-            data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-            className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-          />
-          {item.icon && (
-            <img
-              src={item.icon}
-              alt=""
-              aria-hidden
-              data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
-              className="h-4 w-4 shrink-0 rounded object-contain"
+        <Field disabled={disabled} className="min-w-0 flex-1">
+          <FieldLabel
+            data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
+            data-checked={checked ? 'true' : 'false'}
+            className={cn(
+              'flex shrink items-center gap-2 rounded-md px-2 py-1.5 text-caption select-none hover:bg-fill-subtle',
+              disabled && 'opacity-60',
+            )}
+          >
+            <Checkbox
+              checked={checked}
+              onCheckedChange={() => onToggle(item.id)}
+              style={checkboxStyle}
+              data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
+              className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
             />
-          )}
-          <span className="truncate">{item.label}</span>
-        </label>
+            {item.icon && (
+              <img
+                src={item.icon}
+                alt=""
+                aria-hidden
+                data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
+                className="h-4 w-4 shrink-0 rounded object-contain"
+              />
+            )}
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          </FieldLabel>
+        </Field>
         {providerId && (
           <div className="shrink-0">
             <ToolkitConnectionControl
@@ -144,9 +147,10 @@ const ProviderToolkitSection = ({
   return (
     <div className="flex flex-col gap-0.5">
       <Txt
-        variant="ui-xs"
+        variant="meta"
+        tone="muted"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="text-neutral3 px-2 pt-1 tracking-wide uppercase"
+        className="px-2 pt-1 tracking-wide uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -209,34 +213,30 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
+      className="flex h-full min-h-0 flex-col gap-3 border-r border-border px-4 py-4"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
-      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${TEST_ID_PREFIX}-filter-search`}>
-        <InputGroup variant="outline" size="lg">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label="Filter toolkits"
-            placeholder="Filter toolkits..."
-            onChange={event => setSearch(event.target.value)}
-          />
-        </InputGroup>
-      </div>
+      <SearchInput
+        label="Filter toolkits"
+        size="md"
+        className="flex-none"
+        data-testid={`${TEST_ID_PREFIX}-filter-search`}
+        placeholder="Filter toolkits..."
+        value={search}
+        onValueChange={setSearch}
+      />
 
-      <div className="text-ui-xs flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 text-meta">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Select all
         </button>
-        <span className="text-neutral2" aria-hidden>
+        <span className="text-placeholder" aria-hidden>
           ·
         </span>
         <button
@@ -244,50 +244,50 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           Clear all
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
-        <div className="flex flex-col gap-3">
-          {/* Built-in group renders immediately; it needs no async fetch. */}
-          {filteredBuiltIn.length > 0 && (
-            <ul className="flex flex-col gap-0.5">
-              {filteredBuiltIn.map(item => (
-                <ToolkitFilterRow
-                  key={item.id}
-                  item={item}
-                  checked={isChecked(item.id)}
-                  disabled={disabled}
-                  onToggle={onToggle}
-                />
-              ))}
-            </ul>
-          )}
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="pr-2">
+          <div className="flex flex-col gap-3">
+            {filteredBuiltIn.length > 0 && (
+              <ul className="flex flex-col gap-0.5">
+                {filteredBuiltIn.map(item => (
+                  <ToolkitFilterRow
+                    key={item.id}
+                    item={item}
+                    checked={isChecked(item.id)}
+                    disabled={disabled}
+                    onToggle={onToggle}
+                  />
+                ))}
+              </ul>
+            )}
 
-          {/* Each provider fetches and renders its own toolkits independently. */}
-          {providers.map(provider => (
-            <ProviderToolkitSection
-              key={provider.providerId}
-              provider={provider}
-              term={term}
-              isChecked={isChecked}
-              onToggle={onToggle}
-              disabled={disabled}
-              multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
-            />
-          ))}
+            {providers.map(provider => (
+              <ProviderToolkitSection
+                key={provider.providerId}
+                provider={provider}
+                term={term}
+                isChecked={isChecked}
+                onToggle={onToggle}
+                disabled={disabled}
+                multipleAllowed={multipleAllowedByProvider.get(provider.providerId) ?? false}
+              />
+            ))}
 
-          {isProvidersLoading && (
-            <div className="flex flex-col gap-1 px-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 w-full" />
-              ))}
-            </div>
-          )}
-        </div>
+            {isProvidersLoading && (
+              <div className="flex flex-col gap-1 px-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-7 w-full" />
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );

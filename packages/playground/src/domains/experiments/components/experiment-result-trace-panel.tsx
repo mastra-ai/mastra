@@ -90,7 +90,7 @@ export function ExperimentResultTracePanel({
       <Column.Content>
         <MainHeader withMargins={false}>
           <MainHeader.Column>
-            <MainHeader.Title size="smaller">
+            <MainHeader.Title>
               <EyeIcon /> Trace {getShortId(traceId)}
             </MainHeader.Title>
           </MainHeader.Column>

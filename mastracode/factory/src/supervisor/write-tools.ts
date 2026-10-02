@@ -1,27 +1,42 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { boardForWorkItem } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
-import type { AuditStorage } from '../storage/domains/audit/base.js';
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import type { AuditAction } from '../storage/domains/audit/actions.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
+import type { WorkerMessageResult } from './session-messaging.js';
 
 interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
-  audit: AuditStorage;
+  boards: BoardRegistry;
+  audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
-  signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
+  messageSession?: (input: {
+    sessionId: string;
+    message: string;
+    userId: string;
+    delivery: 'send' | 'queue';
+  }) => Promise<WorkerMessageResult>;
   now?: () => Date;
 }
 
 export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependencies): IntegrationTools {
   const now = deps.now ?? (() => new Date());
-  const audit = async (action: string, target: { type: string; id: string }, metadata: Record<string, unknown> = {}) =>
+  const audit = async (
+    action: AuditAction,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown> = {},
+  ) =>
     deps.audit.record({
       orgId: deps.scope.orgId,
       actorId: deps.userId,
@@ -40,6 +55,14 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
       inputSchema: z.object({ decisionId: z.string().min(1) }),
       requireApproval: true,
       execute: async ({ decisionId }) => {
+        const current = await deps.workItems.getDeferredDecision(
+          deps.scope.orgId,
+          deps.scope.factoryProjectId,
+          decisionId,
+        );
+        if (current && (await overtakenDecisionIds(deps.workItems, deps.boards, deps.scope, [current])).size > 0) {
+          throw new Error('The work item has moved on from the phase this run was decided for; it cannot be retried.');
+        }
         const decision = await deps.workItems.retryDeferredDecision(
           deps.scope.orgId,
           deps.scope.factoryProjectId,
@@ -113,31 +136,27 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: 'Move or accept one Factory work item after the person confirms the destination stage.',
-      inputSchema: z.object({ workItemId: z.string().min(1), stage: z.enum(FACTORY_RULE_STAGES) }),
+      inputSchema: z.object({
+        workItemId: z.string().min(1),
+        stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
+      }),
       requireApproval: true,
       execute: async ({ workItemId, stage }) => {
         const item = await deps.workItems.get({ orgId: deps.scope.orgId, id: workItemId });
         if (!item || item.factoryProjectId !== deps.scope.factoryProjectId) throw new Error('Work item not found.');
-        const from = factoryRuleStage(item.stages);
+        const from = item.stages.length === 1 ? item.stages[0] : undefined;
         if (!from) throw new Error('The work item does not have one valid Factory stage.');
         const result = await deps.transitionService.transition({
           orgId: deps.scope.orgId,
           factoryProjectId: deps.scope.factoryProjectId,
           workItemId,
-          board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+          board: boardForWorkItem(item),
           stage,
           expectedRevision: item.revision,
           actor: { type: 'human', id: deps.userId },
           ingress: { type: 'human', identity: `supervisor:${deps.userId}:${workItemId}:${item.revision}:${stage}` },
           cause: 'supervisor',
         });
-        await audit(
-          result.status === 'accepted' ? 'factory.work_item.stage_moved' : 'factory.work_item.transition_rejected',
-          { type: 'work_item', id: workItemId },
-          result.status === 'accepted'
-            ? { from, to: result.stage, revision: result.revision, transitionId: result.transitionId }
-            : { from, to: stage, code: result.code, reason: result.reason, transitionId: result.transitionId },
-        );
         if (result.status !== 'accepted') {
           throw new Error(`The transition was rejected (${result.code}): ${result.reason}`);
         }
@@ -186,24 +205,40 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
     }),
     factory_signal_session: createTool({
       id: 'factory_signal_session',
-      description: 'Send bounded guidance to a worker session after the person confirms the exact message.',
-      inputSchema: z.object({ sessionId: z.string().min(1), message: z.string().trim().min(1).max(2000) }),
+      description:
+        'Send bounded guidance to a worker session after the person confirms the exact message. Use queue only when the guidance should wait for the current run to finish.',
+      inputSchema: z.object({
+        sessionId: z.string().min(1),
+        message: z.string().trim().min(1).max(2000),
+        delivery: z.enum(['send', 'queue']).default('send'),
+      }),
       requireApproval: true,
-      execute: async ({ sessionId, message }) => {
-        if (!deps.signalSession) throw new Error('Worker session signaling is unavailable.');
+      execute: async ({ sessionId, message, delivery }) => {
+        if (!deps.messageSession) throw new Error('Worker session messaging is unavailable.');
         const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
         const binding = bindings.find(row => row.sessionId === sessionId);
         if (!binding) throw new Error('The session does not belong to this factory.');
-        await deps.signalSession({ sessionId, message, userId: deps.userId });
+        const result = await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
+        if (result?.status === 'interrupted') {
+          return {
+            sessionId,
+            delivered: false,
+            status: 'interrupted',
+            delivery,
+            workItemId: binding.workItemId,
+            role: binding.role,
+          };
+        }
         await audit(
           'factory.agent.signaled',
           { type: 'factory_session', id: sessionId },
           {
             workItemId: binding.workItemId,
             role: binding.role,
+            delivery,
           },
         );
-        return { sessionId, delivered: true, workItemId: binding.workItemId, role: binding.role };
+        return { sessionId, delivered: true, delivery, workItemId: binding.workItemId, role: binding.role };
       },
     }),
   };

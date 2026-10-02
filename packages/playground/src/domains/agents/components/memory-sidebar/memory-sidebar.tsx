@@ -5,9 +5,11 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
@@ -32,12 +34,14 @@ export interface MemorySidebarProps {
   onDelete?: (threadId: string) => void;
   /** When provided, rendered as the thread layer instead of the built-in ChatThreads list. */
   threadsSlot?: React.ReactNode;
+  /** Forwarded to ChatThreads; renders the "Hide threads panel" control when set. */
+  onHidePanel?: () => void;
 }
 
 const barColor = (percent: number): string => {
-  if (percent >= 85) return 'bg-orange-400';
-  if (percent >= 60) return 'bg-blue-500';
-  return 'bg-green-500';
+  if (percent >= 85) return 'bg-warning-indicator';
+  if (percent >= 60) return 'bg-info-indicator';
+  return 'bg-success-indicator';
 };
 
 type ConfigBadgeProps = {
@@ -54,12 +58,12 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         <span
           className={cn(
             'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
-            enabled ? 'border-border1 bg-surface4 text-neutral6' : 'border-border1/40 text-neutral3/50',
+            enabled ? 'border-border bg-muted text-foreground' : 'border-border/40 text-muted-foreground/50',
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
+            <Txt as="span" variant="meta" className="leading-none tabular-nums">
               {value}
             </Txt>
           )}
@@ -83,25 +87,38 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar({ agentId, threadId, threads, onDelete }: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete, onHidePanel }: MemorySidebarProps) {
   return (
     <SidebarPanel>
-      <MemorySidebarBody agentId={agentId} threadId={threadId} threads={threads} onDelete={onDelete} />
+      <MemorySidebarBody
+        agentId={agentId}
+        threadId={threadId}
+        threads={threads}
+        onDelete={onDelete}
+        onHidePanel={onHidePanel}
+      />
     </SidebarPanel>
   );
 }
 
-export function MemorySidebarBody({ agentId, threadId, threads, onDelete, threadsSlot }: MemorySidebarProps) {
+export function MemorySidebarBody({
+  agentId,
+  threadId,
+  threads,
+  onDelete,
+  threadsSlot,
+  onHidePanel,
+}: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId, useEntityRequestContext('agent', agentId)[0]);
   const hasMemory = Boolean(memory?.result);
   const memoryType = memory?.memoryType;
 
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
   const { isPanelOpen } = useMemoryTimeline();
   const { streamProgress } = useObservationalMemoryContext();
-  const { lastMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
+  const { recentMessages, semanticRecallOn, workingMemoryOn, observationalOn } = useMemoryFeatureFlags(agentId);
 
   const showMemory = selectedTab === 'memory';
   const memoryCardShellRef = useRef<HTMLDivElement>(null);
@@ -117,8 +134,8 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
   // Status parts are streamed but not persisted, so on a fresh load there is no live
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
-  const { data: thread } = useThread({ threadId, agentId });
-  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const { data: thread } = useThread({ threadId, agentId }, useEntityRequestContext('agent', agentId)[0]);
+  const { data: memoryConfigData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { data: omData } = useObservationalMemory(
     observationalOn ? agentId : undefined,
     observationalOn ? threadId : undefined,
@@ -167,7 +184,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
     return () => observer.disconnect();
   }, [
     hasMemory,
-    lastMessages,
+    recentMessages.description,
     observationPercent,
     observationalOn,
     semanticRecallOn,
@@ -209,25 +226,25 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
               threadsSlot
             ) : hasMemory ? (
               <ChatThreads
+                key={agentId}
                 resourceId={agentId}
                 resourceType="agent"
                 threads={threads ?? []}
                 threadId={threadId}
                 onDelete={onDelete ?? (() => {})}
                 embedded
+                onHidePanel={onHidePanel}
               />
             ) : (
               <EmptyState
-                iconSlot={null}
                 titleSlot="Memory not enabled"
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={
                   <Button
-                    as="a"
-                    href="https://mastra.ai/docs/memory/overview"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="outline"
+                    icon={<ExternalLink />}
+                    render={
+                      <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
+                    }
                   >
                     View documentation
                   </Button>
@@ -242,10 +259,10 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
             ref={memoryCardShellRef}
             data-testid="memory-sidebar-overlay"
             className={cn(
-              'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
+              'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
-                ? 'top-1 m-1 rounded-xl border-border1/40 bg-surface3 shadow-none'
-                : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
+                ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
+                : 'state-layer m-1 rounded-xl border border-border/40 bg-muted',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >
@@ -258,16 +275,16 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
               className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 text-foreground">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
-                  <Txt as="span" variant="ui-sm" className="font-medium">
+                  <Txt as="span" variant="column">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronUp className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
               </span>
 
@@ -277,13 +294,9 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
                   <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <ConfigBadge
                       icon={MessageSquare}
-                      tooltip={
-                        lastMessages !== undefined
-                          ? `Keeps the last ${lastMessages} messages in context`
-                          : 'Recent message history is off'
-                      }
-                      enabled={lastMessages !== undefined}
-                      value={lastMessages}
+                      tooltip={recentMessages.description}
+                      enabled={recentMessages.enabled}
+                      value={recentMessages.maxMessages}
                     />
                     <ConfigBadge
                       icon={Search}
@@ -320,7 +333,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
                 <span
                   data-testid="memory-card-observation-bar"
                   data-percent={observationPercent}
-                  className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full"
+                  className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-fill"
                 >
                   <span
                     className={cn(
@@ -334,7 +347,7 @@ export function MemorySidebarBody({ agentId, threadId, threads, onDelete, thread
             </button>
 
             {showMemory && (
-              <div className="memory-card-content border-border1 min-h-0 flex-1 overflow-y-auto border-t">
+              <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border">
                 <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
               </div>
             )}

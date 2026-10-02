@@ -1,8 +1,16 @@
 {
   "attachment": [
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "deepseek-v4.1-flash",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.7-flash",
+    "gemini-3.8-flash",
     "glm-5.3-flash",
     "gpt-5-mini",
     "gpt-5.4",
@@ -12,15 +20,23 @@
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
-    "kimi-k3"
+    "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-sol",
+    "kimi-k3",
+    "viv-fast"
   ],
   "temperature": [
     "deepseek-v3.2",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "deepseek-v4.1-flash",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.7-flash",
+    "gemini-3.8-flash",
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
@@ -29,11 +45,20 @@
     "gpt-5.6-terra"
   ],
   "structuredOutput": [
+    "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
     "deepseek-v4-flash",
     "deepseek-v4-pro",
+    "deepseek-v4-pro-0813",
+    "deepseek-v4.1-flash",
     "gemini-3.1-flash-lite-preview",
     "gemini-3.1-pro-preview",
     "gemini-3.7-flash",
+    "gemini-3.8-flash",
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
@@ -47,6 +72,11 @@
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
-    "kimi-k3"
+    "gpt-6-astra",
+    "gpt-6-luna",
+    "gpt-6-sol",
+    "gpt-6.1-sol",
+    "kimi-k3",
+    "viv-fast"
   ]
 }

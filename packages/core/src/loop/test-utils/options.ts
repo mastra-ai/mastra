@@ -65,10 +65,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       abortController.abort();
 
+      // The tool is handed a signal derived from the caller's, not the caller's own
+      // object: eager execution has to be able to cancel one call on its own without
+      // aborting the run. What the tool depends on is that aborting the caller aborts
+      // the signal it was given, so assert that rather than object identity.
+      const toolAbortSignal = toolExecuteMock.mock.calls[0]?.[1]?.abortSignal as AbortSignal;
+      expect(toolAbortSignal).toBeInstanceOf(AbortSignal);
+      expect(toolAbortSignal.aborted).toBe(true);
+
       expect(toolExecuteMock).toHaveBeenCalledWith(
         { value: 'value' },
         expect.objectContaining({
-          abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),
           outputWriter: expect.any(Function),
@@ -510,6 +517,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -940,6 +948,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -2959,6 +2968,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                           "toolName": "tool1",
                         },
                         "type": "tool-invocation",
+                        "updatedAt": 1704067200000,
                       },
                       {
                         "createdAt": 1704067200000,
@@ -5068,7 +5078,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           runId: 'test-run-id',
           from: 'AGENT',
           type: 'step-start',
-          payload: { request: {}, warnings: [], messageId: 'id-0' },
+          payload: { request: {}, warnings: [], messageId: 'id-0', startedAt: Date.now() },
         },
         {
           type: 'error',
@@ -8276,6 +8286,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8365,9 +8376,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "text": "Hello",
                   "toolCalls": [],
                   "usage": {
-                    "inputTokens": 0,
-                    "outputTokens": 0,
-                    "totalTokens": 0,
+                    "inputTokens": undefined,
+                    "outputTokens": undefined,
+                    "totalTokens": undefined,
                   },
                 },
                 "stepResult": {
@@ -8602,6 +8613,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8872,6 +8884,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",

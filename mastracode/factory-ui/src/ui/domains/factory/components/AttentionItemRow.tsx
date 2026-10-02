@@ -2,16 +2,21 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
   ArchiveRestore,
   Brain,
+  Check,
+  Hourglass,
   MailOpen,
   MessageSquare,
   MessagesSquare,
   RotateCw,
+  Sparkles,
   TriangleAlert,
+  X,
 } from 'lucide-react';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -22,13 +27,31 @@ import { attentionAuthorName, factoryAttentionTargetPath } from '../services/att
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
 import { RAIL_ROW_BODY } from './Timeline';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** What landed: the glyph the rail hangs the row off, and the word the row's badge wears. */
 const KIND = {
-  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
-  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
-  'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
-  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
+  mention: { glyph: MessageSquare, label: 'mention', tone: 'text-badge-green-indicator', badge: 'green' },
+  activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-muted-foreground', badge: 'neutral' },
+  'automation-failed': {
+    glyph: TriangleAlert,
+    label: 'failed',
+    tone: 'text-destructive-foreground',
+    badge: 'destructive',
+  },
+  'automation-proposed': {
+    glyph: Sparkles,
+    label: 'suggested',
+    tone: 'text-warning-foreground',
+    badge: 'orange',
+  },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-badge-green-indicator', badge: 'blue' },
+  'agent-waiting': {
+    glyph: Hourglass,
+    label: 'waiting',
+    tone: 'text-warning-foreground',
+    badge: 'orange',
+  },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
@@ -36,7 +59,7 @@ const KIND = {
 
 /** Actions ride over the row's right end rather than displacing the time, so a hover never reflows the row. */
 const REVEAL_ACTIONS =
-  'bg-surface4 absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-0.5 rounded-md pl-2 pointer-coarse:flex pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex';
+  'bg-fill absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-0.5 rounded-md pl-2 pointer-coarse:flex pointer-fine:group-hover:flex pointer-fine:group-focus-within:flex';
 
 /** Kept in flow so nothing shifts; the action bar covers it. */
 const MASKED_BY_ACTIONS =
@@ -69,7 +92,7 @@ function RowAction({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon-sm"
       disabled={disabled}
       tooltip={tooltip}
       aria-label={label}
@@ -84,9 +107,13 @@ export function AttentionItemRow({
   factoryId,
   item,
   retrying,
+  settling,
   updatingReceipt,
   onOpen,
   onRetry,
+  onChooseRepository,
+  onApprove,
+  onDismiss,
   onRead,
   onArchive,
   onRestore,
@@ -94,9 +121,13 @@ export function AttentionItemRow({
   factoryId: string;
   item: FactoryAttentionItem;
   retrying: boolean;
+  settling: boolean;
   updatingReceipt: boolean;
   onOpen?: () => void;
   onRetry?: () => void;
+  onChooseRepository?: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
   onRead: () => void;
   onArchive: () => void;
   onRestore: () => void;
@@ -110,14 +141,16 @@ export function AttentionItemRow({
         to={factoryAttentionTargetPath(factoryId, item.target)}
         onClick={onOpen}
         aria-label={`${destinationLabel(item)} for ${item.title}`}
-        className="focus-visible:outline-accent1 absolute inset-0 rounded-lg outline-none focus-visible:outline-2 focus-visible:-outline-offset-2"
+        className={`absolute inset-0 rounded-lg ${focusRingInset}`}
       />
       <span className="flex w-full items-center gap-2">
         <span className="sr-only">{item.read ? 'Read' : 'Unread'}</span>
-        <span className="text-ui-sm text-icon6 min-w-0 flex-1 truncate font-medium">{item.title}</span>
+        <Txt as="span" variant="column" tone="ink" className="min-w-0 flex-1 truncate">
+          {item.title}
+        </Txt>
         <Badge
           variant={KIND[item.kind].badge}
-          emphasis={item.read ? 'muted' : 'default'}
+          emphasis={item.read ? 'subtle' : 'strong'}
           size="xs"
           icon={createElement(KIND[item.kind].glyph)}
           className={MASKED_BY_ACTIONS}
@@ -131,7 +164,7 @@ export function AttentionItemRow({
           <span className={REVEAL_ACTIONS}>
             <Button
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               tooltip="Ask supervisor"
               aria-label={`Ask supervisor about ${item.title}`}
               onClick={() => {
@@ -141,7 +174,16 @@ export function AttentionItemRow({
             >
               <Brain aria-hidden />
             </Button>
-            {onRetry ? (
+            {onChooseRepository ? (
+              <RowAction
+                tooltip="Choose repository"
+                label={`Choose repository for ${item.title}`}
+                disabled={retrying}
+                onClick={onChooseRepository}
+              >
+                <RotateCw aria-hidden />
+              </RowAction>
+            ) : onRetry ? (
               <RowAction
                 tooltip="Retry"
                 label={`${retrying ? 'Retrying' : 'Retry'} ${item.title}`}
@@ -149,6 +191,16 @@ export function AttentionItemRow({
                 onClick={onRetry}
               >
                 {retrying ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <RotateCw aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onApprove ? (
+              <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
+                {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onDismiss ? (
+              <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
+                <X aria-hidden />
               </RowAction>
             ) : null}
             {!item.read ? (
@@ -183,10 +235,10 @@ export function AttentionItemRow({
           </span>
         </span>
       </span>
-      <span className="text-ui-xs text-icon3 truncate">
-        {author ? <span className="text-icon4 font-medium">{author} </span> : null}
+      <Txt as="span" variant="meta" tone="muted" className="truncate">
+        {author ? <span className="text-muted-foreground font-medium">{author} </span> : null}
         {item.detail}
-      </span>
+      </Txt>
     </div>
   );
 }

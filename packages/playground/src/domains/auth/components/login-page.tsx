@@ -1,6 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Lock } from 'lucide-react';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useSSOLogin } from '../hooks/use-auth-actions';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
@@ -55,19 +59,11 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const [password, setPassword] = useState('');
 
   if (isLoadingCapabilities) {
-    return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-neutral3">Loading...</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Loading...</div>;
   }
 
   if (!capabilities?.enabled || !capabilities?.login) {
-    return (
-      <div className="bg-surface1 flex min-h-screen items-center justify-center">
-        <div className="text-neutral3">Authentication is not configured</div>
-      </div>
-    );
+    return <div className="text-muted-foreground">Authentication is not configured</div>;
   }
 
   const { login } = capabilities;
@@ -116,14 +112,16 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="border-border1 bg-surface1 flex items-start gap-2.5 rounded-md border p-3">
-      <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-      <p className="text-neutral3 text-sm">{login.description}</p>
+    <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;
 
   const errorBanner = errorMessage ? (
-    <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{errorMessage}</div>
+    <div role="alert">
+      <Notice variant="destructive">{errorMessage}</Notice>
+    </div>
   ) : null;
 
   return (
@@ -133,14 +131,12 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       errorBanner={errorBanner}
     >
       {hasCredentials && (
-        <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+        <Form onSubmit={handleCredentialsSubmit}>
           {!isSignIn && (
-            <div className="space-y-2">
-              <label htmlFor="name" className="text-neutral4 block text-sm">
-                Name
-              </label>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
               <Input
-                id="name"
+                name="name"
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -148,15 +144,13 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
                 variant="default"
                 size="lg"
               />
-            </div>
+            </Field>
           )}
 
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-neutral4 block text-sm">
-              Email
-            </label>
+          <Field>
+            <FieldLabel required>Email</FieldLabel>
             <Input
-              id="email"
+              name="email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -165,14 +159,13 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               variant="default"
               size="lg"
             />
-          </div>
+            <FieldError />
+          </Field>
 
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-neutral4 block text-sm">
-              Password
-            </label>
+          <Field>
+            <FieldLabel required>Password</FieldLabel>
             <Input
-              id="password"
+              name="password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -181,40 +174,45 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               variant="default"
               size="lg"
             />
-          </div>
+            <FieldError />
+          </Field>
 
-          {error && <div className="rounded-md bg-red-500/10 p-3 text-sm text-red-400">{error.message}</div>}
+          {error ? (
+            <div role="alert">
+              <Notice variant="destructive">{error.message}</Notice>
+            </div>
+          ) : null}
 
-          <Button type="submit" disabled={isPending} className="w-full" size="lg">
+          <Button icon={<LogIn />} type="submit" disabled={isPending} className="w-full" size="lg">
             {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 
           {signUpEnabled && (
-            <div className="text-center text-sm">
-              <span className="text-neutral3">
+            <div className="text-center text-body">
+              <span className="text-muted-foreground">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
               </span>
-              <button type="button" onClick={toggleMode} className="text-neutral6 hover:underline">
+              <button type="button" onClick={toggleMode} className="text-foreground hover:underline">
                 {isSignIn ? 'Sign up' : 'Sign in'}
               </button>
             </div>
           )}
-        </form>
+        </Form>
       )}
 
       {hasSSO && hasCredentials && (
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="border-border1 w-full border-t" />
+            <div className="w-full border-t border-border" />
           </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="bg-surface1 text-neutral3 px-2">or continue with</span>
+          <div className="relative flex justify-center text-body">
+            <span className="bg-sidebar px-2 text-muted-foreground">or continue with</span>
           </div>
         </div>
       )}
 
       {hasSSO && sso && (
-        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg" variant="outline">
+        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
           {sso.icon && <span className="mr-2">{sso.icon}</span>}
           {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
         </Button>

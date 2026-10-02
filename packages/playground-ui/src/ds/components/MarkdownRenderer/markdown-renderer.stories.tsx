@@ -9,7 +9,7 @@ const meta: Meta<typeof MarkdownRenderer> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-150 p-4">
+        <div className="w-150 max-w-[calc(100vw-2rem)] p-4">
           <Story />
         </div>
       </TooltipProvider>
@@ -97,6 +97,7 @@ Regular text after the quote.`,
 
 export const Tables: Story = {
   args: {
+    tableActions: true,
     children: `## Agent Comparison
 
 | Agent Name | Model | Temperature | Max Tokens |
@@ -203,7 +204,7 @@ function StreamCadence() {
       <button
         type="button"
         onClick={() => setRun(count => count + 1)}
-        className="text-icon5 border-border1 text-ui-sm self-start rounded-md border px-3 py-1"
+        className="self-start rounded-md border border-border px-3 py-1 text-caption text-foreground"
       >
         Replay
       </button>

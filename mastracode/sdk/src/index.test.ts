@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// createMastraCode() pulls in a large module graph, so these tests routinely
+// exceed the 5s default (matches the sibling headless/libsql suites).
+vi.setConfig({ testTimeout: 30_000 });
+
 // Captures the createSession() args so tests can assert on wiring (e.g.
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
@@ -40,6 +44,14 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
     async init() {}
 
+    onSessionCreated() {
+      return () => {};
+    }
+
+    onSessionDeleted() {
+      return () => {};
+    }
+
     getMastra() {
       return undefined;
     }
@@ -58,6 +70,8 @@ vi.mock('@mastra/core/agent-controller', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  createBackgroundWorkSignalProcessor: () => ({}),
+  CyberRefusalHandler: class {},
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -84,9 +98,6 @@ vi.mock('./agents/model.js', () => ({
   resolveModel: vi.fn(),
 }));
 
-vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
-vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
-vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
 vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 
@@ -100,6 +111,13 @@ vi.mock('./auth/storage.js', () => ({
     }
     loadStoredApiKeysIntoEnv() {}
   },
+  getOAuthProviders: () => [
+    { id: 'anthropic' },
+    { id: 'openai-codex' },
+    { id: 'github-copilot' },
+    { id: 'kimi-for-coding' },
+    { id: 'xai' },
+  ],
 }));
 
 vi.mock('./hooks/index.js', () => ({ HookManager: class {} }));
@@ -116,7 +134,9 @@ vi.mock('./onboarding/om-settings.js', () => ({
 }));
 
 vi.mock('./onboarding/settings.js', () => ({
+  OBSERVABILITY_AUTH_PREFIX: 'observability:',
   getCustomProviderId: vi.fn(),
+  parseExperimentalAgentSetting: vi.fn(value => value ?? null),
   loadSettings: vi.fn(() => ({
     onboarding: { completedAt: null, skippedAt: null, version: 0, modePackId: null, omPackId: null },
     models: {
@@ -201,6 +221,12 @@ vi.mock('./utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+vi.mock('./utils/maintenance-lock.js', () => ({
+  registerSessionAndWaitForMaintenance: vi.fn(async () => {}),
+  unregisterSession: vi.fn(),
+  UNKNOWN_OWNER: -1,
+}));
+
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
     const [{ syncGateways }, { createStorage }] = await Promise.all([
@@ -230,6 +256,92 @@ describe('createMastraCode startup performance', () => {
     expect(result.storageWarning).toBe('Storage fallback warning');
     expect(syncGateways).not.toHaveBeenCalled();
     resolveSync?.();
+    // Almost all of this test's wall time is transforming and importing the
+    // entry module graph, not the startup path it asserts on: measured at
+    // ~9s on an idle machine and ~57s under heavy load, for the same code.
+    // A tight budget here fails on that import cost rather than on the
+    // ordering contract, so give it room for a contended runner.
+  }, 60_000);
+});
+
+describe('storage maintenance exclusion', () => {
+  it('registers the session and waits for maintenance before opening storage', async () => {
+    const [{ registerSessionAndWaitForMaintenance }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const order: string[] = [];
+    let finishMaintenance!: () => void;
+    vi.mocked(registerSessionAndWaitForMaintenance).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          order.push('wait');
+          finishMaintenance = () => {
+            order.push('maintenance-done');
+            resolve();
+          };
+        }),
+    );
+    vi.mocked(createStorage).mockImplementationOnce((async () => {
+      order.push('storage');
+      return { storage: {}, backend: 'memory' };
+    }) as never);
+    const { createMastraCode } = await import('./index.js');
+
+    const started = createMastraCode();
+    await vi.waitFor(() => expect(order).toEqual(['wait']));
+    // Give startup ample turns to (incorrectly) open storage while maintenance is pending.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(order).not.toContain('storage');
+
+    finishMaintenance();
+    await started;
+
+    expect(order).toEqual(['wait', 'maintenance-done', 'storage']);
+  });
+
+  it('unregisters the session when opening storage fails', async () => {
+    const [{ unregisterSession }, { createStorage }] = await Promise.all([
+      import('./utils/maintenance-lock.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    const failure = new Error('storage unavailable');
+    vi.mocked(createStorage).mockRejectedValueOnce(failure);
+    const { createMastraCode } = await import('./index.js');
+
+    await expect(createMastraCode()).rejects.toBe(failure);
+    expect(unregisterSession).toHaveBeenCalled();
+  });
+});
+
+describe('scores storage domain', () => {
+  it('keeps scorer results out of the default libsql store', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+
+    const result = await createMastraCode();
+
+    // mastracode's scorers persist every result through the `scores` domain, and
+    // nothing reads them back. The domain must accept writes (a missing domain
+    // makes validateAndSaveScore() throw MASTRA_SCORES_STORAGE_NOT_AVAILABLE)
+    // without writing to libsql (#22056) or retaining payloads in memory.
+    const scores = await result.storage.getStore('scores');
+    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
+
+    const saved = await scores!.saveScore({
+      scorerId: 'outcome',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(saved.score.id).toEqual(expect.any(String));
+    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
+    const listed = await scores!.listScoresByRunId({ runId: 'run-1', pagination: { page: 0, perPage: 10 } });
+    expect(listed.scores).toEqual([]);
   });
 });
 
@@ -417,5 +529,42 @@ describe('AgentController session id and ownerId wiring', () => {
 
     expect(createSessionCalls).toHaveLength(2);
     expect(createSessionCalls[0]!.id).not.toBe(createSessionCalls[1]!.id);
+  });
+});
+
+describe('resolveCloudObservabilityConfig', () => {
+  const settings = () => ({ observability: { resources: {}, localTracing: false } }) as any;
+  const noAuth = { getStoredApiKey: () => undefined } as any;
+
+  it('returns undefined when nothing is configured so no platform exporter is constructed', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', {})).toBeUndefined();
+  });
+
+  it('ignores the host project MASTRA_* env vars loaded from the cwd .env', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRA_CLOUD_ACCESS_TOKEN: 'tok', MASTRA_PROJECT_ID: 'ae68feda-c5e2-4637-a148-4d0a020b5de5' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toBeUndefined();
+  });
+
+  it('reads MASTRACODE_* env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_1' };
+    expect(resolveCloudObservabilityConfig(settings(), noAuth, 'res', env)).toEqual({
+      accessToken: 'tok',
+      projectId: 'proj_1',
+    });
+  });
+
+  it('prefers per-resource settings over env vars', async () => {
+    const { resolveCloudObservabilityConfig } = await import('./index.js');
+    const s = settings();
+    s.observability.resources.res = { projectId: 'proj_settings', configuredAt: 0 };
+    const auth = { getStoredApiKey: (k: string) => (k === 'observability:res' ? 'stored' : undefined) } as any;
+    const env = { MASTRACODE_CLOUD_ACCESS_TOKEN: 'tok', MASTRACODE_PROJECT_ID: 'proj_env' };
+    expect(resolveCloudObservabilityConfig(s, auth, 'res', env)).toEqual({
+      accessToken: 'stored',
+      projectId: 'proj_settings',
+    });
   });
 });

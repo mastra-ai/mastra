@@ -419,6 +419,93 @@ export class MemorySpanner extends MemoryStorage {
     }
   }
 
+  /**
+   * Atomically reassign a thread and all of its messages to a different resource.
+   *
+   * Runs inside a single read-write transaction: the thread row is read inside the
+   * transaction (acquiring a lock), then the thread and every message are moved together.
+   * Overlapping transfers of the same thread serialize on the transaction, so they can never
+   * interleave the thread update with the message update — either both move or neither does,
+   * with no split-ownership window. The thread's `createdAt` is preserved. Callers are
+   * responsible for authorizing the reassignment.
+   */
+  async updateThreadResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<StorageThreadType> {
+    const tableThreads = quoteIdent(TABLE_THREADS, 'table name');
+    const messagesTable = quoteIdent(TABLE_MESSAGES, 'table name');
+    const now = new Date();
+    let existingThread: StorageThreadType | null = null;
+    let noop = false;
+    try {
+      await this.db.runWithAbortRetry(() =>
+        this.database.runTransactionAsync(async tx => {
+          try {
+            const [rows] = await tx.run({
+              sql: `SELECT * FROM ${tableThreads} WHERE id = @threadId LIMIT 1`,
+              params: { threadId },
+              json: true,
+            });
+            const row = (rows as Array<Record<string, any>>)[0];
+            if (!row) {
+              throw new MastraError({
+                id: createStorageErrorId('SPANNER', 'UPDATE_THREAD_RESOURCE_ID', 'NOT_FOUND'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Thread ${threadId} not found`,
+                details: { threadId },
+              });
+            }
+            existingThread = this.formatThreadRow(row);
+
+            if (existingThread.resourceId === resourceId) {
+              noop = true;
+              await tx.commit();
+              return;
+            }
+
+            await this.db.update({
+              tableName: TABLE_THREADS,
+              keys: { id: threadId },
+              data: { resourceId, updatedAt: now },
+              transaction: tx,
+            });
+            await tx.runUpdate({
+              sql: `UPDATE ${messagesTable} SET ${quoteIdent('resourceId', 'column name')} = @resourceId WHERE ${quoteIdent('thread_id', 'column name')} = @threadId`,
+              params: { resourceId, threadId },
+            });
+            await tx.commit();
+          } catch (err) {
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
+            throw err;
+          }
+        }),
+      );
+      const thread = existingThread as unknown as StorageThreadType;
+      if (noop) {
+        return thread;
+      }
+      return { ...thread, resourceId, updatedAt: now };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'UPDATE_THREAD_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   /** Deletes a thread and all its messages atomically. */
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     const messagesTable = quoteIdent(TABLE_MESSAGES, 'table name');

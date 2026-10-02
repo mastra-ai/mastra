@@ -65,6 +65,7 @@ function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
     textFormat?: 'markdown' | 'plain';
+    onAbort?: 'flush' | 'discard';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
@@ -83,6 +84,7 @@ function makeChannels(
     streaming: opts.streaming ?? false,
   };
   if (opts.textFormat !== undefined) adapterConfig.textFormat = opts.textFormat;
+  if (opts.onAbort !== undefined) adapterConfig.onAbort = opts.onAbort;
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
@@ -100,7 +102,7 @@ async function drive(
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  const render = (channels as any)._buildRenderContext(chatThread, 'test', approvalContext);
+  const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
   const processor = new ChatChannelOutputProcessor();
   const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
@@ -792,6 +794,31 @@ describe('ChatChannelOutputProcessor', () => {
       expect(edits).toHaveLength(2);
       expect(edits[0]!.messageId).toBe('m1');
       expect(edits[1]!.messageId).toBe('m1');
+    });
+
+    it('skips the approval card but still returns the chunk when the channels decline to render it', async () => {
+      const { channels, calls, chatThread } = makeChannels({ toolDisplay: 'cards' });
+      const shouldRender = vi.spyOn(channels, 'shouldRenderToolApproval').mockResolvedValue(false);
+      const processor = new ChatChannelOutputProcessor(channels);
+      const render = (channels as any)._buildRenderContext(chatThread, 'test');
+      const requestContext = { get: (key: string) => (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY ? render : undefined) };
+      const state: Record<string, unknown> = {};
+      const approval = {
+        type: 'tool-call-approval',
+        payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } },
+      };
+
+      for (const part of [
+        { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } } },
+        approval,
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      ]) {
+        const returned = await processor.processOutputStream({ part, state, requestContext } as any);
+        expect(returned).toBe(part);
+      }
+
+      expect(shouldRender).toHaveBeenCalledWith(requestContext, 'weather');
+      expect(JSON.stringify(calls)).not.toContain('tool_approve:');
     });
 
     it("'cards' approval does not push plan/task rows (no flash plan widget)", async () => {
@@ -2150,7 +2177,7 @@ describe('ChatChannelOutputProcessor', () => {
       expect(postArgs).toEqual([{ markdown: 'partial' }, '❌ Error: boom', { markdown: 'recovery' }]);
     });
 
-    it('does not post anything on abort but still flushes pending text', async () => {
+    it('flushes pending buffered text on abort by default', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
       await drive(
         channels,
@@ -2162,6 +2189,34 @@ describe('ChatChannelOutputProcessor', () => {
       );
       const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
       expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("flushes pending buffered text on abort when onAbort is 'flush'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'flush' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([{ markdown: 'partial' }]);
+    });
+
+    it("discards buffered text on abort when onAbort is 'discard'", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, onAbort: 'discard' });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'partial' } },
+          { type: 'abort', payload: {} },
+        ],
+        chatThread,
+      );
+      const postArgs = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(postArgs).toEqual([]);
     });
   });
 

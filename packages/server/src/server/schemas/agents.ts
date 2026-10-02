@@ -22,13 +22,6 @@ import { z } from 'zod/v4';
  */
 type StopConditionArg = (event: unknown) => boolean | PromiseLike<boolean>;
 
-/**
- * Structural mirror of the ai-sdk JSONValue type, which is not publicly
- * exported from @mastra/core. Used to keep providerOptions assignable to
- * ProviderOptions (Record<string, JSONObject>) with portable declaration emit.
- */
-type JSONValue = null | string | number | boolean | { [key: string]: JSONValue } | JSONValue[];
-
 type ModelSettings = {
   maxOutputTokens?: number;
   temperature?: number;
@@ -186,13 +179,14 @@ export const serializedProcessorSchema = z.object({
 
 /**
  * Schema for serialized tool with JSON schemas
- * Uses passthrough() to allow additional tool properties beyond core fields
  */
 export const serializedToolSchema = z.object({
   id: z.string(),
+  title: z.string().optional(),
   description: z.string().optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
+  requestContextSchema: z.string().optional(),
   requireApproval: z.boolean().optional(),
 });
 
@@ -237,12 +231,21 @@ const systemMessageSchema = typedPermissive<SystemMessage>(
  * Schema for model configuration in model list
  */
 const modelConfigSchema = z.object({
+  id: z.string(),
+  enabled: z.boolean(),
+  maxRetries: z.number(),
   model: z.object({
     modelId: z.string(),
     provider: z.string(),
     modelVersion: z.string(),
   }),
-  // Additional fields from AgentModelManagerConfig can be added here
+});
+
+const serializedSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  license: z.string().optional(),
+  path: z.string(),
 });
 
 const agentEditorConfigSchema = z.union([
@@ -264,6 +267,11 @@ export const serializedAgentSchema = z.object({
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
   workflows: z.record(z.string(), serializedWorkflowSchema),
+  skills: z.array(serializedSkillSchema),
+  workspaceTools: z.array(z.string()),
+  browserTools: z.array(z.string()),
+  hasBrowser: z.boolean(),
+  workspaceId: z.string().optional(),
   inputProcessors: z.array(serializedProcessorSchema),
   outputProcessors: z.array(serializedProcessorSchema),
   provider: z.string().optional(),
@@ -274,6 +282,7 @@ export const serializedAgentSchema = z.object({
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  requestContextSchema: z.string().optional(),
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
@@ -403,14 +412,7 @@ export const agentExecutionBodySchema = z
 
     // Model Configuration
     model: z.string().optional(),
-    providerOptions: typedPermissive<Record<string, Record<string, JSONValue>>>(
-      z.object({
-        anthropic: z.record(z.string(), z.unknown()).optional(),
-        google: z.record(z.string(), z.unknown()).optional(),
-        openai: z.record(z.string(), z.unknown()).optional(),
-        xai: z.record(z.string(), z.unknown()).optional(),
-      }),
-    ).optional(),
+    providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
     modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 
     // Tool Configuration
@@ -772,12 +774,32 @@ export const sendAgentMessageBodySchema = z.union([
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
 
-export const subscribeAgentThreadBodySchema = z.object({
+const agentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),
 });
 
-export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withInitialHistory: z
+    .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
+    .optional()
+    .describe('Emit one thread-history chunk with stored messages before live parts'),
+});
+
+export const abortAgentThreadBodySchema = agentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  clearPendingSignals: z.boolean().optional(),
+  expectedRunId: z.string().optional(),
+});
+
+export const cancelPendingAgentSignalsBodySchema = agentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export const cancelPendingAgentSignalsResponseSchema = z.object({
+  cancelledSignalIds: z.array(z.string()),
+});
 
 export const sendToolApprovalBodySchema = z.object({
   resourceId: z.string(),

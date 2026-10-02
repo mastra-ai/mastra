@@ -40,6 +40,8 @@ export interface ChatChannelRenderContext {
   formatError?: (error: Error) => unknown;
   /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
   textFormat?: 'markdown' | 'plain';
+  /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
+  onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
 }
 
@@ -175,7 +177,16 @@ export class ChatChannelOutputProcessor {
       state.session = session;
     }
 
-    session.queue.push(part as AgentChunkType<any>);
+    // Skip the approval card when no human decision is pending (e.g. the
+    // controller auto-resolves the tool's policy). The chunk still flows on so
+    // the run itself can resolve the approval.
+    const renderPart =
+      part.type !== 'tool-call-approval' ||
+      !this.#agentChannels ||
+      (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
+    if (renderPart) {
+      session.queue.push(part as AgentChunkType<any>);
+    }
 
     // Agents emit a `finish` chunk per LLM step, plus a `step-finish` per step
     // whose payload carries `isContinued`. Multi-step runs (e.g. tool calls or
@@ -280,6 +291,7 @@ export class ChatChannelOutputProcessor {
             takePendingApproval: render.takePendingApproval,
             formatError: render.formatError,
             textFormat: render.textFormat,
+            onAbort: render.onAbort,
           })
     ).catch(err => {
       // Prevent unhandled rejection if the driver fails before a terminal chunk

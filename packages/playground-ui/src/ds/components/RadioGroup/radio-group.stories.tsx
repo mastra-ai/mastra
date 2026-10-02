@@ -1,19 +1,19 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
-import { Label } from '../Label';
+import { FieldContent, FieldDescription, FieldItem, FieldLabel, Fieldset } from '../Field';
 import { RadioGroup, RadioGroupItem } from './radio-group';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
-  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
-  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
-  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
-  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+  { token: 'sidebar', label: 'sidebar · the recessed shell', className: 'bg-sidebar' },
+  { token: 'background', label: 'background · the page canvas', className: 'bg-background' },
+  { token: 'card', label: 'card · a raised surface', className: 'bg-card' },
+  { token: 'muted', label: 'muted · the quiet step above the canvas', className: 'bg-muted' },
 ];
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-5 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border p-5 ${className}`}>
+      <p className="mb-4 text-meta tracking-wide text-muted-foreground uppercase">{label}</p>
       {children}
     </div>
   );
@@ -34,14 +34,14 @@ function RadioPreview({
 }) {
   return (
     <RadioGroup aria-label={label} defaultValue={checked ? id : undefined} disabled={disabled}>
-      <RadioGroupItem aria-label={label} value={id} id={id} className={className} />
+      <RadioGroupItem aria-label={label} value={id} className={className} />
     </RadioGroup>
   );
 }
 
 function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
   return (
-    <div className="text-ui-sm text-neutral3 grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3">
+    <div className="grid grid-cols-[5rem_repeat(5,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-caption text-muted-foreground">
       <span />
       <span>Default</span>
       <span>Selected</span>
@@ -49,14 +49,14 @@ function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
       <span>Disabled</span>
       <span>Disabled on</span>
 
-      <span className="text-neutral5">State</span>
+      <span className="text-foreground">State</span>
       <RadioPreview id={`${idPrefix}-default`} label={`${idPrefix} default`} />
       <RadioPreview id={`${idPrefix}-selected`} label={`${idPrefix} selected`} checked />
       <RadioPreview
         id={`${idPrefix}-focus`}
         label={`${idPrefix} focus preview`}
         checked
-        className="border-neutral5/60 outline-neutral5/55 outline-1 outline-offset-2 outline-solid"
+        className="border-border-focus outline-1 outline-offset-2 outline-border-focus outline-solid"
       />
       <RadioPreview id={`${idPrefix}-disabled`} label={`${idPrefix} disabled`} disabled />
       <RadioPreview id={`${idPrefix}-disabled-selected`} label={`${idPrefix} disabled selected`} checked disabled />
@@ -83,34 +83,34 @@ type Story = StoryObj<typeof RadioGroup>;
 export const Default: Story = {
   render: args => (
     <RadioGroup defaultValue="option-1" {...args}>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-1" id="option-1" />
-        <Label htmlFor="option-1">Option 1</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-2" id="option-2" />
-        <Label htmlFor="option-2">Option 2</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-3" id="option-3" />
-        <Label htmlFor="option-3">Option 3</Label>
-      </div>
+      <FieldItem>
+        <RadioGroupItem value="option-1" />
+        <FieldLabel>Option 1</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-2" />
+        <FieldLabel>Option 2</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-3" />
+        <FieldLabel>Option 3</FieldLabel>
+      </FieldItem>
     </RadioGroup>
   ),
 };
 
 export const Disabled: Story = {
   render: () => (
-    <RadioGroup defaultValue="option-1" disabled>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-1" id="disabled-1" />
-        <Label htmlFor="disabled-1">Option 1</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="option-2" id="disabled-2" />
-        <Label htmlFor="disabled-2">Option 2</Label>
-      </div>
-    </RadioGroup>
+    <Fieldset disabled render={<RadioGroup defaultValue="option-1" />}>
+      <FieldItem>
+        <RadioGroupItem value="option-1" />
+        <FieldLabel>Option 1</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="option-2" />
+        <FieldLabel>Option 2</FieldLabel>
+      </FieldItem>
+    </Fieldset>
   ),
 };
 
@@ -119,7 +119,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="border-border1 bg-surface2 grid min-w-md gap-4 rounded-lg border p-4">
+    <div className="grid min-w-md gap-4 rounded-lg border border-border bg-background p-4">
       <RadioStateGrid idPrefix="all-states" />
     </div>
   ),
@@ -143,18 +143,18 @@ export const OnSurfaces: Story = {
 export const Horizontal: Story = {
   render: () => (
     <RadioGroup defaultValue="small" className="flex flex-row gap-4">
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="small" id="small" />
-        <Label htmlFor="small">Small</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="medium" id="medium" />
-        <Label htmlFor="medium">Medium</Label>
-      </div>
-      <div className="flex items-center space-x-2">
-        <RadioGroupItem value="large" id="large" />
-        <Label htmlFor="large">Large</Label>
-      </div>
+      <FieldItem>
+        <RadioGroupItem value="small" />
+        <FieldLabel>Small</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="medium" />
+        <FieldLabel>Medium</FieldLabel>
+      </FieldItem>
+      <FieldItem>
+        <RadioGroupItem value="large" />
+        <FieldLabel>Large</FieldLabel>
+      </FieldItem>
     </RadioGroup>
   ),
 };
@@ -162,27 +162,27 @@ export const Horizontal: Story = {
 export const WithDescriptions: Story = {
   render: () => (
     <RadioGroup defaultValue="startup">
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="startup" id="startup" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="startup">Startup</Label>
-          <p className="text-neutral3 text-xs">Best for small teams just getting started</p>
-        </div>
-      </div>
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="business" id="business" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="business">Business</Label>
-          <p className="text-neutral3 text-xs">For growing companies with advanced needs</p>
-        </div>
-      </div>
-      <div className="flex items-start space-x-2">
-        <RadioGroupItem value="enterprise" id="enterprise" className="mt-1" />
-        <div className="grid gap-1">
-          <Label htmlFor="enterprise">Enterprise</Label>
-          <p className="text-neutral3 text-xs">For large organizations requiring customization</p>
-        </div>
-      </div>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="startup" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Startup</FieldLabel>
+          <FieldDescription className="mt-0">Best for small teams just getting started</FieldDescription>
+        </FieldContent>
+      </FieldItem>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="business" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Business</FieldLabel>
+          <FieldDescription className="mt-0">For growing companies with advanced needs</FieldDescription>
+        </FieldContent>
+      </FieldItem>
+      <FieldItem className="items-start">
+        <RadioGroupItem value="enterprise" className="mt-1" />
+        <FieldContent className="gap-1">
+          <FieldLabel>Enterprise</FieldLabel>
+          <FieldDescription className="mt-0">For large organizations requiring customization</FieldDescription>
+        </FieldContent>
+      </FieldItem>
     </RadioGroup>
   ),
 };

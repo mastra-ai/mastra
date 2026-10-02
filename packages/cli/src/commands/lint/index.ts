@@ -16,6 +16,7 @@ import type { LintContext, LintIssue, LintIssueCode } from './rules/types.js';
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 }
 
 interface MastraPackage {
@@ -61,6 +62,7 @@ function getMastraPackages(packageJson: PackageJson): MastraPackage[] {
   const allDependencies = {
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
+    ...packageJson.optionalDependencies,
   };
 
   const mastraPackages = Object.entries(allDependencies).filter(

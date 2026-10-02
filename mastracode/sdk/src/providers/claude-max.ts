@@ -12,6 +12,8 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
+import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import type { ThinkingLevel } from './openai-codex.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
@@ -78,18 +80,21 @@ export const claudeCodeMiddleware: LanguageModelMiddleware = {
  *
  * Adds cache breakpoints at strategic locations:
  * 1. Last system message (end of static instructions + dynamic memory)
- * 2. Most recent user/assistant message (conversation context)
+ * 2. Most recent user/assistant message (conversation context), `conversation` scope only
  *
  * This allows Anthropic to cache:
  * - System prompts and instructions (rarely change)
  * - Conversation history up to the last message
  */
-export const promptCacheMiddleware: LanguageModelMiddleware = {
+export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): LanguageModelMiddleware => ({
   specificationVersion: 'v3',
   transformParams: async ({ params }) => {
     const prompt = [...params.prompt];
 
-    const cacheControl = { type: 'ephemeral' as const, ttl: '5m' as const };
+    const cacheControl = {
+      type: 'ephemeral' as const,
+      ttl: scope === 'conversation' ? ANTHROPIC_PROMPT_CACHE_TTL : ('5m' as const),
+    };
 
     // Helper to add cache control to a message's last content part
     const addCacheToMessage = (msg: any) => {
@@ -137,13 +142,13 @@ export const promptCacheMiddleware: LanguageModelMiddleware = {
 
     // Add cache breakpoint to the most recent message (last in array)
     const lastIdx = prompt.length - 1;
-    if (lastIdx >= 0 && lastIdx !== lastSystemIdx) {
+    if (scope === 'conversation' && lastIdx >= 0 && lastIdx !== lastSystemIdx) {
       prompt[lastIdx] = addCacheToMessage(prompt[lastIdx]);
     }
 
     return { ...params, prompt };
   },
-};
+});
 
 type ActiveThinkingLevel = Exclude<ThinkingLevel, 'off'>;
 
@@ -258,23 +263,11 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
       throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
     }
 
-    // Preserve existing headers, strip auth-related ones
-    const headers = new Headers();
-    if (init?.headers) {
-      const source =
-        init.headers instanceof Headers
-          ? init.headers
-          : Array.isArray(init.headers)
-            ? new Headers(init.headers as Array<[string, string]>)
-            : new Headers(init.headers as Record<string, string>);
-      source.forEach((value, key) => {
-        const lower = key.toLowerCase();
-        if (lower !== 'authorization' && lower !== 'x-api-key') {
-          headers.set(key, value);
-        }
-      });
-    }
-
+    // Preserve Request headers and let explicit init headers override them.
+    const headers = new Headers(url instanceof Request ? url.headers : undefined);
+    if (init?.headers) new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+    headers.delete('authorization');
+    headers.delete('x-api-key');
     headers.set('Authorization', `Bearer ${accessToken}`);
     const requestBetas = (headers.get('anthropic-beta') ?? '')
       .split(',')
@@ -302,11 +295,20 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
  */
 export function opencodeClaudeMaxProvider(
   modelId: string = 'claude-sonnet-4-20250514',
-  options?: { headers?: Record<string, string>; authStorage?: CredentialStore; thinkingLevel?: ThinkingLevel },
+  options?: {
+    headers?: Record<string, string>;
+    authStorage?: CredentialStore;
+    thinkingLevel?: ThinkingLevel;
+    promptCacheScope?: AnthropicPromptCacheScope;
+  },
 ): MastraModelConfig {
   const headers = options?.headers;
   const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, options?.thinkingLevel);
-  const middleware = [claudeCodeMiddleware, promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])];
+  const middleware = [
+    claudeCodeMiddleware,
+    createPromptCacheMiddleware(options?.promptCacheScope ?? 'conversation'),
+    ...(thinkingMiddleware ? [thinkingMiddleware] : []),
+  ];
 
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {

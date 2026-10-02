@@ -1,9 +1,12 @@
 import EventEmitter from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSubDeliveryMode } from '../events/pubsub';
 import { __hookHandlerCount, AvailableHooks } from '../hooks';
 import { MockStore } from '../storage';
+import { createStep, createWorkflow } from '../workflows/evented';
 import { Mastra } from './index';
 
 function deferred<T = void>() {
@@ -12,6 +15,47 @@ function deferred<T = void>() {
     resolve = r;
   });
   return { promise, resolve };
+}
+
+/** Push-only pubsub so startWorkers() wires handleWorkflowEvent directly. */
+class PushOnlyPubSub extends EventEmitterPubSub {
+  override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['push'];
+  }
+}
+
+/**
+ * Two-step evented workflow whose first step blocks until `gate` resolves, so a
+ * test can call shutdown() while a step is mid-execution.
+ */
+function makeGatedWorkflow(gate: Promise<void>, onStepStarted: () => void, id = 'gated-workflow') {
+  const wf = createWorkflow({
+    id,
+    inputSchema: z.object({}),
+    outputSchema: z.object({ done: z.boolean() }),
+  });
+  wf.then(
+    createStep({
+      id: 'slow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        onStepStarted();
+        await gate;
+        return {};
+      },
+    }) as any,
+  )
+    .then(
+      createStep({
+        id: 'finish',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        execute: async () => ({ done: true }),
+      }) as any,
+    )
+    .commit();
+  return wf;
 }
 
 describe('Mastra shutdown lifecycle', () => {
@@ -96,11 +140,12 @@ describe('Mastra shutdown lifecycle', () => {
     }
   });
 
-  it('waits for its durable agent executions before closing storage', async () => {
+  it('waits for its durable agent executions before stopping workers and closing storage', async () => {
     const execution = deferred();
     const storage = new MockStore();
     const close = vi.spyOn(storage, 'close');
     const mastra = new Mastra({ logger: false, workers: false, storage });
+    const stopWorkers = vi.spyOn(mastra, 'stopWorkers');
     const otherMastra = new Mastra({ logger: false, workers: false });
     const otherExecution = deferred();
 
@@ -110,10 +155,13 @@ describe('Mastra shutdown lifecycle', () => {
     try {
       const shutdown = mastra.shutdown();
       await vi.waitFor(() => expect(close).not.toHaveBeenCalled());
+      // Pubsub must stay alive while durable runs drain (#22863).
+      expect(stopWorkers).not.toHaveBeenCalled();
 
       execution.resolve();
       await shutdown;
 
+      expect(stopWorkers).toHaveBeenCalledOnce();
       expect(close).toHaveBeenCalledOnce();
     } finally {
       execution.resolve();
@@ -122,6 +170,191 @@ describe('Mastra shutdown lifecycle', () => {
       globalRunRegistry.delete('other-run');
       mastra.__unregisterHooks();
       otherMastra.__unregisterHooks();
+    }
+  });
+
+  it('lets an in-flight evented workflow run finish before tearing down pubsub', async () => {
+    const gate = deferred();
+    const stepStarted = deferred();
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { gated: makeGatedWorkflow(gate.promise, () => stepStarted.resolve()) } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run = await mastra.getWorkflow('gated').createRun();
+      const result = run.start({ inputData: {} });
+      await stepStarted.promise;
+
+      const shutdown = mastra.shutdown();
+      // Give shutdown a chance to (incorrectly) return early.
+      await new Promise(r => setTimeout(r, 50));
+      expect(close).not.toHaveBeenCalled();
+
+      gate.resolve();
+      await shutdown;
+
+      // The run's remaining events were still delivered after shutdown began.
+      await expect(result).resolves.toMatchObject({ status: 'success', result: { done: true } });
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      gate.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('bounds the evented run drain with drainTimeout', async () => {
+    const gate = deferred();
+    const stepStarted = deferred();
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { gated: makeGatedWorkflow(gate.promise, () => stepStarted.resolve()) } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run = await mastra.getWorkflow('gated').createRun();
+      void run.start({ inputData: {} }).catch(() => {});
+      await stepStarted.promise;
+
+      // drainTimeout is one shared deadline for the whole shutdown, not a
+      // per-phase allowance: the stuck run is the same promise the worker
+      // and push-event drains would wait on, so it must not be charged twice.
+      const startedAt = Date.now();
+      await mastra.shutdown({ drainTimeout: 500 });
+
+      expect(Date.now() - startedAt).toBeLessThan(800);
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      gate.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('drains a run that starts while an earlier run is still draining', async () => {
+    const gate1 = deferred();
+    const gate2 = deferred();
+    const started1 = deferred();
+    const started2 = deferred();
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: {
+        first: makeGatedWorkflow(gate1.promise, () => started1.resolve(), 'first'),
+        second: makeGatedWorkflow(gate2.promise, () => started2.resolve(), 'second'),
+      } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run1 = await mastra.getWorkflow('first').createRun();
+      const result1 = run1.start({ inputData: {} });
+      await started1.promise;
+
+      const shutdown = mastra.shutdown({ drainTimeout: 5_000 });
+
+      // Second run starts after shutdown() took its first snapshot.
+      const run2 = await mastra.getWorkflow('second').createRun();
+      const result2 = run2.start({ inputData: {} });
+      await started2.promise;
+      gate1.resolve();
+      await expect(result1).resolves.toMatchObject({ status: 'success' });
+
+      // Only the second run holds shutdown open now; it must still be drained.
+      await new Promise(r => setTimeout(r, 50));
+      gate2.resolve();
+      await expect(result2).resolves.toMatchObject({ status: 'success' });
+      await shutdown;
+    } finally {
+      gate1.resolve();
+      gate2.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('shares the drain deadline with the push-mode event drain', async () => {
+    const gate = deferred();
+    const stepStarted = deferred();
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new PushOnlyPubSub(),
+      workflows: { gated: makeGatedWorkflow(gate.promise, () => stepStarted.resolve()) } as any,
+    });
+
+    try {
+      await mastra.startWorkers();
+      const run = await mastra.getWorkflow('gated').createRun();
+      void run.start({ inputData: {} }).catch(() => {});
+      await stepStarted.promise;
+
+      const startedAt = Date.now();
+      await mastra.shutdown({ drainTimeout: 500 });
+
+      expect(Date.now() - startedAt).toBeLessThan(800);
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      gate.resolve();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('stopWorkers waits for an in-flight push-mode workflow event', async () => {
+    const handling = deferred();
+    const handled = deferred();
+    const pubsub = new PushOnlyPubSub();
+    const flush = vi.spyOn(pubsub, 'flush');
+    const mastra = new Mastra({ logger: false, pubsub, storage: new MockStore(), workflows: {} as any });
+
+    try {
+      await mastra.startWorkers();
+      vi.spyOn(mastra, 'handleWorkflowEvent').mockImplementation(async () => {
+        handled.resolve();
+        await handling.promise;
+        return { ok: true };
+      });
+      await pubsub.publish('workflows', { type: 'workflow.start', runId: 'run-1', data: {} } as any);
+      await handled.promise;
+
+      let stopped = false;
+      const stop = mastra.stopWorkers().then(() => {
+        stopped = true;
+      });
+      await new Promise(r => setTimeout(r, 20));
+      expect(stopped).toBe(false);
+      expect(flush).not.toHaveBeenCalled();
+
+      handling.resolve();
+      await stop;
+      expect(flush).toHaveBeenCalled();
+    } finally {
+      handling.resolve();
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
+    }
+  });
+
+  it('rejects an invalid drainTimeout', async () => {
+    const mastra = new Mastra({ logger: false, workers: false });
+    try {
+      await expect(mastra.shutdown({ drainTimeout: -1 })).rejects.toThrow(RangeError);
+      await expect(mastra.shutdown({ drainTimeout: Number.NaN })).rejects.toThrow(RangeError);
+      // Node clamps timers above 2^31-1 to 1ms, which would silently skip the drain.
+      await expect(mastra.shutdown({ drainTimeout: 2_147_483_648 })).rejects.toThrow(RangeError);
+      await expect(mastra.stopWorkers({ drainTimeout: -1 })).rejects.toThrow(RangeError);
+    } finally {
+      await mastra.shutdown();
+      mastra.__unregisterHooks();
     }
   });
 

@@ -1,14 +1,25 @@
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useScopeControl } from '../SettingsScope';
-import type { SettingsScope } from '../SettingsScope';
+import type { ScopeControl, SettingsScope } from '../SettingsScope';
 import { SettingsSubsection } from '../SettingsSubsection';
 
-function ScopeHarness({ options }: { options: SettingsScope[] }) {
-  const control = useScopeControl(options);
-  return <SettingsSubsection scope={control} title="Provider access" />;
+function ScopeHarness({
+  options,
+  disabledReasons,
+}: {
+  options: SettingsScope[];
+  disabledReasons?: ScopeControl['disabledReasons'];
+}) {
+  const control = useScopeControl(options, disabledReasons);
+  return (
+    <TooltipProvider delayDuration={0}>
+      <SettingsSubsection scope={control} title="Provider access" />
+    </TooltipProvider>
+  );
 }
 
 describe('SettingsSubsection', () => {
@@ -81,6 +92,42 @@ describe('SettingsSubsection', () => {
 
       expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
       expect(screen.getByText('Personal')).toBeInTheDocument();
+    });
+  });
+
+  describe('given a scope the caller may not pick', () => {
+    it('keeps it visible but greyed, ignores the click, and says why on hover', async () => {
+      const user = userEvent.setup();
+      render(<ScopeHarness options={['personal', 'org']} disabledReasons={{ org: 'Admins only' }} />);
+
+      const orgWide = screen.getByRole('button', { name: 'Org-wide' });
+      expect(orgWide).toHaveAttribute('aria-disabled', 'true');
+
+      await user.hover(orgWide);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Admins only');
+
+      await user.click(orgWide);
+      expect(screen.getByRole('button', { name: 'Personal' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('lands on the first scope the caller may pick, not the first listed', () => {
+      render(<ScopeHarness options={['personal', 'org']} disabledReasons={{ personal: 'Unavailable' }} />);
+
+      expect(screen.getByRole('button', { name: 'Org-wide' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Personal' })).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('falls back when the permission answer takes the picked scope away', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<ScopeHarness options={['personal', 'org']} />);
+
+      await user.click(screen.getByRole('button', { name: 'Org-wide' }));
+      expect(screen.getByRole('button', { name: 'Org-wide' })).toHaveAttribute('aria-pressed', 'true');
+
+      rerender(<ScopeHarness options={['personal', 'org']} disabledReasons={{ org: 'Admins only' }} />);
+
+      expect(screen.getByRole('button', { name: 'Personal' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Org-wide' })).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });

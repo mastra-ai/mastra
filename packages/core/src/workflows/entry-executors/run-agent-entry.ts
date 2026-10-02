@@ -1,5 +1,6 @@
 import type { ReadableStream } from 'node:stream/web';
 import { TripWire } from '../../agent/trip-wire';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { PubSub } from '../../events';
 import type { Mastra } from '../../mastra';
 import { resolveObservabilityContext } from '../../observability';
@@ -66,6 +67,11 @@ export async function runAgentEntry(
 
   // Track structured output result
   let structuredResult: any = null;
+  // Distinguishes "no object produced" from a validly-parsed falsy object
+  // (e.g. `0`/`false`/`""` for primitive-root schemas) at the return site.
+  let structuredResultProduced = false;
+  // Retained for diagnostics when the structured-output guard fires.
+  let finishResult: any = undefined;
 
   const toolData = {
     name: agent.name,
@@ -76,8 +82,10 @@ export async function runAgentEntry(
 
   const handleFinish = (result: any) => {
     const resultWithObject = result as typeof result & { object?: unknown };
-    if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+    finishResult = result;
+    if (agentOptions?.structuredOutput?.schema && resultWithObject.object !== undefined) {
       structuredResult = resultWithObject.object;
+      structuredResultProduced = true;
     }
     streamPromise.resolve(result.text);
     void agentOptions?.onFinish?.(result);
@@ -141,8 +149,26 @@ export async function runAgentEntry(
     return abort();
   }
 
+  // A step that declared a structured-output schema but finished without an
+  // object must fail closed rather than silently returning `{ text }` as
+  // success. Reuse STRUCTURED_OUTPUT_OBJECT_UNDEFINED so this matches what
+  // isStructuredOutputFormatError already recognises across the agent stack.
+  if (agentOptions?.structuredOutput?.schema && !structuredResultProduced) {
+    throw new MastraError({
+      id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text: `Agent step '${entry.id}' declared structuredOutput.schema but the agent finished without producing an object.`,
+      details: {
+        stepId: entry.id,
+        finishReason: finishResult?.finishReason ?? 'unknown',
+        usage: finishResult?.usage,
+      },
+    });
+  }
+
   // Return structured output if available, otherwise default text
-  if (structuredResult !== null) {
+  if (structuredResultProduced) {
     return structuredResult;
   }
   return {

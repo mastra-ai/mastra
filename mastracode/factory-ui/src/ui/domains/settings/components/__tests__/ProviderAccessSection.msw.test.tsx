@@ -461,8 +461,9 @@ describe('ProviderAccessSection', () => {
       expect(orgWide()).toHaveAttribute('aria-pressed', 'false');
     });
 
-    it('offers members without org rights only the personal view, with org coverage visible per row', async () => {
+    it('shows members without org rights the org view greyed with the reason, org coverage visible per row', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      const user = userEvent.setup();
       server.use(
         authenticated(),
         http.get(PROVIDERS_URL, () =>
@@ -484,13 +485,94 @@ describe('ProviderAccessSection', () => {
       renderWithProviders(<ProviderAccessSection />);
 
       await screen.findByText('Anthropic');
-      await waitFor(() => expect(screen.getByText('Personal')).toBeInTheDocument());
-      expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
+      await waitFor(() => expect(orgWide()).toHaveAttribute('aria-disabled', 'true'));
+      expect(personal()).toHaveAttribute('aria-pressed', 'true');
+      await user.hover(orgWide());
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        'Only organization admins can manage org-wide credentials.',
+      );
       expect(within(rowFor('anthropic')).getByText('Covered by org')).toBeInTheDocument();
       expect(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' })).toBeInTheDocument();
       expect(
         within(rowFor('anthropic')).queryByRole('button', { name: 'Sign out of Anthropic for the org' }),
       ).not.toBeInTheDocument();
+    });
+
+    it('fixes onboarding API-key management to personal scope without treating org coverage as personal', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      const providers: ProviderInfo[] = [
+        { provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' },
+      ];
+      let putBody: unknown;
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.put(keyUrl('openai'), async ({ request }) => {
+          putBody = await request.json();
+          providers[0] = {
+            ...providers[0],
+            source: 'stored-user',
+            userCredential: 'api_key',
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      const { client } = renderWithProviders(<ProviderAccessSection fixedScope="user" />);
+
+      expect(screen.queryByRole('button', { name: 'Personal' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('OpenAI');
+      expect(within(rowFor('openai')).getByText('Not set')).toBeInTheDocument();
+      expect(within(rowFor('openai')).queryByText('Covered by org')).not.toBeInTheDocument();
+
+      await user.click(within(rowFor('openai')).getByRole('button', { name: 'Add API key for OpenAI' }));
+      expect(screen.queryByText('Just me')).not.toBeInTheDocument();
+      expect(screen.queryByText('Everyone in org')).not.toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitForMutationsIdle(client);
+      expect(putBody).toEqual({ key: 'sk-personal', scope: 'user' });
+      expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument();
+    });
+
+    it('starts onboarding OAuth at personal scope', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      let startBody: unknown;
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([
+            {
+              provider: 'anthropic',
+              source: 'oauth-org',
+              orgCredential: 'oauth',
+              oauth: { supported: true, modes: ['paste-code'] },
+            },
+          ]),
+        ),
+        http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+          startBody = await request.json();
+          return HttpResponse.json({
+            sessionId: 'session-personal',
+            kind: 'paste-code',
+            url: 'https://example.com/authorize',
+            instructions: 'Authorize and paste the code.',
+            expiresAt: Date.now() + 60_000,
+          });
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ProviderAccessSection fixedScope="user" />);
+
+      await screen.findByText('Anthropic');
+      expect(within(rowFor('anthropic')).getByText('Not set')).toBeInTheDocument();
+      await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' }));
+
+      await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'user' }));
     });
   });
 

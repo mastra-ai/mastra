@@ -2,6 +2,7 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CardDescription, CardTitle } from '@mastra/playground-ui/components/Card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useId } from 'react';
 
@@ -34,8 +35,8 @@ export function AgentWorkflowDetails({ agentName, workflows }: AgentWorkflowDeta
             size="sm"
             className="pointer-events-auto"
             aria-label={`Show ${workflowCount} for ${agentName}`}
+            icon={<WorkflowIcon aria-hidden="true" />}
           >
-            <WorkflowIcon aria-hidden="true" />
             <span>{workflowEntries.length}</span>
           </Button>
         }
@@ -56,9 +57,9 @@ export function AgentWorkflowDetails({ agentName, workflows }: AgentWorkflowDeta
           >
             {workflowEntries.map(([workflowKey, workflow]) => (
               <li key={workflowKey} className="grid gap-1">
-                <span className="overflow-wrap-anywhere text-ui-sm text-neutral5 font-medium">
+                <Txt as="span" variant="column" tone="ink" className="overflow-wrap-anywhere">
                   {workflow.name || workflowKey}
-                </span>
+                </Txt>
                 {workflow.description ? (
                   <CardDescription className="overflow-wrap-anywhere">{workflow.description}</CardDescription>
                 ) : null}

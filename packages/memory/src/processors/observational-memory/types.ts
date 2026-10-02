@@ -1,4 +1,5 @@
-import type { AgentConfig } from '@mastra/core/agent';
+import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
+import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -56,13 +57,40 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | 'auto' | false;
+export type ActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs, e.g. `{ default: 'auto', anthropic: '1h' }`.
+ * Keys match the actor model's provider before the first `.`, case-insensitively.
+ */
+export type ActivationTTLByProvider = {
+  default?: ActivationTTLValue;
+  [provider: string]: ActivationTTLValue | undefined;
+};
+
+export type ActivationTTL = ActivationTTLValue | ActivationTTLByProvider;
 export type ResolvedActivationTTL = number | 'auto';
+
+/**
+ * Parsed form of {@link ActivationTTLByProvider}. Provider keys are lowercased.
+ * A provider value of `false` disables idle activation for that provider.
+ * @internal
+ */
+export interface ParsedActivationTTLMap {
+  default?: ResolvedActivationTTL;
+  providers: Record<string, ResolvedActivationTTL | false>;
+}
 
 /**
  * Configuration for the observation step (Observer agent).
  */
 export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
+/**
+ * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
+ * fields into this before combining them (`??`, ternaries) — see `WidenModelId` in core.
+ */
+export type WidenedObservationalMemoryModel = WidenModelId<ObservationalMemoryModel>;
 
 /**
  * Controls which continuation-hint sections OM asks the Observer and Reflector to emit.
@@ -96,6 +124,12 @@ export interface ObservationConfig {
    */
   model?: ObservationalMemoryModel;
 
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Token count of unobserved messages that triggers observation.
    * When unobserved message tokens exceed this, the Observer is called.
@@ -106,10 +140,10 @@ export interface ObservationConfig {
 
   /**
    * Model settings for the Observer agent.
-   * @default { temperature: 0.3 }
+   * @default { temperature: 0.3 } for models known to support temperature
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `maxOutputTokens: 100_000` is only applied when using the built-in
+   * default model selection or `ModelByInputTokens`.
    */
   modelSettings?: ModelSettings;
 
@@ -273,7 +307,10 @@ export interface ObservationConfig {
    * endpoints) while the main agent uses a multimodal model. The same
    * filter applies to tool results that contain image or file parts.
    *
-   * @default true
+   * When omitted, images and PDFs are forwarded. Use `true` to explicitly
+   * forward every attachment type.
+   *
+   * @default ['image/*', 'application/pdf']
    */
   observeAttachments?: 'auto' | boolean | string[];
 }
@@ -295,6 +332,12 @@ export interface ReflectionConfig {
    */
   model?: ObservationalMemoryModel;
 
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
+
   /**
    * Token count of observations that triggers reflection.
    * When observation tokens exceed this, the Reflector is called to condense them.
@@ -305,10 +348,10 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0 }
+   * @default { temperature: 0 } for models known to support temperature
    *
-   * Note: `maxOutputTokens: 100_000` is only applied by default when using
-   * the built-in default model selection.
+   * Note: The default `maxOutputTokens: 100_000` is only applied when using the built-in
+   * default model selection or `ModelByInputTokens`.
    */
   modelSettings?: ModelSettings;
 
@@ -545,6 +588,12 @@ export interface DataOmObservationFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
     /** The OM record ID */
     recordId: string;
 
@@ -727,6 +776,12 @@ export interface DataOmBufferingFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
     /** The OM record ID */
     recordId: string;
 
@@ -883,6 +938,7 @@ export interface ObservationDebugEvent {
     | 'observation_complete'
     | 'reflection_triggered'
     | 'reflection_complete'
+    | 'reflection_failed'
     | 'tokens_accumulated'
     | 'step_progress';
   timestamp: Date;
@@ -905,6 +961,10 @@ export interface ObservationDebugEvent {
   observations?: string;
   /** Previous observations (before this event) */
   previousObservations?: string;
+  /** Failure metadata for failed observation or reflection events */
+  failurePolicy?: 'abort' | 'continue';
+  failureKind?: 'observer-model' | 'reflector-model';
+  error?: string;
   /** Observer's raw output */
   rawObserverOutput?: string;
   /** LLM usage from Observer/Reflector calls */
@@ -974,6 +1034,7 @@ export interface ObservationalMemoryConfig {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
 
   /**
@@ -999,6 +1060,12 @@ export interface ObservationalMemoryConfig {
    * Memory scope for observations.
    * - 'resource': Observations span all threads for a resource (cross-thread memory)
    * - 'thread': Observations are per-thread (default)
+   *
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1021,6 +1088,11 @@ export interface ObservationalMemoryConfig {
    * Failed async-buffer cycles never throw (fire-and-forget), so failures are
    * reported through the end hook's `error` field. An end hook may fire with
    * neither `usage` nor `error` when a cycle concludes without a model call.
+   *
+   * Also accepts transform hooks (`beforeObservation`, `afterObservation`,
+   * `beforeReflection`, `afterReflection`) that can filter the messages sent
+   * to the observer or rewrite observation/reflection text before it is
+   * persisted. See {@link ObserveTransformHooks}.
    */
   hooks?: ObserveHooks;
 
@@ -1065,7 +1137,8 @@ export interface ObservationalMemoryConfig {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`, `"auto"`,
+   * or an object of per-provider TTLs like `{ default: 'auto', anthropic: '1h' }`.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached.
@@ -1098,6 +1171,8 @@ export interface ObservationalMemoryConfig {
  */
 export interface ResolvedObservationConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1113,7 +1188,7 @@ export interface ResolvedObservationConfig {
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -1132,6 +1207,8 @@ export interface ResolvedObservationConfig {
 
 export interface ResolvedReflectionConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1142,7 +1219,7 @@ export interface ResolvedReflectionConfig {
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
@@ -1183,7 +1260,56 @@ export interface ObserveHookContext {
   trigger?: ObserveTrigger;
 }
 
-export interface ObserveHooks {
+/**
+ * Transform hooks that intercept the data flowing through an observation or
+ * reflection cycle. Unlike lifecycle hooks they are always awaited (regardless
+ * of `hookExecution`) because the pipeline cannot continue until the transform
+ * settles. Returning `undefined` passes the payload through unchanged (useful
+ * for logging or syncing to external systems); returning an object replaces
+ * it. A thrown error fails the cycle so untransformed data is never persisted;
+ * on async-buffer paths the failure surfaces via the matching end hook's
+ * `error` field. Config-level only.
+ */
+export interface ObserveTransformHooks {
+  /**
+   * Runs before the observer model sees the unobserved messages. Return
+   * `{ messages }` to filter or redact them. Returning an empty array skips
+   * the observer model call for this cycle; the original messages are still
+   * marked as observed.
+   */
+  beforeObservation?: (
+    input: { messages: MastraDBMessage[] } & ObserveHookContext,
+  ) => void | { messages: MastraDBMessage[] } | Promise<void | { messages: MastraDBMessage[] }>;
+  /**
+   * Runs on the observer's parsed observation text before it is merged into
+   * the record. Return `{ observations }` to replace it.
+   */
+  afterObservation?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+  /**
+   * Runs on the observation text about to be compressed by the reflector.
+   * Return `{ observations }` to replace what the reflector sees.
+   */
+  beforeReflection?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+  /**
+   * Runs on the reflector's parsed output before it is persisted as the new
+   * generation (or buffered reflection). Return `{ observations }` to replace it.
+   */
+  afterReflection?: (
+    input: { observations: string } & ObserveHookContext,
+  ) => void | { observations: string } | Promise<void | { observations: string }>;
+}
+
+export interface ObserveHooks extends ObserveLifecycleHooks, ObserveTransformHooks {}
+
+/**
+ * Telemetry-style hooks fired around observation/reflection cycles. These are
+ * the hooks accepted per call by `observe({ hooks })`.
+ */
+export interface ObserveLifecycleHooks {
   onObservationStart?: (info?: ObserveHookContext) => void | Promise<void>;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM

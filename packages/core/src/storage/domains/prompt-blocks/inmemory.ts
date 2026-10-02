@@ -96,7 +96,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
       ...existingBlock,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
-      ...(status !== undefined && { status: status as StoragePromptBlockType['status'] }),
+      ...(status !== undefined && { status }),
       ...(metadata !== undefined && {
         metadata: { ...existingBlock.metadata, ...metadata },
       }),

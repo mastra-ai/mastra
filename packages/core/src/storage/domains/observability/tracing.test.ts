@@ -1,12 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { SpanType } from '../../../observability/types';
 import {
+  BATCH_DELETE_TRACES_MAX_IDS,
+  batchDeleteTracesArgsSchema,
   buildInputPreview,
   extractBranchSpans,
   getTraceLightResponseSchema,
   INPUT_PREVIEW_MAX_LENGTH,
   lightSpanRecordSchema,
 } from './tracing';
+
+describe('batchDeleteTracesArgsSchema', () => {
+  it('limits the number of trace IDs in a batch', () => {
+    expect(
+      batchDeleteTracesArgsSchema.safeParse({
+        traceIds: Array.from({ length: BATCH_DELETE_TRACES_MAX_IDS }, (_, index) => `trace-${index}`),
+      }).success,
+    ).toBe(true);
+    expect(
+      batchDeleteTracesArgsSchema.safeParse({
+        traceIds: Array.from({ length: BATCH_DELETE_TRACES_MAX_IDS + 1 }, (_, index) => `trace-${index}`),
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe('lightSpanRecordSchema', () => {
   const validLightSpan = {
@@ -23,6 +40,8 @@ describe('lightSpanRecordSchema', () => {
     entityType: 'agent',
     entityId: 'agent-1',
     entityName: 'Test Agent',
+    threadId: 'thread-1',
+    resourceId: 'user-1',
     metadata: { environment: 'production' },
     createdAt: new Date('2024-01-01T00:00:00Z'),
     updatedAt: new Date('2024-01-01T00:00:01Z'),
@@ -43,6 +62,8 @@ describe('lightSpanRecordSchema', () => {
     expect(result.entityType).toBe('agent');
     expect(result.entityId).toBe('agent-1');
     expect(result.entityName).toBe('Test Agent');
+    expect(result.threadId).toBe('thread-1');
+    expect(result.resourceId).toBe('user-1');
     expect(result.metadata).toEqual({ environment: 'production' });
     expect(result.createdAt).toEqual(new Date('2024-01-01T00:00:00Z'));
     expect(result.updatedAt).toEqual(new Date('2024-01-01T00:00:01Z'));
@@ -69,6 +90,8 @@ describe('lightSpanRecordSchema', () => {
     expect(result.entityType).toBeUndefined();
     expect(result.entityId).toBeUndefined();
     expect(result.entityName).toBeUndefined();
+    expect(result.threadId).toBeUndefined();
+    expect(result.resourceId).toBeUndefined();
     expect(result.metadata).toBeUndefined();
   });
 

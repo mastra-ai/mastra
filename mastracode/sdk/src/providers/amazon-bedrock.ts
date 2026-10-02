@@ -21,6 +21,41 @@ export interface BedrockModelEntry {
 }
 
 /**
+ * A models.dev catalog entry for one Bedrock model.
+ *
+ * Most entries carry no `provider` block: they are served by the SigV4
+ * `bedrock-runtime` Converse API, which is what this catalog feeds. An entry
+ * that *does* carry one is overriding that transport.
+ */
+interface BedrockCatalogEntry {
+  provider?: {
+    npm?: string;
+    api?: string;
+    shape?: string;
+  };
+}
+
+/**
+ * True when the catalog entry asks for a transport this catalog cannot serve.
+ *
+ * Every id returned here is handed to `createAmazonBedrock()(modelId)` by
+ * `amazon-bedrock-gateway.ts`, i.e. the Converse API, unconditionally. A
+ * `provider` override in the catalog means the model wants a different endpoint
+ * and API shape: the nine `bedrock-mantle` models point at
+ * `https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1` with
+ * `shape: "responses"`. Advertising them makes them selectable in `/models` and
+ * in packs even though the request that follows cannot reach them.
+ *
+ * Filtering is deliberately conservative: it hides what is currently unusable
+ * rather than guessing at a transport. Routing these to Mantle properly is a
+ * separate change and a design call for the maintainers.
+ */
+function needsUnsupportedTransport(entry: unknown): boolean {
+  const provider = (entry as BedrockCatalogEntry | null)?.provider;
+  return Boolean(provider && (provider.npm || provider.api || provider.shape));
+}
+
+/**
  * A small, stable fallback so Bedrock packs keep working offline or when
  * models.dev is unreachable. Intentionally minimal — the live catalog is the
  * source of truth and supersedes this within one fetch.
@@ -54,7 +89,9 @@ async function fetchBedrockModels(signal: AbortSignal): Promise<BedrockModelEntr
   const data = (await response.json()) as Record<string, { models?: Record<string, unknown> }>;
   const provider = data[BEDROCK_PROVIDER_ID];
   const models = provider?.models ?? {};
-  return Object.keys(models)
+  return Object.entries(models)
+    .filter(([, entry]) => !needsUnsupportedTransport(entry))
+    .map(([id]) => id)
     .sort()
     .map(id => ({ id }));
 }

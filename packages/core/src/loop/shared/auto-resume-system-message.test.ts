@@ -41,13 +41,13 @@ describe('extractSuspendedToolsFromMessages', () => {
   it('reads suspendedTools metadata when present', () => {
     const suspended = { fooTool: { toolName: 'fooTool', resumeSchema: {} } };
     const messages = [makeAssistantMessage({ metadata: { suspendedTools: suspended } })];
-    expect(extractSuspendedToolsFromMessages(messages)).toEqual([suspended.fooTool]);
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([{ toolCallId: 'fooTool', ...suspended.fooTool }]);
   });
 
   it('reads pendingToolApprovals metadata as a fallback', () => {
     const pending = { approveMe: { toolName: 'approveMe', type: 'approval' } };
     const messages = [makeAssistantMessage({ metadata: { pendingToolApprovals: pending } })];
-    expect(extractSuspendedToolsFromMessages(messages)).toEqual([pending.approveMe]);
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([{ toolCallId: 'approveMe', ...pending.approveMe }]);
   });
 
   it('falls back to data-tool-call-suspended parts when metadata is absent', () => {
@@ -64,11 +64,10 @@ describe('extractSuspendedToolsFromMessages', () => {
     expect((result[0] as { toolName: string }).toolName).toBe('fooTool');
   });
 
-  it('surfaces delegatedRunId as runId so auto-resume targets the inner suspended run', () => {
+  it('preserves the original toolCallId and surfaces delegatedRunId for diagnostics', () => {
     // Persisted metadata stores the OUTER resumable runId (for refresh/restart
-    // resume) with the inner suspended run as `delegatedRunId`. The auto-resume
-    // directive tells the model to echo `runId` back as `suspendedToolRunId`,
-    // which must be the INNER run — so extraction swaps it in.
+    // resume) with the inner suspended run as `delegatedRunId`. Auto-resume uses
+    // the original toolCallId for correlation while keeping the inner run visible.
     const pending = {
       'tc-1': { toolCallId: 'tc-1', toolName: 'agent-subAgent', runId: 'outer-run', delegatedRunId: 'inner-run' },
     };
@@ -112,13 +111,31 @@ describe('extractSuspendedToolsFromMessages', () => {
     ]);
   });
 
+  it('preserves distinct toolCallIds for parallel calls to the same tool', () => {
+    const messages = [
+      makeAssistantMessage({
+        metadata: {
+          suspendedTools: {
+            'call-a': { toolName: 'agent-researcher', delegatedRunId: 'inner-a' },
+            'call-b': { toolName: 'agent-researcher', delegatedRunId: 'inner-b' },
+          },
+        },
+      }),
+    ];
+
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([
+      { toolCallId: 'call-a', toolName: 'agent-researcher', runId: 'inner-a' },
+      { toolCallId: 'call-b', toolName: 'agent-researcher', runId: 'inner-b' },
+    ]);
+  });
+
   it('walks assistant messages newest-to-oldest', () => {
     const newerSuspended = { newer: { toolName: 'newer' } };
     const messages = [
       makeAssistantMessage({ metadata: { suspendedTools: { older: { toolName: 'older' } } } }),
       makeAssistantMessage({ metadata: { suspendedTools: newerSuspended } }),
     ];
-    expect(extractSuspendedToolsFromMessages(messages)).toEqual([newerSuspended.newer]);
+    expect(extractSuspendedToolsFromMessages(messages)).toEqual([{ toolCallId: 'newer', ...newerSuspended.newer }]);
   });
 });
 
@@ -132,6 +149,7 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix).not.toBeNull();
     expect(suffix!).toContain('Analyse the suspended tools');
     expect(suffix!).toContain('fooTool');
+    expect(suffix!).toContain('suspendedToolCallId');
   });
 
   it('returns null when only approval suspensions are present', () => {

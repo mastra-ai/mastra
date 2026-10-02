@@ -1,11 +1,9 @@
 import type { McpServerListResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
 
-export const useMCPServers = () => {
+export const useMCPServers = (requestContext?: Record<string, any>) => {
   const client = useMastraClient();
-  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['mcp-servers'],

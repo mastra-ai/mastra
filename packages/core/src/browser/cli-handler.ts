@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { shellQuote, splitShellCommand, reassembleShellCommand } from '../workspace/sandbox/utils';
 import type { MastraBrowser } from './browser';
 
@@ -198,6 +199,26 @@ export class BrowserCliHandler {
    * chained command string (commands joined by &&, ||, or ;).
    */
   injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
+    const { header, suffix } = this.getShellHeader(command);
+    const headerParts = splitShellCommand(header);
+    if (headerParts.parts.some(part => this.isBrowserUseStdinCommand(part))) {
+      const modifiedParts = headerParts.parts.map(part => {
+        const trimmed = part.trim();
+        const cliMatch = this.getBrowserCliConfig(trimmed);
+        return cliMatch && !this.isBrowserUseStdinCommand(trimmed)
+          ? this.injectCdpUrlIntoSingleCommand(trimmed, cdpUrl, cliMatch.config, threadId)
+          : part;
+      });
+      const transformed = modifiedParts.some((part, index) => part !== headerParts.parts[index])
+        ? reassembleShellCommand(modifiedParts, headerParts.operators) + suffix
+        : command;
+      const name = createHash('sha256')
+        .update(JSON.stringify([threadId ?? 'default', cdpUrl]))
+        .digest('hex')
+        .slice(0, 16);
+      return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(`mastra-${name}`)} sh -c ${shellQuote(transformed)}`;
+    }
+
     const { parts, operators } = splitShellCommand(command);
 
     const modifiedParts = parts.map((part: string) => {
@@ -269,6 +290,54 @@ export class BrowserCliHandler {
     return warmups;
   }
 
+  private getShellHeader(command: string): { header: string; suffix: string } {
+    // Join shell continuations in the header only; never inspect a heredoc body.
+    let header = '';
+    let quote = '';
+    let continued = false;
+    let hasHeredoc = false;
+    const source = command.trimStart();
+    let i = 0;
+    for (; i < source.length; i++) {
+      const char = source[i]!;
+      if (char === '\\' && quote !== "'" && i + 1 < source.length) {
+        const next = source[++i]!;
+        if (next !== '\n') {
+          header += char + next;
+          continued = false;
+        }
+        continue;
+      }
+      if (char === '\n' && !quote) {
+        // A pending heredoc starts its payload here, even after a shell operator.
+        if (hasHeredoc || !continued) break;
+        header += ' ';
+        continue;
+      }
+      if (!quote && (source.slice(i, i + 2) === '&&' || source.slice(i, i + 2) === '||')) {
+        header += source.slice(i, i + 2);
+        i++;
+        continued = true;
+        continue;
+      }
+      if (!quote && source.slice(i, i + 2) === '<<') hasHeredoc = true;
+      if (!/\s/.test(char)) continued = !quote && (char === '|' || char === ';');
+      if (char === quote) quote = '';
+      else if (!quote && (char === "'" || char === '"')) quote = char;
+      header += char;
+    }
+    return { header, suffix: source.slice(i) };
+  }
+
+  private isBrowserUseStdinCommand(command: string): boolean {
+    const word = String.raw`(?:[^\s<>;&|"'\\]|\\.|"[^"]*"|'[^']*')+`;
+    const redirection = String.raw`\d*(?:<<-?|>>?|<|[<>]&|<>|>\|)\s*${word}\s*`;
+    const stdinInvocation = new RegExp(
+      String.raw`^\s*(?:browser-use|browseruse|browser|bu)(?=\s|[<>]|$)\s*(?:${redirection})*$`,
+    );
+    return stdinInvocation.test(command);
+  }
+
   /**
    * Process a command for browser CLI handling.
    * Detects browser CLIs, checks for external CDP, and prepares injection.
@@ -285,6 +354,23 @@ export class BrowserCliHandler {
     /** External CDP URL if detected */
     externalCdpUrl: string | null;
   } {
+    // Python on stdin is opaque: shell splitting and flag detection would inspect its contents.
+    const { header } = this.getShellHeader(command);
+    const headerParts = splitShellCommand(header).parts;
+    if (headerParts.some(part => this.isBrowserUseStdinCommand(part))) {
+      const browserClis = headerParts
+        .map(part => this.getBrowserCliConfig(part.trim()))
+        .filter((match): match is NonNullable<typeof match> => match !== null);
+      const legacyParts = headerParts.filter(part => !this.isBrowserUseStdinCommand(part));
+      const usingExternalCdp = this.hasExternalCdpFlag(legacyParts);
+      return {
+        browserClis,
+        parts: [command],
+        usingExternalCdp,
+        externalCdpUrl: usingExternalCdp ? this.extractExternalCdpUrl(legacyParts) : null,
+      };
+    }
+
     const { parts } = splitShellCommand(command);
 
     const browserClis = parts

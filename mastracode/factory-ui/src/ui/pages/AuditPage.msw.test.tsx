@@ -89,6 +89,7 @@ describe('Audit log', () => {
   it('shows event density, custom rows, expandable details, and automatically fetches the next page', async () => {
     vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
     const requestedCursors: Array<string | null> = [];
+    const requestedNamespaces: Array<string | null> = [];
     const recent = event('event-recent', {
       metadata: {
         to: 'review',
@@ -107,8 +108,10 @@ describe('Audit log', () => {
     server.use(
       ...baseHandlers(),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
-        const cursor = new URL(request.url).searchParams.get('before');
+        const { searchParams } = new URL(request.url);
+        const cursor = searchParams.get('before');
         requestedCursors.push(cursor);
+        requestedNamespaces.push(searchParams.get('namespaces'));
         const actors = { 'user-1': { id: 'canonical-user-1', name: 'Damien Schneider' } };
         return cursor
           ? HttpResponse.json({ events: [older], actors })
@@ -170,6 +173,10 @@ describe('Audit log', () => {
     await user.click(categories.getByRole('button', { name: 'Agent' }));
     expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'true');
     expect(categories.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'true');
+    // The page names namespaces; which actions each one holds is the server's to know.
+    await waitFor(() => expect(requestedNamespaces).toContain('run,agent'));
+    expect(requestedNamespaces).toContain('run');
+    await waitForMutationsIdle(client);
 
     await user.click(categories.getByRole('button', { name: 'All' }));
     await waitFor(() =>
@@ -177,6 +184,7 @@ describe('Audit log', () => {
     );
     expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'false');
     expect(categories.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'false');
+    await waitForMutationsIdle(client);
   });
 
   it('keeps category toggles available when the log is empty', async () => {

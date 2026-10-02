@@ -1,13 +1,13 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
+import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
+import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
-import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -21,7 +21,10 @@ export interface DatasetItemsViewProps {
   onNavigateToDataset?: (datasetId: string) => void;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
+  belowToolbarSlot?: React.ReactNode;
 }
+
+const DATASET_ITEMS_SORT_KEYS = ['createdAt'] as const;
 
 export function DatasetItemsView({
   datasetId,
@@ -29,9 +32,18 @@ export function DatasetItemsView({
   onNavigateToDataset,
   leftSlot,
   rightSlot,
+  belowToolbarSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
+  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: DATASET_ITEMS_SORT_KEYS });
+  const orderBy = useMemo(
+    () =>
+      sort
+        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
+        : undefined,
+    [sort],
+  );
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -51,7 +63,7 @@ export function DatasetItemsView({
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
+  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion, orderBy);
   const { deleteItems } = useDatasetMutations();
 
   // Clicking the already-open item closes the URL-driven panel.
@@ -117,6 +129,7 @@ export function DatasetItemsView({
           items={items}
           leftSlot={leftSlot}
           rightSlot={rightSlot}
+          belowToolbarSlot={belowToolbarSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}
@@ -134,11 +147,18 @@ export function DatasetItemsView({
           searchQuery={searchQuery}
           activeSearchQuery={debouncedSearch}
           onSearchChange={setSearchQuery}
+          sort={sort}
+          onSortChange={onSortChange}
           currentDatasetVersion={dataset?.version}
         />
       </div>
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-      <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
+      <JSONImportDialog
+        datasetId={datasetId}
+        datasetName={dataset?.name}
+        open={importJsonDialogOpen}
+        onOpenChange={setImportJsonDialogOpen}
+      />
       <CreateDatasetFromItemsDialog
         open={createDialogOpen}
         onOpenChange={handleCreateDialogOpenChange}

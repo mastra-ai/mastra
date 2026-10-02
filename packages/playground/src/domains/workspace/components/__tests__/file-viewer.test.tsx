@@ -16,7 +16,7 @@ describe('FileViewer', () => {
     it('renders plain text on the themed surface', () => {
       render(
         <ThemeProvider defaultTheme="light" storageKey="file-viewer-plain-text-theme">
-          <div data-testid="surface-reference" className="bg-surface2" />
+          <div data-testid="surface-reference" className="bg-background" />
           <FileViewer path="hello.txt" content="hello" isLoading={false} />
         </ThemeProvider>,
       );

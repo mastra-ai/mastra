@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { arch, hostname, platform, release } from 'node:os';
 import { getCurrentVersion } from '../../utils/update-check.js';
 import {
@@ -32,7 +31,7 @@ const KIMI_DEVICE_DETAILS = {
 };
 
 export function createKimiCodingDeviceId(): string {
-  return randomUUID().replaceAll('-', '');
+  return globalThis.crypto.randomUUID().replaceAll('-', '');
 }
 
 export function isKimiCodingDeviceId(value: unknown): value is string {
@@ -120,8 +119,7 @@ export async function startKimiCodingDeviceLogin(options?: {
     signal: requestSignal(options?.signal),
   });
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Kimi For Coding device authorization failed: ${response.status}${text ? ` ${text}` : ''}`);
+    throw new Error(`Kimi For Coding device authorization failed: ${response.status}`);
   }
 
   const data = await readJson(response);
@@ -201,10 +199,9 @@ async function pollKimiCodingTokenOnce(
     return { status: 'failed', error: 'Kimi For Coding authorization expired. Please restart login.' };
   }
   if (error === 'access_denied') return { status: 'failed', error: 'Kimi For Coding login was denied.' };
-  const description = typeof data?.error_description === 'string' ? `: ${data.error_description}` : '';
   return {
     status: 'failed',
-    error: `Kimi For Coding token request failed: ${response.status}${typeof error === 'string' ? ` ${error}${description}` : ''}`,
+    error: `Kimi For Coding token request failed: ${response.status}`,
   };
 }
 

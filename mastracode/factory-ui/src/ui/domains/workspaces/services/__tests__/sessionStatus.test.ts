@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chatSessionPhase } from '../sessionStatus';
+import { chatSessionPhase, sessionRowStatus } from '../sessionStatus';
 
 const idle = {
   sessionError: false,
@@ -10,6 +10,19 @@ const idle = {
   initializing: false,
   pending: false,
 };
+
+describe('sessionRowStatus', () => {
+  it('shows a sandbox still coming up over the run already registered on it', () => {
+    expect(sessionRowStatus({ running: true, initializing: true })).toBe('initializing');
+    expect(sessionRowStatus({ running: true, initializing: false })).toBe('working');
+  });
+
+  it('lets a live run outrank a card waiting on a person, and runs no marker when idle', () => {
+    expect(sessionRowStatus({ running: true, initializing: false, attention: true })).toBe('working');
+    expect(sessionRowStatus({ running: false, initializing: false, attention: true })).toBe('ready');
+    expect(sessionRowStatus({ running: false, initializing: false })).toBeUndefined();
+  });
+});
 
 describe('chatSessionPhase', () => {
   it('reports a live run as working even while history still loads', () => {

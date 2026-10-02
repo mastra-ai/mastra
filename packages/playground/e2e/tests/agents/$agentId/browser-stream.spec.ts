@@ -45,8 +45,8 @@ test.describe('Browser stream WebSocket gating', () => {
       await page.goto('/agents/weather-agent/chat/1234');
 
       // Wait for the agent page to settle.
-      await expect(page.getByTestId('thread-sidebar-back')).toContainText('Weather Agent');
-      await expect(page.locator('a:has-text("New Chat")')).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.locator('a:has-text("New Thread")')).toBeVisible();
 
       // Negative assertion: poll for any browser traffic and fail fast if it appears.
       // The poll resolves at the timeout with the final count, which we expect to be 0.
@@ -89,7 +89,7 @@ test.describe('Browser stream WebSocket gating', () => {
 
       await page.goto('/agents/weather-agent/chat/1234');
 
-      await expect(page.getByTestId('thread-sidebar-back')).toContainText('Weather Agent');
+      await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
 
       // The probe should fire once the agent details resolve and the gate flips on.
       await expect

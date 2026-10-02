@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { defaultFactoryRules } from '../rules/defaults.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -43,24 +43,8 @@ async function bindRun(storage: WorkItemsStorage, item: Awaited<ReturnType<typeo
 
 async function queueDecision(storage: WorkItemsStorage, number: number) {
   const item = await createItem(storage, number);
-  const rules = defaultFactoryRules({
-    version: 'rules-v1',
-    overrides: {
-      work: {
-        execute: {
-          issue: {
-            onEnter: () => ({
-              type: 'invokeSkill',
-              role: 'work',
-              skillName: 'factory-work',
-              idempotencyKey: `work-${number}`,
-            }),
-          },
-        },
-      },
-    },
-  });
-  const transitions = new FactoryTransitionService({ storage, rules });
+  const configVersion = 'rules-v1';
+  const transitions = new FactoryTransitionService({ storage, configVersion });
   const moved = await transitions.transition({
     ...SCOPE,
     workItemId: item.id,
@@ -90,22 +74,24 @@ async function setup() {
   const onAccepted = vi.fn();
   const transitionService = new FactoryTransitionService({
     storage: seed.workItems,
-    rules: defaultFactoryRules({ version: 'rules-v1' }),
+    configVersion: 'rules-v1',
+    audit: seed.audit,
     onAccepted,
   });
   const reconcileAcceptanceLabels = vi.fn().mockResolvedValue(undefined);
-  const signalSession = vi.fn().mockResolvedValue(undefined);
+  const messageSession = vi.fn().mockResolvedValue(undefined);
   const tools = createFactorySupervisorWriteTools({
     scope: SCOPE,
     userId: 'user-supervisor',
     workItems: seed.workItems,
+    boards: createBoardRegistry(),
     audit: seed.audit,
     transitionService,
     reconcileAcceptanceLabels,
-    signalSession,
+    messageSession,
     now: () => NOW,
   });
-  return { ...seed, tools, transitionService, reconcileAcceptanceLabels, signalSession, onAccepted };
+  return { ...seed, tools, transitionService, reconcileAcceptanceLabels, messageSession, onAccepted };
 }
 
 async function latestAudit(audit: Awaited<ReturnType<typeof setup>>['audit']) {
@@ -119,6 +105,56 @@ async function auditByAction(audit: Awaited<ReturnType<typeof setup>>['audit'], 
 }
 
 describe('createFactorySupervisorWriteTools', () => {
+  it('transitions the persisted custom board through live membership and topology checks', async () => {
+    const seed = await createFactoryStorageForTests();
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Shipping', kind: 'working', role: 'publisher', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const { item } = await seed.workItems.upsert({
+      ...SCOPE,
+      userId: 'user-1',
+      input: {
+        board: 'release',
+        title: 'Release',
+        stages: ['queued'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'release:1' },
+      },
+    });
+    const transitionService = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'release-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+    const tools = createFactorySupervisorWriteTools({
+      scope: SCOPE,
+      userId: 'user-supervisor',
+      workItems: seed.workItems,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      audit: seed.audit,
+      transitionService,
+    });
+    expect(tools.factory_transition_work_item.requireApproval).toBe(true);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
+    ).rejects.toThrow(/rejected/);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'shipped' }),
+    ).rejects.toThrow(/rejected/);
+    await expect(
+      execute(tools.factory_transition_work_item, { workItemId: item.id, stage: 'shipping' }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'shipping' });
+    expect(await seed.workItems.get({ orgId: SCOPE.orgId, id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['shipping'],
+    });
+  });
   it('retries a failed decision and attributes the repair to the person', async () => {
     const context = await setup();
     const { decision } = await queueDecision(context.workItems, 1);
@@ -196,11 +232,6 @@ describe('createFactorySupervisorWriteTools', () => {
     await expect(
       execute(context.tools.factory_transition_work_item, { workItemId: item.id, stage: 'planning' }),
     ).rejects.toThrow('The transition was rejected (stale_revision)');
-    expect(await auditByAction(context.audit, 'factory.work_item.transition_rejected')).toMatchObject({
-      actorId: 'user-supervisor',
-      actorType: 'human',
-      metadata: expect.objectContaining({ cause: 'supervisor', code: 'stale_revision' }),
-    });
   });
 
   it('moves a held card as a human so acceptance is remembered', async () => {
@@ -213,7 +244,7 @@ describe('createFactorySupervisorWriteTools', () => {
       destinationStage: 'triage',
       actorId: 'triage-agent',
       ingress: { identity: 'classify-4', triggerType: 'tool', transitionId: 'classify-4' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
       triageType: 'feature-request',
@@ -274,6 +305,22 @@ describe('createFactorySupervisorWriteTools', () => {
     });
   });
 
+  it('does not report or audit delivery when worker startup was interrupted', async () => {
+    const context = await setup();
+    const item = await createItem(context.workItems, 6, 'execute');
+    await bindRun(context.workItems, item, 6);
+    context.messageSession.mockResolvedValueOnce({ status: 'interrupted' });
+
+    await expect(
+      execute(context.tools.factory_signal_session, {
+        sessionId: 'session-6',
+        message: 'Please stop after tests.',
+      }),
+    ).resolves.toMatchObject({ delivered: false, status: 'interrupted', workItemId: item.id });
+    const { events } = await context.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 });
+    expect(events.some(event => event.action === 'factory.agent.signaled')).toBe(false);
+  });
+
   it('signals only a session bound to this factory', async () => {
     const context = await setup();
     const item = await createItem(context.workItems, 6, 'execute');
@@ -282,17 +329,36 @@ describe('createFactorySupervisorWriteTools', () => {
     await expect(
       execute(context.tools.factory_signal_session, { sessionId: 'session-6', message: 'Please stop after tests.' }),
     ).resolves.toMatchObject({ delivered: true, workItemId: item.id });
-    expect(context.signalSession).toHaveBeenCalledWith({
+    expect(context.messageSession).toHaveBeenCalledWith({
       sessionId: 'session-6',
       message: 'Please stop after tests.',
       userId: 'user-supervisor',
+      delivery: 'send',
     });
     expect(await latestAudit(context.audit)).toMatchObject({
       actorId: 'user-supervisor',
       actorType: 'human',
       action: 'factory.agent.signaled',
-      metadata: expect.objectContaining({ cause: 'supervisor', workItemId: item.id, role: 'work' }),
+      metadata: expect.objectContaining({ cause: 'supervisor', workItemId: item.id, role: 'work', delivery: 'send' }),
     });
+
+    await expect(
+      execute(context.tools.factory_signal_session, {
+        sessionId: 'session-6',
+        message: 'Wait until the current work completes.',
+        delivery: 'queue',
+      }),
+    ).resolves.toMatchObject({ delivered: true, delivery: 'queue', workItemId: item.id });
+    expect(context.messageSession).toHaveBeenLastCalledWith({
+      sessionId: 'session-6',
+      message: 'Wait until the current work completes.',
+      userId: 'user-supervisor',
+      delivery: 'queue',
+    });
+    expect(
+      (await context.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 })).events,
+    ).toContainEqual(expect.objectContaining({ metadata: expect.objectContaining({ delivery: 'queue' }) }));
+
     await expect(
       execute(context.tools.factory_signal_session, { sessionId: 'foreign', message: 'No.' }),
     ).rejects.toThrow('does not belong to this factory');

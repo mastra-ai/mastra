@@ -987,7 +987,7 @@
     },
     {
       "source": "/docs/community/discord",
-      "destination": "https://discord.gg/BTYqqHKUrf",
+      "destination": "https://discord.gg/mastra-ai",
       "permanent": true
     },
     {
@@ -2218,6 +2218,21 @@
     {
       "source": "/docs/evals/datasets/running-experiments",
       "destination": "/docs/evals/experiments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/connections/connect-mcp-client",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getTelemetry",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry",
+      "destination": "/reference/client-js/observability",
       "permanent": true
     },
     {
@@ -4033,6 +4048,21 @@
     {
       "source": "/docs/evals/datasets/running-experiments/llms.txt",
       "destination": "/docs/evals/experiments/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/connections/connect-mcp-client/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getTelemetry/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry/llms.txt",
+      "destination": "/reference/client-js/observability/llms.txt",
       "permanent": true
     }
   ]

@@ -9,6 +9,7 @@ import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
+import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
@@ -21,6 +22,7 @@ import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
+import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { isSubconsciousEnabled } from './utils/experimental-features.js';
 
 // =============================================================================
@@ -34,6 +36,8 @@ export function setupKeyboardShortcuts(
     exit?: (exitCode: number) => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
+    openBackgroundActivityCenter?: () => void;
+    clearFinishedBackgroundActivities?: () => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -142,8 +146,17 @@ export function setupKeyboardShortcuts(
     for (const shell of state.allShellComponents) {
       shell.setExpanded(state.toolOutputExpanded);
     }
+    // Expanded quiet shell calls leave their shared box, so re-measure chat spacing.
+    reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   });
+
+  if (callbacks.openBackgroundActivityCenter) {
+    state.editor.onAction('openBackgroundActivityCenter', callbacks.openBackgroundActivityCenter);
+  }
+  if (callbacks.clearFinishedBackgroundActivities) {
+    state.editor.onAction('clearFinishedBackgroundActivities', callbacks.clearFinishedBackgroundActivities);
+  }
 
   // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
@@ -215,6 +228,20 @@ export function setupKeyboardShortcuts(
   });
 }
 
+async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<void> {
+  const threadId = state.session.thread.getId();
+  if (!threadId) return;
+  try {
+    const agent = state.controller.getCurrentAgent(state.session);
+    // Only an active goal is being judged; never overwrite a finished or already-paused goal.
+    const record = await agent.getObjective({ threadId });
+    if (record?.status !== 'active') return;
+    await agent.updateObjectiveOptions({ threadId, status: 'paused', pausedReason });
+  } catch {
+    // Persistence is best-effort, like saveToThread.
+  }
+}
+
 function abortActiveGoalJudge(state: TUIState): boolean {
   const activeGoalJudge = state.activeGoalJudge;
   if (!activeGoalJudge) return false;
@@ -232,8 +259,16 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
   // abort handler synchronous.
-  state.goalManager.pause('Judge evaluation was interrupted.');
-  void state.goalManager.saveToThread(state);
+  const pausedReason = 'Judge evaluation was interrupted.';
+  if (state.goalManager.getGoal()) {
+    state.goalManager.pause(pausedReason);
+    void state.goalManager.saveToThread(state);
+  } else {
+    // Nothing is loaded in memory (e.g. another client wrote the goal), so an
+    // empty save would not persist the pause. Pause the stored record directly;
+    // core no-ops when no record exists.
+    void pauseStoredGoal(state, pausedReason);
+  }
   state.activeGoalJudge = undefined;
   state.ui.requestRender();
   return true;
@@ -282,6 +317,9 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.taskProgress = new TaskProgressComponent();
   state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
+  if (state.options.backgroundToolsEnabled) {
+    state.ui.addChild(state.globalBackgroundNoticeContainer);
+  }
   state.ui.addChild(state.editorContainer);
   state.idleCounter = new IdleCounterComponent();
   state.editorContainer.addChild(state.idleCounter);
@@ -465,6 +503,10 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
           { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
+      name: 'schedules',
+      description: 'Create and manage recurring prompts for this thread',
     },
     {
       name: 'profile',
@@ -655,27 +697,45 @@ export function setupKeyHandlers(
 
 export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
+  const reportEventError = (event: { type: string }, err: unknown): void => {
+    // Log but don't crash — individual event errors shouldn't kill the process
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+    if (stack) process.stderr.write(stack + '\n');
+  };
   const listener: AgentControllerEventListener = event => {
-    // Notify at receipt, before queueing: a pending prompt blocks the serial
-    // queue until answered, which would starve any notification queued behind
-    // it — exactly when the user has walked away and needs the ping.
-    notifyForInputRequest(state, event);
-    // PermissionRequest hooks starve the same way (#20861) — dispatch them at
-    // receipt too, before the event is chained onto the serial queue.
-    runPermissionHooksForEvent(state, event);
+    // Notifications and hooks run at receipt, before queueing, so they must
+    // apply the same thread routing the dispatch queue does — otherwise a
+    // detached thread's approval would ping the user and run permission hooks
+    // for a call they cannot act on.
+    if (isEventRoutedToCurrentThread(event, state)) {
+      // Notify at receipt, before queueing: a pending prompt blocks the serial
+      // queue until answered, which would starve any notification queued behind
+      // it — exactly when the user has walked away and needs the ping.
+      notifyForInputRequest(state, event);
+      // PermissionRequest hooks starve the same way (#20861) — dispatch them at
+      // receipt too, before the event is chained onto the serial queue.
+      runPermissionHooksForEvent(state, event);
+    }
     eventQueue = eventQueue.then(async () => {
+      if (state.options.backgroundToolsEnabled && event.type === 'tool_suspended') {
+        // Start interactive prompts in event order, but don't park the finite
+        // rendering queue on the user's response. Thread switches wait on this
+        // queue and must remain available while a prior thread awaits input.
+        void handleEvent(event).catch(err => reportEventError(event, err));
+        return;
+      }
+
       try {
         await handleEvent(event);
       } catch (err) {
-        // Log but don't crash — individual event errors shouldn't kill the process
-        const msg = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error ? err.stack : undefined;
-        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-        if (stack) process.stderr.write(stack + '\n');
+        reportEventError(event, err);
       }
     });
     return eventQueue;
   };
+  state.waitForAgentControllerEvents = state.options.backgroundToolsEnabled ? () => eventQueue : undefined;
   state.unsubscribe = state.session.subscribe(listener);
 }
 

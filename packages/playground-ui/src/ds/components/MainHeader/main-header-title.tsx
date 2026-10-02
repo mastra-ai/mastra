@@ -1,24 +1,24 @@
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type MainHeaderTitleProps = {
   children?: React.ReactNode;
   isLoading?: boolean;
-  size?: 'default' | 'smaller';
 };
 
-export function MainHeaderTitle({ children, isLoading, size = 'default' }: MainHeaderTitleProps) {
+export function MainHeaderTitle({ children, isLoading }: MainHeaderTitleProps) {
   return (
-    <h1
+    <Txt
+      as="h1"
+      variant="heading"
+      tone="ink"
       className={cn(
-        'flex items-center gap-2 text-xl font-normal text-neutral5',
+        'flex items-center gap-2',
         '[&>svg]:size-[1.25em] [&>svg]:opacity-50',
-        {
-          'bg-surface4 w-60 max-w-[50%] rounded-md animate-pulse': isLoading,
-          'text-md': size === 'smaller',
-        },
+        isLoading && 'w-60 max-w-[50%] animate-pulse rounded-md bg-fill',
       )}
     >
-      {isLoading ? <>&nbsp;</> : <>{children}</>}
-    </h1>
+      {isLoading ? <>&nbsp;</> : children}
+    </Txt>
   );
 }

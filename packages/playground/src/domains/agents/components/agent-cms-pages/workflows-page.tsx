@@ -1,19 +1,18 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -27,8 +26,8 @@ export function WorkflowsPage() {
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
       value: id,
-      label: (workflow as { name?: string }).name || id,
-      description: (workflow as { description?: string }).description || '',
+      label: workflow.name || id,
+      description: workflow.description || '',
     }));
   }, [workflows]);
 
@@ -86,7 +85,7 @@ export function WorkflowsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
@@ -97,17 +96,12 @@ export function WorkflowsPage() {
             <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
           </Section.Header>
 
-          <InputGroup variant="outline">
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search workflows"
-              placeholder="Search workflows"
-              onChange={event => setSearch(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput
+            label="Search workflows"
+            placeholder="Search workflows"
+            value={search}
+            onValueChange={setSearch}
+          />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -117,7 +111,7 @@ export function WorkflowsPage() {
                 const isDisabled = readOnly || !isSelected;
 
                 return (
-                  <Entity key={workflow.value} className="bg-surface2">
+                  <Entity key={workflow.value} className="bg-background">
                     <EntityContent>
                       <EntityName>{workflow.label}</EntityName>
                       <EntityDescription>
@@ -125,8 +119,8 @@ export function WorkflowsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',
+                            !isDisabled && 'border-dashed border-border',
                           )}
                           value={
                             isSelected

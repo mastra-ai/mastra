@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { isAuthenticated } from '../types';
+import { getClientQueryKey } from './get-client-query-key';
 import { useAuthCapabilities } from './use-auth-capabilities';
 
 /**
@@ -25,7 +26,7 @@ export const usePermissionPatterns = () => {
   const rbacEnabled = !!(capabilities && isAuthenticated(capabilities) && capabilities.capabilities.rbac);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['permission-patterns'],
+    queryKey: ['permission-patterns', getClientQueryKey(client)],
     queryFn: () => client.getPermissionPatterns(),
     // Only fetch the pattern vocabulary when RBAC gating is in effect.
     enabled: rbacEnabled,

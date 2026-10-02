@@ -1,0 +1,241 @@
+/**
+ * Regression tests for #23456 — calling `abort()` and immediately sending
+ * another message (via `steer`, a direct `abort()` + `sendMessage()`, or
+ * `followUp` on an idle-after-abort session) must start a fresh, observable run.
+ *
+ * Before the fix, `Session.sendSignal` re-used the live subscription handle
+ * captured before `waitForStreamIdle()`. The abort teardown detached that
+ * handle while the wait was in flight, so the follow-up run dispatched with no
+ * native subscription: its `agent_start`/`agent_end` never reached the session
+ * and the display state never returned to idle. The fix re-ensures the
+ * subscription (for the dispatch-captured agent) after the wait.
+ */
+import { describe, expect, it, vi } from 'vitest';
+import { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
+import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { AgentController } from '../agent-controller';
+import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerEvent } from '../types';
+
+vi.setConfig({ testTimeout: 30_000 });
+
+const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+/** A model stream that emits an opening delta, then blocks until `gate` resolves. */
+function heldStream(gate: Promise<void>) {
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-held', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'text-start', id: 'text-held' });
+      controller.enqueue({ type: 'text-delta', id: 'text-held', delta: 'thinking' });
+      await gate;
+      try {
+        controller.enqueue({ type: 'text-end', id: 'text-held' });
+        controller.enqueue({ type: 'finish', finishReason: 'stop', usage });
+        controller.close();
+      } catch {
+        // The run was aborted while held; the stream is already torn down.
+      }
+    },
+  });
+}
+
+/** A model stream that completes immediately with a short text turn. */
+function textStream(delta: string) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-text', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'text-start', id: 'text-1' });
+      controller.enqueue({ type: 'text-delta', id: 'text-1', delta });
+      controller.enqueue({ type: 'text-end', id: 'text-1' });
+      controller.enqueue({ type: 'finish', finishReason: 'stop', usage });
+      controller.close();
+    },
+  });
+}
+
+async function createHarness(id: string) {
+  let releaseFirst!: () => void;
+  const firstGate = new Promise<void>(resolve => {
+    releaseFirst = resolve;
+  });
+
+  // Resolves when the first run's model call actually begins. `agent_start`
+  // fires before the provider request, so tests that need a genuinely in-flight
+  // run must wait on this rather than a tick after `agent_start`.
+  let signalFirstCall!: () => void;
+  const firstCallStarted = new Promise<void>(resolve => {
+    signalFirstCall = resolve;
+  });
+
+  let callCount = 0;
+  const agent = new Agent({
+    id: `${id}-agent`,
+    name: `${id} agent`,
+    instructions: 'You reply to the user.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) signalFirstCall();
+        return { stream: callCount === 1 ? heldStream(firstGate) : textStream('second reply') };
+      },
+    }),
+  });
+
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ agents: { [`${id}-agent`]: agent }, logger: false, storage });
+  const registeredAgent = mastra.getAgent(`${id}-agent`);
+
+  const controller = new AgentController({
+    workspace: createMockWorkspace(),
+    id: `${id}-controller`,
+    storage,
+    modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+  });
+  await controller.init();
+  const session = await controller.createSession({ id: `${id}-session`, ownerId: 'owner-1' });
+  await session.thread.create();
+
+  const events: AgentControllerEvent[] = [];
+  session.subscribe((event: AgentControllerEvent) => {
+    events.push(event);
+  });
+
+  return { session, events, releaseFirst, firstCallStarted, getCallCount: () => callCount };
+}
+
+/** Resolve once `count` events of `type` have been observed, or after `timeoutMs`. */
+function waitForEventCount(
+  events: AgentControllerEvent[],
+  type: AgentControllerEvent['type'],
+  count: number,
+  timeoutMs = 5_000,
+) {
+  return new Promise<void>(resolve => {
+    const start = Date.now();
+    const check = () => {
+      if (events.filter(e => e.type === type).length >= count || Date.now() - start > timeoutMs) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 10);
+    };
+    check();
+  });
+}
+
+function waitForFirstActive(events: AgentControllerEvent[], firstCallStarted: Promise<void>) {
+  return waitForEventCount(events, 'agent_start', 1).then(() => {
+    // Wait until the model request has actually begun so the run is genuinely
+    // in-flight when the test aborts. A tick after `agent_start` is not enough:
+    // `agent_start` fires before the provider call, so aborting there can land
+    // before the first request and let the follow-up run claim this run's held
+    // stream, which stalls the follow-up's lifecycle instead of exercising the
+    // post-abort path this suite is about.
+    //
+    // Bound the wait: if `sendMessage` fails before `doStream`, the promise never
+    // resolves, and an unbounded await would stall until the suite timeout with
+    // no indication of why. Fail with the reason instead.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      firstCallStarted,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('waitForFirstActive: the first model call never started')), 5_000);
+      }),
+    ]).finally(() => {
+      if (timeout) clearTimeout(timeout);
+    });
+  });
+}
+
+describe('immediate message after Session.abort() (#23456)', () => {
+  it('Given an in-flight run, When steer() aborts and immediately sends, Then a second run starts and the session returns to idle', async () => {
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('steer');
+
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitForFirstActive(events, firstCallStarted);
+
+    // steer() = abort() + immediate sendMessage() with a distinct instruction.
+    const steered = session.steer({ content: 'second message' });
+    releaseFirst();
+    await steered.catch(() => {});
+    await waitForEventCount(events, 'agent_end', 2);
+
+    expect(events.filter(e => e.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(e => e.type === 'agent_end')).toHaveLength(2);
+    expect(session.displayState.get().isRunning).toBe(false);
+  });
+
+  it('Given an in-flight run, When abort() is followed synchronously by sendMessage(), Then a second run starts and the session returns to idle', async () => {
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('abort-send');
+
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitForFirstActive(events, firstCallStarted);
+
+    session.abort();
+    const sent = session.sendMessage({ content: 'second message' });
+    releaseFirst();
+    await sent.catch(() => {});
+    await waitForEventCount(events, 'agent_end', 2);
+
+    expect(events.filter(e => e.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(e => e.type === 'agent_end')).toHaveLength(2);
+    expect(session.displayState.get().isRunning).toBe(false);
+  });
+
+  it('Control: two sequential sends (no abort) each start their own run', async () => {
+    const { session, events, releaseFirst, firstCallStarted } = await createHarness('control-sequential');
+
+    // Let the first run finish normally before sending the second.
+    const first = session.sendMessage({ content: 'first message' });
+    await waitForFirstActive(events, firstCallStarted);
+    releaseFirst();
+    await first;
+    await session.sendMessage({ content: 'second message' });
+
+    expect(events.filter(e => e.type === 'agent_start')).toHaveLength(2);
+    expect(events.filter(e => e.type === 'agent_end')).toHaveLength(2);
+    expect(session.displayState.get().isRunning).toBe(false);
+  });
+
+  it('Given the prior stream still finalizing past the idle-wait timeout, When a message is sent right after abort(), Then a fresh subscribed run still starts and the session returns to idle', async () => {
+    const { session, events, releaseFirst, firstCallStarted, getCallCount } = await createHarness('slow-teardown');
+
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitForFirstActive(events, firstCallStarted);
+
+    // Model the ">1s teardown" manifestation of #23456: `waitForStreamIdle`
+    // returns on its timeout escape *before* the old run tears down, so its
+    // subscription is still live and matching. Forcing the timeout return here
+    // is deterministic and equivalent to a real consumer whose stream takes
+    // longer than the 1s idle wait to finalize after abort. Without the fix the
+    // re-ensure short-circuits on the live subscription and dispatches onto the
+    // aborting run, losing the second run's events and leaving `isRunning` true.
+    const idleSpy = vi.spyOn(session as any, 'waitForStreamIdle').mockResolvedValue(false);
+
+    session.abort();
+    const sent = session.sendMessage({ content: 'second message' });
+
+    await waitForEventCount(events, 'agent_start', 2, 10_000);
+    await sent.catch(() => {});
+
+    expect(idleSpy).toHaveBeenCalled();
+    expect(events.filter(e => e.type === 'agent_start').length).toBeGreaterThanOrEqual(2);
+    // The forced re-subscription means the second run's lifecycle reaches the
+    // session and the display state returns to idle.
+    await waitForEventCount(events, 'agent_end', 1, 10_000);
+    expect(events.filter(e => e.type === 'agent_end').length).toBeGreaterThanOrEqual(1);
+    expect(session.displayState.get().isRunning).toBe(false);
+    // The follow-up must reach the model, not just produce lifecycle events: a
+    // signal misrouted onto the aborting run would leave the session idle with
+    // matching event counts while the second message is silently dropped.
+    expect(getCallCount()).toBeGreaterThanOrEqual(2);
+
+    // Release the held first stream so the harness tears down cleanly.
+    releaseFirst();
+  });
+});

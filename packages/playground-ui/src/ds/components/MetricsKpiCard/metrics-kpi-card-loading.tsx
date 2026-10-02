@@ -1,10 +1,10 @@
 import { Spinner } from '@/ds/components/Spinner/spinner';
-import { cn } from '@/lib/utils';
+import { Txt } from '@/ds/components/Txt';
 
 export function MetricsKpiCardLoading({ className }: { className?: string }) {
   return (
-    <span className={cn('text-sm', className)}>
-      <Spinner size="md" variant="pulse" className="text-neutral1" />
-    </span>
+    <Txt as="span" className={className}>
+      <Spinner size="md" variant="pulse" className="text-placeholder" />
+    </Txt>
   );
 }

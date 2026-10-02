@@ -219,6 +219,8 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    threadId: nullableString(row.threadId),
+    resourceId: nullableString(row.resourceId),
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
@@ -528,6 +530,8 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   };
 }
 
+// Keep both feedback mappers lossless: updateFeedbackReviewStatus uses them
+// to reinsert the entire row, so an omitted column would reset to its default.
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
   const feedbackSource = nullableString(row.feedbackSource);
@@ -574,6 +578,8 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   };
 }
 
+// Keep both feedback mappers lossless: updateFeedbackReviewStatus uses them
+// to reinsert the entire row, so an omitted column would reset to its default.
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';

@@ -1,13 +1,13 @@
+import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+
 import type { BoardCandidate } from './boardCandidates';
 import type { BoardKind } from './boardStages';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
-import { isHumanActor, workItemHumanActorIds } from './workItemActivity';
+import { workItemHumanActorIds } from './workItemActivity';
 
 export const BOARD_RELEVANCE_TYPES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 export type BoardRelevanceType = (typeof BOARD_RELEVANCE_TYPES)[number];
-
-const NO_RELEVANCE = 'none';
 
 function isBoardRelevanceType(value: string): value is BoardRelevanceType {
   return BOARD_RELEVANCE_TYPES.some(type => type === value);
@@ -16,7 +16,6 @@ function isBoardRelevanceType(value: string): value is BoardRelevanceType {
 export function boardRelevanceFromQuery(value: string | null, kind: BoardKind): ReadonlySet<BoardRelevanceType> {
   const available = boardRelevanceOptions(kind).map(option => option.id);
   if (value === null) return new Set(available);
-  if (value === NO_RELEVANCE) return new Set();
   const selected = value
     .split(',')
     .filter(isBoardRelevanceType)
@@ -30,12 +29,11 @@ export function boardRelevanceQueryValue(
 ): string | undefined {
   const available = boardRelevanceOptions(kind).map(option => option.id);
   const selected = available.filter(type => selectedTypes.has(type));
-  if (selected.length === available.length) return undefined;
-  return selected.length > 0 ? selected.join(',') : NO_RELEVANCE;
+  return selected.length > 0 && selected.length < available.length ? selected.join(',') : undefined;
 }
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'linear';
+  source: 'factory' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 }
 
 interface RelevanceTarget {
@@ -56,7 +54,10 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 
 function externalId(source: RelevanceTarget['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return `gitlab:${name.toLowerCase()}`;
   if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
+  if (source === 'jira-issue') return `jira:${name.toLowerCase()}`;
+  if (source === 'incidentio-follow-up') return `incidentio:${name.toLowerCase()}`;
   return undefined;
 }
 
@@ -71,14 +72,24 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
       source: 'github',
     };
   }
-  return { id, name, source: 'linear' };
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return { id, name, source: 'gitlab' };
+  return {
+    id,
+    name,
+    source: source === 'jira-issue' ? 'jira' : source === 'incidentio-follow-up' ? 'incidentio' : 'linear',
+  };
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     return metadataString(target.metadata, 'author');
   }
-  if (target.source === 'linear-issue') {
+  if (target.source === 'linear-issue' || target.source === 'jira-issue' || target.source === 'incidentio-follow-up') {
     return (
       metadataString(target.metadata, 'creator') ??
       metadataString(target.metadata, 'linearCreator') ??
@@ -89,12 +100,17 @@ function externalCreator(target: RelevanceTarget): string | undefined {
 }
 
 function externalAssignees(target: RelevanceTarget): string[] {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     const assignees = metadataStrings(target.metadata, 'assignees');
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
   }
-  if (target.source === 'linear-issue') {
+  if (target.source === 'linear-issue' || target.source === 'jira-issue' || target.source === 'incidentio-follow-up') {
     const assignee = metadataString(target.metadata, 'assignee') ?? metadataString(target.metadata, 'linearAssignee');
     return assignee ? [assignee] : [];
   }
@@ -102,7 +118,7 @@ function externalAssignees(target: RelevanceTarget): string[] {
 }
 
 function requestedReviewers(target: RelevanceTarget): string[] {
-  if (target.source !== 'github-pr') return [];
+  if (target.source !== 'github-pr' && target.source !== 'gitlab-pr') return [];
   return metadataStrings(target.metadata, 'requestedReviewers');
 }
 
@@ -136,12 +152,12 @@ export function workItemRelevance(
   const external = targetRelations(item);
   const worked = new Set(workItemHumanActorIds(item).map(actorId => `factory:${actorId}`));
   for (const event of activityPage?.events ?? []) {
-    if (event.actorType === 'human' && isHumanActor(event.actorId) && targetsWorkItem(event, item.id)) {
+    if (event.actorType === 'human' && isHumanActorId(event.actorId) && targetsWorkItem(event, item.id)) {
       worked.add(`factory:${event.actorId}`);
     }
   }
   const authored = new Set(external.authored);
-  if (item.source === 'manual' && isHumanActor(item.createdBy)) authored.add(`factory:${item.createdBy}`);
+  if (item.source === 'manual' && isHumanActorId(item.createdBy)) authored.add(`factory:${item.createdBy}`);
   return { worked, authored, assigned: external.assigned, 'review-requested': external['review-requested'] };
 }
 
@@ -220,7 +236,7 @@ export function boardParticipants({
   }
 
   for (const [actorId, profile] of Object.entries(activityPage?.actors ?? {})) {
-    if (!isHumanActor(actorId)) continue;
+    if (!isHumanActorId(actorId)) continue;
     add({ ...profile, id: `factory:${actorId}`, source: 'factory' });
   }
 

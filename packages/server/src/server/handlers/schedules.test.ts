@@ -321,6 +321,22 @@ describe('Schedules handlers', () => {
       expect(created!.target.type).toBe('workflow');
     });
 
+    it('persists resourceId on a workflow schedule for run attribution', async () => {
+      const result = await CREATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        workflowId: 'test',
+        cron: '0 * * * *',
+        resourceId: 'tenant-1',
+        ...baseCtx(),
+      } as any);
+
+      expect((result as { resourceId?: string }).resourceId).toBe('tenant-1');
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const created = await schedulesStore.getSchedule(result.id);
+      expect((created!.target as { resourceId?: string }).resourceId).toBe('tenant-1');
+    });
+
     it('404s when the agent does not exist', async () => {
       await expect(
         CREATE_SCHEDULE_ROUTE.handler({
@@ -418,6 +434,25 @@ describe('Schedules handlers', () => {
       } as any);
 
       expect((result as any).inputData).toEqual({ hello: 'world' });
+    });
+
+    it('updates workflow schedule resourceId', async () => {
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule(
+        makeWorkflowSchedule({ id: 'wf_a', target: { type: 'workflow', workflowId: 'test', resourceId: 'tenant-1' } }),
+      );
+
+      const result = await UPDATE_SCHEDULE_ROUTE.handler({
+        mastra,
+        scheduleId: 'wf_a',
+        resourceId: 'tenant-2',
+        ...baseCtx(),
+      } as any);
+
+      expect((result as { resourceId?: string }).resourceId).toBe('tenant-2');
+
+      const persisted = await schedulesStore.getSchedule('wf_a');
+      expect((persisted!.target as { resourceId?: string }).resourceId).toBe('tenant-2');
     });
 
     it('rejects invalid cron', async () => {

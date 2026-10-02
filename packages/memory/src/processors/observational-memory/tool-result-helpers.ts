@@ -5,7 +5,7 @@ import { safeSlice } from './string-utils';
 const ENCRYPTED_CONTENT_KEY = 'encryptedContent';
 const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
-export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 10_000;
+export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 5_000;
 
 function isObjectLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

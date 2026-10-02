@@ -1,0 +1,38 @@
+---
+extends: existence
+message: "AI hurdle metaphor: '%s'. Say the check passed. Disable this rule for athletics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Clears" is an AI fingerprint for passing described as a jump: a draft
+# "clears the gate," a message "clears every check," a fix "clears the
+# finding." The checking noun after the verb is the discriminator, so
+# clearing a cache, a screen, or a buffer stays quiet, and every token
+# measured zero across the Go and Python standard libraries. The same nouns
+# carry a deletion sense in interface prose, where clearing an alert means
+# dismissing it; writing about dismissing notifications disables the rule,
+# and a high jumper clearing the bar takes the athletics note in the
+# message.
+#
+# A documentation-corpus audit (2026-09) found the synonyms of the listed
+# nouns escaping ("clears the target" beside "clears the threshold," "the
+# blobs that cleared the run") and an intransitive form with no object at
+# all ("it clears on the next run"). The bound and pass nouns join the
+# list and the intransitive takes its own token; both measure zero. The
+# pronoun object ("every real input clears it") stays out: "clear it" and
+# "clear them" are the deletion sense thirty-four times over in the
+# corpora, with no complement to tell the hurdle apart.
+tokens:
+  # --- The hurdle: a checking noun jumped over ("cleared every gate,"
+  # "clears the mechanical validator," "clearing a finding by hand"), or
+  # the bound and pass nouns that stand in for one ("clears the target,"
+  # "cleared the run," "clears every stage"). An optional modifier word
+  # sits between the determiner and the noun.
+  - "\\bclear(?:s|ed|ing)? (?:a|an|the|every|each|its|that|this|those|these|all|both) (?:[a-z-]+ )?(?:gates?|checks?|checkers?|lints?|linters?|validators?|reviews?|hooks?|findings?|alerts?|hurdles?|bars?|thresholds?|targets?|floors?|ceilings?|limits?|caps?|runs?|suites?|stages?|passes|tiers?|rounds?|audits?|scans?|probes?|tests?|cutoffs?|minimums?|quotas?|budgets?)\\b"
+
+  # --- The proper-noun hurdle ("the branch clears CI").
+  - "\\bclear(?:s|ed|ing)? CI\\b"
+
+  # --- The intransitive hurdle: the finding jumps by itself on the next
+  # occasion ("it clears on the next run," "the alert cleared on retry").
+  - "\\bclear(?:s|ed|ing)? on (?:the|a|its|every|each) (?:[a-z]+ )?(?:run|pass|retry|rerun|re-run|attempt|commit|push|build|sync|cycle|iteration|refresh|reload)\\b"

@@ -338,6 +338,35 @@ function formatPlanGoalObjective(title: string, plan: string): string {
   return `# ${title}\n\n${plan}`;
 }
 
+/**
+ * Resolves `true` once the resumed tool's result is recorded (`tool_end`), or
+ * `false` if the run ends or parks first.
+ */
+function waitForToolEnd(
+  session: TUIState['session'],
+  toolCallId: string,
+): { promise: Promise<boolean>; cancel: () => void } {
+  let unsubscribe: (() => void) | undefined;
+  let settle!: (recorded: boolean) => void;
+  const promise = new Promise<boolean>(resolve => {
+    settle = resolve;
+  });
+  const cancel = () => {
+    unsubscribe?.();
+    unsubscribe = undefined;
+    settle(false);
+  };
+  unsubscribe = session.subscribe(event => {
+    if (event.type === 'tool_end' && event.toolCallId === toolCallId) {
+      settle(true);
+      cancel();
+    } else if (event.type === 'agent_end' || event.type === 'error' || event.type === 'tool_suspended') {
+      cancel();
+    }
+  });
+  return { promise, cancel };
+}
+
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   toolCallId: string,
@@ -419,19 +448,47 @@ export async function handlePlanApproval(
         releaseApprovalFocus();
         firePermissionResult('approved');
         await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        await resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
 
-        // The plan-mode resume reaches its idle boundary before `startGoal` sends
-        // the canonical goal reminder, so this starts a fresh build-mode run.
-        const objective = formatPlanGoalObjective(resolvedTitle, plan);
-        await ctx.startGoal(objective, 'Goal cancelled.');
-
-        const goal = state.goalManager.getGoal();
-        if (goal?.id) {
+        // The approved run keeps going into implementation, so the plan has to
+        // replace any active goal before it resumes: the core goal step reads
+        // the objective at every judge boundary, and an earlier goal (e.g. the
+        // one that produced this plan) would otherwise judge the implementation
+        // and only hand over to the plan once the work was already done.
+        // A failure to set the goal must not block approval: fall back to a
+        // plain approval so the suspended plan still resumes.
+        const goal = await ctx
+          .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
+          .catch((error: unknown) => {
+            ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
+            return null;
+          });
+        if (goal) {
           state.planStartedGoalId = goal.id;
         }
+        const approvalRecorded = goal ? waitForToolEnd(state.session, toolCallId) : undefined;
 
+        const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
+        // The controller emits the resumed tool's terminal events while this
+        // handler owns its serialized event queue. Let those events reach their
+        // render boundaries immediately instead of waiting for the resumed run.
         resolve();
+
+        if (goal && approvalRecorded) {
+          let recorded = false;
+          try {
+            recorded = await Promise.race([approvalRecorded.promise, resumed.then(() => false)]);
+          } finally {
+            approvalRecorded.cancel();
+          }
+          // Once the approval result is persisted, deliver the goal reminder
+          // into the resumed run. If that run already ended, only record the
+          // reminder: the goal is set, and a second run would start on
+          // finished work.
+          if (recorded) {
+            await ctx.sendGoalReminder(goal, { persistIfIdle: true });
+          }
+        }
+        await resumed;
       },
       onReject: () => {
         releaseApprovalFocus();

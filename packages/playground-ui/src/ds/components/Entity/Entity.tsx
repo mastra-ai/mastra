@@ -1,5 +1,6 @@
 import { Txt } from '../Txt';
 import { Icon } from '@/ds/icons';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export interface EntityProps {
@@ -21,8 +22,9 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'group/entity flex gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-3',
-        onClick && 'cursor-pointer transition-all hover:bg-surface4',
+        raisedSurfaceStyle,
+        'group/entity flex gap-3 rounded-xl px-3 py-2',
+        onClick && 'cursor-pointer transition-all hover:bg-fill-subtle',
         className,
       )}
       onClick={onClick}
@@ -34,7 +36,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
 
 export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={cn('mt-1 shrink-0 text-neutral3', className)} style={style}>
+    <Icon size="lg" className={cn('mt-1 shrink-0 text-muted-foreground', className)} style={style}>
       {children}
     </Icon>
   );
@@ -42,7 +44,7 @@ export const EntityIcon = ({ children, className, style }: EntityProps) => {
 
 export const EntityName = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-lg" className={cn('font-medium text-neutral6', className)}>
+    <Txt as="p" variant="heading" tone="ink" className={className}>
       {children}
     </Txt>
   );
@@ -50,7 +52,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="div" variant="ui-sm" className={cn('text-neutral3', className)}>
+    <Txt as="div" variant="caption" tone="muted" className={className}>
       {children}
     </Txt>
   );

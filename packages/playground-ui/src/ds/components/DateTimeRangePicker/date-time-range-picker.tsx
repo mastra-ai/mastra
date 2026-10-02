@@ -1,11 +1,14 @@
 import { isValid, parse } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
-import { useState } from 'react';
+import { CalendarIcon, Check } from 'lucide-react';
+import { useId, useState } from 'react';
+import type { ReactElement } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
@@ -32,11 +35,21 @@ export interface DateTimeRangePickerProps {
   dateFrom?: Date;
   dateTo?: Date;
   onDateChange?: (value: Date | undefined, type: 'from' | 'to') => void;
+  /**
+   * Called once with both ends when a custom range is applied. When provided it replaces
+   * the two `onDateChange` calls for that step, so consumers can write the range atomically.
+   */
+  onDateRangeChange?: (from: Date | undefined, to: Date | undefined) => void;
   disabled?: boolean;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
   /** Size passed through to the trigger Button. Defaults to 'md'. */
   size?: ButtonProps['size'];
+  /**
+   * Replace the default Button trigger. Receives the current label (preset name or
+   * custom range) and must return an element the menu/popover can attach to.
+   */
+  renderTrigger?: (props: { label: string; disabled?: boolean }) => ReactElement;
 }
 
 export function DateTimeRangePicker({
@@ -45,9 +58,11 @@ export function DateTimeRangePicker({
   dateFrom,
   dateTo,
   onDateChange,
+  onDateRangeChange,
   disabled,
   presets,
   size = 'md',
+  renderTrigger,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
@@ -57,6 +72,7 @@ export function DateTimeRangePicker({
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
   const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
   const [customRangeError, setCustomRangeError] = useState<string | undefined>();
+  const customRangeErrorId = useId();
 
   const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
 
@@ -88,25 +104,40 @@ export function DateTimeRangePicker({
       return;
     }
     setCustomRangeError(undefined);
-    onDateChange?.(fromDate, 'from');
-    onDateChange?.(toDate, 'to');
+    if (onDateRangeChange) {
+      onDateRangeChange(fromDate, toDate);
+    } else {
+      onDateChange?.(fromDate, 'from');
+      onDateChange?.(toDate, 'to');
+    }
     setCustomRangeOpen(false);
   };
 
   if (preset === 'custom') {
+    const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
-        <PopoverTrigger asChild>
-          <Button size={size} disabled={disabled}>
-            <CalendarIcon />
-            {dateFrom ? dateFrom.toLocaleDateString() : 'Start'} {' \u2013 '}
-            {dateTo ? dateTo.toLocaleDateString() : 'End'}
-          </Button>
-        </PopoverTrigger>
+        {renderTrigger ? (
+          <PopoverTrigger render={renderTrigger({ label: customLabel, disabled })} />
+        ) : (
+          <PopoverTrigger asChild>
+            <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+              {customLabel}
+            </Button>
+          </PopoverTrigger>
+        )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <div className={cn('flex')}>
-            <div className={cn('border-r border-border1')}>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>Start</span>
+          <div
+            role="group"
+            aria-label="Custom date range"
+            aria-invalid={customRangeError ? true : undefined}
+            aria-describedby={customRangeError ? customRangeErrorId : undefined}
+            className="flex"
+          >
+            <div className={cn('border-r border-border')}>
+              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                Start
+              </Txt>
               <DatePicker
                 mode="single"
                 selected={draftDateFrom}
@@ -116,6 +147,7 @@ export function DateTimeRangePicker({
                 toDate={draftDateTo}
               />
               <TimePicker
+                label="Start time"
                 className="mx-4 mb-3 w-auto"
                 defaultValue={draftTimeFrom}
                 onValueChange={v => {
@@ -124,7 +156,9 @@ export function DateTimeRangePicker({
               />
             </div>
             <div>
-              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>End</span>
+              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
+                End
+              </Txt>
               <DatePicker
                 mode="single"
                 selected={draftDateTo}
@@ -134,6 +168,7 @@ export function DateTimeRangePicker({
                 fromDate={draftDateFrom}
               />
               <TimePicker
+                label="End time"
                 className="mx-4 mb-3 w-auto"
                 defaultValue={draftTimeTo}
                 onValueChange={v => {
@@ -142,23 +177,24 @@ export function DateTimeRangePicker({
               />
             </div>
           </div>
-          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-red-500')}>{customRangeError}</p>}
+          <Field invalid={Boolean(customRangeError)}>
+            <FieldError id={customRangeErrorId} className="px-4 pb-1">
+              {customRangeError}
+            </FieldError>
+          </Field>
           <div className={cn('flex items-center justify-between px-4 pb-3')}>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={disabled}
-              className={cn(
-                'text-ui-sm text-neutral3 hover:text-neutral4',
-                disabled && 'pointer-events-none opacity-50',
-              )}
               onClick={() => {
                 setCustomRangeError(undefined);
                 handlePresetSelect(fallbackPreset);
               }}
             >
               &larr; Presets
-            </button>
-            <Button variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
+            </Button>
+            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
               Apply
             </Button>
           </div>
@@ -169,12 +205,15 @@ export function DateTimeRangePicker({
 
   return (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button size={size} disabled={disabled}>
-          <CalendarIcon />
-          {datePresetLabel}
-        </Button>
-      </DropdownMenu.Trigger>
+      {renderTrigger ? (
+        <DropdownMenu.Trigger render={renderTrigger({ label: datePresetLabel, disabled })} />
+      ) : (
+        <DropdownMenu.Trigger asChild>
+          <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
+            {datePresetLabel}
+          </Button>
+        </DropdownMenu.Trigger>
+      )}
       <DropdownMenu.Content align="start">
         {visiblePresets.map(p => (
           <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>

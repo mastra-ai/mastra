@@ -1,0 +1,92 @@
+---
+extends: existence
+message: "AI overused verb: '%s'. Say uses or resorts to instead. Disable this rule for sports or robotics prose."
+level: error
+nonword: true
+ignorecase: true
+# "Reaches for" is an AI fingerprint for selection described as motion: the
+# prose "reaches for" the same verb, a rule "reaches for" a curated list,
+# AI "reaches for" a structure. The literal sense needs a hand, so the
+# subject is the discriminator. The first token leaves the subject open
+# behind a determiner, in the FigurativeLands mold, and the exceptions
+# name the beings and limbs that literally reach; the second names the
+# bare subjects agent prose starts a clause with; the third gates on a
+# writing-device complement instead, because a human writer reaching for
+# a metaphor is the same figure. Every inflected form measured zero
+# across the Go and Python standard libraries; the corpora's one
+# figurative use ("they are what people reach for when debugging") is a
+# bare verb on a bare human subject, outside every gated token here.
+# "Out of reach" stays in FigurativeIdioms and "reach out" stays in
+# ClosingPleasantries, so the noun and the pleasantry never double-flag.
+# Sports, robotics, and physical narrative use the verb literally with
+# subjects beyond the exception list; those files disable the rule.
+#
+# A documentation-corpus census (2026-09) then counted the imperative
+# ("Reach for it in a script," "Reach for a slice when the skip doesn't
+# cover it") as the form agent prose uses most, fifty-odd times with
+# nothing here reading it, and the second-person and generic-human
+# subjects ("you might reach for," "users reach for") beside it. The
+# imperative token gates on the sentence or list-item start and measures
+# zero across the seven pre-LLM corpora. The human-subject token reverses
+# the earlier ruling that left the bare human idiom alone: it fires five
+# times across the corpora, four Rust RFCs making the same selection
+# figure ("you might reach for git dependencies," "many users reach for
+# Self(v0, v1)") and the one Go comment the paragraph above quotes,
+# flagged on the maintainer's call. "People" and "person"
+# left the exceptions for the same reason. A hand, a child, a climber,
+# and a robot still reach literally and stay excepted.
+exceptions:
+  # Body parts that do the literal reaching
+  - "(?i)hands?"
+  - "(?i)arms?"
+  - "(?i)fingers?"
+  # People who reach literally, by age or by sport
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)bab(?:y|ies)"
+  - "(?i)toddlers?"
+  - "(?i)patients?"
+  - "(?i)players?"
+  - "(?i)climbers?"
+  - "(?i)swimmers?"
+  # Creatures and machines with a literal grasp
+  - "(?i)cats?"
+  - "(?i)dogs?"
+  - "(?i)monkeys?"
+  - "(?i)robots?"
+tokens:
+  # --- Determiner-gated selection: an artifact choosing by "reaches for"
+  # where "uses" would do, with an optional modifier word between the
+  # determiner and the subject ("the generated prose reaches for the same
+  # verb"). Inflected forms only, so the noun homograph ("a reach for
+  # power") and the bare-verb human idiom the corpora attest stay out.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all) (?:[a-z]+ )?[a-z]+ reach(?:es|ed|ing) for\\b"
+
+  # --- Determiner-less subjects at a sentence or clause start ("AI
+  # reaches for this structure," "agents reach for the passive voice").
+  # The subject set is curated because there is no determiner to gate on;
+  # every noun in it measured zero across the Go and Python standard
+  # libraries, and the bare verb form is safe behind them.
+  - "\\b(?:AI|LLMs?|models?|agents?|prose|writing|copy|documentation|docs|drafts?) reach(?:es|ed|ing)? for\\b"
+
+  # --- The writing-device complement, whatever the subject: a writer
+  # reaching for a metaphor is the same substitution figure with a human
+  # holding the pen ("writers reach for the same tired metaphor,"
+  # "reaching for a superlative"). The head nouns are language devices
+  # with no physical sense, so a hand reaching for an object never
+  # matches this token.
+  - "\\breach(?:es|ed|ing)? for (?:(?:a|an|the|this|that|its|their|the same) )?(?:[a-z]+ )?(?:word|verb|noun|adjective|phrase|phrasing|metaphor|simile|idiom|cliché|cliche|superlative|intensifier|qualifier|hedge|euphemism|trope|formula|template|structure|construction|crutch|shorthand)s?\\b"
+
+  # --- The imperative: "use" as an instruction to grab ("Reach for it in
+  # a script," "Reach for a slice when the skip doesn't cover it"). The
+  # sentence or list-item start is the gate, since a verb there has no
+  # subject to check.
+  - "(?:^|(?<=[.!?:;] )|(?<=^[-*] )|(?<=^\\d+\\. ))reach for\\b"
+
+  # --- Second-person and generic-human subjects choosing a tool ("you
+  # might reach for a git dependency," "users reach for the path form,"
+  # "one reaches for the same helper"), with an optional modal or adverb
+  # between subject and verb.
+  - "\\b(?:you|you'd|you'll|we|we'd|one|people|users|developers|programmers|engineers|maintainers|authors|readers|teams|folks|someone|anyone|everyone) (?:(?:might|may|could|would|should|can|will|often|usually|typically|naturally|instinctively|immediately|first|just|simply|then|always|never|tend to|want to|need to|have to|had to|used to) )?reach(?:es|ed|ing)? for\\b"

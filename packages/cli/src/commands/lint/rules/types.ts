@@ -6,6 +6,7 @@ export interface LintContext {
   packageJson: {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
   };
   mastraPackages: {
     name: string;

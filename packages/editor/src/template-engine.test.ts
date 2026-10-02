@@ -130,6 +130,36 @@ describe('renderTemplate', () => {
     });
   });
 
+  describe('inherited properties', () => {
+    it('should leave an inherited member unresolved', () => {
+      expect(renderTemplate('{{constructor}}', { name: 'Alice' })).toBe('{{constructor}}');
+    });
+
+    it('should leave toString unresolved', () => {
+      expect(renderTemplate('{{toString}}', { name: 'Alice' })).toBe('{{toString}}');
+    });
+
+    it('should leave valueOf unresolved', () => {
+      expect(renderTemplate('{{valueOf}}', { name: 'Alice' })).toBe('{{valueOf}}');
+    });
+
+    it('should use the fallback for an inherited member', () => {
+      expect(renderTemplate("{{constructor || 'none'}}", { name: 'Alice' })).toBe('none');
+    });
+
+    it('should use the fallback for inherited toString', () => {
+      expect(renderTemplate("{{toString || 'none'}}", { name: 'Alice' })).toBe('none');
+    });
+
+    it('should resolve an own key that shadows a built-in name', () => {
+      expect(renderTemplate('{{toString}}', { toString: 'shadowed' })).toBe('shadowed');
+    });
+
+    it('should leave a nested inherited member unresolved', () => {
+      expect(renderTemplate('{{user.constructor}}', { user: { name: 'Alice' } })).toBe('{{user.constructor}}');
+    });
+  });
+
   describe('no-op cases', () => {
     it('should return plain text unchanged', () => {
       expect(renderTemplate('Hello World!', {})).toBe('Hello World!');

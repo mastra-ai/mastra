@@ -4,11 +4,11 @@ import { HorizontalBars } from './horizontal-bars';
 
 const fmt = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
 
-const singleSegment = [{ label: 'Requests', color: '#6366f1' }];
+const singleSegment = [{ label: 'Requests', color: 'var(--chart-blue)' }];
 
 const stackedSegments = [
-  { label: 'Input', color: '#3b82f6' },
-  { label: 'Output', color: '#93c5fd' },
+  { label: 'Input', color: 'var(--chart-blue-deep)' },
+  { label: 'Output', color: 'var(--chart-blue)' },
 ];
 
 const singleData = [
@@ -17,6 +17,20 @@ const singleData = [
   { name: 'search-agent', values: [1800] },
   { name: 'billing-agent', values: [900] },
   { name: 'moderation-agent', values: [400] },
+];
+
+const statusSegments = [
+  { label: 'Completed', color: 'var(--muted-foreground)' },
+  { label: 'Running', color: 'var(--warning-indicator)' },
+  { label: 'Pending', color: 'var(--chart-orange)' },
+  { label: 'Failed', color: 'var(--destructive-indicator)' },
+];
+
+const statusData = [
+  { name: 'travel-questions', values: [0, 10, 0, 0] },
+  { name: 'geo-questions', values: [2, 0, 5, 0] },
+  { name: 'support-tickets', values: [0, 0, 0, 4] },
+  { name: 'billing-faq', values: [3, 0, 0, 0] },
 ];
 
 const stackedData = [
@@ -57,6 +71,15 @@ export const Stacked: Story = {
   render: () => (
     <div style={{ width: '30rem', height: 300 }}>
       <HorizontalBars data={stackedData} segments={stackedSegments} maxVal={4200} fmt={fmt} />
+    </div>
+  ),
+};
+
+/** Bright fills (yellow, orange, red) render at full opacity in dark mode; the label must stay readable on them. */
+export const BrightSegments: Story = {
+  render: () => (
+    <div style={{ width: '30rem', height: 300 }}>
+      <HorizontalBars data={statusData} segments={statusSegments} maxVal={10} fmt={fmt} />
     </div>
   ),
 };

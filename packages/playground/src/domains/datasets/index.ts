@@ -1,6 +1,5 @@
 // Query hooks
-export * from './hooks/use-datasets';
-export * from './hooks/use-dataset-items';
+export * from '@mastra/playground-ui/domains/datasets';
 export * from './hooks/use-dataset-item-versions';
 export * from './hooks/use-dataset-experiments';
 export * from './hooks/use-experiments';
@@ -8,7 +7,7 @@ export * from './hooks/use-compare-experiments';
 export * from './hooks/use-dataset-versions';
 
 // Mutation hooks
-export * from './hooks/use-dataset-mutations';
+export * from '@mastra/playground-ui/domains/datasets';
 
 // CSV import utilities
 export * from './hooks/use-csv-parser';
@@ -16,7 +15,6 @@ export * from './utils/csv-validation';
 export * from './utils/json-cell-parser';
 
 // JSON import utilities
-export * from './hooks/use-json-parser';
 export * from './utils/json-validation';
 
 // Selection and export utilities
@@ -26,13 +24,8 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
-export {
-  DATASET_TARGET_OPTIONS,
-  DATASET_EXPERIMENT_OPTIONS,
-  getDatasetTagOptions,
-} from './components/datasets-list/helpers';
+export { DATASET_EXPERIMENT_OPTIONS, getDatasetTagOptions } from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
-export { DatasetHealthCard } from './components/dataset-health-card';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
 export { CreateDatasetForm } from './components/create-dataset-form';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
@@ -50,15 +43,14 @@ export type { DatasetVersionsProps } from './components/dataset-versions';
 export { DatasetHeader } from './components/dataset-detail/dataset-header';
 export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
 export { DatasetItemsView } from './components/dataset-detail/dataset-items-view';
+export { DatasetTagsEditor } from './components/dataset-detail/dataset-tags-editor';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 
 // Item detail components
-export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';
-export type { DatasetItemHeaderProps } from './components/dataset-detail/dataset-item-header';
-export { DatasetItemContent } from './components/dataset-detail/dataset-item-content';
-export type { DatasetItemContentProps } from './components/dataset-detail/dataset-item-content';
+export { DatasetItemDetails } from './components/items/dataset-item-details';
+export type { DatasetItemDetailsProps } from './components/items/dataset-item-details';
 export { EditModeContent } from './components/dataset-detail/dataset-item-form';
 export type { EditModeContentProps } from './components/dataset-detail/dataset-item-form';
 export { ItemPageToolbar } from './components/dataset-detail/item-page-toolbar';
@@ -92,9 +84,5 @@ export {
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
-export { DatasetItemVersionsPanel } from './components/versions';
 export { DatasetCompareVersionToolbar } from './components/versions';
 export { DatasetCompareVersionsList } from './components/versions';
-
-// Generation context
-export { GenerationProvider, useGenerationTasks } from './context/generation-context';

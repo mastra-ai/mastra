@@ -1,6 +1,7 @@
 'use client';
 
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JSONSchema7 } from 'json-schema';
@@ -8,7 +9,6 @@ import { useState, useEffect, useRef } from 'react';
 
 interface SchemaFieldProps {
   label: string;
-  schemaType: 'input' | 'output' | 'requestContext';
   value: Record<string, unknown> | null | undefined;
   onChange: (schema: Record<string, unknown> | null) => void;
   error?: string;
@@ -24,15 +24,7 @@ interface SchemaFieldProps {
  * JSON parsing errors shown inline.
  * Supports auto-population from sourceSchema when autoPopulate is true.
  */
-export function SchemaField({
-  label,
-  schemaType,
-  value,
-  onChange,
-  error,
-  sourceSchema,
-  autoPopulate = false,
-}: SchemaFieldProps) {
+export function SchemaField({ label, value, onChange, error, sourceSchema, autoPopulate = false }: SchemaFieldProps) {
   const isEnabled = value !== null && value !== undefined;
   const [jsonText, setJsonText] = useState(() => (value ? JSON.stringify(value, null, 2) : ''));
   const [parseError, setParseError] = useState<string | null>(null);
@@ -90,26 +82,26 @@ export function SchemaField({
     }
   };
 
+  const errorMessage = parseError ?? error;
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-        <label htmlFor={`${schemaType}-schema-toggle`} className="text-sm font-medium">
-          {label}
-        </label>
-      </div>
+      <Field orientation="horizontal">
+        <Switch checked={isEnabled} onCheckedChange={handleToggle} />
+        <FieldLabel size="smaller">{label}</FieldLabel>
+      </Field>
 
       {isEnabled && (
-        <div className="space-y-2">
+        <Field invalid={Boolean(errorMessage)}>
+          <FieldLabel className="sr-only">{`${label} JSON`}</FieldLabel>
           <CodeEditor
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
+            className={cn('h-48 rounded-md border', errorMessage && 'border-destructive-indicator')}
           />
-          {parseError && <p className="text-destructive text-xs">{parseError}</p>}
-          {error && !parseError && <p className="text-destructive text-xs">{error}</p>}
-        </div>
+          <FieldError>{errorMessage}</FieldError>
+        </Field>
       )}
     </div>
   );

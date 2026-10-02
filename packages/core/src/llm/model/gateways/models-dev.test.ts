@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { MASTRA_USER_AGENT } from './constants.js';
 import { ModelsDevGateway } from './models-dev.js';
 
 const {
@@ -42,7 +43,7 @@ const {
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
 vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
 vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
-vi.mock('@ai-sdk/deepseek-v6', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/deepseek-v7', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
 vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
@@ -478,6 +479,50 @@ describe('ModelsDevGateway', () => {
     });
   });
 
+  describe('buildUrl without a registry url template', () => {
+    const makeGateway = () =>
+      new ModelsDevGateway({
+        google: {
+          apiKeyEnvVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
+          name: 'Google',
+          models: ['gemini-2.5-flash'],
+          gateway: 'models.dev',
+        },
+        'my-provider': {
+          apiKeyEnvVar: 'MY_PROVIDER_API_KEY',
+          name: 'My Provider',
+          models: ['m'],
+          gateway: 'models.dev',
+        },
+      });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('returns undefined when no override is set', () => {
+      vi.stubEnv('GOOGLE_BASE_URL', '');
+      expect(makeGateway().buildUrl('google/gemini-2.5-flash', {})).toBeUndefined();
+    });
+
+    it('honors <PROVIDER>_BASE_URL passed via envVars', () => {
+      expect(
+        makeGateway().buildUrl('google/gemini-2.5-flash', { GOOGLE_BASE_URL: 'https://proxy.example/google' }),
+      ).toBe('https://proxy.example/google');
+    });
+
+    it('honors <PROVIDER>_BASE_URL from process.env', () => {
+      vi.stubEnv('GOOGLE_BASE_URL', 'https://proxy.example/google');
+      expect(makeGateway().buildUrl('google/gemini-2.5-flash')).toBe('https://proxy.example/google');
+    });
+
+    it('maps hyphenated provider ids to underscore env var names', () => {
+      expect(makeGateway().buildUrl('my-provider/m', { MY_PROVIDER_BASE_URL: 'https://proxy.example/mine' })).toBe(
+        'https://proxy.example/mine',
+      );
+    });
+  });
+
   describe('resolveLanguageModel', () => {
     it.each([
       {
@@ -573,20 +618,50 @@ describe('ModelsDevGateway', () => {
           providerId,
           modelId: 'test-model',
           apiKey: 'sk-test',
-          headers: { 'x-test': 'true' },
+          headers: { 'x-test': 'true', ...(providerId === 'perplexity' ? { 'x-pplx-integration': 'custom' } : {}) },
         });
 
         expect(result).toEqual(model);
         expect(factory).toHaveBeenCalledWith({
           apiKey: 'sk-test',
           baseURL: `https://custom.${providerId}.proxy/v1`,
-          headers: expect.objectContaining({
+          headers: {
+            'User-Agent': expect.any(String),
             'x-test': 'true',
-          }),
+            ...(providerId === 'perplexity' ? { 'x-pplx-integration': 'custom' } : {}),
+          },
         });
         expect(modelInvoker).toHaveBeenCalledWith('test-model');
       },
     );
+
+    it('adds Perplexity integration attribution by default', async () => {
+      gateway = new ModelsDevGateway({
+        perplexity: {
+          apiKeyEnvVar: 'PERPLEXITY_API_KEY',
+          name: 'perplexity',
+          models: ['test-model'],
+          gateway: 'models.dev',
+          url: 'https://api.perplexity.ai',
+        },
+      });
+      vi.stubEnv('PERPLEXITY_BASE_URL', 'https://custom.perplexity.proxy/v1');
+
+      await gateway.resolveLanguageModel({
+        providerId: 'perplexity',
+        modelId: 'test-model',
+        apiKey: 'sk-test',
+      });
+
+      expect(createPerplexityMock).toHaveBeenCalledWith({
+        apiKey: 'sk-test',
+        baseURL: 'https://custom.perplexity.proxy/v1',
+        headers: {
+          'User-Agent': expect.any(String),
+          'X-Pplx-Integration': MASTRA_USER_AGENT,
+        },
+      });
+    });
 
     it('routes xAI models through the Responses API', async () => {
       gateway = new ModelsDevGateway({
@@ -614,6 +689,24 @@ describe('ModelsDevGateway', () => {
       });
       expect(xAIResponsesMock).toHaveBeenCalledWith('grok-4.3');
       expect(callableModelMock).not.toHaveBeenCalledWith('grok-4.3');
+    });
+
+    it('passes XAI_BASE_URL as baseURL when the provider has no registry url template', async () => {
+      gateway = new ModelsDevGateway({
+        xai: {
+          apiKeyEnvVar: 'XAI_API_KEY',
+          name: 'xAI',
+          models: ['grok-4'],
+          gateway: 'models.dev',
+        },
+      });
+      vi.stubEnv('XAI_BASE_URL', 'https://proxy.example/xai');
+
+      await gateway.resolveLanguageModel({ providerId: 'xai', modelId: 'grok-4', apiKey: 'xai-test' });
+
+      expect(createXaiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'xai-test', baseURL: 'https://proxy.example/xai' }),
+      );
     });
   });
 

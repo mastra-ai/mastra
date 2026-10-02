@@ -1,0 +1,87 @@
+/* Chart series and span-type hues. Chart roles point at the colour ramps; span
+   roles keep their own hue wheel, one hue per span type. */
+
+:root {
+  --chart-blue: var(--blue-300);
+  --chart-blue-deep: var(--blue-600);
+  --chart-amber: var(--amber-300);
+  --chart-green: var(--green-400);
+  --chart-purple: var(--purple-400);
+  --chart-orange: var(--orange-400);
+  --chart-pink: var(--pink-300);
+  --chart-red: var(--red-500);
+
+  --chart-sequential-1: var(--purple-200);
+  --chart-sequential-2: var(--purple-300);
+  --chart-sequential-3: var(--purple-400);
+  --chart-sequential-4: var(--purple-500);
+  --chart-sequential-5: var(--purple-600);
+  --chart-sequential-pale: var(--purple-200);
+
+  --span-agent: oklch(0.75 0.133 250);
+  --span-workflow: oklch(0.75 0.127 200);
+  --span-model: oklch(0.75 0.15 320);
+  --span-mcp: oklch(0.75 0.15 160);
+  --span-tool: oklch(0.75 0.15 100);
+  --span-provider: oklch(0.75 0.14 75);
+  --span-memory: oklch(0.75 0.12 50);
+  --span-workspace: oklch(0.75 0.13 20);
+  --span-skill: oklch(0.75 0.15 130);
+  --span-scorer: oklch(0.75 0.13 350);
+  --span-other: var(--muted-foreground);
+}
+
+html.light {
+  --chart-blue: var(--blue-500);
+  --chart-blue-deep: var(--blue-800);
+  --chart-amber: var(--amber-500);
+  --chart-green: var(--green-500);
+  --chart-purple: var(--purple-600);
+  --chart-orange: var(--orange-600);
+  --chart-pink: var(--pink-500);
+  --chart-red: var(--red-700);
+
+  --span-agent: oklch(0.55 0.15 250);
+  --span-workflow: oklch(0.55 0.093 200);
+  --span-model: oklch(0.55 0.15 320);
+  --span-mcp: oklch(0.55 0.124 160);
+  --span-tool: oklch(0.55 0.114 100);
+  --span-provider: oklch(0.55 0.11 75);
+  --span-memory: oklch(0.55 0.12 50);
+  --span-workspace: oklch(0.55 0.15 20);
+  --span-skill: oklch(0.55 0.148 130);
+  --span-scorer: oklch(0.55 0.15 350);
+  --chart-sequential-1: var(--purple-900);
+  --chart-sequential-2: var(--purple-800);
+  --chart-sequential-3: var(--purple-700);
+  --chart-sequential-4: var(--purple-600);
+  --chart-sequential-5: var(--purple-500);
+}
+
+@theme inline {
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-blue-deep: var(--chart-blue-deep);
+  --color-chart-amber: var(--chart-amber);
+  --color-chart-green: var(--chart-green);
+  --color-chart-purple: var(--chart-purple);
+  --color-chart-orange: var(--chart-orange);
+  --color-chart-pink: var(--chart-pink);
+  --color-chart-red: var(--chart-red);
+  --color-chart-sequential-1: var(--chart-sequential-1);
+  --color-chart-sequential-2: var(--chart-sequential-2);
+  --color-chart-sequential-3: var(--chart-sequential-3);
+  --color-chart-sequential-4: var(--chart-sequential-4);
+  --color-chart-sequential-5: var(--chart-sequential-5);
+  --color-chart-sequential-pale: var(--chart-sequential-pale);
+  --color-span-agent: var(--span-agent);
+  --color-span-workflow: var(--span-workflow);
+  --color-span-model: var(--span-model);
+  --color-span-mcp: var(--span-mcp);
+  --color-span-tool: var(--span-tool);
+  --color-span-provider: var(--span-provider);
+  --color-span-memory: var(--span-memory);
+  --color-span-workspace: var(--span-workspace);
+  --color-span-skill: var(--span-skill);
+  --color-span-scorer: var(--span-scorer);
+  --color-span-other: var(--span-other);
+}

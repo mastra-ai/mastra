@@ -138,6 +138,13 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     isOptional: true,
   },
   {
+    name: 'volumes',
+    type: 'Record<string, Volume>',
+    description:
+      'Modal Volumes to mount into the sandbox, keyed by absolute mount path. The working directory must not be at or inside a mount path.',
+    isOptional: true,
+  },
+  {
     name: 'onStop',
     type: 'function',
     description: 'Lifecycle hook called before the sandbox stops.',
@@ -209,6 +216,48 @@ await sandbox.processes.spawn('npm install')
 await sandbox._stop()
 await sandbox._start()
 ```
+
+## Volumes and persistent files
+
+Mount [Modal Volumes](https://modal.com/docs/guide/volumes) with the `volumes` option, then use `ModalFilesystem` to expose a mounted path to the agent's workspace file tools. Files written under the mount persist across sandbox restarts.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { ModalFilesystem, ModalSandbox } from '@mastra/modal'
+import { ModalClient } from 'modal'
+
+const modal = new ModalClient()
+const privateVolume = await modal.volumes.fromName('agent-user-123', { createIfMissing: true })
+const teamVolume = await modal.volumes.fromName('agent-team', { createIfMissing: true })
+
+const sandbox = new ModalSandbox({
+  id: 'agent-sandbox',
+  workingDirectory: '/workspace',
+  volumes: {
+    '/mnt/agent': privateVolume,
+    '/mnt/team': teamVolume,
+  },
+})
+
+const workspace = new Workspace({
+  sandbox,
+  filesystem: new ModalFilesystem({ sandbox, basePath: '/mnt/agent' }),
+})
+```
+
+`ModalFilesystem` runs file operations inside the sandbox and confines all paths to `basePath`. Set `readOnly: true` to reject writes.
+
+Writes made by other sandboxes to the same Volume are only visible after a reload. Call `reloadVolumes()` on a long-lived sandbox to pick them up:
+
+```typescript
+await sandbox.reloadVolumes()
+```
+
+:::note
+
+Keep the working directory outside every Volume mount (for example `/workspace`). Modal can't reload a Volume that is the current working directory, so `ModalSandbox` throws if `workingDirectory` is at or inside a mount path.
+
+:::
 
 ## Background processes
 

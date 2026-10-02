@@ -24,13 +24,22 @@ function createMockState() {
     chatContainer: { clear: vi.fn() },
     pendingTools: { clear: vi.fn() },
     pendingTaskToolIds: { clear: vi.fn() },
+    pendingSubagents: new Map([['subagent', {}]]),
+    pendingSignalMessageComponentsById: new Map([['signal', {}]]),
+    followUpComponents: [{}],
     allToolComponents: [{}],
     allSlashCommandComponents: [{}],
     allSystemReminderComponents: [{}],
     messageComponentsById: new Map([['a', {}]]),
     allShellComponents: [{}],
+    globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
+    gradientAnimator: { stop: vi.fn() },
+    githubPrGradientAnimator: { stop: vi.fn() },
+    githubPrPollingActive: true,
+    agentRunStartedAt: 1_700_000_000_000,
+    agentRunLastStreamPartAt: 1_700_000_000_500,
     session: {
       state: { set: vi.fn(async () => {}) },
       thread: { detachFromCurrent: vi.fn() },
@@ -91,6 +100,10 @@ describe('handleNewCommand', () => {
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
     expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
     expect(state.allToolComponents).toEqual([]);
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);
@@ -98,6 +111,7 @@ describe('handleNewCommand', () => {
     expect(state.assistantRenderRegistry.size).toBe(0);
     expect(state.assistantSegment.component.disposeRenderState).toHaveBeenCalledOnce();
     expect(state.allShellComponents).toEqual([]);
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
@@ -109,5 +123,20 @@ describe('handleNewCommand', () => {
     expect(state.ui.terminal.setTitle).toHaveBeenCalledWith(`Mastra Code - ${basename(process.cwd())}`);
     expect(ctx.updateStatusLine).toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('stops status bar animations from the thread being left', async () => {
+    const state = createMockState();
+    const ctx = createCtx(state);
+
+    await handleNewCommand(ctx);
+
+    // A thread owned by another instance never delivers a local agent_end on
+    // detach, so /new has to stop the run animation itself.
+    expect(state.gradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrGradientAnimator.stop).toHaveBeenCalled();
+    expect(state.githubPrPollingActive).toBe(false);
+    expect(state.agentRunStartedAt).toBeUndefined();
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
   });
 });

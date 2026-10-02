@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
+
+import * as p from '@clack/prompts';
 
 import { MASTRA_PLATFORM_API_URL } from './client.js';
 
@@ -27,12 +28,20 @@ export interface Credentials {
 export interface LoginOptions {
   skipOnInput?: boolean;
   allowLogin?: boolean;
+  timeoutMs?: number;
 }
 
 export class LoginCancelledError extends Error {
   constructor() {
-    super('Login skipped.');
+    super('Login cancelled.');
     this.name = 'LoginCancelledError';
+  }
+}
+
+class LoginTimedOutError extends Error {
+  constructor() {
+    super('Login timed out.');
+    this.name = 'LoginTimedOutError';
   }
 }
 
@@ -223,12 +232,12 @@ function listenForSkipInput(onSkip: () => void): () => void {
   return cleanup;
 }
 
-export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
   signal?.throwIfAborted();
   console.info('\n   Logging in to Mastra...\n');
 
   const server = createServer();
-  const state = randomBytes(16).toString('hex');
+  const state = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 
   const port = await new Promise<number>(resolve => {
     server.listen(0, '127.0.0.1', () => {
@@ -277,9 +286,12 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
     const handleAbort = () => {
       finish(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('Login cancelled')));
     };
-    const timeout = setTimeout(() => {
-      finish(() => reject(new Error('Login timed out (60s)')));
-    }, 60000);
+    const timeout = setTimeout(
+      () => {
+        finish(() => reject(new LoginTimedOutError()));
+      },
+      options.timeoutMs ?? 5 * 60 * 1000,
+    );
 
     signal?.addEventListener('abort', handleAbort, { once: true });
     if (signal?.aborted) {
@@ -326,6 +338,31 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
   await saveCredentials(creds);
   console.info(`   Logged in as ${creds.user.email}\n`);
   return creds;
+}
+
+export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+  while (true) {
+    try {
+      return await loginAttempt(signal, options);
+    } catch (error) {
+      if (!(error instanceof LoginTimedOutError)) throw error;
+    }
+
+    if (!isInteractive()) throw new LoginCancelledError();
+
+    const cancelValue = options.skipOnInput ? 'skip' : 'cancel';
+    const choice = await p.select({
+      message: 'Browser sign-in timed out.',
+      options: [
+        { value: 'retry', label: 'Retry' },
+        { value: cancelValue, label: options.skipOnInput ? 'Skip platform setup' : 'Cancel login' },
+      ],
+      initialValue: 'retry',
+      showInstructions: false,
+      signal,
+    });
+    if (p.isCancel(choice) || choice === cancelValue) throw new LoginCancelledError();
+  }
 }
 
 function isInteractive(): boolean {

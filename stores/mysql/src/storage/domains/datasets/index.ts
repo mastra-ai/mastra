@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   TABLE_DATASETS,
@@ -13,6 +12,7 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  resolveListOrderBy,
   hasErrorCode,
 } from '@mastra/core/storage';
 import type {
@@ -26,6 +26,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -45,7 +46,6 @@ import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } 
 function parseJSON<T>(value: unknown): T | undefined {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
-    if (!value) return undefined;
     try {
       return JSON.parse(value) as T;
     } catch {
@@ -59,9 +59,28 @@ function parseJSON<T>(value: unknown): T | undefined {
   return value as T;
 }
 
+function parseOptionalJSON<T>(value: unknown, emptyValue: null | undefined): T | null | undefined {
+  return value === null || value === undefined ? emptyValue : parseJSON<T>(value);
+}
+
 function jsonArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
 }
+
+function jsonDataArg(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+// Read authored JSON as text so the driver cannot collapse JSON null into SQL NULL
+// or leave a JSON-looking string indistinguishable from serialized JSON.
+const ITEM_SELECT_COLUMNS = Object.keys(DATASET_ITEMS_SCHEMA)
+  .map(column => {
+    const name = quoteIdentifier(column, 'column name');
+    return ['input', 'groundTruth', 'expectedTrajectory'].includes(column)
+      ? `CAST(${name} AS CHAR CHARACTER SET utf8mb4) AS ${name}`
+      : name;
+  })
+  .join(', ');
 
 export class DatasetsMySQL extends DatasetsStorage {
   private pool: Pool;
@@ -210,17 +229,13 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   private async experimentTablesExist(): Promise<boolean> {
-    try {
-      const [rows] = await this.pool.execute<any[]>(
-        `SELECT COUNT(*) AS c FROM information_schema.tables
-         WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
-        [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
-      );
-      const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
-      return Number(row?.c ?? 0) === 2;
-    } catch {
-      return false;
-    }
+    const [rows] = await this.pool.execute<any[]>(
+      `SELECT COUNT(*) AS c FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
+      [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+    );
+    const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
+    return Number(row?.c ?? 0) === 2;
   }
 
   // --- Row transformers ---
@@ -229,15 +244,15 @@ export class DatasetsMySQL extends DatasetsStorage {
     return {
       id: row.id as string,
       name: row.name as string,
-      description: row.description as string | undefined,
+      description: (row.description as string | null) ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       inputSchema: parseJSON<Record<string, unknown>>(row.inputSchema),
       groundTruthSchema: parseJSON<Record<string, unknown>>(row.groundTruthSchema),
       requestContextSchema: parseJSON<Record<string, unknown>>(row.requestContextSchema),
-      tags: parseJSON<string[]>(row.tags) ?? null,
-      targetType: (row.targetType as TargetType | null | undefined) ?? null,
-      targetIds: parseJSON<string[]>(row.targetIds) ?? null,
-      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
+      tags: parseJSON<string[]>(row.tags),
+      targetType: (row.targetType as TargetType | null | undefined) ?? undefined,
+      targetIds: parseJSON<string[]>(row.targetIds),
+      scorerIds: parseJSON<string[]>(row.scorerIds),
       version: row.version as number,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
@@ -249,6 +264,8 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   private mapItem(row: Record<string, any>): DatasetItem {
+    const metadata = row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -256,23 +273,23 @@ export class DatasetsMySQL extends DatasetsStorage {
       externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
-      input: parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory
-        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : undefined,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
-      metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
+      groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
+      metadata,
+      source: parseOptionalJSON<DatasetItem['source']>(row.source, emptyValue),
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
   }
 
   private mapItemFull(row: Record<string, any>): DatasetItemRow {
+    const metadata = row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined;
+    const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
@@ -282,17 +299,15 @@ export class DatasetsMySQL extends DatasetsStorage {
       projectId: (row.projectId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
-      input: parseJSON<Record<string, unknown>>(row.input),
-      groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
-      expectedTrajectory: row.expectedTrajectory
-        ? parseJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory)
-        : undefined,
-      toolMocks: row.toolMocks ? parseJSON<DatasetItem['toolMocks']>(row.toolMocks) : undefined,
-      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
-      scorerIds: row.scorerIds ? parseJSON<string[]>(row.scorerIds) : undefined,
-      requestContext: row.requestContext ? parseJSON<Record<string, unknown>>(row.requestContext) : undefined,
-      metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
-      source: row.source ? parseJSON<DatasetItem['source']>(row.source) : undefined,
+      input: row.input === null ? null : parseJSON<Record<string, unknown>>(row.input),
+      groundTruth: parseOptionalJSON<Record<string, unknown>>(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON<DatasetItem['expectedTrajectory']>(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON<DatasetItem['toolMocks']>(row.toolMocks, emptyValue),
+      unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      scorerIds: parseOptionalJSON<string[]>(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON<Record<string, unknown>>(row.requestContext, emptyValue),
+      metadata,
+      source: parseOptionalJSON<DatasetItem['source']>(row.source, emptyValue),
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -311,7 +326,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
@@ -350,9 +365,9 @@ export class DatasetsMySQL extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         requestContextSchema: input.requestContextSchema ?? undefined,
-        targetType: input.targetType ?? null,
-        targetIds: input.targetIds ?? null,
-        scorerIds: input.scorerIds ?? null,
+        targetType: input.targetType ?? undefined,
+        targetIds: input.targetIds ?? undefined,
+        scorerIds: input.scorerIds ?? undefined,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -457,10 +472,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         requestContextSchema:
           (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
           undefined,
-        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? null,
-        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
-        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
-        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
+        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? undefined,
+        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? undefined,
+        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? undefined,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? undefined,
         updatedAt: data.updatedAt,
       };
     } catch (error) {
@@ -553,6 +568,10 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt', 'name'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
 
       const filterParts: string[] = [];
@@ -607,7 +626,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const rows = await this.operations.loadMany<Record<string, any>>({
         tableName: TABLE_DATASETS,
         whereClause,
-        orderBy: `${quoteIdentifier('createdAt', 'column name')} DESC, \`id\` ASC`,
+        orderBy: `${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC`,
         offset,
         limit: limitValue,
       });
@@ -641,8 +660,8 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       await connection.beginTransaction();
 
-      const id = randomUUID();
-      const versionId = randomUUID();
+      const id = globalThis.crypto.randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
@@ -672,8 +691,8 @@ export class DatasetsMySQL extends DatasetsStorage {
           newVersion,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(args.input),
-          jsonArg(args.groundTruth),
+          jsonDataArg(args.input),
+          jsonDataArg(args.groundTruth),
           args.unmockedToolPolicy ?? null,
           jsonArg(args.scorerIds),
           jsonArg(args.metadata),
@@ -722,37 +741,53 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     this.#rejectToolMocks(args.toolMocks);
-    const existing = await this.getItemById({ id: args.id });
-    if (!existing) {
-      throw new MastraError({
-        id: 'MYSQL_UPDATE_ITEM_NOT_FOUND',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: args.id },
-      });
-    }
-    if (existing.datasetId !== args.datasetId) {
-      throw new MastraError({
-        id: 'MYSQL_UPDATE_ITEM_DATASET_MISMATCH',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
-      });
-    }
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
 
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
 
-      const mergedInput = args.input ?? existing.input;
-      const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
-      const mergedExpectedTrajectory = args.expectedTrajectory ?? existing.expectedTrajectory;
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [args.datasetId]);
+      const [itemRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        [args.id],
+      );
+      const itemRow = (itemRows as any[])[0];
+      const existing = itemRow ? this.mapItem(itemRow) : null;
+      if (!existing) {
+        throw new MastraError({
+          id: 'MYSQL_UPDATE_ITEM_NOT_FOUND',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: args.id },
+        });
+      }
+      if (existing.datasetId !== args.datasetId) {
+        throw new MastraError({
+          id: 'MYSQL_UPDATE_ITEM_DATASET_MISMATCH',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
+        });
+      }
+      if (existing.metadata?.__purged === true) {
+        throw new MastraError({
+          id: 'DATASET_ITEM_PURGED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { datasetId: args.datasetId, itemId: args.id },
+          text: `Purged dataset item cannot be updated: ${args.id}`,
+        });
+      }
+
+      const mergedInput = args.input !== undefined ? args.input : existing.input;
+      const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
+      const mergedExpectedTrajectory =
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks ?? existing.toolMocks;
       const mergedUnmockedToolPolicy = args.unmockedToolPolicy ?? existing.unmockedToolPolicy;
       const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
@@ -790,9 +825,9 @@ export class DatasetsMySQL extends DatasetsStorage {
           existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(mergedInput),
-          jsonArg(mergedGroundTruth),
-          jsonArg(mergedExpectedTrajectory),
+          jsonDataArg(mergedInput),
+          jsonDataArg(mergedGroundTruth),
+          jsonDataArg(mergedExpectedTrajectory),
           jsonArg(mergedToolMocks),
           mergedUnmockedToolPolicy ?? null,
           jsonArg(mergedScorerIds),
@@ -845,26 +880,35 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
-    const existing = await this.getItemById({ id });
-    if (!existing) return;
-    if (existing.datasetId !== datasetId) {
-      throw new MastraError({
-        id: 'MYSQL_DELETE_ITEM_DATASET_MISMATCH',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
-      });
-    }
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
 
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const now = new Date();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [datasetId]);
+      const [itemRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+        [id],
+      );
+      const itemRow = (itemRows as any[])[0];
+      const existing = itemRow ? this.mapItem(itemRow) : null;
+      if (!existing) {
+        await connection.commit();
+        return;
+      }
+      if (existing.datasetId !== datasetId) {
+        throw new MastraError({
+          id: 'MYSQL_DELETE_ITEM_DATASET_MISMATCH',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { itemId: id, expectedDatasetId: datasetId, actualDatasetId: existing.datasetId },
+        });
+      }
 
       // Bump version
       await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
@@ -896,9 +940,9 @@ export class DatasetsMySQL extends DatasetsStorage {
           existing.externalId ?? null,
           parentOrganizationId,
           parentProjectId,
-          jsonArg(existing.input),
-          jsonArg(existing.groundTruth),
-          jsonArg(existing.expectedTrajectory),
+          jsonDataArg(existing.input),
+          jsonDataArg(existing.groundTruth),
+          jsonDataArg(existing.expectedTrajectory),
           jsonArg(existing.toolMocks),
           existing.unmockedToolPolicy ?? null,
           jsonArg(existing.scorerIds),
@@ -933,6 +977,60 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    const experimentTablesExist = await this.experimentTablesExist();
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute(
+        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_DATASETS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+        [datasetId],
+      );
+      const itemsTable = formatTableName(TABLE_DATASET_ITEMS);
+      const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${itemsTable} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ? LIMIT 1 FOR UPDATE`,
+        [id, datasetId],
+      );
+      if (rows.length === 0) {
+        await connection.commit();
+        return;
+      }
+
+      const purgedAt = new Date().toISOString();
+      const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
+      await connection.execute(
+        `UPDATE ${itemsTable} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('expectedTrajectory', 'column name')} = NULL, ${quoteIdentifier('toolMocks', 'column name')} = NULL, ${quoteIdentifier('unmockedToolPolicy', 'column name')} = NULL, ${quoteIdentifier('scorerIds', 'column name')} = NULL, ${quoteIdentifier('requestContext', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ?, ${quoteIdentifier('source', 'column name')} = NULL WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+        ['null', purgedMetadata, id, datasetId],
+      );
+
+      if (experimentTablesExist) {
+        await connection.execute(
+          `UPDATE ${formatTableName(TABLE_EXPERIMENT_RESULTS)} SET ${quoteIdentifier('input', 'column name')} = ?, ${quoteIdentifier('output', 'column name')} = NULL, ${quoteIdentifier('groundTruth', 'column name')} = NULL, ${quoteIdentifier('error', 'column name')} = NULL, ${quoteIdentifier('toolMockReport', 'column name')} = NULL, ${quoteIdentifier('tags', 'column name')} = NULL, ${quoteIdentifier('comment', 'column name')} = NULL, ${quoteIdentifier('metadata', 'column name')} = ? WHERE ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
+          ['null', purgedMetadata, id, datasetId],
+        );
+      }
+      await connection.commit();
+    } catch (error) {
+      let transactionError = error;
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        transactionError = new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
+      if (transactionError instanceof MastraError) throw transactionError;
+      throw new MastraError(
+        {
+          id: 'MYSQL_PURGE_ITEM_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        transactionError,
+      );
+    } finally {
+      connection.release();
+    }
+  }
+
   // --- SCD-2 queries ---
 
   async getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
@@ -942,12 +1040,12 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       if (args.datasetVersion !== undefined) {
         [rows] = await this.pool.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`datasetVersion\` DESC LIMIT 1`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`datasetVersion\` DESC LIMIT 1`,
           [args.id, args.datasetVersion, args.datasetVersion],
         );
       } else {
         [rows] = await this.pool.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`validTo\` IS NULL AND \`isDeleted\` = 0`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? AND \`validTo\` IS NULL AND \`isDeleted\` = 0`,
           [args.id],
         );
       }
@@ -969,7 +1067,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`createdAt\` DESC, \`id\` ASC`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`createdAt\` DESC, \`id\` ASC`,
         [datasetId, version, version],
       );
 
@@ -990,7 +1088,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? ORDER BY \`datasetVersion\` DESC`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`id\` = ? ORDER BY \`datasetVersion\` DESC`,
         [itemId],
       );
 
@@ -1009,6 +1107,10 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
+      const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'updatedAt'], {
+        field: 'createdAt',
+        direction: 'DESC',
+      });
       const { page, perPage: perPageInput } = args.pagination;
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
 
@@ -1062,7 +1164,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT * FROM ${tableItemsName}${whereSql} ORDER BY \`createdAt\` DESC, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
+        `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName}${whereSql} ORDER BY ${quoteIdentifier(orderBy.field, 'column name')} ${orderBy.direction}, \`id\` ASC LIMIT ${limitValue} OFFSET ${offset}`,
         params,
       );
 
@@ -1091,7 +1193,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({
@@ -1200,13 +1302,13 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (externalIds.length > 0) {
         const placeholders = externalIds.map(() => '?').join(', ');
         const [rows] = await connection.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`externalId\` IN (${placeholders}) ORDER BY \`datasetVersion\` ASC`,
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE \`datasetId\` = ? AND \`externalId\` IN (${placeholders}) ORDER BY \`datasetVersion\` ASC`,
           [input.datasetId, ...externalIds],
         );
         historyRows = rows.map(row => this.mapItemFull(row));
       }
 
-      const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const plan = this.planDatasetItemBatch(input.items, historyRows, () => globalThis.crypto.randomUUID());
       const existingItems = new Map<string, DatasetItem>(
         [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
       );
@@ -1233,9 +1335,9 @@ export class DatasetsMySQL extends DatasetsStorage {
             item.externalId ?? null,
             dataset.organizationId ?? null,
             dataset.projectId ?? null,
-            jsonArg(item.input),
-            jsonArg(item.groundTruth),
-            jsonArg(item.expectedTrajectory),
+            jsonDataArg(item.input),
+            jsonDataArg(item.groundTruth),
+            jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
             jsonArg(item.scorerIds),
@@ -1261,7 +1363,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       await connection.execute(
         `INSERT INTO ${tableVersionsName} (\`id\`, \`datasetId\`, \`version\`, \`createdAt\`) VALUES (?, ?, ?, ?)`,
-        [randomUUID(), input.datasetId, newVersion, transformToSqlValue(now)],
+        [globalThis.crypto.randomUUID(), input.datasetId, newVersion, transformToSqlValue(now)],
       );
       await connection.commit();
 
@@ -1293,26 +1395,31 @@ export class DatasetsMySQL extends DatasetsStorage {
       });
     }
 
-    // Fetch current items for tombstone data
-    const currentItems: DatasetItem[] = [];
-    for (const itemId of input.itemIds) {
-      const item = await this.getItemById({ id: itemId });
-      if (item && item.datasetId === input.datasetId) {
-        currentItems.push(item);
-      }
-    }
-
-    if (currentItems.length === 0) return;
-
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
 
       const now = new Date();
-      const versionId = randomUUID();
+      const versionId = globalThis.crypto.randomUUID();
       const tableDatasetsName = formatTableName(TABLE_DATASETS);
       const tableItemsName = formatTableName(TABLE_DATASET_ITEMS);
       const tableVersionsName = formatTableName(TABLE_DATASET_VERSIONS);
+
+      await connection.execute(`SELECT id FROM ${tableDatasetsName} WHERE id = ? FOR UPDATE`, [input.datasetId]);
+      const currentItems: DatasetItem[] = [];
+      for (const itemId of input.itemIds) {
+        const [itemRows] = await connection.execute<RowDataPacket[]>(
+          `SELECT ${ITEM_SELECT_COLUMNS} FROM ${tableItemsName} WHERE id = ? AND validTo IS NULL AND isDeleted = 0`,
+          [itemId],
+        );
+        const row = (itemRows as any[])[0];
+        const item = row ? this.mapItem(row) : null;
+        if (item && item.datasetId === input.datasetId) currentItems.push(item);
+      }
+      if (currentItems.length === 0) {
+        await connection.commit();
+        return;
+      }
 
       // Single version increment
       await connection.execute(`UPDATE ${tableDatasetsName} SET \`version\` = \`version\` + 1 WHERE id = ?`, [
@@ -1345,9 +1452,9 @@ export class DatasetsMySQL extends DatasetsStorage {
             item.externalId ?? null,
             parentOrganizationId,
             parentProjectId,
-            jsonArg(item.input),
-            jsonArg(item.groundTruth),
-            jsonArg(item.expectedTrajectory),
+            jsonDataArg(item.input),
+            jsonDataArg(item.groundTruth),
+            jsonDataArg(item.expectedTrajectory),
             jsonArg(item.toolMocks),
             item.unmockedToolPolicy ?? null,
             jsonArg(item.scorerIds),

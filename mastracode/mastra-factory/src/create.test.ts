@@ -23,6 +23,7 @@ const tinyexec = vi.hoisted(() => ({
 
 const platform = vi.hoisted(() => ({
   createServerProject: vi.fn(),
+  ensureProductionEnvironment: vi.fn(),
   mintOrgApiKey: vi.fn(),
   attachNeonDatabase: vi.fn(),
   waitForDatabaseReady: vi.fn(),
@@ -93,6 +94,7 @@ beforeEach(() => {
   clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
+  platform.ensureProductionEnvironment.mockResolvedValue('env_production');
   platform.attachNeonDatabase.mockResolvedValue({ id: 'db_1', status: 'provisioning', error: null });
   platform.waitForDatabaseReady.mockResolvedValue({ id: 'db_1', status: 'ready', error: null });
   platform.getDatabaseConnection.mockResolvedValue({
@@ -221,13 +223,22 @@ describe('create (platform provisioning)', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // All four platform keys present with real values; the shared API URL is
+    // All five platform keys present with real values; the shared API URL is
     // no longer written (consumers default to the production platform URL).
     expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).toMatch(/^DATABASE_URL=postgres:\/\/user:pass@host\/neon$/m);
+
+    expect(env).toMatch(/^MASTRA_ENVIRONMENT_ID=env_production$/m);
+    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_abc',
+      region: 'eu',
+    });
 
     // Other .env.example placeholders untouched.
     expect(env).toContain('# ANTHROPIC_API_KEY=');
@@ -272,6 +283,17 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('Sandboxes (code agent sessions run here)');
     expect(note).toContain('Manage your project at');
     expect(note).toContain('https://projects.mastra.ai');
+  });
+
+  it('preserves the minted secret key when environment setup fails', async () => {
+    platform.ensureProductionEnvironment.mockRejectedValue(new platform.PlatformApiError(403, 'forbidden'));
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
+    expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
+    expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
+    expect(env).not.toMatch(/^MASTRA_ENVIRONMENT_ID=/m);
+    expect(platform.attachNeonDatabase).not.toHaveBeenCalled();
+    expect(clack.note.mock.calls[0]![0]).toContain('Platform provisioning failed');
   });
 
   it('surfaces a Neon 403 as a "need admin role" hint without failing the run', async () => {
@@ -475,32 +497,27 @@ describe('create — .env safety before git commit', () => {
     expect(gitignore).toMatch(/^\.env$/m);
   });
 
-  it.runIf(process.platform !== 'win32')(
-    'skips git init when .gitignore cannot be updated so .env secrets are never staged',
-    async () => {
-      // Ship a .gitignore that does NOT cover `.env` — the scaffolder must
-      // append to it. We then make the scaffolded copy read-only so the
-      // append fails and the git init step is aborted.
-      fs.writeFileSync(path.join(templateDir, '.gitignore'), 'node_modules\n');
+  it('skips git init when .gitignore cannot be updated so .env secrets are never staged', async () => {
+    // Make the scaffolded `.gitignore` a directory so it can't be read or
+    // written. A read-only file (chmod 0o444) is not enough: CI may run as
+    // root, which ignores permission bits and lets the append succeed.
+    tinyexec.x.mockImplementation(async (command: string, args: string[]) => {
+      if (command === 'npx' && args[0] === 'degit') {
+        fs.cpSync(templateDir, args[2]!, { recursive: true });
+        fs.mkdirSync(path.join(args[2]!, '.gitignore'));
+      }
+      return { stdout: '', stderr: '', exitCode: 0, killed: false };
+    });
 
-      // Intercept the copy step: after the template lands in the project dir,
-      // lock its .gitignore before ensureEnvGitignored runs. We do this via a
-      // one-shot spy that fires when the create flow calls into runInherit for
-      // the first git command — but simpler: pre-chmod the template's file
-      // itself. The scaffolder copies it into the project dir, preserving the
-      // read-only bit, so the subsequent writeFileSync throws EACCES.
-      fs.chmodSync(path.join(templateDir, '.gitignore'), 0o444);
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
-      await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
+    const anyGit = runCalls.some(call => call[0] === 'git');
+    expect(anyGit).toBe(false);
 
-      const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
-      const anyGit = runCalls.some(call => call[0] === 'git');
-      expect(anyGit).toBe(false);
-
-      // User was warned about it.
-      const warns = clack.log.warn.mock.calls.flat().join('\n');
-      expect(warns).toMatch(/\.gitignore/);
-      expect(warns).toMatch(/Skipping git init/i);
-    },
-  );
+    // User was warned about it.
+    const warns = clack.log.warn.mock.calls.flat().join('\n');
+    expect(warns).toMatch(/\.gitignore/);
+    expect(warns).toMatch(/Skipping git init/i);
+  });
 });

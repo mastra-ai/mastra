@@ -22,9 +22,10 @@ import type {
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-clients';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
@@ -39,8 +40,8 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (MCPClientsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -59,7 +60,7 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     for (const tableName of MCPClientsPG.MANAGED_TABLES) {
@@ -81,7 +82,7 @@ export class MCPClientsPG extends MCPClientsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return MCPClientsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -134,9 +135,17 @@ export class MCPClientsPG extends MCPClientsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPClientType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageMCPClientType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -163,6 +172,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
+      const metadataJson = mcpClient.metadata ? toPgJson(mcpClient.metadata) : null;
 
       // 1. Create the thin MCP client record
       await this.#db.client.none(
@@ -170,17 +180,7 @@ export class MCPClientsPG extends MCPClientsStorage {
           id, status, "activeVersionId", "authorId", metadata,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          mcpClient.id,
-          'draft',
-          null,
-          mcpClient.authorId ?? null,
-          mcpClient.metadata ? JSON.stringify(mcpClient.metadata) : null,
-          nowIso,
-          nowIso,
-          nowIso,
-          nowIso,
-        ],
+        [mcpClient.id, 'draft', null, mcpClient.authorId ?? null, metadataJson, nowIso, nowIso, nowIso, nowIso],
       );
 
       // 2. Extract snapshot fields and create version 1
@@ -200,7 +200,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: mcpClient.authorId,
-        metadata: mcpClient.metadata,
+        metadata: metadataJson ? JSON.parse(metadataJson) : mcpClient.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -237,7 +237,7 @@ export class MCPClientsPG extends MCPClientsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
 
-      const existingClient = await this.getById(id);
+      const existingClient = await this.#getById(this.#db.client, id);
       if (!existingClient) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_CLIENT', 'NOT_FOUND'),
@@ -273,7 +273,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingClient.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -288,7 +288,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedClient = await this.getById(id);
+      const updatedClient = await this.#getById(this.#db.client, id);
       if (!updatedClient) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_CLIENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -369,13 +369,13 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -392,7 +392,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -438,6 +438,8 @@ export class MCPClientsPG extends MCPClientsStorage {
       });
       const now = new Date();
       const nowIso = now.toISOString();
+      const serversJson = toPgJson(input.servers);
+      const changedFieldsJson = input.changedFields ? toPgJson(input.changedFields) : null;
 
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
@@ -452,8 +454,8 @@ export class MCPClientsPG extends MCPClientsStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          JSON.stringify(input.servers),
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          serversJson,
+          changedFieldsJson,
           input.changeMessage ?? null,
           nowIso,
           nowIso,
@@ -462,6 +464,8 @@ export class MCPClientsPG extends MCPClientsStorage {
 
       return {
         ...input,
+        servers: JSON.parse(serversJson),
+        changedFields: changedFieldsJson ? JSON.parse(changedFieldsJson) : input.changedFields,
         createdAt: now,
       };
     } catch (error) {
@@ -484,7 +488,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         indexName: TABLE_MCP_CLIENT_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -511,7 +515,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         indexName: TABLE_MCP_CLIENT_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpClientId" = $1 AND "versionNumber" = $2`,
         [mcpClientId, versionNumber],
       );
@@ -541,7 +545,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         indexName: TABLE_MCP_CLIENT_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpClientId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [mcpClientId],
       );
@@ -590,7 +594,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpClientId" = $1`,
         [mcpClientId],
       );
@@ -607,7 +611,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpClientId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [mcpClientId, limitValue, offset],
       );
@@ -690,9 +694,10 @@ export class MCPClientsPG extends MCPClientsStorage {
         indexName: TABLE_MCP_CLIENT_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpClientId" = $1`, [
-        mcpClientId,
-      ]);
+      const result = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpClientId" = $1`,
+        [mcpClientId],
+      );
       return parseInt(result.count, 10);
     } catch (error) {
       if (error instanceof MastraError) throw error;

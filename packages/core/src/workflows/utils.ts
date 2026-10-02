@@ -43,7 +43,7 @@ async function validateWithStandardSchema<T>(
     };
   }
 
-  return { success: true, data: resolvedResult.value as T };
+  return { success: true, data: resolvedResult.value };
 }
 
 export async function validateStepInput({
@@ -292,11 +292,11 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
-const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
  * Whether an entry is a "single step-like" entry: a plain user step or one of the
- * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ * declarative variants (agent / tool / classifier / mapping) that resolve to exactly one step.
  */
 export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
   return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);
@@ -505,10 +505,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // Siblings of the time-travel target inside a conditional were not selected by the
-      // branch's condition, so they should be reported as skipped rather than as a fake
-      // success (otherwise their empty output leaks into the conditional's aggregated result).
-      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling
@@ -597,24 +595,24 @@ export const createRestartExecutionParams = ({
     }
   }
 
-  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+  let firstEntryActiveStepsPath: Record<string, number[]> = {};
 
   const firstEntry = graph.steps[0]!;
 
   if (isSingleStepEntry(firstEntry)) {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry)]: [0],
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+    firstEntryActiveStepsPath = firstEntry.steps.reduce(
       (acc, step) => {
         acc[getSingleStepEntryId(step)] = [0];
         return acc;
@@ -622,16 +620,60 @@ export const createRestartExecutionParams = ({
       {} as Record<string, number[]>,
     );
   }
+
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
-    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
+    activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
     state: snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
+    isPreFirstStepRestart,
   };
 
   return restartData;
 };
+
+/**
+ * Top-level index the default engine should restart from.
+ *
+ * The engine checkpoints an entry when it finishes but only moves the pointer
+ * when the next entry starts. A checkpoint with nothing running whose
+ * pointed-at entry saved only successful results was written in that gap, so
+ * restart resumes at the next entry instead of replaying a finished one (#24615).
+ * Any other checkpoint resumes at the entry it points to.
+ *
+ * Skips at most one entry, so a step id reused later in the graph is never
+ * mistaken for finished.
+ */
+export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExecutionParams): number {
+  const startIdx = restart.activePaths[0]!;
+  const entry = steps[startIdx];
+  if (!entry || restart.activePaths.length !== 1 || Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+    return startIdx;
+  }
+
+  const results = getStepIds(entry).map(id => restart.stepResults[id]);
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
+
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
+}
 
 /**
  * Re-hydrates serialized errors in step results back into proper Error instances.
@@ -795,9 +837,9 @@ export function resolveForeachConcurrency(
   return Math.floor(resolved);
 }
 
-const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
+export const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
-const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
+export const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:

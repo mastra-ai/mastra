@@ -75,6 +75,37 @@ const subagents: AgentControllerSubagent[] = [
 
 const resolveModel = vi.fn().mockReturnValue({ modelId: 'test-model' });
 
+describe('createSubagentTool definitions', () => {
+  it('rejects empty definitions before constructing an Agent', () => {
+    const previousConstructorOpts = MockAgent.lastConstructorOpts;
+
+    expect(() => createSubagentTool({ subagents: [], resolveModel, fallbackModelId: 'test-model' })).toThrow(
+      'createSubagentTool requires at least one subagent',
+    );
+    expect(MockAgent.lastConstructorOpts).toBe(previousConstructorOpts);
+  });
+
+  it('accepts one definition and only parses registered agent IDs', () => {
+    const tool = createSubagentTool({
+      subagents: subagents.slice(0, 1),
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    expect(tool.inputSchema.safeParse({ agentType: 'explore', task: 'Explore the code' }).success).toBe(true);
+    expect(tool.inputSchema.safeParse({ agentType: 'execute', task: 'Execute the task' }).success).toBe(false);
+  });
+
+  it('accepts all registered IDs with multiple definitions', () => {
+    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
+
+    for (const { id } of subagents) {
+      expect(tool.inputSchema.safeParse({ agentType: id, task: 'Run the task' }).success).toBe(true);
+    }
+    expect(tool.inputSchema.safeParse({ agentType: 'unknown', task: 'Run the task' }).success).toBe(false);
+  });
+});
+
 describe('createSubagentTool requestContext forwarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -124,6 +155,25 @@ describe('createSubagentTool requestContext forwarding', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content).not.toContain('<subagent-meta');
+  });
+
+  it('resolves the subagent model with the calling run request context', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('result text'));
+    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'org-1');
+    requestContext.set('controller', { threadId: 'parent-thread', resourceId: 'parent-resource' });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext, agent: { toolCallId: 'tc-model' } },
+    );
+
+    const [modelId, options] = resolveModel.mock.calls.at(-1)!;
+    expect(modelId).toBe('test-model');
+    expect(options.requestContext).not.toBe(requestContext);
+    expect(options.requestContext.get('tenant')).toBe('org-1');
+    expect(options.requestContext.get('controller')).toMatchObject({ threadId: null, resourceId: '' });
   });
 
   it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
@@ -660,6 +710,7 @@ describe('createSubagentTool forked subagent behavior', () => {
       sourceThreadId: 'parent-thread-1',
       resourceId: 'parent-resource-1',
       title: expect.stringContaining('Fork:'),
+      requestContext,
     });
 
     // Parent agent's stream is used — no fresh Agent is constructed for the fork.

@@ -176,7 +176,7 @@ describe('DurableAgent toModelOutput parity', () => {
     expect(JSON.stringify(prompts[1])).toContain('model-facing content');
   });
 
-  it('normalizes image-url to media type in toModelOutput', async () => {
+  it('normalizes data-URI image-url to media type in toModelOutput', async () => {
     const toModelOutputSpy = vi.fn(() => ({
       type: 'content',
       value: [
@@ -221,7 +221,8 @@ describe('DurableAgent toModelOutput parity', () => {
     expect(toModelOutputSpy).toHaveBeenCalledTimes(1);
     // The normalization happens inside the mapping step — we verify the spy was called
     // and the stream completed without errors, which proves the normalizeModelOutput
-    // path was exercised (image-url → media conversion).
+    // path was exercised (data-URI image-url → media conversion; remote-URL image-url
+    // parts pass through untouched, see durable-agent-image-url-model-output.test.ts).
   });
 
   it('keeps the raw tool result when toModelOutput returns undefined', async () => {

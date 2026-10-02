@@ -18,7 +18,10 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
 
   try {
     const { queryInput, bodyInput } = splitInput(options.descriptor, options.input);
-    const url = buildUrl(options.baseUrl, options.descriptor.path, options.pathParams, queryInput, options.apiPrefix);
+    const originRoute = options.descriptor.routePlacement === 'origin';
+    const baseUrl = originRoute ? new URL(options.baseUrl).origin : options.baseUrl;
+    const apiPrefix = originRoute ? '' : options.apiPrefix;
+    const url = buildUrl(baseUrl, options.descriptor.path, options.pathParams, queryInput, apiPrefix);
     const init: RequestInit = {
       method: options.descriptor.method,
       headers: { ...options.headers },

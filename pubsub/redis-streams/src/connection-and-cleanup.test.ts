@@ -80,6 +80,37 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     inspectors = [];
   });
 
+  describe('shutdown batch drainage', () => {
+    it.each([true, false])('delivers the acquired batch and preserves ACK ownership (ack=%s)', async shouldAck => {
+      const prefix = `shutdown-${randomUUID()}`;
+      const ps = createPubSub({ keyPrefix: prefix, reclaimIntervalMs: 0 });
+      const inspector = await createInspector();
+      for (let i = 0; i < 10; i++) {
+        await ps.publish('topic', makeEvent({ runId: String(i) }));
+      }
+      const delivered: string[] = [];
+      const acks: Promise<void>[] = [];
+      let stop: Promise<void> | undefined;
+      const cb: EventCallback = (event, ack) => {
+        delivered.push(event.runId);
+        if (shouldAck) acks.push(ack());
+        if (delivered.length === 1) stop = ps.unsubscribe('topic', cb);
+      };
+      try {
+        await ps.subscribe('topic', cb, { group: 'workers' });
+        await expect.poll(() => stop !== undefined).toBe(true);
+        await stop;
+        expect(delivered).toEqual(Array.from({ length: 10 }, (_, i) => String(i)));
+        await Promise.all(acks);
+        const pending = await inspector.xPending(`${prefix}:topic`, 'workers');
+        expect(pending.pending).toBe(shouldAck ? 0 : 10);
+      } finally {
+        await ps.close();
+        await inspector.del(`${prefix}:topic`);
+      }
+    });
+  });
+
   describe('connection drops', () => {
     it('survives a server-side socket close: no unhandled error, publish recovers', async () => {
       const proxy = makeSeverableProxy(REDIS_URL);
@@ -127,6 +158,46 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
         await proxy.close();
       }
     }, 30_000);
+  });
+
+  describe('trimTopic', () => {
+    it("deletes only the given run's entries", async () => {
+      const ps = createPubSub();
+      const topic = `trim-${randomUUID()}`;
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 1 } }));
+      await ps.publish(topic, makeEvent({ runId: 'b', data: { n: 2 } }));
+      await ps.publish(topic, makeEvent({ runId: 'a', data: { n: 3 } }));
+
+      const inspector = await createInspector();
+      const streamKey = `mastra:topic:${topic}`;
+      expect(await inspector.xLen(streamKey)).toBe(3);
+
+      await ps.trimTopic(topic, { runId: 'a' });
+      expect(await inspector.xLen(streamKey)).toBe(1);
+
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([2]);
+    }, 15_000);
+
+    it('pages through streams longer than one XRANGE page', async () => {
+      const ps = createPubSub();
+      const topic = `trim-paged-${randomUUID()}`;
+      for (let i = 0; i < 1_200; i++) {
+        await ps.publish(topic, makeEvent({ runId: i % 2 === 0 ? 'a' : 'b' }));
+      }
+      await ps.trimTopic(topic, { runId: 'a' });
+      const inspector = await createInspector();
+      expect(await inspector.xLen(`mastra:topic:${topic}`)).toBe(600);
+    }, 30_000);
+
+    it('is a no-op for a topic that was never published to', async () => {
+      const ps = createPubSub();
+      await expect(ps.trimTopic(`never-${randomUUID()}`, { runId: 'a' })).resolves.toBeUndefined();
+    }, 15_000);
   });
 
   describe('clearTopic', () => {

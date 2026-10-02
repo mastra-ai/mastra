@@ -7,6 +7,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
+import { calculateObservedUsage, isUsageIncomplete } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
 import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { MastraModelOutput } from '../../stream/base/output';
@@ -120,11 +121,13 @@ export class MastraLLMVNext extends MastraBase {
     llmRequestInputProcessors,
     outputProcessors,
     errorProcessors,
+    hasConfiguredErrorProcessors,
     returnScorerData,
     providerOptions,
     messageList,
     requireToolApproval,
     toolCallConcurrency,
+    eagerToolExecution,
     _internal,
     agentId,
     agentVersionId,
@@ -136,6 +139,7 @@ export class MastraLLMVNext extends MastraBase {
     methodType,
     includeRawChunks,
     experimentalTransform,
+    hideSignals,
     autoResumeSuspendedTools,
     maxProcessorRetries,
     processorStates,
@@ -220,7 +224,7 @@ export class MastraLLMVNext extends MastraBase {
         messageList,
         models: this.#models,
         logger: this.logger,
-        tools: tools as Tools,
+        tools,
         stopWhen: stopWhenToUse,
         toolChoice,
         modelSettings,
@@ -231,10 +235,12 @@ export class MastraLLMVNext extends MastraBase {
         llmRequestInputProcessors,
         outputProcessors,
         errorProcessors,
+        hasConfiguredErrorProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
         toolCallConcurrency,
+        eagerToolExecution,
         agentId,
         agentVersionId,
         agentName,
@@ -244,6 +250,7 @@ export class MastraLLMVNext extends MastraBase {
         methodType,
         includeRawChunks,
         experimentalTransform,
+        hideSignals,
         autoResumeSuspendedTools,
         maxProcessorRetries,
         processorStates,
@@ -300,12 +307,15 @@ export class MastraLLMVNext extends MastraBase {
                 type: SpanType.GENERIC,
                 metadata: { remainingTokens, delayMs: 10_000 },
               });
-              await delay(10 * 1000);
+              await delay(10 * 1000, options?.abortSignal);
               rateLimitSpan?.end();
             }
           },
 
-          onFinish: async props => {
+          onFinish: async (props, context) => {
+            const usageIncomplete = isUsageIncomplete(props?.totalUsage);
+            const observedUsage = usageIncomplete ? calculateObservedUsage(props?.steps ?? []) : props?.totalUsage;
+
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
             // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
@@ -318,22 +328,32 @@ export class MastraLLMVNext extends MastraBase {
                 sources: props?.sources,
                 text: props?.text,
                 warnings: props?.warnings,
+                // Flatten tool-call chunks so exporters (e.g. PostHog) see the same
+                // { toolCallId, toolName, args } shape as the non-loop path.
+                toolCalls: props?.toolCalls?.length
+                  ? props.toolCalls.map(tc => ({
+                      toolCallId: tc.payload.toolCallId,
+                      toolName: tc.payload.toolName,
+                      args: tc.payload.args,
+                    }))
+                  : undefined,
               },
               attributes: {
                 finishReason: props?.finishReason,
+                ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 responseId: props?.response.id,
                 // Account for Anthropic server-side fallbacks: when the primary
                 // model declines a turn and a fallback serves it, attribute the
                 // response to the model that actually generated it.
                 responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
-              usage: props?.totalUsage,
+              usage: observedUsage,
               providerMetadata: props?.providerMetadata,
               stepProviderMetadata: props?.steps.map(step => step.providerMetadata),
             });
 
             try {
-              await options?.onFinish?.({ ...props, runId: runId! });
+              await options?.onFinish?.({ ...props, runId: runId! }, context);
             } catch (e: unknown) {
               const mastraError = new MastraError(
                 {

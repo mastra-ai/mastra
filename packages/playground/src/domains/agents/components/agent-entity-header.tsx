@@ -1,6 +1,7 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -12,7 +13,7 @@ export interface AgentEntityHeaderProps {
 }
 
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
   const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });
   const agentName = agent?.name || '';
 
@@ -25,7 +26,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               type="button"
               onClick={handleCopy}
               aria-label="Copy Agent ID for use in code"
-              className="group/agent-title text-neutral6 flex max-w-full min-w-0 cursor-pointer items-center gap-2"
+              className="group/agent-title flex max-w-full min-w-0 cursor-pointer items-center gap-2 text-foreground"
               data-testid="agent-entity-header-copy-id"
             >
               <span className="flex size-7 shrink-0 items-center justify-center">
@@ -36,14 +37,14 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               {isLoading ? (
                 <Skeleton className="h-3 w-32" />
               ) : (
-                <Txt variant="header-md" as="h2" className="truncate font-medium">
+                <Txt variant="heading" as="h2" className="truncate">
                   {agentName}
                 </Txt>
               )}
               {isCopied ? (
-                <Check className="text-neutral3 h-4 w-4 shrink-0" />
+                <Check className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
-                <CopyIcon className="text-neutral3 h-4 w-4 shrink-0" />
+                <CopyIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
             </button>
           </TooltipTrigger>

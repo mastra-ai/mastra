@@ -4,13 +4,28 @@ import { Memory } from './index';
 
 // Mock embedMany across AI SDK versions so embedMessageContent does no network I/O.
 vi.mock('@internal/ai-v6', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 vi.mock('@internal/ai-sdk-v5', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 vi.mock('@internal/ai-sdk-v4', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 
 function createMemory() {
@@ -31,6 +46,91 @@ function createMemory() {
     options: { semanticRecall: true },
   });
 }
+
+describe('observation indexing IDs', () => {
+  const observation = {
+    text: 'An observation',
+    groupId: 'group-1',
+    range: 'message-1:message-2',
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+  };
+
+  it('reuses UUIDs across retries and Memory instances', async () => {
+    const first = createMemory();
+    const second = createMemory();
+    await first.indexObservation(observation);
+    await first.indexObservation(observation);
+    await second.indexObservation(observation);
+    const calls = vi.mocked(first.vector!.upsert).mock.calls;
+    const ids = calls[0]![0].ids;
+    expect(ids).toHaveLength(1);
+    expect(ids![0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(calls[1]![0].ids).toEqual(ids);
+    expect(vi.mocked(second.vector!.upsert).mock.calls[0]![0].ids).toEqual(ids);
+  });
+
+  it('does not duplicate chunks when a successful write reports a timeout', async () => {
+    const memory = createMemory();
+    const chunks = ['first', 'second', 'third', 'fourth'];
+    vi.spyOn(memory as any, 'embedMessageContent').mockResolvedValue({
+      chunks,
+      embeddings: chunks.map(() => [0.1, 0.2]),
+      usage: { tokens: 1 },
+      dimension: 2,
+    });
+    const rows = new Set<string>();
+    let attempts = 0;
+    vi.mocked(memory.vector!.upsert).mockImplementation(async ({ ids, vectors }) => {
+      const storedIds = vectors.map((_, index) => ids?.[index] ?? crypto.randomUUID());
+      storedIds.forEach(id => rows.add(id));
+      if (++attempts === 1) throw new Error('Connection terminated due to connection timeout');
+      return storedIds;
+    });
+    await expect(memory.indexObservation(observation)).rejects.toThrow('connection timeout');
+    await memory.indexObservation(observation);
+    const calls = vi.mocked(memory.vector!.upsert).mock.calls;
+    const ids = calls[0]![0].ids!;
+    expect(ids.length).toBeGreaterThan(1);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(calls[1]![0].ids).toEqual(ids);
+    expect(rows.size).toBe(ids.length);
+  });
+
+  it('stores the record ID with each chunk without changing the vector IDs', async () => {
+    const memory = createMemory();
+    await memory.indexObservation({ ...observation, recordId: 'record-1' });
+    await memory.indexObservation({ ...observation, recordId: 'record-2' });
+    const calls = vi.mocked(memory.vector!.upsert).mock.calls;
+    expect(calls[0]![0].metadata![0]).toMatchObject({ group_id: 'group-1', record_id: 'record-1' });
+    expect(calls[1]![0].ids).toEqual(calls[0]![0].ids);
+  });
+
+  it('returns the stored record ID with search results', async () => {
+    const memory = createMemory();
+    vi.mocked(memory.vector!.query).mockResolvedValue([
+      {
+        id: 'v1',
+        score: 0.9,
+        metadata: { group_id: 'group-1', thread_id: 'thread-1', record_id: 'record-1', text: 'x' },
+      },
+      { id: 'v2', score: 0.8, metadata: { group_id: 'group-2', thread_id: 'thread-1', text: 'y' } },
+    ]);
+    const { results } = await memory.searchMessages({ query: 'x', resourceId: 'resource-1' });
+    expect(results.map(r => [r.groupId, r.recordId])).toEqual([
+      ['group-1', 'record-1'],
+      ['group-2', undefined],
+    ]);
+  });
+
+  it.each(['groupId', 'threadId', 'resourceId'] as const)('isolates IDs by %s', async key => {
+    const memory = createMemory();
+    await memory.indexObservation(observation);
+    await memory.indexObservation({ ...observation, [key]: 'another-value' });
+    const calls = vi.mocked(memory.vector!.upsert).mock.calls;
+    expect(calls[0]![0].ids).not.toEqual(calls[1]![0].ids);
+  });
+});
 
 describe('embedMessageContent caching', () => {
   it('reuses cached embeddings for repeated content (cache hit)', async () => {

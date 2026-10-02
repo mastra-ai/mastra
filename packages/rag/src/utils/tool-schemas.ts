@@ -11,7 +11,8 @@ export const baseSchema = {
 // Each source contains all information needed to reference
 // the original document, chunk, and similarity score.
 export const outputSchema = z.object({
-  // Array of metadata or content for compatibility with prior usage
+  // Array with one entry per result: metadata objects (vector query) or content strings (graph RAG).
+  // Kept as z.any() for compatibility with prior usage.
   relevantContext: z.any(),
   // Array of full retrieval result objects
   sources: z.array(

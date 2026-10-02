@@ -118,6 +118,7 @@ describe('OpenAIRealtimeVoice', () => {
   describe('function call dispatch', () => {
     it('should send exactly one response.create after multiple function_calls', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      (voice as any).sessionReady = true;
       voice.addTools({
         tool_a: {
           description: 'A',
@@ -146,6 +147,33 @@ describe('OpenAIRealtimeVoice', () => {
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(1);
     });
 
+    it('should ignore function_calls for tools that were not added', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'function_call', name: 'external_tool', call_id: '1', arguments: '{}' }],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
+
+    it('should ignore function_calls whose name is only inherited from Object.prototype', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      voice.addTools({
+        tool_a: { description: 'A', inputSchema: undefined, execute: vi.fn() },
+      } as any);
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'function_call', name: 'toString', call_id: '1', arguments: '{}' }],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
+
     it('should not send response.create when there are no function_call outputs', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
 
@@ -159,6 +187,18 @@ describe('OpenAIRealtimeVoice', () => {
         JSON.parse(raw),
       );
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(0);
+    });
+  });
+
+  describe('sendEvent', () => {
+    it('should keep the type argument when data also carries a type field', () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn(), readyState: 1, OPEN: 1 };
+      (voice as any).sessionReady = true;
+
+      voice.sendEvent('response.create', { type: 'session.update', response: {} });
+
+      const [raw] = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(JSON.parse(raw)).toEqual({ type: 'response.create', response: {} });
     });
   });
 

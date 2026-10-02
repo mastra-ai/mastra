@@ -38,6 +38,7 @@ export function getEntryRetries(entry: SingleStepEntry, fallback?: number): numb
       return entry.step.retries ?? fallback;
     case 'agent':
     case 'tool':
+    case 'classifier':
       return entry.options?.retries ?? fallback;
     case 'mapping':
       return fallback;
@@ -50,7 +51,7 @@ export function getEntryRetries(entry: SingleStepEntry, fallback?: number): numb
  * declarative variants have none.
  */
 export function getEntryComponent(entry: SingleStepEntry): string | undefined {
-  return entry.type === 'step' ? (entry.step as { component?: string }).component : undefined;
+  return entry.type === 'step' ? entry.step.component : undefined;
 }
 
 /**
@@ -102,6 +103,8 @@ export function getEntrySchemas(
       };
     case 'agent':
       return { inputSchema: toStandardSchema(z.object({ prompt: z.string() })) };
+    case 'classifier':
+      return { inputSchema: toStandardSchema(z.any()) };
     case 'tool': {
       let tool: { inputSchema?: any; resumeSchema?: any; suspendSchema?: any } | undefined;
       try {

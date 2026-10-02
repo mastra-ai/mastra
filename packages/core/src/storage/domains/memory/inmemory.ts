@@ -12,7 +12,7 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
-  StorageCloneThreadOutput,
+  StorageCopyThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   ObservationalMemoryHistoryOptions,
@@ -40,6 +40,7 @@ import { MemoryStorage } from './base';
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -649,7 +650,7 @@ export class InMemoryMemory extends MemoryStorage {
     return resource;
   }
 
-  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+  async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
@@ -722,16 +723,13 @@ export class InMemoryMemory extends MemoryStorage {
     // Save the new thread
     this.db.threads.set(newThreadId, newThread);
 
-    // Clone messages with new IDs
-    const clonedMessages: MastraDBMessage[] = [];
+    // Copy the raw storage rows under new IDs; payloads are never parsed here.
     const messageIdMap: Record<string, string> = {};
     for (const sourceMsg of sourceMessages) {
       const newMessageId = crypto.randomUUID();
       messageIdMap[sourceMsg.id] = newMessageId;
-      const parsedContent = safelyParseJSON(sourceMsg.content);
 
-      // Create storage message
-      const newStorageMessage: StorageMessageType = {
+      this.db.messages.set(newMessageId, {
         id: newMessageId,
         thread_id: newThreadId,
         content: sourceMsg.content,
@@ -739,27 +737,10 @@ export class InMemoryMemory extends MemoryStorage {
         type: sourceMsg.type,
         createdAt: sourceMsg.createdAt,
         resourceId: resourceId || sourceMsg.resourceId,
-      };
-
-      this.db.messages.set(newMessageId, newStorageMessage);
-
-      // Create MastraDBMessage for return
-      clonedMessages.push({
-        id: newMessageId,
-        threadId: newThreadId,
-        content: parsedContent,
-        role: sourceMsg.role as MastraDBMessage['role'],
-        type: sourceMsg.type,
-        createdAt: sourceMsg.createdAt,
-        resourceId: resourceId || sourceMsg.resourceId || undefined,
       });
     }
 
-    return {
-      thread: newThread,
-      clonedMessages,
-      messageIdMap,
-    };
+    return { thread: newThread, messageIdMap };
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {
@@ -807,12 +788,37 @@ export class InMemoryMemory extends MemoryStorage {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
     let records = this.db.observationalMemory.get(key) ?? [];
 
+    if (options?.recordId !== undefined) {
+      records = records.filter(r => r.id === options.recordId);
+    }
     if (options?.from) {
       records = records.filter(r => r.createdAt >= options.from!);
     }
     if (options?.to) {
       records = records.filter(r => r.createdAt <= options.to!);
     }
+    if (options?.groupId !== undefined) {
+      const prefix = `<observation-group id="${options.groupId}"`;
+      records = records.filter(
+        r =>
+          r.activeObservations.includes(prefix) ||
+          (Array.isArray(r.bufferedObservationChunks) &&
+            r.bufferedObservationChunks.some(chunk => chunk.observations?.includes(prefix))),
+      );
+    }
+    if (options?.beforeGeneration !== undefined) {
+      records = records.filter(r => r.generationCount < options.beforeGeneration!);
+    }
+    if (options?.afterGeneration !== undefined) {
+      records = records.filter(r => r.generationCount > options.afterGeneration!);
+    }
+    const direction = options?.sortDirection === 'ASC' ? 1 : -1;
+    records = [...records].sort(
+      (a, b) =>
+        direction * (a.generationCount - b.generationCount) ||
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        a.id.localeCompare(b.id),
+    );
     if (options?.offset != null) {
       records = records.slice(options.offset);
     }

@@ -2,11 +2,12 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentScorerSummaryProps = {
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
@@ -59,24 +60,24 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     }
 
     return (
-      <div className="text-ui-sm text-neutral3 flex items-center gap-2">
-        <GaugeIcon className="text-neutral3 size-4 shrink-0" />
-        <span className="text-neutral4">{title}</span>
+      <div className="flex items-center gap-2 text-caption text-muted-foreground">
+        <GaugeIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="text-muted-foreground">{title}</span>
         <span className="truncate">{description}</span>
       </div>
     );
   }
 
   return (
-    <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
+    <div className="flex flex-col gap-2">
       {scorerSummaries.map(({ scorerId, avg }) => {
         const scorerName = scorers?.[scorerId]?.scorer?.config?.name ?? scorerId;
 
         return (
-          <MetricsKpiCard key={scorerId} className="w-52 min-w-0 flex-none p-3">
+          <MetricsKpiCard key={scorerId} className="min-w-0 p-3">
             <LinkComponent
               href={paths.scorerLink(scorerId)}
-              className="text-ui-sm text-neutral3 [&>svg]:text-neutral3 flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3 [&>svg]:shrink-0"
+              className="flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground hover:underline [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
             >
               <Tooltip>
                 <TooltipTrigger render={<ScorersIcon role="img" aria-label="Scorer" />} />
@@ -84,9 +85,11 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
               </Tooltip>
               <span className="truncate">{scorerName}</span>
             </LinkComponent>
-            <strong className="text-ui-lg text-neutral4 font-semibold">
+            <strong className="text-subheading text-muted-foreground">
               {avg.toFixed(3)}
-              <span className="text-ui-sm text-neutral3 ml-1.5 font-normal">avg score</span>
+              <Txt as="span" variant="caption" tone="muted" className="ml-1.5">
+                avg score
+              </Txt>
             </strong>
           </MetricsKpiCard>
         );

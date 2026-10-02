@@ -8,6 +8,7 @@
  * instances (the @internal/ai-sdk-v5 mock models require a build step).
  */
 
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -376,4 +377,134 @@ describe('turn.end() idle buffering', () => {
       skipMinimumTokenCheck: true,
     });
   });
+});
+
+describe('22573 idle', () => {
+  it.each([
+    // Pending call on the newest message: buffer everything before it.
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3 },
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 3, reverse: true },
+    // Cursor collision (max(prefix)+1ms >= pending): defer the whole attempt.
+    { times: [100, 200, 400, 400], pendingIndex: 3, expected: 0 },
+    { times: [100, 200, 399, 400], pendingIndex: 3, expected: 0 },
+    { times: [399, 399, 399, 400], pendingIndex: 3, expected: 0 },
+    // A toolCallId shared across the cut: defer the whole attempt.
+    { times: [100, 200, 300, 400], pendingIndex: 3, expected: 0, splitTool: true },
+    // A `call` that is not on the newest message is an orphan — the conversation
+    // already continued past it — so it buffers like any other message.
+    { times: [100, 200, 300, 400], pendingIndex: 2, expected: 4 },
+    { times: [100, 200, 300, 400], pendingIndex: 0, expected: 4 },
+  ])(
+    'buffers the whole prefix or defers: $times pending=$pendingIndex split=$splitTool reverse=$reverse',
+    async ({ times, pendingIndex, expected, splitTool, reverse }) => {
+      const messages = times.map((time, index) =>
+        createTestMessage(`Message ${index}`, 'assistant', `prefix-${index}`, new Date(time)),
+      );
+      messages[pendingIndex]!.content.parts.push({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {} },
+      });
+      if (splitTool) {
+        for (const index of [1, pendingIndex]) {
+          messages[index]!.content.parts.push({
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'split', toolName: 'split', args: {}, result: 'done' },
+          });
+        }
+      }
+      const list = new MessageList({ threadId: 'idle-buffer-thread' });
+      list.add(structuredClone(messages), 'input');
+      const mockOM = createMockOM({
+        asyncEnabled: true,
+        unobservedMessages: reverse ? [...messages].reverse() : messages,
+      });
+      const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+      await turn.start();
+      await turn.end();
+      expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+      if (expected) {
+        expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
+      } else {
+        expect(mockOM.buffer).not.toHaveBeenCalled();
+      }
+    },
+  );
+  for (const source of ['input', 'response', 'memory'] as const) {
+    for (const providerExecuted of [false, true]) {
+      it(`defers pending ${source} calls with providerExecuted=${providerExecuted} and persists raw input/output`, async () => {
+        const message = createTestMessage('Mixed text and tools', 'assistant', `pending-${source}`);
+        message.content.parts.push(
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId: 'complete', toolName: 'complete', args: {}, result: 'done' },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {}, providerExecuted },
+          },
+        );
+        const list = new MessageList({ threadId: 'idle-buffer-thread', resourceId: 'idle-buffer-resource' });
+        list.add(message, source);
+        const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: list.get.all.db() });
+        const turn = new ObservationTurn({
+          om: mockOM as any,
+          threadId: 'idle-buffer-thread',
+          resourceId: 'idle-buffer-resource',
+          messageList: list,
+        });
+        await turn.start();
+        await turn.end();
+        if (source !== 'memory') {
+          expect(mockOM.persistMessages).toHaveBeenCalledWith(
+            list.get.all.db(),
+            'idle-buffer-thread',
+            'idle-buffer-resource',
+          );
+        }
+        expect(mockOM.buffer).not.toHaveBeenCalled();
+      });
+    }
+  }
+});
+
+describe('22573 control', () => {
+  it('buffers every candidate in chronological order when no tools are pending', async () => {
+    const messages = [300, 100, 200].map((time, index) =>
+      createTestMessage(`Completed ${index}`, 'user', `completed-${index}`, new Date(time)),
+    );
+    const chronological = [messages[1], messages[2], messages[0]];
+    const list = new MessageList({ threadId: 'idle-buffer-thread' });
+    list.add(structuredClone(messages), 'input');
+    const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: messages });
+    const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+    await turn.start();
+    await turn.end();
+    expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: chronological }));
+  });
+
+  it.each([
+    { state: 'result', asyncEnabled: true, bufferOnIdle: true, expected: 1 },
+    { state: 'text', asyncEnabled: true, bufferOnIdle: true, expected: 1 },
+    { state: 'empty', asyncEnabled: true, bufferOnIdle: true, expected: 0 },
+    { state: 'result', asyncEnabled: false, bufferOnIdle: true, expected: 0 },
+    { state: 'result', asyncEnabled: true, bufferOnIdle: false, expected: 0 },
+  ])(
+    'retains idle behavior for $state async=$asyncEnabled idle=$bufferOnIdle',
+    async ({ state, asyncEnabled, bufferOnIdle, expected }) => {
+      const list = new MessageList({ threadId: 'idle-buffer-thread' });
+      const message = createTestMessage('Completed turn', 'assistant');
+      if (state === 'result') {
+        message.content.parts.push({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'complete', toolName: 'complete', args: {}, result: 'done' },
+        });
+      }
+      if (state !== 'empty') list.add(message, 'input');
+      const mockOM = createMockOM({ asyncEnabled, bufferOnIdle, unobservedMessages: list.get.all.db() });
+      const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+      await turn.start();
+      await turn.end();
+      expect(mockOM.buffer).toHaveBeenCalledTimes(expected);
+    },
+  );
 });

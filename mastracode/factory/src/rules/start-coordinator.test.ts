@@ -2,11 +2,10 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
-import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -55,7 +54,7 @@ function makeController(sendMessage = vi.fn(async () => {})) {
   };
 }
 
-function makeSourceControl() {
+function makeSourceControl(integrationId = 'github') {
   const sessions = new Map([
     [
       'session-1',
@@ -83,11 +82,28 @@ function makeSourceControl() {
     ],
   ]);
   return {
+    integrationId,
     sessions: { getBySessionId: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null) },
     projectRepositories: {
       get: vi.fn(async ({ id }: { id: string }) => ({ id, connectionId: `connection-${id}` })),
+      list: vi.fn(async ({ connectionId }: { connectionId: string }) => {
+        const suffix = connectionId.endsWith('2') ? '2' : '1';
+        return [{ id: `project-repository-${suffix}`, repositoryId: `repository-${suffix}` }];
+      }),
     },
-    connections: { get: vi.fn(async () => ({ factoryProjectId: PROJECT_ID })) },
+    repositories: {
+      get: vi.fn(async ({ id }: { id: string }) => ({
+        id,
+        externalId: id.endsWith('2') ? '2' : '1',
+        slug: 'owner/repo',
+      })),
+    },
+    connections: {
+      get: vi.fn(async () => ({ factoryProjectId: PROJECT_ID })),
+      list: vi.fn(async ({ orgId }: { orgId: string }) => [
+        { id: `connection-project-repository-${orgId === 'org-2' ? '2' : '1'}`, integrationId },
+      ]),
+    },
   };
 }
 
@@ -96,7 +112,6 @@ function startRequest(
     sessionId: string;
     kickoffKey: string;
     role: string;
-    kickoffMessage: string | null;
     defaultModelId: string;
     id: string;
   }> = {},
@@ -107,12 +122,7 @@ function startRequest(
     factoryProjectId: PROJECT_ID,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
-    threadTags: { role: overrides.role ?? 'work' },
     kickoffKey: overrides.kickoffKey ?? 'kickoff-1',
-    invocation:
-      overrides.kickoffMessage === null
-        ? undefined
-        : { type: 'prompt' as const, prompt: overrides.kickoffMessage ?? 'Start work' },
     destinationStage: 'intake' as const,
     defaultModelId: overrides.defaultModelId,
     workItem: {
@@ -134,93 +144,51 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
-  it('uses authenticated run_start ingress to approve a classified feature into Planning', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const item = (
-      await storage.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
-        factoryProjectId: PROJECT_ID,
-        input: startRequest().workItem.input,
-      })
-    ).item;
-    const transitionService = new FactoryTransitionService({
-      storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
-    });
-    await transitionService.transition({
+  it('retries an unattributed item only in its existing role session', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await seed.workItems.upsert({
       orgId: 'org-1',
+      userId: 'user-1',
       factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      board: 'work',
-      stage: 'intake',
-      expectedRevision: item.revision,
-      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
-      ingress: { type: 'agent', identity: 'triage-classify' },
-      cause: 'await approval',
-      triageType: 'feature request',
+      input: {
+        title: 'Fix issue 1',
+        stages: ['intake'],
+        sessions: { work: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'session-1' } },
+        metadata: {},
+      },
     });
+    const sourceControl = makeSourceControl();
+    sourceControl.projectRepositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      connectionId: `connection-${id}`,
+      repositoryId: id === 'project-repository-1' ? 'repository-1' : 'repository-2',
+    }));
+    sourceControl.projectRepositories.list.mockResolvedValue([
+      { id: 'project-repository-2', repositoryId: 'repository-2' },
+      { id: 'project-repository-1', repositoryId: 'repository-1' },
+    ]);
+    sourceControl.repositories.get.mockImplementation(async ({ id }) => ({
+      id,
+      externalId: id.endsWith('2') ? '2' : '1',
+      slug: id.endsWith('2') ? 'owner/other' : 'owner/repo',
+    }));
     const { controller } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
-      storage,
-      transitionService,
-      makeSourceControl() as never,
+      seed.workItems,
+      undefined,
+      sourceControl as never,
     );
 
-    const prepared = await coordinator.prepare({
-      ...startRequest({ id: item.id, role: 'plan' }),
-      destinationStage: 'planning',
+    await expect(coordinator.prepare(startRequest({ id: item.item.id }))).resolves.toMatchObject({
+      sessionId: 'session-1',
     });
-
-    expect(prepared.workItemId).toBe(item.id);
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
-  });
-
-  it('uses authenticated run_start ingress to approve a classified feature into Execute', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const item = (
-      await storage.upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
-        factoryProjectId: PROJECT_ID,
-        input: { ...startRequest().workItem.input, stages: ['planning'] },
-      })
-    ).item;
-    const transitionService = new FactoryTransitionService({
-      storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
-    });
-    await transitionService.transition({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: item.id,
-      board: 'work',
-      stage: 'planning',
-      expectedRevision: item.revision,
-      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
-      ingress: { type: 'agent', identity: 'triage-classify-execute' },
-      cause: 'await approval',
-      triageType: 'feature request',
-    });
-    const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      transitionService,
-      makeSourceControl() as never,
-    );
-
-    await coordinator.prepare({
-      ...startRequest({ id: item.id, role: 'work' }),
-      destinationStage: 'execute',
-    });
-
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+    expect(controller.createSession).toHaveBeenCalledTimes(1);
   });
 
   it('commits the item session, exact binding, and durable pending start', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
@@ -235,15 +203,23 @@ describe('FactoryStartCoordinator', () => {
       threadId: 'session-1',
       resourceId: 'session-1',
       sessionId: 'session-1',
-      kickoffStatus: 'pending',
+      kickoffStatus: 'sent',
       replayed: false,
     });
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
     const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
+    expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
       toolName: 'factory_transition_work_item',
       policy: 'allow',
     });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
@@ -258,27 +234,28 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
-  it('grants plan preapproval only on a hands-off start, and a later one upgrades the item', async () => {
+  it('resolves GitLab-backed runs from the GitLab source-control partition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
+    const githubSourceControl = makeSourceControl();
+    const gitlabSourceControl = makeSourceControl('gitlab');
+    const resolveSourceControl = vi.fn(request =>
+      request.workItem.input.externalSource?.integrationId === 'gitlab'
+        ? (gitlabSourceControl as never)
+        : (githubSourceControl as never),
     );
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, resolveSourceControl);
+    const request = startRequest();
+    request.workItem.input.externalSource.integrationId = 'gitlab';
 
-    const plain = await coordinator.prepare(startRequest());
-    expect((await storage.get({ orgId: 'org-1', id: plain.workItemId }))?.plansPreapprovedAt ?? null).toBeNull();
+    await coordinator.prepare(request);
 
-    const handsOff = await coordinator.prepare({
-      ...startRequest({ kickoffKey: 'kickoff-2' }),
-      preapprovePlans: true,
-    });
-    expect(handsOff.workItemId).toBe(plain.workItemId);
-    expect((await storage.get({ orgId: 'org-1', id: handsOff.workItemId }))?.plansPreapprovedAt).toBeInstanceOf(Date);
+    expect(resolveSourceControl).toHaveBeenCalledWith(request);
+    expect(gitlabSourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+    expect(githubSourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
   });
 
   it('seeds caller identity into an existing request context', async () => {
@@ -418,7 +395,7 @@ describe('FactoryStartCoordinator', () => {
 
     await expect(
       coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' })),
-    ).resolves.toMatchObject({ threadId: 'session-1', kickoffStatus: 'pending' });
+    ).resolves.toMatchObject({ threadId: 'session-1', kickoffStatus: 'sent' });
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
       modelId: 'anthropic/claude-fable-5',
       error: 'Unknown model',
@@ -431,16 +408,12 @@ describe('FactoryStartCoordinator', () => {
     let bindingsDuringRule = 0;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: {
-            execute: {
-              issue: {
-                onEnter: async () => {
-                  bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-                },
-              },
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        execute: {
+          issue: {
+            onEnter: async () => {
+              bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
             },
           },
         },
@@ -460,7 +433,7 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.get({ orgId: 'org-1', id: prepared.workItemId }))?.stages).toEqual(['execute']);
     expect(bindingsDuringRule).toBe(1);
     expect(sendMessage).not.toHaveBeenCalled();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
   it('binds the controller session to the exact Factory session thread', async () => {
@@ -473,7 +446,7 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
+    const prepared = await coordinator.prepare(startRequest());
 
     expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
     expect(controller.createSession).toHaveBeenCalledWith(
@@ -487,11 +460,16 @@ describe('FactoryStartCoordinator', () => {
     // Bound-agent gates (transition tool, factory-phase processor) resolve the
     // session address from controller state — the coordinator must seed it
     // server-side, never relying on a browser connecting to set it.
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
     expect(session.thread.list).not.toHaveBeenCalled();
     expect(session.thread.switch).not.toHaveBeenCalled();
     expect(session.thread.create).not.toHaveBeenCalled();
@@ -507,7 +485,7 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    const request = startRequest({ role: 'review', kickoffMessage: null });
+    const request = startRequest({ role: 'review' });
     request.workItem.input.externalSource.type = 'pull-request' as never;
     await coordinator.prepare(request);
 
@@ -515,46 +493,19 @@ describe('FactoryStartCoordinator', () => {
     // reads this flag to skip AGENTS.md/CLAUDE.md ingestion for the session.
     // `baseRef` carries the trusted ref (the session's base branch) that the
     // SDK may serve instruction files from instead.
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-      untrustedCheckout: true,
-      baseRef: 'main',
-    });
-  });
-
-  it.each(['factory-review', 'factory-rereview'] as const)(
-    'tags %s skill kickoffs with untrustedCheckout',
-    async skillName => {
-      const storage = (await createFactoryStorageForTests()).workItems;
-      const { controller, session } = makeController();
-      session.getWorkspace.mockReturnValue({
-        skills: {
-          maybeRefresh: vi.fn(async () => {}),
-          get: vi.fn(async () => ({ name: skillName, description: 'Review a PR', instructions: 'Review.' })),
-        },
-      } as never);
-      const coordinator = new FactoryStartCoordinator(
-        controller as never,
-        storage,
-        undefined,
-        makeSourceControl() as never,
-      );
-
-      const request = startRequest({ kickoffMessage: null });
-      request.invocation = { type: 'skill', skillName, arguments: 'PR #1' } as never;
-      await coordinator.prepare(request);
-
-      expect(session.state.set).toHaveBeenCalledWith({
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
         factoryProjectId: PROJECT_ID,
         projectRepositoryId: 'project-repository-1',
         factoryOrgId: 'org-1',
         untrustedCheckout: true,
         baseRef: 'main',
-      });
-    },
-  );
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
+  });
 
   it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -564,18 +515,23 @@ describe('FactoryStartCoordinator', () => {
     record!.baseBranch = '';
     const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, sourceControl as never);
 
-    const request = startRequest({ role: 'review', kickoffMessage: null });
+    const request = startRequest({ role: 'review' });
     request.workItem.input.externalSource.type = 'pull-request' as never;
     request.workItem.input.metadata = { baseBranch: 'release-1.x' };
     await coordinator.prepare(request);
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-      untrustedCheckout: true,
-      baseRef: 'release-1.x',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        untrustedCheckout: true,
+        baseRef: 'release-1.x',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
   });
 
   it('does not tag issue work sessions with untrustedCheckout', async () => {
@@ -588,13 +544,18 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    await coordinator.prepare(startRequest({ kickoffMessage: null }));
+    await coordinator.prepare(startRequest());
 
-    expect(session.state.set).toHaveBeenCalledWith({
-      factoryProjectId: PROJECT_ID,
-      projectRepositoryId: 'project-repository-1',
-      factoryOrgId: 'org-1',
-    });
+    expect(session.state.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        factoryProjectId: PROJECT_ID,
+        projectRepositoryId: 'project-repository-1',
+        factoryOrgId: 'org-1',
+        pluginInstructions: [
+          "Target repository: owner/repo. Before editing files or creating a pull request, verify this session's checkout matches the target repository.",
+        ],
+      }),
+    );
   });
 
   it('reuses the exact Factory session thread across roles', async () => {
@@ -607,12 +568,8 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    const triage = await coordinator.prepare(
-      startRequest({ role: 'triage', kickoffKey: 'triage-1', kickoffMessage: null }),
-    );
-    const plan = await coordinator.prepare(
-      startRequest({ id: triage.workItemId, role: 'plan', kickoffKey: 'plan-1', kickoffMessage: null }),
-    );
+    const triage = await coordinator.prepare(startRequest({ role: 'triage', kickoffKey: 'triage-1' }));
+    const plan = await coordinator.prepare(startRequest({ id: triage.workItemId, role: 'plan', kickoffKey: 'plan-1' }));
 
     expect(plan.threadId).toBe('session-1');
     expect(plan.threadId).toBe(triage.threadId);
@@ -628,11 +585,9 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: { execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } } },
-        },
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),
     });
     const { controller, sendMessage } = makeController();
@@ -667,8 +622,9 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+  it('replays the same durable pending kickoff and binding without dispatching or auditing it again', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
@@ -682,9 +638,10 @@ describe('FactoryStartCoordinator', () => {
     const replay = await coordinator.prepare(input);
 
     expect(replay).toMatchObject({ workItemId: first.workItemId, bindingId: first.bindingId, replayed: true });
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'pending' });
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
   });
 
   it('revokes only the prior binding for the same item role', async () => {
@@ -696,11 +653,9 @@ describe('FactoryStartCoordinator', () => {
       undefined,
       makeSourceControl() as never,
     );
-    const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
+    const first = await coordinator.prepare(startRequest());
 
-    await coordinator.prepare(
-      startRequest({ id: first.workItemId, kickoffKey: 'kickoff-2', role: 'work', kickoffMessage: null }),
-    );
+    await coordinator.prepare(startRequest({ id: first.workItemId, kickoffKey: 'kickoff-2', role: 'work' }));
     const bindings = await storage.listRunBindings('org-1', PROJECT_ID, first.workItemId);
     expect(bindings.map(binding => binding.status).sort()).toEqual(['active', 'revoked']);
     expect(bindings.every(binding => binding.role === 'work')).toBe(true);
@@ -715,9 +670,9 @@ describe('FactoryStartCoordinator', () => {
       undefined,
       makeSourceControl() as never,
     );
-    const first = await coordinator.prepare(startRequest({ kickoffMessage: null }));
+    const first = await coordinator.prepare(startRequest());
     const second = await coordinator.prepare({
-      ...startRequest({ sessionId: 'session-2', kickoffMessage: null }),
+      ...startRequest({ sessionId: 'session-2' }),
       orgId: 'org-2',
       workItem: {
         ...startRequest().workItem,
@@ -732,72 +687,5 @@ describe('FactoryStartCoordinator', () => {
     expect(second.workItemId).not.toBe(first.workItemId);
     expect(await storage.listPendingStarts('org-1', PROJECT_ID)).toHaveLength(1);
     expect(await storage.listPendingStarts('org-2', PROJECT_ID)).toHaveLength(1);
-  });
-
-  describe('feed context injection', () => {
-    async function seedItemWithComment() {
-      const seed = await createFactoryStorageForTests();
-      const item = (
-        await seed.workItems.upsert({
-          orgId: 'org-1',
-          userId: 'user-1',
-          factoryProjectId: PROJECT_ID,
-          input: startRequest().workItem.input,
-        })
-      ).item;
-      await seed.comments.create({
-        orgId: 'org-1',
-        factoryProjectId: PROJECT_ID,
-        workItemId: item.id,
-        author: { kind: 'user', id: 'user-2', displayName: 'Bob' },
-        body: 'ship it behind the flag',
-      });
-      return { seed, item };
-    }
-
-    function coordinatorWith(
-      seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>,
-      reader?: FactoryFeedReader,
-    ) {
-      const { controller } = makeController();
-      return new FactoryStartCoordinator(
-        controller as never,
-        seed.workItems,
-        undefined,
-        makeSourceControl() as never,
-        undefined,
-        reader,
-      );
-    }
-
-    it('appends the feed to the kickoff of an existing item', async () => {
-      const { seed, item } = await seedItemWithComment();
-      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
-
-      await coordinator.prepare(startRequest({ id: item.id }));
-
-      const message = (await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message;
-      expect(message).toMatch(/^Start work\n\n<work-item-feed>\n/);
-      expect(message).toContain('ship it behind the flag');
-      expect(message).toContain('[Bob · ');
-    });
-
-    it('leaves a new item kickoff untouched even with a reader injected', async () => {
-      const { seed } = await seedItemWithComment();
-      const coordinator = coordinatorWith(seed, new FactoryFeedReader(seed.comments));
-
-      await coordinator.prepare(startRequest());
-
-      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
-    });
-
-    it('is byte-identical when no reader is injected', async () => {
-      const { seed, item } = await seedItemWithComment();
-      const coordinator = coordinatorWith(seed);
-
-      await coordinator.prepare(startRequest({ id: item.id }));
-
-      expect((await seed.workItems.listPendingStarts('org-1', PROJECT_ID))[0]?.message).toBe('Start work');
-    });
   });
 });

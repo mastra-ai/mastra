@@ -91,7 +91,7 @@ function parseMetadata(value: unknown): RemindMessageMetadata | undefined {
 }
 
 export function getRemindMessageMetadata(message: MastraDBMessage): RemindMessageMetadata | undefined {
-  const metadata = message.content.metadata as Record<string, unknown> | undefined;
+  const metadata = message.content.metadata;
   return parseMetadata(metadata?.[REMIND_MESSAGE_METADATA_KEY]);
 }
 

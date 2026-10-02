@@ -25,6 +25,7 @@ const STEP_KEY = 'mastracode.factory-create.step';
 const NAME_KEY = 'mastracode.factory-create.name';
 const REPO_KEY = 'mastracode.factory-create.repository';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
+const LINKED_KEY = 'mastracode.factory-create.linked-repository-id';
 const WIZARD_PATH = '/factories/fp-host/new-factory';
 
 const connectedGithub: GithubStatus = {
@@ -79,14 +80,14 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Factory name')).toHaveFocus();
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name your new Factory')).toHaveFocus();
     expect(screen.getByRole('option', { name: /Type a name to create your Factory/ })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
 
-    await userEvent.setup().type(screen.getByLabelText('Factory name'), 'Mastra');
+    await userEvent.setup().type(screen.getByLabelText('Name your new Factory'), 'Mastra');
     expect(screen.getByRole('option', { name: /Create “Mastra”/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
@@ -105,13 +106,15 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    const field = await screen.findByLabelText('Factory name');
+    const field = await screen.findByLabelText('Name your new Factory');
+    expect(screen.getByRole('combobox', { name: 'Name your new Factory' })).toBe(field);
     await user.type(field, 'Mastra');
     await user.click(screen.getByRole('option', { name: /Create “Mastra”/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Choose your codebase' })).toBe(field);
     // The same field carries over, focused and empty — steps swap rows, not the palette.
-    expect(screen.getByLabelText('Search repositories')).toBe(field);
+    expect(screen.getByLabelText('Choose your codebase')).toBe(field);
     expect(field).toHaveFocus();
     expect(field).toHaveValue('');
     // Nothing exists server-side yet: quitting here leaves no empty Factory behind.
@@ -135,13 +138,13 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await screen.findByLabelText('Name your new Factory');
     await waitFor(() => expect(repoRequests).toBe(1));
 
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
 
     // Already cached: the repository step opens on rows, not on a skeleton.
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /octo\/hello/ })).toBeInTheDocument();
     expect(screen.queryByLabelText('Loading repositories')).not.toBeInTheDocument();
   });
@@ -160,11 +163,11 @@ describe('Create Factory wizard', () => {
 
     const { client } = renderFlow();
 
-    await screen.findByRole('heading', { name: 'Name your new Factory' });
+    await screen.findByLabelText('Name your new Factory');
     await waitForMutationsIdle(client);
     expect(queries).toEqual(['']);
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
-    const search = await screen.findByLabelText('Search repositories');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
+    const search = await screen.findByLabelText('Choose your codebase');
     await waitForMutationsIdle(client);
     expect(queries.length).toBeGreaterThanOrEqual(2);
     queries.splice(0);
@@ -188,9 +191,9 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    await user.type(await screen.findByLabelText('Factory name'), 'Mastra{Enter}');
+    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
 
-    expect(await screen.findByRole('heading', { name: 'Choose your codebase' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
   });
 
   it('keeps the picked repository in the draft instead of linking it right away', async () => {
@@ -211,7 +214,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('option', { name: /octo\/hello/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
     expect(calls).toEqual([]);
     expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
     expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({ fullName: 'octo/hello' });
@@ -232,7 +235,7 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Skip' }));
 
-    expect(await screen.findByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
     expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
     // Still nothing server-side one step before the end.
     expect(calls).toEqual([]);
@@ -245,7 +248,13 @@ describe('Create Factory wizard', () => {
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
@@ -256,6 +265,7 @@ describe('Create Factory wizard', () => {
     seedDraft('model-provider');
     const { intakeConfigs } = stubModelStepEndpoints(calls, {
       github: { enabled: true, sourceIds: ['octo/hello'] },
+      gitlab: { enabled: false, sourceIds: null },
     });
     const user = userEvent.setup();
 
@@ -318,15 +328,18 @@ describe('Create Factory wizard', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
-    // The Factory exists: no walking back to rename it or swap the repository it will link.
-    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
   });
 
   it('cannot be left while the Factory is being created', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
     stubModelStepEndpoints(calls);
-    server.use(http.post(`${TEST_BASE_URL}/web/factory/projects`, () => new Promise<never>(() => {})));
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        calls.push('create-pending');
+        return new Promise<never>(() => {});
+      }),
+    );
     const user = userEvent.setup();
 
     renderFlow();
@@ -334,7 +347,8 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument());
+    await waitFor(() => expect(calls).toContain('create-pending'));
+    expect(screen.queryByRole('button', { name: 'Codebase' })).not.toBeInTheDocument();
     await user.keyboard('{Escape}');
 
     expect(screen.getByTestId('pathname')).toHaveTextContent(WIZARD_PATH);
@@ -353,7 +367,7 @@ describe('Create Factory wizard', () => {
     expect(await screen.findByRole('option', { name: /Connect GitHub/ })).toHaveAttribute('aria-disabled', 'false');
   });
 
-  it('says so instead of offering a dead end when GitHub is not configured on the server', async () => {
+  it('marks GitHub unavailable and does not leak env details when the GitHub App is not configured', async () => {
     seedDraft('vcs');
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
@@ -371,7 +385,63 @@ describe('Create Factory wizard', () => {
 
     const row = await screen.findByRole('option', { name: /GitHub unavailable/ });
     expect(row).toHaveAttribute('aria-disabled', 'true');
-    expect(row).toHaveTextContent('Set GITHUB_APP_ID on the server and restart.');
+    expect(row).toHaveTextContent('GitHub is not configured for this deployment.');
+    expect(row).not.toHaveTextContent('GITHUB_APP_ID');
+  });
+
+  it('lets a GitLab-only deployment choose a GitLab repository', async () => {
+    seedDraft('vcs');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: false,
+          connected: false,
+          installations: [],
+          reason: 'missing_config',
+          diagnostics: { missingGithubAppEnvVars: ['GITHUB_APP_ID'] },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          configured: true,
+          accounts: ['gitlab.com'],
+          reauthRequired: false,
+          reason: 'ready',
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'gitlab-project:encoded',
+              name: 'acme/app',
+              projectId: '10',
+              projectPath: 'acme/app',
+              installationStorageId: 'gitlab-inst-1',
+              connectionId: 'direct',
+              accountLabel: 'gitlab.com',
+              defaultBranch: 'main',
+              sandboxProvider: 'local',
+              sandboxWorkdir: '/workspace/app',
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /acme\/app/ }));
+
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    expect(JSON.parse(sessionStorage.getItem(REPO_KEY) ?? 'null')).toMatchObject({
+      provider: 'gitlab',
+      id: 'gitlab-project:encoded',
+      externalId: '10',
+      fullName: 'acme/app',
+    });
   });
 
   it('keeps the Linear step skippable when Linear is not configured on the server', async () => {
@@ -389,7 +459,7 @@ describe('Create Factory wizard', () => {
     expect(screen.queryByRole('option', { name: /Connect Linear/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('option', { name: /Skip for now/ }));
-    expect(await screen.findByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
   });
 
   it('offers to reconnect Linear when its authorization expired', async () => {
@@ -423,7 +493,7 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: /Mobile App/ })).toBeInTheDocument();
     // Skip leads, and doubles as chrome so a long project list never hides it.
     expect(screen.getAllByRole('option')[0]).toHaveTextContent('Skip for now');
@@ -451,14 +521,74 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     await waitForMutationsIdle(client);
-    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
-    // Both picks land in one config write, each selected and switched on.
+    expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
+    // The link feeds the repository first; the Linear pick lands on top of it.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: true, sourceIds: ['lin-1'] },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 
-  it('keeps Linear out of intake when it is skipped', async () => {
+  it('routes the picked Jira project into the Factory it creates', async () => {
+    const calls: string[] = [];
+    seedDraft('project-management');
+    stubConnectedJira();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: false, connected: false, workspace: null, reason: 'missing_config' }),
+      ),
+    );
+    const { intakeConfigs } = stubModelStepEndpoints(calls);
+    const bindings: unknown[] = [];
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
+        bindings.push(await request.json());
+        return HttpResponse.json({ bindings: [] });
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderFlow();
+
+    await user.click(await screen.findByRole('option', { name: /Engineering/ }));
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+
+    await waitForMutationsIdle(client);
+    expect(bindings).toEqual([
+      { integrationId: 'jira', sourceId: 'jira-source-1', factoryProjectId: 'fp-1', board: 'work' },
+    ]);
+    expect(intakeConfigs).toEqual([
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: true, sourceIds: ['jira-source-1'] },
+        incidentio: { enabled: false, sourceIds: null },
+      },
+    ]);
+  });
+
+  it('keeps project-management intake disabled when it is skipped', async () => {
     const calls: string[] = [];
     seedDraft('project-management');
     stubConnectedLinear();
@@ -483,7 +613,13 @@ describe('Create Factory wizard', () => {
     // No Linear routing without a picked project; only the repository feeds intake.
     expect(bindings).toEqual([]);
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        gitlab: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
+        jira: { enabled: false, sourceIds: null },
+        incidentio: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 
@@ -500,11 +636,11 @@ describe('Create Factory wizard', () => {
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
 
     // Restarting drops what an earlier attempt half-created, so the run ahead is a clean one.
     await user.click(screen.getByRole('option', { name: /Create “Mastra”/ }));
-    await screen.findByRole('heading', { name: 'Choose your codebase' });
+    await screen.findByLabelText('Choose your codebase');
     expect(sessionStorage.getItem(FACTORY_KEY)).toBeNull();
   });
 
@@ -524,29 +660,7 @@ describe('Create Factory wizard', () => {
     await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to create Factory (500)');
-    expect(screen.getByRole('heading', { name: 'Choose your Factory model' })).toBeInTheDocument();
-  });
-
-  it('Back steps through the wizard, and leaves it from the first step', async () => {
-    sessionStorage.setItem(STEP_KEY, 'vcs');
-    sessionStorage.setItem(NAME_KEY, 'Mastra');
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
-      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-    );
-    const user = userEvent.setup();
-
-    renderFlow(['/factories/fp-host/overview', WIZARD_PATH]);
-
-    await user.click(await screen.findByRole('button', { name: 'Back' }));
-
-    // Back to the name step, with what was already typed.
-    expect(await screen.findByRole('heading', { name: 'Name your new Factory' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Factory name')).toHaveValue('Mastra');
-
-    await user.click(screen.getByRole('button', { name: 'Back' }));
-    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-host/overview'));
+    expect(screen.getByLabelText('Choose your Factory model')).toBeInTheDocument();
   });
 
   it('Escape falls back to the Factory in view when there is no in-app history (deep link)', async () => {
@@ -569,14 +683,16 @@ const linkedRepository = {
 
 /**
  * Stub the intake config the last step reads and writes, collecting every
- * saved config body.
+ * saved config body. Stateful: each PUT becomes what the next GET returns.
  */
-function stubIntakeConfig(config: Record<string, unknown> = {}) {
+function stubIntakeConfig(initial: Record<string, unknown> = {}) {
+  let config = initial;
   const savedConfigs: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
-    http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
-      savedConfigs.push(await request.json());
+    http.put<never, Record<string, unknown>>(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      config = await request.json();
+      savedConfigs.push(config);
       return HttpResponse.json({ config });
     }),
   );
@@ -670,6 +786,149 @@ function stubConnectedLinear() {
     ),
   );
 }
+
+function stubConnectedJira() {
+  const connection = {
+    id: 'jira-connection-1',
+    integrationId: 'jira',
+    status: 'active',
+    accountLabel: 'acme.atlassian.net',
+  };
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        configured: true,
+        mode: 'platform',
+        site: 'acme.atlassian.net',
+        sites: ['acme.atlassian.net'],
+        connections: [connection],
+        reason: 'ready',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: 'jira-source-1',
+            key: 'ENG',
+            name: 'Engineering',
+            connectionId: connection.id,
+            site: connection.accountLabel,
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/integrations/platform/jira/connections`, () =>
+      HttpResponse.json({ connections: [connection] }),
+    ),
+  );
+}
+
+describe('back navigation', () => {
+  it('has no back button on the name step', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })));
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('steps back from vcs to name while preserving the typed name', async () => {
+    seedDraft('vcs');
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    // Back returns to the name step, and the previously typed name is still in the draft.
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
+
+  it('steps back from project-management to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('vcs');
+  });
+
+  it('drops the back button once a Factory has been created but the final commit failed', async () => {
+    // The final commit on model-provider persists `factoryId` (and possibly
+    // `linkedRepositoryId`) so a retry resumes instead of duplicating. If the
+    // user could still step back, they might pick a new name or repository
+    // while the retry silently finishes the prior IDs, so Back is removed
+    // once these server-side checkpoints exist.
+    seedDraft('model-provider');
+    sessionStorage.setItem(FACTORY_KEY, 'fp-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-existing', name: 'Mastra' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('also drops the back button when only the repository link has been persisted', async () => {
+    seedDraft('model-provider');
+    sessionStorage.setItem(LINKED_KEY, 'lnk-existing');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/om`, () => HttpResponse.json({})),
+    );
+
+    renderFlow();
+
+    expect(await screen.findByLabelText('Choose your Factory model')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Go back to previous step/ })).not.toBeInTheDocument();
+  });
+
+  it('preserves the repository pick when Back rewinds through name back to vcs', async () => {
+    seedDraft('project-management');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    // Back twice: project-management → vcs → name. The repository the user
+    // already picked must survive the rewind so it is still there when they
+    // continue back to vcs.
+    expect(await screen.findByLabelText('Connect the work behind the code')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Go back to previous step/ }));
+    expect(await screen.findByLabelText('Name your new Factory')).toBeInTheDocument();
+
+    // The repository pick is still in sessionStorage after landing on name.
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('name');
+    expect(sessionStorage.getItem(REPO_KEY)).not.toBeNull();
+    expect(sessionStorage.getItem(NAME_KEY)).toBe('Mastra');
+  });
+});
 
 /** Seed a mid-flow draft: name typed, repository picked, nothing created yet. */
 function seedDraft(step: 'vcs' | 'project-management' | 'model-provider') {

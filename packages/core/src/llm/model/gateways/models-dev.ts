@@ -2,7 +2,7 @@ import { createAlibaba } from '@ai-sdk/alibaba-v6';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createCerebras } from '@ai-sdk/cerebras-v6';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v6';
-import { createDeepSeek } from '@ai-sdk/deepseek-v6';
+import { createDeepSeek } from '@ai-sdk/deepseek-v7';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createGroq } from '@ai-sdk/groq-v6';
 import { createMistral } from '@ai-sdk/mistral-v6';
@@ -296,15 +296,18 @@ export class ModelsDevGateway extends MastraModelGateway {
     const perModelApi = config?.modelOverrides?.[modelId]?.api;
     const template = perModelApi ?? config?.url;
 
+    // Explicit <PROVIDER>_BASE_URL override wins, even for providers without a registry url template
+    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
+    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
+    if (customBaseUrl) {
+      return customBaseUrl;
+    }
+
     if (!template) {
       return;
     }
 
-    // Check for custom base URL from env vars (explicit override still wins)
-    const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
-    const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
-
-    return customBaseUrl || interpolateUrlTemplate(template, envVars);
+    return interpolateUrlTemplate(template, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {
@@ -371,8 +374,13 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
-      case 'perplexity':
-        return createPerplexity({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+      case 'perplexity': {
+        const hasIntegrationHeader = Object.keys(mastraHeaders).some(key => key.toLowerCase() === 'x-pplx-integration');
+        const perplexityHeaders = hasIntegrationHeader
+          ? mastraHeaders
+          : { 'X-Pplx-Integration': MASTRA_USER_AGENT, ...mastraHeaders };
+        return createPerplexity({ apiKey, baseURL, headers: perplexityHeaders })(modelId);
+      }
       case 'cerebras':
         return createCerebras({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'togetherai':

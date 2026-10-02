@@ -7,10 +7,11 @@
  */
 import { EntityType } from '@internal/core/storage';
 
+import type { MessageListInput } from '../../agent/message-list/types';
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload, StepTripwireData } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
@@ -37,6 +38,8 @@ export enum SpanType {
   AGENT_RUN = 'agent_run',
   /** Scorer execution */
   SCORER_RUN = 'scorer_run',
+  /** Classifier evaluation */
+  CLASSIFIER_EVALUATION = 'classifier_evaluation',
   /** Individual scorer pipeline step */
   SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
@@ -51,6 +54,8 @@ export enum SpanType {
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
   /** Input or Output Processor execution */
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
@@ -187,6 +192,23 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
 }
 
 /**
+ * Classifier evaluation attributes
+ */
+export interface ClassifierEvaluationAttributes extends AIBaseAttributes {
+  classifierId?: string;
+  modelId?: string;
+  provider?: string;
+  questionCount?: number;
+  questionTypes?: string[];
+  maxRetries?: number;
+  attemptCount?: number;
+  retryCount?: number;
+  durationMs?: number;
+  usage?: UsageStats;
+  errorType?: string;
+}
+
+/**
  * Scorer Step attributes
  */
 export interface ScorerStepAttributes extends AIBaseAttributes {
@@ -279,6 +301,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Whether one or more model steps omitted a primary token count */
+  usageIncomplete?: boolean;
   /** Estimated cost context, when provided directly by an SDK or provider */
   costContext?: CostContext;
   /** Model parameters */
@@ -449,6 +473,8 @@ export interface ProviderToolCallAttributes extends AIBaseAttributes {
  * MCP Tool Call attributes
  */
 export interface MCPToolCallAttributes extends AIBaseAttributes {
+  /** Tool category, e.g. 'tool', 'function' */
+  toolType?: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */
@@ -458,6 +484,26 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   toolCallId?: string;
   /** Whether tool execution was successful */
   success?: boolean;
+}
+
+/**
+ * MCP Server Request attributes
+ */
+export interface MCPServerRequestAttributes extends AIBaseAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string;
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string;
+  /** Configured MCPServer name */
+  mcpServer: string;
+  /** Configured MCPServer version */
+  serverVersion?: string;
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string;
+  /** Client implementation name, when the client reported one */
+  clientName?: string;
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string;
 }
 
 /**
@@ -529,6 +575,38 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
 }
 
 /**
+ * Pipeline phase a processor span is created for. One value per site where a
+ * processor executor creates a span, so a processor that runs in more than one
+ * phase can name, describe and narrow each of them separately.
+ *
+ * Re-exported from `@mastra/core/processors` as `ProcessorSpanPhase`; it lives
+ * here because `ProcessorPipelineAttributes` records it and observability types
+ * cannot import from `processors`.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
+/**
+ * Phase recorded on a processor span, and the discriminant its payloads narrow
+ * on.
+ *
+ * Finer-grained than `ProcessorSpanPhase`, which collapses the two output hooks
+ * into one `'output'` because a processor naming its span does not care which
+ * ran. A reader does: `outputStream` records chunk counts and accumulated text,
+ * `outputResult` records messages and a summarized result. One value for both
+ * would leave the payload ambiguous, which is the whole reason this attribute
+ * exists.
+ */
+export type ProcessorSpanPayloadPhase = Exclude<ProcessorSpanPhase, 'output'> | 'outputStream' | 'outputResult';
+
+/**
  * Attributes recorded for every processor the processor runner executes,
  * independent of the span type that processor declares.
  *
@@ -545,6 +623,24 @@ export interface ProcessorPipelineAttributes {
   processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
+  /**
+   * Pipeline phase the span was created for. The discriminant a reader narrows
+   * a processor span's payloads on: `entityType` cannot serve, because
+   * `llmRequest`/`llmResponse` share `INPUT_PROCESSOR` and
+   * `outputStep`/`requestError` share `OUTPUT_STEP_PROCESSOR`.
+   *
+   * Absent on spans recorded before this attribute existed, which is why the
+   * typed payload views fall back to the untyped shape rather than assuming a
+   * phase.
+   */
+  processorPhase?: ProcessorSpanPayloadPhase;
+  /**
+   * Milliseconds spent inside `processOutputStream`, summed across every
+   * chunk of the stream. Only set on output stream processor spans. The
+   * span's own duration covers the whole stream, model latency included, so
+   * this is what separates a slow processor from a slow model.
+   */
+  hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
   messageListMutations?: Array<{
     type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
@@ -607,6 +703,10 @@ export interface WorkflowRunAttributes extends AIBaseAttributes {
 export interface WorkflowStepAttributes extends AIBaseAttributes {
   /** Step status */
   status?: WorkflowStepStatus;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -619,6 +719,12 @@ export interface WorkflowConditionalAttributes extends AIBaseAttributes {
   truthyIndexes?: number[];
   /** Which steps will be executed */
   selectedSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -639,6 +745,12 @@ export interface WorkflowParallelAttributes extends AIBaseAttributes {
   branchCount: number;
   /** Step IDs being executed in parallel */
   parallelSteps?: string[];
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -653,6 +765,12 @@ export interface WorkflowLoopAttributes extends AIBaseAttributes {
   totalIterations?: number;
   /** Number of steps to run concurrently in foreach loop */
   concurrency?: number;
+  /** Authored graph entry id for this control-flow operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -665,6 +783,12 @@ export interface WorkflowSleepAttributes extends AIBaseAttributes {
   untilDate?: Date;
   /** Sleep type */
   sleepType?: 'fixed' | 'dynamic';
+  /** Authored graph entry id for this sleep operation */
+  entryId?: string;
+  /** Authored graph entry description */
+  entryDescription?: string;
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>;
 }
 
 /**
@@ -857,6 +981,7 @@ export interface GraphActionAttributes extends AIBaseAttributes {
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.CLASSIFIER_EVALUATION]: ClassifierEvaluationAttributes;
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
@@ -867,6 +992,7 @@ export interface SpanTypeMap {
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
   [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [SpanType.MCP_SERVER_REQUEST]: MCPServerRequestAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
@@ -893,6 +1019,279 @@ export interface SpanTypeMap {
  * Union type for cases that need to handle any span type
  */
 export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
+
+// ============================================================================
+// Span Input & Output Payloads
+// ============================================================================
+
+/**
+ * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
+ * when the run stops before the span's own result exists: a durable run
+ * suspended, or the caller aborted.
+ */
+export interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted';
+  /** Why the run stopped */
+  reason?: string;
+  /** Tool that suspended the run */
+  toolName?: string;
+  /** Tool call that suspended the run */
+  toolCallId?: string;
+}
+
+/**
+ * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
+ * passed, plus the suspended tool's identity when it is known.
+ */
+export interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown;
+  /** Tool the run resumes into */
+  toolName?: string;
+  /** Tool call the run resumes into */
+  toolCallId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Input recorded on `AGENT_RUN` spans: the messages the caller passed for a
+ * fresh run, or the resume data for a resumed run.
+ */
+export type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput;
+
+/** Output recorded on an `AGENT_RUN` span when the run finishes. */
+export interface AgentRunResult {
+  /** Final response text */
+  text?: string;
+  /** Final structured output */
+  object?: unknown;
+  /** Generated files */
+  files?: unknown[];
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData;
+}
+
+/** Output recorded on `AGENT_RUN` spans. */
+export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
+
+/**
+ * Input recorded on `MODEL_GENERATION` spans.
+ *
+ * Mastra's own loop records the normalized model messages, system messages
+ * first. SDK agents (`@mastra/claude`, `@mastra/openai`, ...) record the raw
+ * messages the caller passed, so `messages` keeps the full `MessageListInput`
+ * shape rather than a single message format.
+ */
+export interface ModelGenerationInput {
+  /** Messages sent to the model */
+  messages: MessageListInput;
+  /** Output schema, when structured output was requested */
+  schema?: unknown;
+}
+
+/**
+ * Output recorded on a `MODEL_GENERATION` span when the generation finishes.
+ * Every field is optional: a durable run records only `text`.
+ */
+export interface ModelGenerationResult {
+  /** Generated text */
+  text?: string;
+  /** Generated structured output */
+  object?: unknown;
+  /** Reasoning details */
+  reasoning?: unknown;
+  /** Reasoning as plain text */
+  reasoningText?: string;
+  /** Generated files */
+  files?: unknown[];
+  /** Sources the model cited */
+  sources?: unknown[];
+  /** Tool calls the model requested */
+  toolCalls?: unknown[];
+  /** Provider warnings */
+  warnings?: unknown[];
+}
+
+/** Output recorded on `MODEL_GENERATION` spans. */
+export type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput;
+
+/** One message in the shallow conversation preview a model step records. */
+export interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string;
+  /** Message text, with non-text parts summarized */
+  content: string;
+}
+
+/**
+ * Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow
+ * preview of what the step sent to the model. A normalized message list when
+ * the step carries messages; otherwise a summary of the request body, or the
+ * raw request when it cannot be summarized.
+ */
+export type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string;
+
+/**
+ * Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step
+ * finishes: the step result without `usage`, which lives on the attributes.
+ */
+export interface ModelStepResult {
+  /** Text generated in this step */
+  text?: string;
+  /** Tool calls the model requested in this step */
+  toolCalls?: unknown[];
+  /** Accumulated step results, when the loop reports them */
+  steps?: unknown[];
+  /** Structured output generated in this step */
+  object?: unknown;
+}
+
+/** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
+export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
+
+/** Model a processor saw or swapped in, summarized to the fields worth tracing. */
+export interface ProcessorModelSummary {
+  modelId?: string;
+  provider?: string;
+  specificationVersion?: string;
+}
+
+/** A tool as a processor span records it. */
+export interface ProcessorToolSummary {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/** A tool named in `activeTools`, resolved against the tool registry where possible. */
+export interface ProcessorActiveToolSummary {
+  id: string;
+  name: string;
+}
+
+/** The step's tool choice as a processor span records it. */
+export interface ProcessorToolChoiceSummary {
+  type: string;
+  tool?: ProcessorActiveToolSummary;
+}
+
+/**
+ * Messages and system messages a processor changed. Both executors omit a key
+ * when the processor left it untouched, so an absent key means "unchanged"
+ * rather than "empty" — the diff is the point, not the full list again.
+ */
+export interface ProcessorMessageChanges {
+  messages?: unknown[];
+  systemMessages?: unknown[];
+}
+
+/** The model-call configuration an `inputStep` processor saw. */
+interface ProcessorStepConfig {
+  model?: ProcessorModelSummary;
+  tools?: ProcessorToolSummary[];
+  toolChoice?: ProcessorToolChoiceSummary;
+  activeTools?: ProcessorActiveToolSummary[];
+}
+
+/**
+ * `input` payload a processor span records, per phase.
+ *
+ * Every member is what the executors actually write today; a field either
+ * executor omits conditionally is optional here. `llmRequest`, `llmResponse`
+ * and `requestError` come from the legacy runner only — the processor workflow
+ * has no step for them.
+ */
+export interface ProcessorRunInputByPhase {
+  input: { messages: unknown[]; systemMessages?: unknown[]; retryCount?: number };
+  inputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    messageId?: string;
+    retryCount?: number;
+  } & ProcessorStepConfig;
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: { messages: unknown[]; result?: Record<string, unknown>; retryCount?: number };
+  outputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    finishReason?: string;
+    text?: string;
+    toolCalls?: unknown[];
+    retryCount?: number;
+  };
+  toolResult: {
+    stepNumber?: number;
+    toolName?: string;
+    toolCallId?: string;
+    providerExecuted?: boolean;
+    retryCount?: number;
+  };
+  llmRequest: { prompt?: unknown; stepNumber?: number; retryCount?: number };
+  llmResponse: { stepNumber?: number; retryCount?: number; fromCache?: boolean; chunkCount?: number };
+  requestError: { messages: unknown[]; error: string; stepNumber?: number; messageId?: string; retryCount?: number };
+}
+
+/**
+ * `output` payload a processor span records, per phase.
+ *
+ * Most phases record only what the processor changed, so an absent key means
+ * unchanged. The output-stream hook is the exception: it has no message list to
+ * diff, so it records the chunk totals it produced.
+ */
+export interface ProcessorRunOutputByPhase {
+  input: ProcessorMessageChanges;
+  inputStep: { messageId?: string; retryCount?: number } & ProcessorMessageChanges & ProcessorStepConfig;
+  /** The processor workflow records only `totalChunks`; the legacy runner also records the text. */
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: ProcessorMessageChanges;
+  outputStep: ProcessorMessageChanges;
+  toolResult: ProcessorMessageChanges;
+  llmRequest: ProcessorMessageChanges;
+  llmResponse: ProcessorMessageChanges;
+  requestError: ProcessorMessageChanges;
+}
+
+/** `input` of a processor span before its phase is known. */
+export type ProcessorRunInput = ProcessorRunInputByPhase[ProcessorSpanPayloadPhase];
+
+/** `output` of a processor span before its phase is known. */
+export type ProcessorRunOutput = ProcessorRunOutputByPhase[ProcessorSpanPayloadPhase];
+
+/**
+ * Span types whose `input` Mastra writes itself with a fixed shape. Every
+ * other span type keeps `any`, as before: tool arguments, workflow data and
+ * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
+ * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ *
+ * `PROCESSOR_RUN` is absent on purpose. Three executors emit processor spans —
+ * the legacy runner, the processor workflow, and the Inngest workflow — and they
+ * record different shapes, so a mapped type here would type the write side
+ * against a contract two of them do not meet. The read side is where the shape
+ * is known: `describeSpanInput` / `describeSpanOutput` narrow a payload by the
+ * phase the span recorded, and fall back to JSON when it recorded none.
+ */
+export interface SpanInputMap {
+  [SpanType.AGENT_RUN]: AgentRunInput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationInput;
+  [SpanType.MODEL_STEP]: ModelStepInput;
+  [SpanType.MODEL_INFERENCE]: ModelStepInput;
+}
+
+/** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
+export interface SpanOutputMap {
+  [SpanType.AGENT_RUN]: AgentRunOutput;
+  [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
+  [SpanType.MODEL_STEP]: ModelStepOutput;
+  [SpanType.MODEL_INFERENCE]: ModelStepResult;
+}
+
+/** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */
+export type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap ? SpanInputMap[TType] : any;
+
+/** `output` payload of a span: the mapped shape when `SpanOutputMap` lists the type, otherwise `any`. */
+export type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap ? SpanOutputMap[TType] : any;
 
 /**
  * Span types a processor may declare via `Processor.spanType`.
@@ -967,14 +1366,14 @@ interface BaseSpan<TType extends SpanType> {
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Input passed at the start of the span */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output generated at the end of the span */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
   requestContext?: Record<string, any>;
-  /** Is an event span? (event occurs at startTime, has no endTime) */
+  /** Is an event span? (point-in-time: endTime equals startTime) */
   isEvent: boolean;
 }
 
@@ -1162,7 +1561,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+}
 
 /**
  * Options for ending a model generation span
@@ -1376,9 +1778,9 @@ interface CreateBaseOptions<TType extends SpanType> {
  */
 export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data (for event spans) */
-  output?: any;
+  output?: SpanOutput<TType>;
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Parent span */
@@ -1436,7 +1838,7 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
  */
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -1447,11 +1849,11 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
 
 /**
  * Options for new child events
- * Event spans have no input, and no endTime
+ * Event spans have no input, and their endTime equals their startTime
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 interface UpdateBaseOptions<TType extends SpanType> {
@@ -1464,7 +1866,7 @@ interface UpdateBaseOptions<TType extends SpanType> {
 /** Options for ending a span, with optional final attributes and output. */
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
   /**
    * Also close any descendant spans still open, without applying these
    * options to them. Use at terminal points (error, abort, suspension) where
@@ -1479,9 +1881,9 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   /** Span name override */
   name?: string;
   /** Input data */
-  input?: any;
+  input?: SpanInput<TType>;
   /** Output data */
-  output?: any;
+  output?: SpanOutput<TType>;
 }
 
 /** Options for recording an error on a span. */
@@ -1505,7 +1907,7 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
-  input?: any;
+  input?: SpanInput<TType>;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
   tracingPolicy?: TracingPolicy;
@@ -1581,6 +1983,12 @@ export interface TraceState {
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**
@@ -1678,7 +2086,14 @@ export type TracingEvent =
 export interface SpanOutputProcessor {
   /** Processor name */
   name: string;
-  /** Process span before export */
+  /**
+   * Process span before export.
+   *
+   * Mutate the span you receive and return the same instance, or return
+   * `undefined` to drop it. Do not return a copy: `exportSpan` and `isValid`
+   * are instance members of the live span, so a copy cannot be exported and
+   * is dropped with a logged processor error.
+   */
   process(span?: AnySpan): AnySpan | undefined;
   /** Shutdown processor */
   shutdown(): Promise<void>;

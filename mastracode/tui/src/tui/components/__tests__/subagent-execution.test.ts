@@ -1,6 +1,6 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
 
 // Minimal mock TUI — only requestRender() is called by SubagentExecutionComponent
@@ -36,6 +36,32 @@ describe('SubagentExecutionComponent', () => {
     });
   });
 
+  it('uses elapsed time when finish has no reported duration', () => {
+    vi.useFakeTimers();
+    try {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      vi.advanceTimersByTime(12_300);
+      comp.finish(false, undefined, 'done');
+      expect(comp['durationMs']).toBe(12_300);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the reported duration when finish is called again without one', () => {
+    vi.useFakeTimers();
+    try {
+      const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
+      comp.finish(false, 4_000);
+      vi.advanceTimersByTime(9_000);
+      comp.finish(false, undefined, 'final');
+      expect(comp['durationMs']).toBe(4_000);
+      expect(comp['finalResult']).toBe('final');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('renders task and borders while running', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find all usages of X', mockTui, 'claude-sonnet-4-20250514');
     const lines = renderPlain(comp);
@@ -55,6 +81,21 @@ describe('SubagentExecutionComponent', () => {
 
     expect(lines.some(l => l.includes('subagent fork openai/gpt-5.5'))).toBe(true);
     expect(lines.some(l => l.includes('subagent explore fork'))).toBe(false);
+  });
+
+  it('matches ordinary tool background lifecycle indicators', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+    comp.setBackgroundTaskId('task-1');
+
+    expect(renderPlain(comp).join('\n')).toContain('◌ background · task-1');
+
+    comp.finish(false, 1000, 'done');
+    expect(renderPlain(comp).join('\n')).toContain('✓ background · task-1');
+
+    const failed = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+    failed.setBackgroundTaskId('task-2');
+    failed.finish(true, 1000, 'failed');
+    expect(renderPlain(failed).join('\n')).toContain('✗ background · task-2');
   });
 
   it('renders tool call activity while running', () => {

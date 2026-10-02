@@ -1,6 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
+  DialogCancel,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -56,10 +57,6 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeChannelDialog, setActiveChannelDialog] = useState<PendingRequest | null>(null);
 
-  // Per-platform connect action is needed before we know which platform was
-  // clicked, so we instantiate the Slack one here (currently the only
-  // platform with a direct-connect shortcut). When more platforms gain
-  // shortcuts, this lookup can be expanded.
   const slackConnect = useConnectChannelAction('slack');
 
   const runChannelAction = useCallback(
@@ -112,7 +109,7 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
 
   const dialog = useMemo(
     () => (
-      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()}>
+      <Dialog open={confirmOpen} onOpenChange={open => !open && handleCancel()} pending={updateStoredAgent.isPending}>
         <DialogContent data-testid="agent-builder-publish-before-connect-dialog">
           <DialogHeader>
             <DialogTitle>Add this agent to your library to connect {platformName}?</DialogTitle>
@@ -122,22 +119,10 @@ export function usePublishAndConnectChannel(agentId: string): UsePublishAndConne
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={handleCancel}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-cancel"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              onClick={handleConfirm}
-              disabled={updateStoredAgent.isPending}
-              data-testid="agent-builder-publish-before-connect-dialog-confirm"
-            >
+            <DialogCancel data-testid="agent-builder-publish-before-connect-dialog-cancel">Cancel</DialogCancel>
+            <DialogAction onConfirm={handleConfirm} data-testid="agent-builder-publish-before-connect-dialog-confirm">
               Add to library &amp; continue
-            </Button>
+            </DialogAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>
