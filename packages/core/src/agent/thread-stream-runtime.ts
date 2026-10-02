@@ -4233,23 +4233,36 @@ export class AgentThreadStreamRuntime {
       scheduleCheck();
     };
 
-    const resolveTerminalEventStreamId = (runId: string, streamId?: string) => {
+    const resolveTerminalEventStreamId = (
+      runId: string,
+      type: 'run-failed' | 'run-completed' | 'run-aborted' | 'run-suspended',
+      streamId?: string,
+    ) => {
       if (streamId) {
         terminalEventStreamIds.add(streamId);
         return streamId;
       }
 
       const registered = registeredSeqsByRunId.get(runId);
-      let resolved: { streamId: string; streamSeq: number } | undefined;
+      let oldestUnmatched: { streamId: string; streamSeq: number } | undefined;
+      let newestTracked: { streamId: string; streamSeq: number } | undefined;
       for (const [registeredStreamId, streamSeq] of registered ?? []) {
-        if (
-          !terminalEventStreamIds.has(registeredStreamId) &&
-          (resolved === undefined || streamSeq < resolved.streamSeq)
-        ) {
-          resolved = { streamId: registeredStreamId, streamSeq };
+        if (terminalEventStreamIds.has(registeredStreamId)) continue;
+        if (oldestUnmatched === undefined || streamSeq < oldestUnmatched.streamSeq) {
+          oldestUnmatched = { streamId: registeredStreamId, streamSeq };
+        }
+        const tracked =
+          remoteRuns.has(registeredStreamId) ||
+          deferredRunsByStreamId.has(registeredStreamId) ||
+          remoteRunLeaseWatchTokens.has(registeredStreamId);
+        if (tracked && (newestTracked === undefined || streamSeq > newestTracked.streamSeq)) {
+          newestTracked = { streamId: registeredStreamId, streamSeq };
         }
       }
-      const resolvedStreamId = resolved?.streamId ?? runId;
+      const resolvedStreamId =
+        (type === 'run-suspended' ? oldestUnmatched?.streamId : newestTracked?.streamId) ??
+        oldestUnmatched?.streamId ??
+        runId;
       terminalEventStreamIds.add(resolvedStreamId);
       return resolvedStreamId;
     };
@@ -4343,7 +4356,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-failed') {
-        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.streamId);
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.type, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         remoteRunSuspensionPrompts.delete(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
@@ -4401,7 +4414,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
-        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.streamId);
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.type, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         remoteRunSuspensionPrompts.delete(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);

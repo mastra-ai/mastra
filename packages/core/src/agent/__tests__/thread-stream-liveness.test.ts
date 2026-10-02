@@ -204,6 +204,81 @@ describe('thread stream remote-run liveness', () => {
     await consumed;
   });
 
+  it.each([
+    { terminalType: 'run-completed' as const, expectedErrors: [] },
+    { terminalType: 'run-aborted' as const, expectedErrors: [] },
+    { terminalType: 'run-failed' as const, expectedErrors: ['legacy terminal failure'] },
+  ])('applies a legacy $terminalType event to the resumed stream', async ({ terminalType, expectedErrors }) => {
+    vi.useFakeTimers();
+    const harness = createHarness(`liveness-legacy-${terminalType}`);
+    const { runtime, pubsub, emit } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    const resumedStreamId = `${harness.streamId}-resumed`;
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      sourceId: 'origin',
+      part: {
+        type: 'tool-call-suspended',
+        payload: { toolCallId: 'call-1', toolName: 'ask_user', args: {} },
+      },
+    });
+    await flush();
+
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    expect(collected.map(part => part.type)).toEqual(['tool-call-suspended']);
+
+    pubsub.owners.set(key, harness.runId);
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: resumedStreamId, streamSeq: 2 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: resumedStreamId,
+      sourceId: 'origin',
+      part: { type: 'start', payload: {} },
+    });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: resumedStreamId,
+      sourceId: 'origin',
+      part: { type: 'text-delta', payload: { text: 'resumed' } },
+    });
+    if (terminalType === 'run-completed') {
+      await emit({ type: terminalType, runId: harness.runId, status: 'success', persisted: true });
+    } else if (terminalType === 'run-failed') {
+      await emit({ type: terminalType, runId: harness.runId, error: 'legacy terminal failure' });
+    } else {
+      await emit({ type: terminalType, runId: harness.runId });
+    }
+    await flush();
+
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+
+    expect(collected.filter(part => part.type === 'error').map(part => part.payload.error.message)).toEqual(
+      expectedErrors,
+    );
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
   it('reports lease loss when a prompt-bearing stream continues before losing its owner', async () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-prompt-continued');
