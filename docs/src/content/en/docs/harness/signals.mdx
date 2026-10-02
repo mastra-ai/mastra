@@ -399,7 +399,7 @@ Use the connection tools for distinct operations:
 
 Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
-After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send whose target has no claimed thread owner at that moment isn't lost: the signal is queued in the target's notification inbox and the send reports `persist`, so it carries its reply obligation like any other queued signal. A send only returns an error once the notification has terminally failed to deliver, and that error doesn't consume its `messageId`, so the sender can retry it.
 
 ### Discover agents in other projects
 
