@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { defaultOptionsSchema } from './default-options';
-import { serializedMemoryConfigSchema } from './memory-config';
+import { storedMemoryRefSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
 import { workspaceSnapshotConfigSchema } from './stored-workspaces';
 import { toolProvidersSchema } from './tool-providers';
@@ -302,9 +302,9 @@ const snapshotConfigSchema = z.object({
   outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
     .describe('Output processor graph — static or conditional'),
-  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+  memory: conditionalFieldSchema(storedMemoryRefSchema)
     .optional()
-    .describe('Memory configuration — static or conditional'),
+    .describe('Memory: registered memory reference or inline config — static or conditional'),
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
@@ -384,9 +384,9 @@ export const createStoredAgentBodySchema = z
  */
 const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
   memory: z
-    .union([conditionalFieldSchema(serializedMemoryConfigSchema), z.null()])
+    .union([conditionalFieldSchema(storedMemoryRefSchema), z.null()])
     .optional()
-    .describe('Memory configuration — static, conditional, or null to disable memory'),
+    .describe('Memory: registered memory reference or inline config — static, conditional, or null to disable memory'),
 });
 
 /**
@@ -487,9 +487,9 @@ export const storedAgentSchema = z.object({
   outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
     .describe('Output processor graph — static or conditional'),
-  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+  memory: conditionalFieldSchema(storedMemoryRefSchema)
     .optional()
-    .describe('Memory configuration — static or conditional'),
+    .describe('Memory: registered memory reference or inline config — static or conditional'),
   scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
     .optional()
     .describe('Scorer keys with optional sampling config — static or conditional'),
