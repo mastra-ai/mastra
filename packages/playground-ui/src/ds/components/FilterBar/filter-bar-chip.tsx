@@ -390,6 +390,7 @@ function SegmentCombobox<T>({
     <ComboboxPrimitive.Root<T>
       items={items}
       itemToStringLabel={itemToString}
+      itemToStringValue={itemToString}
       filter={filter}
       value={value}
       onValueChange={(item, details) => {

@@ -26,6 +26,7 @@ import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
+import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
@@ -36,6 +37,8 @@ import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { WorkItemListRow } from './WorkItemListRow';
+
 export function WorkItemCard({
   item,
   deepLinkRef,
@@ -59,6 +62,7 @@ export function WorkItemCard({
   onCreateSession,
   onMove,
   onRemove,
+  layout = 'board',
 }: {
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
@@ -91,6 +95,7 @@ export function WorkItemCard({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
   onRemove: () => void;
+  layout?: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph({ openFor: deepLinkCommentId });
@@ -227,6 +232,42 @@ export function WorkItemCard({
     }),
   });
 
+  const detailsPanel = (
+    <WorkItemDetailsPanel
+      item={item}
+      columnStage={columnStage}
+      projectRepositoryId={projectRepositoryId}
+      activityPage={activityPage}
+      morph={morph}
+      relatedLinks={relatedItems.map(relatedLink)}
+      status={status}
+      actions={actions}
+      menu={<WorkItemMenuItems {...panelMenu} />}
+    />
+  );
+
+  if (layout === 'list') {
+    return (
+      <>
+        <WorkItemListRow
+          item={item}
+          columnStage={columnStage}
+          morph={morph}
+          deepLinkRef={deepLinkRef}
+          highlighted={highlighted}
+          moving={evaluating}
+          busy={busyLabel !== undefined}
+          activity={activity}
+          actors={activityPage?.actors ?? {}}
+          status={status}
+          actions={actions}
+          menu={<WorkItemMenuItems {...menu} />}
+        />
+        {detailsPanel}
+      </>
+    );
+  }
+
   return (
     <>
       <article
@@ -270,7 +311,7 @@ export function WorkItemCard({
           open={false}
           controls={
             <>
-              <CardDetailsHint />
+              <CardDetailsHint onOpen={morph.openDetails} />
               <DropdownMenu>
                 <DropdownMenu.Trigger
                   render={
@@ -294,18 +335,7 @@ export function WorkItemCard({
           }
         />
       </article>
-
-      <WorkItemDetailsPanel
-        item={item}
-        columnStage={columnStage}
-        projectRepositoryId={projectRepositoryId}
-        activityPage={activityPage}
-        morph={morph}
-        relatedLinks={relatedItems.map(relatedLink)}
-        status={status}
-        actions={actions}
-        menu={<WorkItemMenuItems {...panelMenu} />}
-      />
+      {detailsPanel}
     </>
   );
 }

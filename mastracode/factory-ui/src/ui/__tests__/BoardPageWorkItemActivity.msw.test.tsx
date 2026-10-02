@@ -358,6 +358,7 @@ describe('Board work-item activity', () => {
     await user.type(filterInput(), 'octo');
     expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
+    await user.click(screen.getByRole('button', { name: /^Done/ }));
 
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
@@ -469,6 +470,7 @@ describe('Board work-item activity', () => {
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.type(filterInput(), 'Linear Ada');
     await user.click(await screen.findByRole('option', { name: /Linear Ada/i }));
+    await user.click(screen.getByRole('button', { name: /^Done/ }));
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
@@ -524,6 +526,7 @@ describe('Board work-item activity', () => {
     await screen.findByText('Authored PR');
     await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
     await user.click(await screen.findByRole('option', { name: /octocat/ }));
+    await user.click(screen.getByRole('button', { name: /^Done/ }));
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
@@ -540,8 +543,10 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.click(await screen.findByRole('option', { name: /Ada Lovelace/ }));
+    await user.click(screen.getByRole('combobox', { name: /^Value: .*octocat/ }));
+    await user.click(await screen.findByRole('option', { name: /octocat/ }));
+    await user.click(screen.getByRole('option', { name: /Ada Lovelace/ }));
+    await user.click(screen.getByRole('button', { name: /^Done/ }));
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();

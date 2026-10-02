@@ -37,15 +37,20 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// Beside the card's menu, in the slot where the open copy puts Collapse; the click falls through to the card.
-export function CardDetailsHint() {
+// Beside the card's menu, in the slot where the open copy puts Collapse. A mouse twin of the card's own
+// details button, which keeps the keyboard and screen-reader path.
+export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   return (
-    <span
+    <button
+      type="button"
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      tabIndex={-1}
+      draggable={false}
+      onClick={onOpen}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
-    </span>
+    </button>
   );
 }
 

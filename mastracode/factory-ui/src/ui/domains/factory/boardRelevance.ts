@@ -171,33 +171,34 @@ export function candidateRelevance(candidate: BoardCandidate): Record<BoardRelev
   };
 }
 
+/** One person often has several identities (Factory account, GitHub login…): any of them matches. */
 function matchesRelations(
   relations: Record<BoardRelevanceType, Set<string>>,
-  participantId: string,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
 ): boolean {
-  return [...selectedTypes].some(type => relations[type].has(participantId));
+  return [...selectedTypes].some(type => [...participantIds].some(participantId => relations[type].has(participantId)));
 }
 
 export function workItemMatchesRelevance(
   item: WorkItem,
   activityPage: AuditEventPage | undefined,
-  participantId: string | undefined,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
   liveCandidate?: BoardCandidate,
 ): boolean {
-  if (!participantId) return true;
-  if (matchesRelations(workItemRelevance(item, activityPage), participantId, selectedTypes)) return true;
-  return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
+  if (participantIds.size === 0) return true;
+  if (matchesRelations(workItemRelevance(item, activityPage), participantIds, selectedTypes)) return true;
+  return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantIds, selectedTypes) : false;
 }
 
 export function candidateMatchesRelevance(
   candidate: BoardCandidate,
-  participantId: string | undefined,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
 ): boolean {
-  if (!participantId) return true;
-  return matchesRelations(candidateRelevance(candidate), participantId, selectedTypes);
+  if (participantIds.size === 0) return true;
+  return matchesRelations(candidateRelevance(candidate), participantIds, selectedTypes);
 }
 
 export function boardParticipants({

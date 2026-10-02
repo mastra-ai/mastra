@@ -1,8 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { ListFilter, Search, Tag, UserRound, UsersRound } from 'lucide-react';
+import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { BOARD_FILTER_FIELD, boardFilterItems, boardFilterStateFromItems } from '../boardFilters';
@@ -12,45 +11,38 @@ import type { BoardParticipant } from '../boardRelevance';
 import type { BoardKind } from '../boardStages';
 
 /** `contains` carries the free-text search; the closed dimensions pick one or several values. */
-const OPERATORS: FilterBarOperator[] = [
+export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
   { id: 'contains', label: 'contains' },
   { id: 'is', label: 'is' },
   { id: 'in', label: 'is any of', arity: 'many' },
 ];
 
-/**
- * Board narrowing as one filter bar: typing goes straight to a text search, and teammate,
- * relevance and labels are chips built from the same input.
- */
-export function BoardFilters({
-  kind,
-  participants,
-  availableLabels,
-  currentUserId,
-  filters,
-  onFiltersChange,
-}: {
+export interface BoardFilterFieldsOptions {
   kind: BoardKind;
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
   currentUserId?: string;
-  filters: BoardFilterState;
-  onFiltersChange: (filters: BoardFilterState) => void;
-}) {
-  const teammateSelected = filters.participantId !== undefined;
-  const authoredByMe =
-    Boolean(currentUserId) &&
-    filters.participantId === `factory:${currentUserId}` &&
-    filters.relevanceTypes.size === 1 &&
-    filters.relevanceTypes.has('authored');
-  const fields = useMemo<FilterBarField[]>(
+  /** Relevance narrows teammates' cards: with nobody picked it is not offered. */
+  teammateSelected: boolean;
+}
+
+/** The board's filter fields, shared by the filter bar and the saved view previews that read it back. */
+export function useBoardFilterFields({
+  kind,
+  participants,
+  availableLabels,
+  currentUserId,
+  teammateSelected,
+}: BoardFilterFieldsOptions): FilterBarField[] {
+  return useMemo<FilterBarField[]>(
     () => [
       { id: BOARD_FILTER_FIELD.text, label: 'Text', icon: Search, search: true, operators: ['contains'] },
       {
         id: BOARD_FILTER_FIELD.teammate,
         label: 'Teammate',
         icon: UsersRound,
-        operators: ['is'],
+        // Several values so one person's Factory account and GitHub login can be picked together.
+        operators: ['in'],
         strict: true,
         suggestions: participants.map(participant => ({
           value: participant.id,
@@ -64,7 +56,6 @@ export function BoardFilters({
         icon: ListFilter,
         operators: ['in'],
         strict: true,
-        // Relevance narrows one teammate's cards: with nobody picked there is nothing to be relevant to.
         hidden: !teammateSelected,
         suggestions: boardRelevanceOptions(kind).map(option => ({ value: option.id, label: option.label })),
       },
@@ -79,42 +70,38 @@ export function BoardFilters({
     ],
     [availableLabels, currentUserId, kind, participants, teammateSelected],
   );
+}
 
+/**
+ * Board narrowing as one filter bar: typing goes straight to a text search, and teammates,
+ * relevance and labels are chips built from the same input.
+ */
+export function BoardFilters({
+  kind,
+  fields,
+  filters,
+  onFiltersChange,
+  'aria-label': ariaLabel = 'Board filters',
+}: {
+  kind: BoardKind;
+  fields: FilterBarField[];
+  filters: BoardFilterState;
+  onFiltersChange: (filters: BoardFilterState) => void;
+  'aria-label'?: string;
+}) {
   return (
-    <>
-      <FilterBar
-        fields={fields}
-        operators={OPERATORS}
-        value={boardFilterItems(filters, kind)}
-        onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
-        // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
-        createItemId={fieldId => fieldId}
-        aria-label="Board filters"
-        className="w-full max-w-full sm:w-auto"
-      >
-        <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter cards…" />
-      </FilterBar>
-      {currentUserId ? (
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={authoredByMe ? 'primary' : 'default'}
-          tooltip="Author is me"
-          aria-pressed={authoredByMe}
-          onClick={() =>
-            onFiltersChange({
-              ...filters,
-              participantId: authoredByMe ? undefined : `factory:${currentUserId}`,
-              relevanceTypes: new Set(
-                authoredByMe ? boardRelevanceOptions(kind).map(option => option.id) : ['authored'],
-              ),
-            })
-          }
-        >
-          <UserRound aria-hidden />
-        </Button>
-      ) : null}
-    </>
+    <FilterBar
+      fields={fields}
+      operators={BOARD_FILTER_OPERATORS}
+      value={boardFilterItems(filters, kind)}
+      onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
+      // Items are rebuilt from the filter state with `id: fieldId`, so the draft chip is the committed chip.
+      createItemId={fieldId => fieldId}
+      aria-label={ariaLabel}
+      className="w-full max-w-full sm:w-auto"
+    >
+      <FilterBar.Chips />
+      <FilterBar.Input placeholder="Filter cards…" />
+    </FilterBar>
   );
 }

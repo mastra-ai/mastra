@@ -30,7 +30,8 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "^8.0.0",
-    "shiki": "^1.29.2"
+    "shiki": "^1.29.2",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.2.2",

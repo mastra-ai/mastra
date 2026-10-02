@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import type { BoardLayout } from '../boardLayout';
 import type { BoardKind } from '../boardStages';
 import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
@@ -81,6 +82,7 @@ export function BoardColumnEmptyState({
   hasIntakeSource,
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
+  layout = 'board',
 }: {
   stage: BoardStageId;
   kind: BoardKind;
@@ -88,6 +90,7 @@ export function BoardColumnEmptyState({
   filtersExcludeAll?: boolean;
   /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
+  layout?: BoardLayout;
 }) {
   const copy = filtersExcludeAll
     ? {
@@ -100,6 +103,14 @@ export function BoardColumnEmptyState({
           description: `${alreadyMaterialized} ${alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have'} a card on another board, so the feed only offers new ones.`,
         }
       : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  if (layout === 'list') {
+    return (
+      <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2">
+        {copy.title}
+        <span className="text-placeholder"> · {copy.description}</span>
+      </Txt>
+    );
+  }
   return (
     <div className="border-border rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
       <Txt as="p" variant="column" className="text-muted-foreground m-0">

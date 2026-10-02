@@ -172,9 +172,7 @@ async function selectField(name: string) {
 }
 
 async function selectTeammate() {
-  await selectField('Teammate');
-  await screen.findByRole('option', { name: /alice/i });
-  fireEvent.keyDown(input(), { key: 'Enter' });
+  await selectMany('Teammate', [/alice/i]);
 }
 
 async function selectMany(name: string, options: RegExp[]) {

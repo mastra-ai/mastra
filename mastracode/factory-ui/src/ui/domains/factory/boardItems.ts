@@ -139,40 +139,39 @@ export function externalLinkLabel(source: WorkItemSource): string {
   return 'Open in GitHub';
 }
 
-export function workItemMeta(item: WorkItem): string {
-  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
-  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
-  // Prefer when the issue/PR was opened upstream; `item.createdAt` is only
-  // when the factory first saw it, which is "just now" for every backfilled card.
-  const sourceCreatedAt =
-    typeof item.metadata.sourceCreatedAt === 'string' && isValid(new Date(item.metadata.sourceCreatedAt))
-      ? item.metadata.sourceCreatedAt
-      : undefined;
-  const age = relativeTime(sourceCreatedAt ?? item.createdAt);
+/** When the issue/PR was opened upstream; `createdAt` is only when the factory first saw it, "just now" for every backfilled card. */
+export function sourceCreatedAt(metadata: Record<string, unknown>): string | undefined {
+  const value = metadata.sourceCreatedAt;
+  return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
+}
+
+/** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
+export function workItemKey(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   const githubNumber = githubNumberForItem(item);
-  if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
-  const issueIdentifier =
+  if (githubNumber !== undefined) return `#${githubNumber}`;
+  return (
     gitlabIdentifierForItem(item) ??
     linearIdentifierForItem(item) ??
     jiraIdentifierForItem(item) ??
-    incidentioIdentifierForItem(item);
-  const issueOwner = assignee ?? author;
-  if (issueIdentifier !== undefined) return `${issueIdentifier}${issueOwner ? ` · ${issueOwner}` : ''} · ${age}`;
-  return `${SOURCE_LABELS[item.source]} · ${age}`;
+    incidentioIdentifierForItem(item)
+  );
+}
+
+export function workItemMeta(item: WorkItem): string {
+  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const assignee = typeof item.metadata.assignee === 'string' ? item.metadata.assignee : undefined;
+  const age = relativeTime(sourceCreatedAt(item.metadata) ?? item.createdAt);
+  const key = workItemKey(item);
+  if (key === undefined) return `${SOURCE_LABELS[item.source]} · ${age}`;
+  const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
+  return `${key}${owner ? ` · ${owner}` : ''} · ${age}`;
 }
 
 /** Free-text card match over what names it on the board: its title and its issue key. */
 export function cardMatchesSearch(card: Pick<WorkItem, 'source' | 'metadata' | 'title'>, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (needle === '') return true;
-  const number = githubNumberForItem(card);
-  const identifier =
-    gitlabIdentifierForItem(card) ??
-    linearIdentifierForItem(card) ??
-    jiraIdentifierForItem(card) ??
-    incidentioIdentifierForItem(card);
-  const named = [card.title, number === undefined ? '' : `#${number}`, identifier ?? ''];
-  return named.some(text => text.toLowerCase().includes(needle));
+  return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
 }
 
 /**
