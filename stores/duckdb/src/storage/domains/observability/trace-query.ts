@@ -349,9 +349,14 @@ export interface CompiledDuckDBTraceQuery {
   values: unknown[];
 }
 
+/**
+ * Builds the shared trace-scope CTEs. The returned `values` cover every
+ * parameter these CTEs use, in order, starting with the time range.
+ */
 function compileDuckDBTraceScope(
   relatedCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
+  timeRange: { from: unknown; to: unknown },
 ): { ctes: string[]; values: unknown[] } {
   // Rows with a NULL organizationId never match a scope: `NULL = ?` is not true.
   const tenantConditions = (alias: string): string[] =>
@@ -367,8 +372,27 @@ function compileDuckDBTraceScope(
     const conditions = tenantConditions(alias);
     return conditions.length ? `\n      WHERE ${conditions.join(' AND ')}` : '';
   };
-  const values: unknown[] = [...tenantValues];
+  const values: unknown[] = [timeRange.from, timeRange.to, timeRange.from, timeRange.to, ...tenantValues];
   const ctes = [
+    // The window functions below cannot have the time range pushed through
+    // them, and without a range DuckDB decompresses the payload columns of
+    // every root row in the table. Narrow first, on (traceId, timestamp) only:
+    // a root's startedAt is always the timestamp of one of its trace's root
+    // rows, so traces with no root row in the range cannot qualify. The scan
+    // keeps every root row of the remaining traces (they all fall within
+    // root_bounds), so the window results are unchanged.
+    `root_trace_ids AS (
+      SELECT DISTINCT traceId
+      FROM span_events
+      WHERE parentSpanId IS NULL
+        AND timestamp >= CAST(? AS TIMESTAMP)
+        AND timestamp < CAST(? AS TIMESTAMP)
+    )`,
+    `root_bounds AS (
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE parentSpanId IS NULL AND traceId IN (SELECT traceId FROM root_trace_ids)
+    )`,
     `root_events AS (
       SELECT
         *,
@@ -378,6 +402,9 @@ function compileDuckDBTraceScope(
         END AS startedAt
       FROM span_events
       WHERE parentSpanId IS NULL
+        AND timestamp >= (SELECT minTs FROM root_bounds)
+        AND timestamp <= (SELECT maxTs FROM root_bounds)
+        AND traceId IN (SELECT traceId FROM root_trace_ids)
     )`,
     `current_roots AS (
       SELECT * EXCLUDE (rootRank)
@@ -400,7 +427,15 @@ function compileDuckDBTraceScope(
   ];
 
   if (relatedCollections.has('spans')) {
-    ctes.push(`current_span_rows AS (
+    ctes.push(`span_bounds AS (
+      -- Exact event-time range of the in-scope traces, from a narrow
+      -- (traceId, timestamp) pass. The join below cannot be pushed into the
+      -- scan, so the range keeps it from decompressing every span row.
+      SELECT min(timestamp) AS minTs, max(timestamp) AS maxTs
+      FROM span_events
+      WHERE traceId IN (SELECT traceId FROM root_scope)
+    ),
+    current_span_rows AS (
       SELECT
         e.*,
         coalesce(
@@ -412,7 +447,11 @@ function compileDuckDBTraceScope(
           ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END ASC, e.cursorId DESC
         ) AS currentRank
       FROM span_events e
-      INNER JOIN root_scope roots ON roots.traceId = e.traceId${tenantWhere('e')}
+      INNER JOIN root_scope roots ON roots.traceId = e.traceId
+      WHERE e.timestamp >= (SELECT minTs FROM span_bounds)
+        AND e.timestamp <= (SELECT maxTs FROM span_bounds)${tenantConditions('e')
+          .map(condition => `\n        AND ${condition}`)
+          .join('')}
     ),
     current_spans AS (
       SELECT
@@ -469,8 +508,8 @@ function compileDuckDBTraceScope(
 
 export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.where);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope, plan.timeRange);
+  const values: unknown[] = [...scopeValues];
   const conditions = [
     `r.endedAt IS NOT NULL`,
     `r.startedAt >= CAST(? AS TIMESTAMP)`,
@@ -576,8 +615,8 @@ LIMIT ?`,
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope);
-  const values: unknown[] = [plan.traces.timeRange.from, plan.traces.timeRange.to, ...scopeValues];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(relatedCollections, plan.scope, plan.traces.timeRange);
+  const values: unknown[] = [...scopeValues];
 
   let eligibilitySql = 'TRUE';
   if (plan.traces.where) {
@@ -644,8 +683,8 @@ function discoveryCollections(scope: TrustedTraceQueryValuesPlan['predicateScope
 export function compileDuckDBTraceQueryObservedFields(
   plan: TrustedTraceQueryObservedFieldsPlan,
 ): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(new Set(), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(new Set(), plan.scope, plan.timeRange);
+  const values: unknown[] = [...scopeValues];
   if (plan.search) values.push(plan.search);
   values.push(plan.limit + 1);
   const search = plan.search ? `AND strpos(lower('metadata.' || entry.key), lower(?)) > 0` : '';
@@ -668,8 +707,12 @@ LIMIT ?`,
 }
 
 export function compileDuckDBTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledDuckDBTraceQuery {
-  const { ctes, values: scopeValues } = compileDuckDBTraceScope(discoveryCollections(plan.predicateScope), plan.scope);
-  const values: unknown[] = [plan.timeRange.from, plan.timeRange.to, ...scopeValues];
+  const { ctes, values: scopeValues } = compileDuckDBTraceScope(
+    discoveryCollections(plan.predicateScope),
+    plan.scope,
+    plan.timeRange,
+  );
+  const values: unknown[] = [...scopeValues];
   let fieldSql: string;
   let source = discoverySource(plan.predicateScope);
   if (plan.predicateScope === 'trace' && plan.path === 'tags') {
