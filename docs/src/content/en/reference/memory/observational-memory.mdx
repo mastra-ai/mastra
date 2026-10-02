@@ -301,7 +301,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'blockAfter',
             type: 'number',
             description:
-              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Above this point, activation uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Crossing `blockAfter` does not trigger a blocking observation. A synchronous (blocking) observation runs when the `messageTokens` threshold is reached and activating buffered chunks doesn't bring pending tokens back under it, for example when a large tool result arrives after buffering has stopped. All remaining buffered chunks are activated first, so the synchronous observation only covers messages no chunk has observed. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
+              "Safety net for when background buffering can't keep up. Values from `1` up to (but not including) `100` are multipliers of `messageTokens`: `1.2` resolves to 120% of the threshold (36k tokens with the default 30k). Multipliers apply to a per-thread `messageTokens` override when one is set. Values of `100` or more are absolute token counts and must be greater than `messageTokens`. Between `messageTokens` and `blockAfter`, only async buffering and activation run: reaching the threshold without a buffered chunk to activate starts background buffering, and the chunk activates on a later step. A synchronous (blocking) observation runs if pending tokens still reach `blockAfter` after buffered activation. All remaining buffered chunks are activated first, so the synchronous observation only covers messages no chunk has observed. Set `blockAfter: 1` to observe synchronously at `messageTokens`. Above this point, activation also uses the smallest set of buffered chunks that reaches the retention target, even when that overshoots the target by more than the usual safeguard allows. It never activates more chunks than are needed to reach the retention target, so it removes only slightly more history than a normal activation. It changes the result only when the retention floor is above roughly 20,000 tokens; with the default `bufferActivation` (a 6k floor) it has no observable effect. Activation usually keeps a minimum remaining context (the smaller of 1000 tokens or the retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less. Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
             isOptional: true,
             defaultValue: '1.2 (when bufferTokens is set)',
           },
@@ -735,7 +735,7 @@ export const agent = new Agent({
 
 Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Above `blockAfter`, activation may overshoot the retention target instead of activating fewer chunks. A synchronous observation runs if pending tokens are still at or above the threshold after all buffered chunks have been activated.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals and produce chunks of observations. At the threshold, activation moves observations into the log and removes raw messages from context. Between the threshold and `blockAfter`, buffering continues in the background and the next ready chunk activates on a later step. A synchronous observation runs if pending tokens still reach `blockAfter` after all buffered chunks have been activated. Above `blockAfter`, activation may also overshoot the retention target instead of activating fewer chunks.
 
 Default settings:
 
@@ -766,7 +766,7 @@ export const agent = new Agent({
           bufferTokens: 5_000,
           // Activate to retain 30% of threshold
           bufferActivation: 0.7,
-          // Above 1.5x the threshold, let activation overshoot the retention target
+          // Observe synchronously at 1.5x the threshold if no buffered chunk is ready
           blockAfter: 1.5,
         },
         reflection: {
