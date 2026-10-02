@@ -540,6 +540,8 @@ describe('attachment download recovery', () => {
       ['RF64 WAV', 'UkY2NP////9XQVZFZHM2NBwAAAA=', 'audio/wav'],
       ['UTF-16LE text', 'data:text/plain;charset=utf-16le;base64,aABlAGwAbABvAA==', 'text/plain'],
       ['Latin-1 text', 'data:text/plain;charset=iso-8859-1,caf%E9', 'text/plain'],
+      // Base64 of text can look like a path (a `/`, no `+` or `=`); long content is never treated as one
+      ['long text whose base64 looks like a path', 'YWI/Y2Rl'.repeat(200), 'text/plain'],
       // Decoded like fetch(): a fragment isn't content, an encoded hash is, and a bad escape stays literal
       ['a data URL with a fragment', 'data:text/plain,hello#fragment', 'text/plain'],
       ['a data URL with an encoded hash', 'data:text/plain,hello%23fragment', 'text/plain'],
