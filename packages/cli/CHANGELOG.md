@@ -1,5 +1,19 @@
 # mastra
 
+## 1.32.2-alpha.1
+
+### Patch Changes
+
+- Fixed `mastra dev` crashing on startup with "Stripping types is currently unsupported for files under node_modules" when `.mastra/output` still contained a previous `mastra build`. The dev server now clears the output directory before reading your server config, so dependencies resolve from your project instead of from stale build output. ([#25787](https://github.com/mastra-ai/mastra/pull/25787))
+
+- Separated personal settings from shared Factory model and memory settings while preserving existing storage scopes. ([#25806](https://github.com/mastra-ai/mastra/pull/25806))
+
+- Fixed `mastra dev` refusing to start with "Another development server instance is already running in this directory" when `.mastra/dev.lock` was left over from a previous run and its PID now belonged to an unrelated process, which commonly happens after `docker restart`. On Linux the lock now records when the owning process started, so a reused PID is recognised as a stale lock and replaced. Two dev servers running in the same directory are still rejected. The same check applies to `mastra build`'s guard against a running dev server, and the lock is now also removed when `mastra dev` is force-exited during shutdown. ([#25801](https://github.com/mastra-ai/mastra/pull/25801))
+
+- Updated dependencies [[`56eb894`](https://github.com/mastra-ai/mastra/commit/56eb894700575480c0e5d14a1ed7b633008610f2), [`cdf0d0b`](https://github.com/mastra-ai/mastra/commit/cdf0d0bcad55398a2022bbf10fe921ca801d09ac), [`ed8b01a`](https://github.com/mastra-ai/mastra/commit/ed8b01a81ebf018779571de5d9af63cdc61c5693), [`7e63f04`](https://github.com/mastra-ai/mastra/commit/7e63f0486ea13841fc64395e3c03866afa476449), [`53ef78f`](https://github.com/mastra-ai/mastra/commit/53ef78fa1314549de9e3ac8fd7bf57941112e316), [`c3caa9a`](https://github.com/mastra-ai/mastra/commit/c3caa9a04cfa7652a9e5e214839285074eaa3f05), [`2a48242`](https://github.com/mastra-ai/mastra/commit/2a48242a18f7444896bf8c7054fb59c0afae050e), [`e887d1d`](https://github.com/mastra-ai/mastra/commit/e887d1daf271f0f4d4d67afb6c7ae70e690960e0)]:
+  - @mastra/core@1.75.0-alpha.1
+  - @mastra/deployer@1.75.0-alpha.1
+
 ## 1.32.2-alpha.0
 
 ### Patch Changes

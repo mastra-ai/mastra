@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 1.75.0-alpha.1
+
+### Minor Changes
+
+- Semantic recall now works with a vector store that generates embeddings itself, so a self-embedding store needs no client-side `embedder`. ([#25009](https://github.com/mastra-ai/mastra/pull/25009))
+
+  Added `isSelfEmbedding` to `MastraVector`. It defaults to false, so every existing store is unaffected. A store that embeds text itself overrides it to return true, and semantic recall against that store needs no `embedder`:
+
+  ```ts
+  const memory = new Memory({
+    storage,
+    vector: new MongoDBVector({ id: 'vec', uri, dbName, autoEmbed: { model: 'voyage-4' } }),
+    options: { semanticRecall: true },
+  });
+  ```
+
+  A configured `embedder` still takes precedence, so adding one to the example above returns to client-side embedding.
+
+  Messages embedded by the store are kept in an index named `memory_messages_selfembed`, separate from the indexes holding client-supplied vectors.
+
+  Configuring semantic recall with neither an embedder nor a self-embedding store now says so, naming both options.
+
+- Added a `createSession()` option to start a session without creating a thread, and `session.thread.ensureId()` to create one on first use. Sessions that are never used no longer leave empty threads behind. Sending a message or signal creates the thread automatically. The default is unchanged: sessions still get a thread when none matches. ([#22561](https://github.com/mastra-ai/mastra/pull/22561))
+
+  ```ts
+  const session = await controller.createSession({ createInitialThread: false });
+
+  // Returns the current thread, or creates one. Concurrent calls share one thread.
+  const threadId = await session.thread.ensureId();
+  ```
+
+### Patch Changes
+
+- Fixed a process crash with `TypeError: Invalid state: ReadableStream is locked` after a provider errored mid-stream. The crash happened when an agent had output processors, such as `BatchPartsProcessor` or `RegexFilterProcessor`, and a retrying error processor, such as `StreamErrorRetryProcessor`. Output processors no longer carry buffered parts across the retry. A stream that is already being read now reports through `onError` instead of raising an unhandled rejection, which on Node 22 exited the process and dropped every in-flight run. ([#25803](https://github.com/mastra-ai/mastra/pull/25803))
+
+- Fixed `execute_command` and `get_process_output` results for commands stopped by an aborted run. The result now says the command was aborted instead of showing only a kill exit code such as `Exit code: 128`, which agents mistook for a real command failure. This covers foreground commands, background processes killed when the run that started them is aborted, and processes killed while `get_process_output` was waiting on them. ([#25752](https://github.com/mastra-ai/mastra/pull/25752))
+
+  `get_process_output` on a background process that exited without printing anything now returns its exit status (for example `Exit code: 0`) instead of `(no output yet)`, so it no longer looks like the process is still running.
+
+- Fixed executor interruptions so default-engine workflow runs remain recoverable instead of being recorded as canceled. Fixes #24586. ([#24684](https://github.com/mastra-ai/mastra/pull/24684))
+
+- Fixed structured output failing with 400 errors on OpenAI-compatible providers (for example Azure AI Foundry through `@ai-sdk/openai-compatible` with `supportsStructuredOutputs: true`). These providers send a strict JSON schema, but Mastra only prepared schemas for strict mode when the provider name started with `openai`, so requests failed with errors like `'uniqueItems' is not permitted` or `Missing 'subject'`. Schemas are now prepared whenever the model sends a strict JSON schema, and `null` values for optional fields are accepted in the response. Setting `strictJsonSchema: false` in the provider options keeps the schema unchanged. ([#25707](https://github.com/mastra-ai/mastra/pull/25707))
+
+- Tool input validation errors now include the path of each invalid field. Previously, MCP 1.x servers returned errors like `Invalid input: expected array, received string` with no indication of which argument was wrong. Errors now read, for example: ([#25794](https://github.com/mastra-ai/mastra/pull/25794))
+
+  ```
+  - items.0.tags: Invalid input: expected array, received string
+  - options.destination: Invalid input: expected string, received undefined
+  ```
+
+  Fixes #25766.
+
 ## 1.75.0-alpha.0
 
 ### Minor Changes
