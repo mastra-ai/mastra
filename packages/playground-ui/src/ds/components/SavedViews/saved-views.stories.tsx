@@ -109,7 +109,7 @@ export const Default: Story = {
             </SegmentedControlItem>
           </SegmentedControl>
         </div>
-        <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
+        <pre className="bg-card text-meta text-muted-foreground rounded-lg p-3">
           {JSON.stringify(views.applied ?? { filters: pageFilters, settings }, null, 2)}
         </pre>
       </div>

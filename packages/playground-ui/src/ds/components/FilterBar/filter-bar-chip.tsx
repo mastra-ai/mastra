@@ -300,6 +300,7 @@ export function FilterBarChip({
 type SegmentComboboxProps<T> = {
   segment: Exclude<FilterBarSegment, 'remove'>;
   label: string;
+  fullLabel?: string;
   ariaLabel: string;
   items: readonly T[];
   itemToString: (item: T) => string;
@@ -355,6 +356,7 @@ function SegmentSearchInput<T>({
 function SegmentCombobox<T>({
   segment,
   label,
+  fullLabel = label,
   ariaLabel,
   items,
   itemToString,
@@ -384,7 +386,7 @@ function SegmentCombobox<T>({
       <span
         className={cn(segmentClass, isField && 'text-foreground')}
         style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
-        title={label}
+        title={fullLabel}
       >
         {content}
       </span>
@@ -424,8 +426,8 @@ function SegmentCombobox<T>({
             type="button"
             data-filter-bar-segment=""
             tabIndex={segment === 'value' ? 0 : -1}
-            aria-label={`${ariaLabel}: ${label}`}
-            title={label}
+            aria-label={`${ariaLabel}: ${fullLabel}`}
+            title={fullLabel}
             className={cn(editableSegmentClass, isField && 'text-foreground')}
             style={isField ? fieldSegmentAccentStyle(chip.field) : undefined}
           />
@@ -570,6 +572,7 @@ function ValueEditor() {
       segment="value"
       ariaLabel="Value"
       label={formatValueCompact(chip.item.value, chip.field) || '…'}
+      fullLabel={formatValue(chip.item.value, chip.field) || '…'}
       items={step.options}
       itemToString={optionLabel}
       filter={null}

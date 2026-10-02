@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -148,6 +148,10 @@ describe('SavedViews', () => {
     fireEvent.mouseMove(tab('Errors'));
     expect(await screen.findByText('Status', undefined, { timeout: 2000 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit view' })).toBeNull();
+
+    fireEvent.click(tab('Errors'));
+    fireEvent.click(tab('All'));
+    await waitFor(() => expect(screen.queryByText('Status')).toBeNull());
   });
 
   it('keeps focus on a tab when it becomes the active view', async () => {

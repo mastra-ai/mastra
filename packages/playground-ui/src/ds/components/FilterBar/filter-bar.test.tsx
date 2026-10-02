@@ -543,6 +543,13 @@ describe('FilterBar', () => {
       });
     });
 
+    it('shows the first of several values with a count and keeps every value on hover', () => {
+      render(<Harness initial={[{ id: 'f', fieldId: 'status', operatorId: 'in', value: ['running', 'error'] }]} />);
+      const valueSegment = screen.getByLabelText('Value: Running, Error');
+      expect(valueSegment.textContent).toBe('Running +1');
+      expect(valueSegment.getAttribute('title')).toBe('Running, Error');
+    });
+
     it('does not commit free text for strict fields', async () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);

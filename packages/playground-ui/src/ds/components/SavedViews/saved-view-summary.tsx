@@ -26,10 +26,10 @@ export function SavedViewSummary({ filters, fields, operators, settings }: Saved
             return (
               <li key={filter.id} className="min-w-0">
                 <Txt as="span" variant="body-sm" className="flex min-w-0 items-center gap-1.5">
-                  <span className="flex min-w-0 shrink-0 items-center gap-1 text-muted-foreground">
+                  <span className="text-muted-foreground flex min-w-0 shrink-0 items-center gap-1">
                     <FilterBarFieldLabel field={field} label={field?.label ?? filter.fieldId} />
                   </span>
-                  {operatorStated && <span className="shrink-0 text-muted-foreground">{operator?.label}</span>}
+                  {operatorStated && <span className="text-muted-foreground shrink-0">{operator?.label}</span>}
                   <span className="min-w-0 truncate">{formatValue(filter.value, field)}</span>
                 </Txt>
               </li>

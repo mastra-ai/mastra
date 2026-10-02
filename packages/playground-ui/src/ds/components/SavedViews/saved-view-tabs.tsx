@@ -128,7 +128,7 @@ function EditingViewTab({ name, onRename }: { name: string; onRename: (name: str
       ) : (
         <>
           <span className="max-w-48 truncate">{name}</span>
-          <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />
+          <span className="bg-warning-indicator size-1.5 shrink-0 rounded-full" aria-hidden />
           <VisuallyHidden>Unsaved changes</VisuallyHidden>
           <Button
             type="button"
@@ -195,8 +195,12 @@ function SavedViewTab<TSettings>({
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const changeMenuOpen = (open: boolean) => {
-    if (selected) setMenuOpen(open);
-    else if (open) onSelect();
+    if (selected || !open) {
+      setMenuOpen(open);
+      return;
+    }
+    setPreviewOpen(false);
+    onSelect();
   };
 
   return (
@@ -213,6 +217,7 @@ function SavedViewTab<TSettings>({
                       <button
                         type="button"
                         aria-pressed={selected}
+                        aria-haspopup={selected ? 'menu' : undefined}
                         className={cn(selected ? selectedTabClass : restingTabClass, 'gap-1.5')}
                       />
                     }
