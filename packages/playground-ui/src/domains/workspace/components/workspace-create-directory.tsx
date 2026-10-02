@@ -35,6 +35,8 @@ export function WorkspaceCreateDirectory({ labeled = false }: { labeled?: boolea
       await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', parentOf(trimmed)] });
       setOpen(false);
       setPath('');
+    } catch {
+      // The caller reports the failure; keep the dialog open so the user can retry.
     } finally {
       setPending(false);
     }

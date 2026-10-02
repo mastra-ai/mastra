@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
@@ -31,6 +32,13 @@ import { useWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skil
 import type { WorkspaceItem } from '@/domains/workspace/types';
 
 const crumbs = [navCrumb('/workspaces')];
+
+const errorMessage = (error: unknown) =>
+  is403ForbiddenError(error)
+    ? "you don't have permission to modify this workspace"
+    : error instanceof Error
+      ? error.message
+      : 'Unknown error';
 
 export default function Workspace() {
   const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
@@ -135,7 +143,12 @@ export default function Workspace() {
     if (!effectiveWorkspaceId) return;
     const skillName = type === 'directory' ? installedSkillName(path) : undefined;
     if (!skillName) {
-      await deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId });
+      try {
+        await deleteFile.mutateAsync({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId });
+      } catch (error) {
+        toast.error(`Failed to delete ${path}: ${errorMessage(error)}`);
+        throw error;
+      }
       return;
     }
     try {
@@ -157,7 +170,12 @@ export default function Workspace() {
 
   // Can manage skills (install/remove/check/update) if we have filesystem and not read-only
   // None of these operations require sandbox - all are done via GitHub API + filesystem
-  const canManageSkills = hasFilesystem && !isReadOnly;
+  // RBAC: actions stay hidden until permissions resolve so they never flash in and out.
+  const { canEdit, canDelete, canExecute, isLoading: isLoadingPermissions } = usePermissions();
+  const canWrite = !isLoadingPermissions && canEdit('workspaces') && !isReadOnly;
+  const canRemove = !isLoadingPermissions && canDelete('workspaces') && !isReadOnly;
+  const canSearch = !isLoadingPermissions && canExecute('workspaces');
+  const canManageSkills = hasFilesystem && hasSkills && canWrite;
 
   // Derive writable mounts for CompositeFilesystem
   const mounts = workspaceInfo?.mounts;
@@ -184,8 +202,10 @@ export default function Workspace() {
 
   // Whether any search functionality is actually available
   const canSearchFiles =
-    hasFilesystem && Boolean(workspaceInfo?.capabilities?.canBM25 || workspaceInfo?.capabilities?.canVector);
-  const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
+    canSearch &&
+    hasFilesystem &&
+    Boolean(workspaceInfo?.capabilities?.canBM25 || workspaceInfo?.capabilities?.canVector);
+  const canSearchSkills = canSearch && hasSkills && isSkillsConfigured && skills.length > 0;
 
   // Mount paths are absolute (`/data`); tree paths are workspace-relative (`data`).
   const readOnlyPaths = isReadOnly
@@ -329,11 +349,20 @@ export default function Workspace() {
               activeFilePath={selectedFile}
               onActiveFileChange={setSelectedFile}
               readOnlyPaths={readOnlyPaths}
-              skillCount={skillsData ? skills.length : undefined}
+              skillCount={hasSkills && skillsData ? skills.length : undefined}
               searchFiles={canSearchFiles}
               searchSkills={canSearchSkills}
-              onCreateDirectory={path =>
-                createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId })
+              onCreateDirectory={
+                canWrite
+                  ? async path => {
+                      try {
+                        await createDirectory.mutateAsync({ path, recursive: true, workspaceId: effectiveWorkspaceId });
+                      } catch (error) {
+                        toast.error(`Failed to create ${path}: ${errorMessage(error)}`);
+                        throw error;
+                      }
+                    }
+                  : undefined
               }
               asideActions={
                 canManageSkills && skills.some(s => s.path?.includes('.agents/skills/')) ? (
@@ -362,7 +391,7 @@ export default function Workspace() {
                     }
                   : undefined
               }
-              onDelete={handleDelete}
+              onDelete={canRemove ? handleDelete : undefined}
             />
           </div>
         )}

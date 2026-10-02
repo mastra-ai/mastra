@@ -265,6 +265,9 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
     setIsDeleting(true);
     try {
       await onDelete(entry);
+    } catch {
+      // The caller reports the failure; keep the dialog open so the user can retry or cancel.
+      return;
     } finally {
       setIsDeleting(false);
     }
