@@ -953,7 +953,7 @@ export class ProcessorRunner {
                 processorId: error.processorId || workflowId,
               };
             }
-            this.logger.error('Output processor workflow failed', { agent: this.agentName, workflowId, error });
+            throw error;
           }
           continue;
         }
@@ -1028,11 +1028,7 @@ export class ProcessorRunner {
               processorId: processor.id,
             };
           }
-          // End span with error
-          const state = processorStates.get(processor.id);
-          state?.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
-          // Log error but continue with original part
-          this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
+          throw error;
         }
       }
 
@@ -1053,7 +1049,7 @@ export class ProcessorRunner {
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
       }
-      return { part, blocked: false };
+      throw error;
     }
   }
 
