@@ -400,6 +400,10 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** Whether the called tool (as resolved for this step, including processor-injected tools) requires approval */
+  requireApproval?: boolean;
+  /** Whether the called tool (as resolved for this step, including processor-injected tools) can suspend */
+  hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
 }

@@ -149,6 +149,8 @@ const durableLLMOutputSchema = z.object({
       providerExecuted: z.boolean().optional(),
       output: z.any().optional(),
       activeTools: z.array(z.string()).nullable().optional(),
+      requireApproval: z.boolean().optional(),
+      hasSuspendSchema: z.boolean().optional(),
       stepSpanData: z.any().optional(),
     }),
   ),
@@ -1673,6 +1675,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-call': {
                     const payload = rawChunk.payload as ToolCallPayload;
+                    // Stamp approval/suspend flags from the step's effective tools so the
+                    // concurrency gate sees processor-injected tools absent from toolsMetadata.
+                    const calledToolDef = resolveToolDef(payload.toolName) as
+                      | { requireApproval?: boolean; hasSuspendSchema?: boolean }
+                      | undefined;
                     toolCalls.push({
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
@@ -1681,6 +1688,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
+                      ...(calledToolDef?.requireApproval ? { requireApproval: true } : {}),
+                      ...(calledToolDef?.hasSuspendSchema ? { hasSuspendSchema: true } : {}),
                     });
                     break;
                   }

@@ -193,4 +193,41 @@ describe('resolveDurableToolCallConcurrency', () => {
       ).toBe(1);
     });
   });
+
+  describe('per-call approval/suspend stamps (processor-injected tools)', () => {
+    const metadata = [tool({ name: 'a' })];
+
+    it('serializes when a called tool absent from toolsMetadata is stamped requireApproval', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 10 },
+          toolsMetadata: metadata,
+          toolCalls: [
+            { toolName: 'injected', requireApproval: true },
+            { toolName: 'injected', requireApproval: true },
+          ],
+        }),
+      ).toBe(1);
+    });
+
+    it('serializes when a called tool absent from toolsMetadata is stamped hasSuspendSchema', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 5, strategy: 'called' } },
+          toolsMetadata: metadata,
+          toolCalls: [{ toolName: 'a' }, { toolName: 'injected', hasSuspendSchema: true }],
+        }),
+      ).toBe(1);
+    });
+
+    it('keeps configured concurrency for unstamped batches', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 7 },
+          toolsMetadata: metadata,
+          toolCalls: [{ toolName: 'a' }, { toolName: 'injected' }],
+        }),
+      ).toBe(7);
+    });
+  });
 });

@@ -27,6 +27,11 @@ import type { DurableToolCallInput, SerializableDurableOptions, SerializableTool
  * share the value, `null` = restriction cleared → unrestricted). When the
  * calls carry no stamp, the run-level `activeTools` option applies.
  *
+ * Calls stamped with `requireApproval`/`hasSuspendSchema` by the LLM step
+ * also force sequential execution. The stamp reflects the step's effective
+ * tools, so it covers tools injected by processors (e.g. tool search) that
+ * never appear in the run-level `toolsMetadata`.
+ *
  * Designed to be called from a foreach concurrency resolver at execution
  * time, reading only serialized state — safe across durable-engine replays
  * and shared workflow instances.
@@ -38,9 +43,13 @@ export function resolveDurableToolCallConcurrency({
 }: {
   options?: Pick<SerializableDurableOptions, 'requireToolApproval' | 'toolCallConcurrency' | 'activeTools'>;
   toolsMetadata?: SerializableToolMetadata[];
-  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName'>[];
+  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName' | 'requireApproval' | 'hasSuspendSchema'>[];
 }): number {
   if (options?.requireToolApproval) {
+    return 1;
+  }
+
+  if (toolCalls?.some(tc => tc.requireApproval || tc.hasSuspendSchema)) {
     return 1;
   }
 

@@ -69,6 +69,8 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  requireApproval: z.boolean().optional(),
+  hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
 });
