@@ -2,4 +2,4 @@
 '@mastra/turso': patch
 ---
 
-Raised the minimum `@mastra/core` version to 1.72.0 to match `@mastra/libsql`, which now uses dataset snapshot storage helpers from that release.
+Raised the minimum `@mastra/core` version for `@mastra/turso` to 1.72.0.
