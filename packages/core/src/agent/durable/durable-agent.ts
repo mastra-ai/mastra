@@ -3772,7 +3772,7 @@ export class DurableAgent<
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See
-       * `/reference/agents/durable-agent#observerunid-options`.
+       * `https://mastra.ai/reference/agents/durable-agent#observerunid-options`.
        */
       offset?: number;
       idleTimeoutMs?: number;
