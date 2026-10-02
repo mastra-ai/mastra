@@ -96,7 +96,8 @@ export function usesOpenAIStrictJsonSchema(
   const providerKey = model.provider.split('.')[0]!;
   const camelCaseProviderKey = providerKey.replace(/[-_]+([a-z0-9])/gi, (_, char: string) => char.toUpperCase());
   const options = providerOptions as Record<string, unknown> | undefined;
-  for (const key of new Set([providerKey, camelCaseProviderKey, 'openaiCompatible'])) {
+  // Highest precedence first, matching @ai-sdk/openai-compatible (the only version that sends `strict`).
+  for (const key of new Set([camelCaseProviderKey, providerKey, 'openaiCompatible', 'openai-compatible'])) {
     const strictJsonSchema = readStrictJsonSchemaOption(options?.[key]);
     if (strictJsonSchema !== undefined) return strictJsonSchema;
   }

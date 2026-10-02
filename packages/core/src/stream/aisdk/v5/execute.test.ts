@@ -629,6 +629,14 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
     expectUnpreparedSchema(captured.options.responseFormat);
   });
 
+  it('uses the camelCase provider options when they conflict with the raw provider name', async () => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', true);
+    await run(model, {
+      providerOptions: { 'azure-foundry': { strictJsonSchema: false }, azureFoundry: { strictJsonSchema: true } },
+    });
+    expectPreparedSchema(captured.options.responseFormat);
+  });
+
   it('leaves the schema alone for models that do not send a strict json_schema', async () => {
     for (const supportsStructuredOutputs of [undefined, false]) {
       const { model, captured } = makeCapturingModel('azure-foundry.chat', supportsStructuredOutputs);

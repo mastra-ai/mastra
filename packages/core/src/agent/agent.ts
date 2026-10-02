@@ -7826,7 +7826,10 @@ export class Agent<
       if (
         targetProvider.includes('openai') ||
         targetModelId?.includes('openai') ||
-        usesOpenAIStrictJsonSchema(structuredOutputModel, options.providerOptions)
+        usesOpenAIStrictJsonSchema(
+          structuredOutputModel,
+          mergeProviderOptions(options.providerOptions, llm.getProviderOptions()),
+        )
       ) {
         options = {
           ...options,

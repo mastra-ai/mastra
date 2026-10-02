@@ -213,4 +213,26 @@ describe('OpenAI compat layer in agent.ts with structured output', () => {
     expect(responseFormat?.schema.properties.tags.maxItems).toBeUndefined();
     expect(result.object).toEqual({ name: 'Ada', tags: ['a'], nested: { subject: 's' } });
   });
+
+  it('accepts null optional fields when strict mode comes from the model entry provider options', async () => {
+    const model = createMockOpenAIModel({
+      provider: 'azure-foundry.chat',
+      modelId: 'gpt-4o',
+      response: { subject: 's', note: null },
+    });
+    (model as { supportsStructuredOutputs?: boolean }).supportsStructuredOutputs = true;
+    const agent = new Agent({
+      id: 'test',
+      name: 'test',
+      instructions: 'test',
+      model: [{ model, providerOptions: { azureFoundry: { strictJsonSchema: true } } }],
+    });
+
+    const result = await agent.generate('test', {
+      providerOptions: { azureFoundry: { strictJsonSchema: false } },
+      structuredOutput: { schema: z.object({ subject: z.string(), note: z.string().optional() }) },
+    });
+
+    expect(result.object).toEqual({ subject: 's' });
+  });
 });
