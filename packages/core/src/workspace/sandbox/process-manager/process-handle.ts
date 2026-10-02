@@ -237,6 +237,7 @@ export abstract class ProcessHandle {
   private _stdout: RetainedOutputBuffer;
   private _stderr: RetainedOutputBuffer;
   private _killedByAbort = false;
+  private _abortKill?: Promise<void>;
   private _stdoutListeners = new Set<(data: string) => void>();
   private _stderrListeners = new Set<(data: string) => void>();
   private _reader?: Readable;
@@ -301,12 +302,22 @@ export abstract class ProcessHandle {
   /** @internal Kill the process for a fired abort signal and record it in {@link killedByAbort}. */
   async killForAbort(): Promise<void> {
     if (this.exitCode !== undefined) return;
+    // Spawn and wait() can both listen to the same signal; share one kill so a
+    // second kill() reporting "already gone" can't clear the first one's flag.
+    return (this._abortKill ??= this.runAbortKill());
+  }
+
+  private async runAbortKill(): Promise<void> {
     this._killedByAbort = true;
     try {
       // `false` means the process exited on its own before the kill landed.
-      if (!(await this.kill())) this._killedByAbort = false;
+      if (!(await this.kill())) {
+        this._killedByAbort = false;
+        this._abortKill = undefined;
+      }
     } catch (error) {
       this._killedByAbort = false;
+      this._abortKill = undefined;
       throw error;
     }
   }

@@ -414,6 +414,30 @@ describe('ProcessHandle wait abortSignal', () => {
     expect(handle.killedByAbort).toBe(false);
   });
 
+  it('keeps the abort record when spawn and wait abort listeners fire together', async () => {
+    const handle = new TestProcessHandle();
+    // Mirrors providers whose kill() leaves exitCode unset while in flight, so a
+    // second kill() reports the process as already gone.
+    const kill = vi.spyOn(handle, 'kill').mockResolvedValueOnce(true).mockResolvedValue(false);
+
+    await Promise.all([handle.killForAbort(), handle.killForAbort()]);
+
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(handle.killedByAbort).toBe(true);
+  });
+
+  it('lets a later abort retry after an abort kill throws', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill').mockRejectedValueOnce(new Error('transport down'));
+
+    await expect(handle.killForAbort()).rejects.toThrow('transport down');
+    expect(handle.killedByAbort).toBe(false);
+
+    await handle.killForAbort();
+    expect(kill).toHaveBeenCalledTimes(2);
+    expect(handle.killedByAbort).toBe(true);
+  });
+
   it('does not record an abort kill for a direct kill()', async () => {
     const handle = new TestProcessHandle();
     await handle.kill();
