@@ -169,12 +169,14 @@ export const githubScenario: Scenario = {
     }
     if (defaultBranch && tools['github_get_branch']) {
       try {
-        const b = await call<{ commit?: { sha?: string } }>('github_get_branch', {
+        // github_get_branch flattens the GitHub REST shape; the sha lives on
+        // the top-level `commit_sha` field, not nested under `commit.sha`.
+        const b = await call<{ commit_sha?: string }>('github_get_branch', {
           owner,
           repo,
           branch: defaultBranch,
         });
-        defaultSha = b.commit?.sha;
+        defaultSha = b.commit_sha;
         steps.push(makeStep('get branch', 'github_get_branch', 'pass', defaultSha?.slice(0, 7)));
       } catch (error) {
         steps.push(makeStep('get branch', 'github_get_branch', 'fail', errorMessage(error)));
@@ -456,17 +458,40 @@ export const githubScenario: Scenario = {
         steps.push(makeStep('create tag object', 'github_create_tag_object', 'fail', errorMessage(error)));
       }
     }
+    // Tag ref: our provider doesn't expose a create-ref tool, so the smoke
+    // tag object above has no accompanying ref. Resolve a real tag from the
+    // repo's existing tags via list_tags and read its ref; fall back to a
+    // probe only when the repo has no tags at all.
     if (tools['github_get_tag_ref']) {
-      steps.push(
-        await probeTool(call, tools, 'get tag ref (probe)', 'github_get_tag_ref', {
-          owner,
-          repo,
-          ref: `tags/smoke-tag-${runId}`,
-        }),
-      );
+      let realTagName: string | undefined;
+      try {
+        const tags = await call<Array<{ name?: string }>>('github_list_tags', { owner, repo, per_page: 1 });
+        realTagName = tags[0]?.name;
+      } catch {
+        /* ignore — probe path handles it */
+      }
+      if (realTagName) {
+        try {
+          await call('github_get_tag_ref', { owner, repo, ref: `tags/${realTagName}` });
+          steps.push(makeStep('get tag ref', 'github_get_tag_ref', 'pass', realTagName));
+        } catch (error) {
+          steps.push(makeStep('get tag ref', 'github_get_tag_ref', 'fail', errorMessage(error)));
+        }
+      } else {
+        steps.push(
+          await probeTool(call, tools, 'get tag ref (probe)', 'github_get_tag_ref', {
+            owner,
+            repo,
+            ref: `tags/smoke-tag-${runId}`,
+          }),
+        );
+      }
     }
 
-    // Workflow surface: pick first workflow, probe runs/jobs/rerun on bogus id.
+    // Workflow surface: resolve first workflow + first run from list calls so
+    // get_workflow / get_workflow_run / list_workflow_jobs operate on real
+    // ids when the repo has any CI history. rerun stays a probe so we never
+    // trigger billable compute from a smoke test.
     let workflowId: number | string | undefined;
     try {
       const wf = await call<{ workflows?: Array<{ id?: number; path?: string }> }>('github_list_workflows', {
@@ -496,38 +521,71 @@ export const githubScenario: Scenario = {
         );
       }
     }
+    let realRunId: number | undefined;
     if (tools['github_list_workflow_runs']) {
       try {
-        await call('github_list_workflow_runs', { owner, repo, per_page: 5 });
-        steps.push(makeStep('list workflow runs', 'github_list_workflow_runs', 'pass'));
+        const runs = await call<{ workflow_runs?: Array<{ id?: number }> }>('github_list_workflow_runs', {
+          owner,
+          repo,
+          per_page: 5,
+        });
+        realRunId = runs.workflow_runs?.[0]?.id;
+        steps.push(
+          makeStep(
+            'list workflow runs',
+            'github_list_workflow_runs',
+            'pass',
+            realRunId !== undefined ? `latest=${realRunId}` : 'empty',
+          ),
+        );
       } catch (error) {
         steps.push(makeStep('list workflow runs', 'github_list_workflow_runs', 'fail', errorMessage(error)));
       }
     }
     if (tools['github_get_workflow_run']) {
-      steps.push(
-        await probeTool(call, tools, 'get workflow run (probe)', 'github_get_workflow_run', {
-          owner,
-          repo,
-          run_id: 1,
-        }),
-      );
+      if (realRunId !== undefined) {
+        try {
+          await call('github_get_workflow_run', { owner, repo, run_id: realRunId });
+          steps.push(makeStep('get workflow run', 'github_get_workflow_run', 'pass', String(realRunId)));
+        } catch (error) {
+          steps.push(makeStep('get workflow run', 'github_get_workflow_run', 'fail', errorMessage(error)));
+        }
+      } else {
+        steps.push(
+          await probeTool(call, tools, 'get workflow run (probe)', 'github_get_workflow_run', {
+            owner,
+            repo,
+            run_id: 1,
+          }),
+        );
+      }
     }
     if (tools['github_list_workflow_jobs']) {
-      steps.push(
-        await probeTool(call, tools, 'list workflow jobs (probe)', 'github_list_workflow_jobs', {
-          owner,
-          repo,
-          run_id: 1,
-        }),
-      );
+      if (realRunId !== undefined) {
+        try {
+          await call('github_list_workflow_jobs', { owner, repo, run_id: realRunId, per_page: 5 });
+          steps.push(makeStep('list workflow jobs', 'github_list_workflow_jobs', 'pass', String(realRunId)));
+        } catch (error) {
+          steps.push(makeStep('list workflow jobs', 'github_list_workflow_jobs', 'fail', errorMessage(error)));
+        }
+      } else {
+        steps.push(
+          await probeTool(call, tools, 'list workflow jobs (probe)', 'github_list_workflow_jobs', {
+            owner,
+            repo,
+            run_id: 1,
+          }),
+        );
+      }
     }
     if (tools['github_rerun_workflow_run']) {
+      // Always a probe: re-running a real workflow consumes Actions minutes
+      // and would be a surprising side effect for a smoke test.
       steps.push(
         await probeTool(call, tools, 'rerun workflow run (probe)', 'github_rerun_workflow_run', {
           owner,
           repo,
-          run_id: 1,
+          run_id: realRunId ?? 1,
         }),
       );
     }
