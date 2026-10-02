@@ -371,7 +371,7 @@ interface PrepareResult {
 
 #### `abortRunStream(runId)`
 
-Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the `finish` event carries reason `abort`, `onAbort` fires, and `observe()` consumers see the stream end.
+Stops a run by ID from any process that shares the agent's [PubSub](/docs/server/pubsub). Only the `runId` from `stream()` or `prepare()` is needed, so a later request can stop a run it didn't start. The run ends the same way as `abort()` on the stream result: the stream emits an `abort` chunk, `onAbort` fires, and `observe()` consumers see the stream end.
 
 ```typescript
 const { runId } = await durableAgent.stream('Summarize the document')
@@ -751,7 +751,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     name: 'onFinish',
     type: '(result: AgentFinishEventData) => void | Promise<void>',
     isOptional: true,
-    description: 'Called when the run finishes.',
+    description: 'Called when the run completes successfully. Aborted runs call `onAbort`; failed runs call `onError`.',
   },
   {
     name: 'onError',
@@ -782,7 +782,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 ]}
 />
 
-`resume()` and `observe()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
+`resume()`, `observe()`, and `recover()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onAbort`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
 
 ## DurableAgentStreamResult
 

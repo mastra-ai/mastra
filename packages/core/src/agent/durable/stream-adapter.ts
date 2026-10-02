@@ -408,25 +408,57 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           const data = streamEvent.data as AgentFinishEventData;
-          // Enqueue finish chunk and close stream even if callback throws
-          const finishChunk = {
-            type: 'finish' as const,
+          const finishReason = data.stepResult?.reason;
+
+          if (finishReason === 'abort') {
+            safeEnqueue(controller, {
+              type: 'abort',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {},
+            } as ChunkType<OUTPUT>);
+          }
+          safeEnqueue(controller, {
+            type: 'finish',
             runId,
             from: ChunkFrom.AGENT,
             payload: {
               output: data.output,
               stepResult: data.stepResult,
             },
-          } as ChunkType<OUTPUT>;
-          safeEnqueue(controller, finishChunk);
+          } as ChunkType<OUTPUT>);
           safeClose(controller);
           markTerminated();
 
-          // Build rich onFinish payload from finish event data.
-          // The pubsub FINISH event carries output.text, output.steps, and
-          // stepResult — enough to reconstruct the fields scenario tests expect
-          // (text, steps, toolResults, finishReason, usage).
-          if (onFinish) {
+          // Terminal callbacks are driven by pubsub delivery because nobody may
+          // consume the stream (for example, resume() with a delay-only wait).
+          if (finishReason === 'abort') {
+            try {
+              await onAbort?.({
+                steps: (data.output?.steps ?? []) as unknown[],
+                text: (data.output?.text ?? '') as string,
+              });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
+            }
+          } else if (finishReason === 'error') {
+            try {
+              const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
+              // Preserve the producer's stack, name, and provider fields so the failure stays attributable and classifiable.
+              if (lastErrorStack) error.stack = lastErrorStack;
+              if (lastErrorName) error.name = lastErrorName;
+              if (lastErrorCause && typeof lastErrorCause === 'object') {
+                for (const [key, value] of Object.entries(lastErrorCause)) {
+                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
+                    (error as unknown as Record<string, unknown>)[key] = value;
+                  }
+                }
+              }
+              await onError?.({ error });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
+            }
+          } else if (onFinish) {
             try {
               const steps = (data.output?.steps ?? []) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
@@ -446,7 +478,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 sources: [],
                 reasoning: [],
                 content: [],
-                finishReason: data.stepResult?.reason ?? 'stop',
+                finishReason: finishReason ?? 'stop',
                 usage: normalizeUsage(data.output?.usage),
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
@@ -457,45 +489,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
-            }
-          }
-
-          // When the finish reason is 'abort', also fire onAbort so
-          // consumers see it — the abort was handled gracefully (clean
-          // return from llm-execution) rather than crashing the workflow,
-          // so the separate ABORT event never fires.
-          if (onAbort && (data.stepResult?.reason as string) === 'abort') {
-            try {
-              await onAbort({
-                steps: (data.output?.steps ?? []) as unknown[],
-                text: (data.output?.text ?? '') as string,
-              });
-            } catch (callbackError) {
-              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
-            }
-          }
-
-          // When the finish reason is 'error', also fire onError so
-          // consumers see it — the error was handled gracefully (bail
-          // response) rather than crashing the workflow, so the ERROR
-          // event never fires.
-          if (onError && data.stepResult?.reason === 'error') {
-            try {
-              const error = new Error(lastErrorMessage || 'LLM execution error', { cause: lastErrorCause });
-              // Preserve the producer's stack and name so the failure stays attributable and classifiable.
-              if (lastErrorStack) error.stack = lastErrorStack;
-              if (lastErrorName) error.name = lastErrorName;
-              // Keep provider fields (statusCode, isRetryable, ...) on the surfaced error.
-              if (lastErrorCause && typeof lastErrorCause === 'object') {
-                for (const [key, value] of Object.entries(lastErrorCause)) {
-                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
-                    (error as unknown as Record<string, unknown>)[key] = value;
-                  }
-                }
-              }
-              await onError({ error });
-            } catch (callbackError) {
-              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
             }
           }
 
@@ -559,6 +552,29 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.ABORT: {
           const data = streamEvent.data as AgentAbortEventData;
+          safeEnqueue(controller, {
+            type: 'abort',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {},
+          } as ChunkType<OUTPUT>);
+          const finishData: AgentFinishEventData = {
+            output: {
+              text: data.text,
+              steps: data.steps,
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            },
+            stepResult: { reason: 'abort', warnings: [], isContinued: false },
+          };
+          safeEnqueue(controller, {
+            type: 'finish',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              output: finishData.output,
+              stepResult: finishData.stepResult,
+            },
+          } as ChunkType<OUTPUT>);
           // Mark terminal BEFORE awaiting onAbort, for the same reason as the
           // closeOnSuspend path above — a slow callback must not let the re-armed
           // watchdog fire against an already-aborted run.
