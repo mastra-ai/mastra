@@ -564,7 +564,7 @@ export class MemoryPG extends MemoryStorage {
         // Lock the thread row for the duration of the transaction. Concurrent transfers of the
         // same thread block here until this transaction commits, so they cannot interleave.
         const thread = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `SELECT * FROM ${threadsTable} WHERE id = $1`,
+          `SELECT * FROM ${threadsTable} WHERE id = $1 FOR UPDATE`,
           [threadId],
         );
 

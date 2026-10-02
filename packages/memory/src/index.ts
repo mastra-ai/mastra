@@ -4,6 +4,7 @@ import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
@@ -425,6 +426,14 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * @see [Memory documentation](https://mastra.ai/docs/memory/overview)
  * if packaged docs are unavailable.
  */
+const invalidMerge = (text: string) =>
+  new MastraError({
+    id: 'MEMORY_WORKING_MEMORY_MERGE_INVALID',
+    domain: ErrorDomain.MASTRA_MEMORY,
+    category: ErrorCategory.USER,
+    text,
+  });
+
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
     return new TokenCounter();
@@ -1264,23 +1273,30 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (!config.workingMemory?.enabled) {
-      throw new Error('Working memory is not enabled for this memory instance');
+      throw invalidMerge('Working memory is not enabled for this memory instance');
     }
     if (!config.workingMemory.schema) {
-      throw new Error('Working memory merge requires schema-based (JSON) working memory');
+      throw invalidMerge('Working memory merge requires schema-based (JSON) working memory');
     }
     if ((config.workingMemory.scope || 'resource') !== 'resource' || !resourceId) {
-      throw new Error('Working memory merge requires resource-scoped working memory and a resourceId');
+      throw invalidMerge('Working memory merge requires resource-scoped working memory and a resourceId');
     }
 
-    const patch = typeof workingMemory === 'string' ? JSON.parse(workingMemory) : workingMemory;
+    let patch: unknown = workingMemory;
+    if (typeof workingMemory === 'string') {
+      try {
+        patch = JSON.parse(workingMemory);
+      } catch {
+        throw invalidMerge('Working memory merge requires a JSON object');
+      }
+    }
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
-      throw new Error('Working memory merge requires a JSON object');
+      throw invalidMerge('Working memory merge requires a JSON object');
     }
 
     const memoryStore = await this.getMemoryStore();
     if (!memoryStore.supportsAtomicWorkingMemoryMerge) {
-      throw new Error(
+      throw invalidMerge(
         `Atomic working memory merge is not supported by this storage adapter (${memoryStore.constructor.name}).`,
       );
     }
@@ -1295,7 +1311,8 @@ export class Memory extends MastraMemory {
     try {
       await memoryStore.mergeResourceWorkingMemory({
         resourceId,
-        merge: existing => JSON.stringify(deepMergeWorkingMemory(parseWorkingMemoryJson(existing), patch)),
+        merge: existing =>
+          JSON.stringify(deepMergeWorkingMemory(parseWorkingMemoryJson(existing), patch as Record<string, unknown>)),
       });
       span?.end({ output: { success: true } });
     } catch (error) {

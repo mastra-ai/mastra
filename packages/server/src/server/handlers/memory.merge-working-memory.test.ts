@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -50,6 +51,20 @@ describe('UPDATE_WORKING_MEMORY_ROUTE mode', () => {
       expect.objectContaining({ threadId: 'thread-1', resourceId: 'user-1', workingMemory: '{"a":1}' }),
     );
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('maps merge validation errors to 400 but leaves storage errors alone', async () => {
+    vi.spyOn(memory, 'supportsAtomicWorkingMemoryMerge').mockResolvedValue(true);
+    const merge = vi.spyOn(memory, 'mergeWorkingMemory');
+
+    merge.mockRejectedValueOnce(
+      new MastraError({ id: 'INVALID', domain: ErrorDomain.MASTRA_MEMORY, category: ErrorCategory.USER, text: 'bad' }),
+    );
+    await expect(call({ workingMemory: '{"a":1}', mode: 'merge' })).rejects.toMatchObject({ status: 400 });
+
+    merge.mockRejectedValueOnce(new Error('connection reset'));
+    const error = await call({ workingMemory: '{"a":1}', mode: 'merge' }).catch(e => e);
+    expect(error.status).not.toBe(400);
   });
 
   it('keeps replace as the default', async () => {

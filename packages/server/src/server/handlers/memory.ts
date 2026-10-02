@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
+import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -1807,7 +1808,10 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
             memoryConfig,
           });
         } catch (error) {
-          throw new HTTPException(400, { message: error instanceof Error ? error.message : String(error) });
+          if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+            throw new HTTPException(400, { message: error.message });
+          }
+          throw error;
         }
         return { success: true };
       }
