@@ -2,13 +2,16 @@ import type { Scenario, ScenarioStep } from '../scenario.js';
 import { makeStep, errorMessage, requireTools, runReadBatch } from '../scenario.js';
 
 /**
- * Deep Notion scenario: pages (create/read/update/archive) plus the read-only
- * database/block/comment surface. Notion lacks hard delete; archive is the
- * cleanup path.
+ * Deep Notion scenario: pages, blocks, databases, comments, users, and
+ * search across most of the Notion tool surface.
+ *
+ * Notion has no hard delete for pages or databases; archive + restore is the
+ * closest thing. For blocks, delete_block IS a hard removal (the block id is
+ * returned so you can confirm removal).
  */
 export const notionScenario: Scenario = {
   integrationId: 'notion',
-  summary: 'page CRUD + database/block/comment reads',
+  summary: 'pages + blocks + databases + comments + users + search',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
@@ -23,8 +26,22 @@ export const notionScenario: Scenario = {
       return steps;
     }
 
-    // Notion's search returns { results, next_cursor, has_more } — the
-    // scenario was previously reading `.items` and never finding anything.
+    // Read-only inventory first — tools that don't need an owned resource.
+    steps.push(
+      ...(await runReadBatch(
+        call,
+        [
+          ['notion_get_bot_user', {}],
+          ['notion_list_users', { page_size: 5 }],
+          ['notion_search_pages', { query: '', page_size: 5 }],
+          ['notion_search_databases', { query: '', page_size: 5 }],
+        ],
+        tools,
+      )),
+    );
+
+    // Notion's search returns { results, next_cursor, has_more }, not
+    // { items }. Historical gotcha: reading .items here hid real page access.
     const search = await call<{ results?: Array<{ object?: string; id?: string }> }>('notion_search', {
       query: '',
       page_size: 10,
@@ -49,13 +66,9 @@ export const notionScenario: Scenario = {
         return steps;
       }
     } else {
-      // Workspace empty / nothing shared with the integration yet. Bootstrap
-      // the scenario by creating a top-level page under the workspace root.
-      // Notion only accepts workspace: true from internal integrations, so
-      // this surfaces a clear error when the token is a public OAuth app.
-      steps.push(
-        makeStep('find parent page', 'notion_search', 'pass', 'empty workspace — bootstrapping a top-level page'),
-      );
+      // Empty workspace / no shared pages. Try a workspace-root page; this
+      // only works for internal integrations.
+      steps.push(makeStep('find parent page', 'notion_search', 'pass', 'empty workspace — bootstrapping root'));
       try {
         const created = await call<{ id: string }>('notion_create_page', {
           parent: { workspace: true },
@@ -90,25 +103,264 @@ export const notionScenario: Scenario = {
       steps.push(makeStep('update page', 'notion_update_page', 'fail', errorMessage(error)));
     }
 
-    // Opportunistic reads against the created page's children/comments.
-    steps.push(
-      ...(await runReadBatch(
-        call,
-        [
-          ['notion_retrieve_block_children', { block_id: pageId }],
-          ['notion_list_comments', { block_id: pageId }],
-          ['notion_search', { query: 'mastra-smoke', page_size: 5 }],
-        ],
-        tools,
-      )),
-    );
+    // Duplicate before adding child blocks/databases. The duplicate tool
+    // walks the source's block tree and replays it; a child_database block
+    // can't be replayed through the public API, so duplicating later would
+    // 400. Duplicating now exercises the happy path.
+    let duplicateId: string | undefined;
+    if (tools['notion_duplicate_page']) {
+      try {
+        const dup = await call<{ id: string }>('notion_duplicate_page', { page_id: pageId });
+        duplicateId = dup.id;
+        steps.push(makeStep('duplicate page', 'notion_duplicate_page', 'pass', duplicateId));
+      } catch (error) {
+        steps.push(makeStep('duplicate page', 'notion_duplicate_page', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Block append surface. Every append helper takes { block_id, children:
+    // Array<RawBlockObject> } — the typed helpers (append_heading_block,
+    // append_todo_block, etc.) are convenience wrappers around the same
+    // Notion endpoint, not shortcut DSLs. Each children entry must be a real
+    // Notion block object, not a flat { text, level } shape.
+    const tryAppend = async (name: string, toolId: string, child: Record<string, unknown>) => {
+      if (!tools[toolId]) return;
+      try {
+        await call(toolId, { block_id: pageId, children: [child] });
+        steps.push(makeStep(name, toolId, 'pass'));
+      } catch (error) {
+        steps.push(makeStep(name, toolId, 'fail', errorMessage(error)));
+      }
+    };
+
+    const richText = (content: string) => [{ type: 'text', text: { content } }];
+    await tryAppend('append paragraph', 'notion_append_block_children', {
+      object: 'block',
+      type: 'paragraph',
+      paragraph: { rich_text: richText(`smoke body ${runId}`) },
+    });
+    await tryAppend('append heading', 'notion_append_heading_block', {
+      heading_2: { rich_text: richText('smoke heading') },
+    });
+    await tryAppend('append bulleted list', 'notion_append_bulleted_list', {
+      bulleted_list_item: { rich_text: richText('one') },
+    });
+    await tryAppend('append todo', 'notion_append_todo_block', {
+      to_do: { rich_text: richText('smoke todo'), checked: false },
+    });
+    await tryAppend('append callout', 'notion_append_callout_block', {
+      callout: { rich_text: richText('smoke callout'), icon: { type: 'emoji', emoji: '💨' } },
+    });
+    await tryAppend('append code', 'notion_append_code_block', {
+      code: { rich_text: richText('const smoke = true;'), language: 'typescript' },
+    });
+    await tryAppend('append divider', 'notion_append_divider', { divider: {} });
+
+    // Walk the block tree, update + delete the first user-created block.
+    let firstBlockId: string | undefined;
+    if (tools['notion_list_block_children']) {
+      try {
+        const blocks = await call<{ results?: Array<{ id?: string; type?: string }> }>('notion_list_block_children', {
+          block_id: pageId,
+        });
+        firstBlockId = blocks.results?.find(b => b.id && b.type !== 'child_page')?.id;
+        steps.push(
+          makeStep(
+            'list block children',
+            'notion_list_block_children',
+            'pass',
+            `${blocks.results?.length ?? 0} blocks`,
+          ),
+        );
+      } catch (error) {
+        steps.push(makeStep('list block children', 'notion_list_block_children', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (firstBlockId && tools['notion_retrieve_block']) {
+      try {
+        await call('notion_retrieve_block', { block_id: firstBlockId });
+        steps.push(makeStep('retrieve block', 'notion_retrieve_block', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve block', 'notion_retrieve_block', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (firstBlockId && tools['notion_update_block']) {
+      try {
+        await call('notion_update_block', {
+          block_id: firstBlockId,
+          paragraph: { rich_text: [{ type: 'text', text: { content: 'edited by smoke test' } }] },
+        });
+        steps.push(makeStep('update block', 'notion_update_block', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update block', 'notion_update_block', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (firstBlockId && tools['notion_delete_block']) {
+      try {
+        await call('notion_delete_block', { block_id: firstBlockId });
+        steps.push(makeStep('delete block', 'notion_delete_block', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete block', 'notion_delete_block', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Database CRUD under the page.
+    let databaseId: string | undefined;
+    if (tools['notion_create_database']) {
+      try {
+        const db = await call<{ id: string }>('notion_create_database', {
+          parent: { page_id: pageId },
+          title: [{ type: 'text', text: { content: `${runId} smoke db` } }],
+          properties: {
+            Name: { title: {} },
+            Status: {
+              select: {
+                options: [
+                  { name: 'todo', color: 'gray' },
+                  { name: 'done', color: 'green' },
+                ],
+              },
+            },
+          },
+        });
+        databaseId = db.id;
+        steps.push(makeStep('create database', 'notion_create_database', 'pass', databaseId));
+      } catch (error) {
+        steps.push(makeStep('create database', 'notion_create_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (databaseId && tools['notion_retrieve_database']) {
+      try {
+        await call('notion_retrieve_database', { database_id: databaseId });
+        steps.push(makeStep('retrieve database', 'notion_retrieve_database', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve database', 'notion_retrieve_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (databaseId && tools['notion_update_database']) {
+      try {
+        await call('notion_update_database', {
+          database_id: databaseId,
+          title: [{ type: 'text', text: { content: `${runId} smoke db (renamed)` } }],
+        });
+        steps.push(makeStep('update database', 'notion_update_database', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update database', 'notion_update_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (databaseId && tools['notion_query_database']) {
+      try {
+        await call('notion_query_database', { database_id: databaseId, page_size: 5 });
+        steps.push(makeStep('query database', 'notion_query_database', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('query database', 'notion_query_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Markdown surface.
+    if (tools['notion_get_page_as_markdown']) {
+      try {
+        await call('notion_get_page_as_markdown', { page_id: pageId });
+        steps.push(makeStep('page as markdown', 'notion_get_page_as_markdown', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('page as markdown', 'notion_get_page_as_markdown', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (tools['notion_update_page_markdown']) {
+      try {
+        await call('notion_update_page_markdown', {
+          page_id: pageId,
+          markdown: `## Smoke run ${runId}\n\nSome paragraph.`,
+        });
+        steps.push(makeStep('update page markdown', 'notion_update_page_markdown', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update page markdown', 'notion_update_page_markdown', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Comments.
+    let commentId: string | undefined;
+    if (tools['notion_create_comment']) {
+      try {
+        const comment = await call<{ id: string }>('notion_create_comment', {
+          parent: { page_id: pageId },
+          rich_text: [{ type: 'text', text: { content: `${runId} smoke comment` } }],
+        });
+        commentId = comment.id;
+        steps.push(makeStep('create comment', 'notion_create_comment', 'pass', commentId));
+      } catch (error) {
+        steps.push(makeStep('create comment', 'notion_create_comment', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (tools['notion_list_comments']) {
+      try {
+        await call('notion_list_comments', { block_id: pageId });
+        steps.push(makeStep('list comments', 'notion_list_comments', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('list comments', 'notion_list_comments', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (commentId && tools['notion_retrieve_comment']) {
+      try {
+        await call('notion_retrieve_comment', { comment_id: commentId });
+        steps.push(makeStep('retrieve comment', 'notion_retrieve_comment', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve comment', 'notion_retrieve_comment', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Cleanup: archive database, duplicate, main page. restore_page then
+    // re-archive verifies the restore path end-to-end.
+    if (databaseId) {
+      try {
+        await call('notion_update_database', { database_id: databaseId, archived: true });
+        steps.push(makeStep('archive database', 'notion_update_database', 'pass'));
+      } catch (error) {
+        log.error(`Failed to archive smoke database ${databaseId}`, errorMessage(error));
+        steps.push(makeStep('archive database', 'notion_update_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (duplicateId) {
+      try {
+        await call('notion_archive_page', { page_id: duplicateId });
+        steps.push(makeStep('archive duplicate', 'notion_archive_page', 'pass'));
+      } catch (error) {
+        log.error(`Failed to archive smoke duplicate ${duplicateId}`, errorMessage(error));
+        steps.push(makeStep('archive duplicate', 'notion_archive_page', 'fail', errorMessage(error)));
+      }
+    }
 
     try {
       await call('notion_archive_page', { page_id: pageId });
       steps.push(makeStep('archive page', 'notion_archive_page', 'pass'));
     } catch (error) {
-      log.error(`Failed to archive smoke page ${pageId} — clean up manually.`, errorMessage(error));
+      log.error(`Failed to archive smoke page ${pageId}`, errorMessage(error));
       steps.push(makeStep('archive page', 'notion_archive_page', 'fail', errorMessage(error)));
+    }
+
+    if (tools['notion_restore_page']) {
+      try {
+        await call('notion_restore_page', { page_id: pageId });
+        steps.push(makeStep('restore page', 'notion_restore_page', 'pass'));
+        // Re-archive after restore to leave nothing active.
+        try {
+          await call('notion_archive_page', { page_id: pageId });
+        } catch (error) {
+          log.error(`Failed to re-archive smoke page ${pageId}`, errorMessage(error));
+        }
+      } catch (error) {
+        steps.push(makeStep('restore page', 'notion_restore_page', 'fail', errorMessage(error)));
+      }
     }
 
     return steps;
