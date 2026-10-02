@@ -286,8 +286,6 @@ trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
   - webpack-dev-middleware@7.4.6
-  # basic-ftp 6.2.1 security floor (DoS in Client.list); parent get-uri still declares ^5.
-  - basic-ftp@6.2.1
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
@@ -442,10 +440,6 @@ overrides:
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
   # @lancedb/lancedb pins @huggingface/transformers@3.0.2 -> onnxruntime-node@1.19.2 (AIKIDO-2026-10293, fixed 1.24.2)
   onnxruntime-node@<1.24.2: 1.24.3
-  # Vanta 2026-10-02: webpack-dev-middleware, basic-ftp, fastify floors
-  webpack-dev-middleware@<7.4.6: 7.4.6
-  basic-ftp@<6.2.1: 6.2.1
-  fastify@<5.12.5: 5.12.5
   # Note: zod@3.x has no AIKIDO patches (fixes are 4.x-only); left as residual.
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
