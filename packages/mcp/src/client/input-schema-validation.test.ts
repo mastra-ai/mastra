@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import AjvCore from 'ajv/dist/core.js';
+import { describe, expect, it, vi } from 'vitest';
 import { validateInputSchema } from './input-schema-validation';
 
 describe('validateInputSchema', () => {
@@ -141,6 +142,21 @@ describe('validateInputSchema', () => {
       expect(validateInputSchema(schema)).toEqual({ success: false, reason: '/: JSON Schema validation failed' });
     },
   );
+
+  it('rejects oversized schemas before Ajv walks them', () => {
+    const atLimit = { type: 'object', properties: { a: { enum: Array.from({ length: 9_990 }, (_, i) => i) } } };
+    expect(validateInputSchema(atLimit).success).toBe(true);
+
+    const validate = vi.spyOn(AjvCore.prototype, 'validate');
+    const enumValues = Array.from({ length: 5_000 }, (_, i) => ({ i }));
+    const oversized = { type: 'object', properties: { a: { enum: enumValues } } };
+    expect(validateInputSchema(oversized)).toEqual({
+      success: false,
+      reason: '/: JSON Schema exceeds the maximum node count of 10000',
+    });
+    expect(validate).not.toHaveBeenCalled();
+    validate.mockRestore();
+  });
 
   it('bounds diagnostics instead of logging a complete schema', () => {
     const result = validateInputSchema({ type: 'object', properties: { ['x'.repeat(1000)]: [] } });

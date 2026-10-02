@@ -2,6 +2,7 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import Ajv from 'ajv';
 import Ajv2019 from 'ajv/dist/2019.js';
 import Ajv2020 from 'ajv/dist/2020.js';
+import { MAX_JSON_SCHEMA_NODES } from '../shared/json-schema-dialect';
 
 type ValidationResult = { success: true; schema: JSONSchema7 } | { success: false; reason: string };
 type Dialect = 'draft-07' | '2019-09' | '2020-12';
@@ -28,10 +29,30 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Ajv's meta-schema pass visits every JSON value (including enum/const data) and checks
+// uniqueness quadratically, so bound the whole document before handing it to Ajv.
+function exceedsNodeBudget(schema: unknown): boolean {
+  let nodes = 0;
+  const stack: unknown[] = [schema];
+  while (stack.length > 0) {
+    const value = stack.pop();
+    nodes += 1;
+    if (typeof value !== 'object' || value === null) continue;
+    for (const key in value) {
+      if (nodes + stack.length >= MAX_JSON_SCHEMA_NODES) return true;
+      stack.push((value as Record<string, unknown>)[key]);
+    }
+  }
+  return false;
+}
+
 export function validateInputSchema(input: unknown): ValidationResult {
   const schema = isObject(input) && 'jsonSchema' in input ? input.jsonSchema : input;
   if (!isObject(schema)) {
     return { success: false, reason: '/: MCP input schema must be a JSON object' };
+  }
+  if (exceedsNodeBudget(schema)) {
+    return { success: false, reason: `/: JSON Schema exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}` };
   }
 
   let dialects: Dialect[] = ['draft-07', '2020-12'];
