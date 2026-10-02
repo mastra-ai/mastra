@@ -485,6 +485,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               // Preserve the producer's stack and name so the failure stays attributable and classifiable.
               if (lastErrorStack) error.stack = lastErrorStack;
               if (lastErrorName) error.name = lastErrorName;
+              // Keep provider fields (statusCode, isRetryable, ...) on the surfaced error.
+              if (lastErrorCause && typeof lastErrorCause === 'object') {
+                for (const [key, value] of Object.entries(lastErrorCause)) {
+                  if (!['name', 'message', 'stack', 'cause'].includes(key)) {
+                    (error as unknown as Record<string, unknown>)[key] = value;
+                  }
+                }
+              }
               await onError({ error });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
