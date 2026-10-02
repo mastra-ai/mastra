@@ -509,7 +509,7 @@ export async function runIdleLoop<
       outerController = controller;
     },
     cancel() {
-      forceClose();
+      abortWrapper();
     },
   });
 

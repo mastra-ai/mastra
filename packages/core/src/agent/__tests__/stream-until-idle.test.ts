@@ -415,6 +415,160 @@ describe('Agent.streamUntilIdle', () => {
     expect(creationWasAborted).toBe(true);
   });
 
+  it('aborts a pending continuation when the combined stream reader cancels', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('initial response')]);
+    const agent = new Agent({
+      id: 'cancel-pending-continuation',
+      name: 'cancel-pending-continuation',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'cancel-pending-continuation');
+
+    const originalStream = agent.stream.bind(agent);
+    let streamCalls = 0;
+    let markCreationStarted!: () => void;
+    const creationStarted = new Promise<void>(resolve => {
+      markCreationStarted = resolve;
+    });
+    let creationWasAborted = false;
+    vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
+      streamCalls += 1;
+      if (streamCalls === 1) return originalStream(messages, options) as any;
+
+      return new Promise((_, reject) => {
+        markCreationStarted();
+        const abort = () => {
+          creationWasAborted = true;
+          reject(new Error('Continuation creation aborted'));
+        };
+        if (options.abortSignal.aborted) abort();
+        else options.abortSignal.addEventListener('abort', abort, { once: true });
+      }) as any;
+    });
+
+    const threadId = 'cancel-pending-continuation-thread';
+    const resourceId = 'user-1';
+    const result = await agent.streamUntilIdle('hi', {
+      runId: 'cancel-pending-continuation-run',
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const reader = (result.fullStream as ReadableStream<any>).getReader();
+    const consumePromise = (async () => {
+      while (!(await reader.read()).done) {
+        // Keep reading until cancellation closes the combined stream.
+      }
+    })();
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: string) =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'cancel-pending-continuation-task',
+        toolName: 'dummy',
+        toolCallId: 'cancel-pending-continuation-task',
+        runId: 'background-run',
+        agentId: 'cancel-pending-continuation',
+        threadId,
+        resourceId,
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+    await creationStarted;
+
+    await reader.cancel();
+    await consumePromise;
+    expect(creationWasAborted).toBe(true);
+  });
+
+  it('does not read a continuation that resolves after the wrapper is aborted', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('initial response')]);
+    const agent = new Agent({
+      id: 'late-pending-continuation',
+      name: 'late-pending-continuation',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'late-pending-continuation');
+
+    const originalStream = agent.stream.bind(agent);
+    let streamCalls = 0;
+    let markCreationStarted!: () => void;
+    const creationStarted = new Promise<void>(resolve => {
+      markCreationStarted = resolve;
+    });
+    let resolveContinuation!: (value: any) => void;
+    const continuation = new Promise<any>(resolve => {
+      resolveContinuation = resolve;
+    });
+    let lateStreamWasRead = false;
+    const lateStream = {
+      getReader() {
+        lateStreamWasRead = true;
+        return {
+          read: async () => ({ done: true, value: undefined }),
+          releaseLock() {},
+        };
+      },
+    };
+    vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
+      streamCalls += 1;
+      if (streamCalls === 1) return originalStream(messages, options) as any;
+      markCreationStarted();
+      return continuation;
+    });
+
+    const runId = 'late-pending-continuation-run';
+    const threadId = 'late-pending-continuation-thread';
+    const resourceId = 'user-1';
+    const result = await agent.streamUntilIdle('hi', {
+      runId,
+      memory: { thread: threadId, resource: resourceId },
+    });
+    const drainPromise = drain(result.fullStream as ReadableStream<any>);
+    const bgManager = mastra.backgroundTaskManager!;
+    const publishEvent = (type: string) =>
+      (bgManager as any).publishLifecycleEvent(type, {
+        id: 'late-pending-continuation-task',
+        toolName: 'dummy',
+        toolCallId: 'late-pending-continuation-task',
+        runId: 'background-run',
+        agentId: 'late-pending-continuation',
+        threadId,
+        resourceId,
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    await publishEvent('task.running');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await publishEvent('task.completed');
+    await creationStarted;
+
+    expect(agent.abortRunStream(runId)).toBe(true);
+    await drainPromise;
+    resolveContinuation({ runId: 'late-inner-run', fullStream: lateStream });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(lateStreamWasRead).toBe(false);
+  });
+
   it('drops the resumed runId from a plain Agent autonomous continuation', async () => {
     const memory = new MockMemory();
     const { model } = makeScriptedModel([
