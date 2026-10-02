@@ -178,6 +178,8 @@ for await (const chunk of output.fullStream) {
 }
 ```
 
+Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. Starting at a non-zero offset skips earlier deltas, so aggregated text is partial and structured output may be invalid. An offset past the retained history waits for future live events. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+
 Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
 
 ```typescript title="src/server/reconnect.ts"

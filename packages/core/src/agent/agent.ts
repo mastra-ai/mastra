@@ -10695,6 +10695,17 @@ export class Agent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index to replay from. The index counts every cached
+       * event on the run topic, including lifecycle events, so it is not a chunk count. Omit it
+       * to replay all available cached events before receiving live events. On PubSub transports
+       * without numeric offset support, providing an offset starts with new live events instead.
+       * An offset past retained history waits for later live events.
+       *
+       * Public stream chunks do not expose this index. Use an offset only when another integration
+       * tracks the transport position. Starting mid-stream skips earlier deltas, so aggregated text
+       * is partial and structured output may fail validation or parsing.
+       */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
