@@ -12668,6 +12668,8 @@ describe('Full Async Buffering Flow', () => {
       expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
 
       // Turn 2, step 0: a chunk is ready, but activating now would wait on the held op.
+      // Reflection still runs: it doesn't wait on the observation op.
+      const maybeReflect = vi.spyOn(om.reflector, 'maybeReflect');
       turn2Step0 = step(0, { freshState: true });
       const outcome = await Promise.race([
         turn2Step0.then(() => 'completed' as const),
@@ -12675,6 +12677,7 @@ describe('Full Async Buffering Flow', () => {
       ]);
       expect(outcome).toBe('completed');
       expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations ?? '').toBe('');
+      expect(maybeReflect).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'turn-sync' }));
     } finally {
       clearTimeout(timer);
       holdObserver = undefined;
@@ -12687,6 +12690,102 @@ describe('Full Async Buffering Flow', () => {
     // With no op in flight, the next step activates the buffered chunks.
     await step(1);
     expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+  });
+
+  describe('threshold→blockAfter band with a ready chunk at step > 0', () => {
+    async function setupReadyChunkInBand(holdObserver: () => Promise<void> | undefined) {
+      const scenario = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+        observerGate: holdObserver,
+      });
+      const { step, waitForAsyncOps, storage, threadId, resourceId } = scenario;
+
+      // Step 0 buffers a chunk in the background; it completes before step 1.
+      const list = await step(0);
+      await waitForAsyncOps();
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+
+      // The agent responds with enough content to cross the next buffer interval,
+      // still inside the band.
+      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      for (let i = 0; i < 6; i++) {
+        list.add(
+          {
+            id: `band-response-${i}`,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: `Band ${i}: ${filler}` }] },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+            threadId,
+            resourceId,
+          } as MastraDBMessage,
+          'response',
+        );
+      }
+      const status = await scenario.om.getStatus({ threadId, resourceId, messages: list.get.all.db() });
+      expect(status.inAsyncObservationBand).toBe(true);
+      expect(status.canActivate).toBe(true);
+      return scenario;
+    }
+
+    async function raceStep(run: () => Promise<unknown>) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const pending = run();
+      try {
+        return await Promise.race([
+          pending.then(() => 'completed' as const),
+          new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    it('should activate the ready chunk instead of starting a buffer op that would defer it', async () => {
+      let holdObserver: Promise<void> | undefined;
+      const { step, observerCalls, storage, threadId, resourceId } = await setupReadyChunkInBand(() => holdObserver);
+
+      // Any new buffer op would stay in flight and defer activation.
+      let releaseObserver!: () => void;
+      holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
+      const callsBeforeStep = observerCalls.length;
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect(observerCalls.length).toBe(callsBeforeStep);
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        holdObserver = undefined;
+        releaseObserver();
+        await step1?.catch(() => {});
+      }
+    });
+
+    it('should activate without waiting on an in-flight reflection buffer op', async () => {
+      const { step, storage, threadId, resourceId } = await setupReadyChunkInBand(() => undefined);
+
+      // A reflection buffer op is still running; waitForBuffering would wait on it.
+      const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+      const reflectionKey = `refl:thread:${threadId}`;
+      let releaseReflection!: () => void;
+      ops.set(reflectionKey, new Promise<void>(resolve => (releaseReflection = resolve)));
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        ops.delete(reflectionKey);
+        releaseReflection();
+        await step1?.catch(() => {});
+      }
+    });
   });
 
   it('should keep the new user input in the input bucket when step 0 buffers it', async () => {
