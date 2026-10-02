@@ -99,6 +99,19 @@ describe('durable thread continuation', () => {
     await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
       continuation: 'across-suspension',
     });
+    const subscriberRuntime = new AgentThreadStreamRuntime();
+    const subscription = await subscriberRuntime.subscribeToThread(
+      h.agent,
+      {
+        threadId: h.options.memory.thread,
+        resourceId: h.options.memory.resource,
+      },
+      h.pubsub,
+    );
+    const parts: any[] = [];
+    const reading = (async () => {
+      for await (const part of subscription.stream) parts.push(part);
+    })();
 
     await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'one', args: {} });
     await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
@@ -110,6 +123,13 @@ describe('durable thread continuation', () => {
     expect(
       h.runtime.continueRun(h.agent, resumed.output, { ...h.options, toolCallId: 'call-1' } as any, h.pubsub),
     ).toBe(true);
+    await h.chunk('text-delta', { text: 'resumed' });
+    await vi.waitFor(() =>
+      expect(parts.some(part => part.type === 'text-delta' && part.payload.text === 'resumed')).toBe(true),
+    );
+
+    subscription.unsubscribe();
+    await reading;
   });
 
   it.each([false, true])('broadcasts one answer and keeps the prefix with delayed reader=%s', async delayed => {
