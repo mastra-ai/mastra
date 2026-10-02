@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed untilIdle continuations replaying earlier chunks while preserving the caller runId as an abort handle for active continuation work.
+Fixed `stream(..., { untilIdle: true })` repeating earlier output when a background task triggers a follow-up turn. The supplied `runId` can abort the initial or follow-up turn through `abortRunStream(runId)` or `abortThreadStream(...)`.

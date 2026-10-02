@@ -242,6 +242,47 @@ describe('Agent.streamUntilIdle', () => {
   });
 
   it.each(['run', 'thread'] as const)(
+    'aborts the initial segment through the caller runId %s handle',
+    async abortBy => {
+      const memory = new MockMemory();
+      const initial = abortableTextResponse('initial started', 'initial tail');
+      const { model } = makeScriptedModel([initial.response]);
+      const agent = new Agent({
+        id: `initial-abort-${abortBy}`,
+        name: `initial-abort-${abortBy}`,
+        instructions: 'test',
+        model,
+        memory,
+      });
+      mastra.addAgent(agent, `initial-abort-${abortBy}`);
+
+      const runId = `caller-initial-abort-${abortBy}`;
+      const threadId = `initial-abort-thread-${abortBy}`;
+      const resourceId = 'user-1';
+      const resultPromise = agent.stream('hi', {
+        runId,
+        memory: { thread: threadId, resource: resourceId },
+        untilIdle: true,
+      });
+      await initial.started;
+
+      const aborted =
+        abortBy === 'run'
+          ? agent.abortRunStream(runId)
+          : agent.abortThreadStream({ threadId, resourceId, expectedRunId: runId });
+      expect(aborted).toBe(true);
+
+      const result = await resultPromise;
+      const chunks = await drain(result.fullStream as ReadableStream<any>);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(initial.wasAborted()).toBe(true);
+      expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).not.toContain(
+        'initial tail',
+      );
+    },
+  );
+
+  it.each(['run', 'thread'] as const)(
     'keeps the caller runId as a %s abort handle during continuations',
     async abortBy => {
       const memory = new MockMemory();

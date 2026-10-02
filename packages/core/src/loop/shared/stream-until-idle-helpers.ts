@@ -346,8 +346,11 @@ export async function runIdleLoop<
     _skipBgTaskWait: true,
   } as Record<string, any>;
 
+  const initialAbort = new AbortController();
+  const callerAbortSignal = restStreamOptions.abortSignal as AbortSignal | undefined;
   const initialStreamOpts = {
     ...(restStreamOptions ?? {}),
+    abortSignal: callerAbortSignal ? AbortSignal.any([callerAbortSignal, initialAbort.signal]) : initialAbort.signal,
     _skipBgTaskWait: true,
   } as Record<string, any>;
 
@@ -361,6 +364,7 @@ export async function runIdleLoop<
   let outerController!: ReadableStreamDefaultController<any>;
   let wrapperRunId = restStreamOptions.runId as string | undefined;
   let activeInnerRunId: string | undefined;
+  let aborting = false;
   const outerAbort = new AbortController();
 
   // --- Close / idle timer ---
@@ -382,7 +386,10 @@ export async function runIdleLoop<
   };
 
   const abortWrapper = () => {
-    if (closed) return;
+    if (closed || aborting) return;
+    aborting = true;
+    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    initialAbort.abort();
     hooks?.onAbortActive?.();
     if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
     forceClose();
@@ -480,7 +487,7 @@ export async function runIdleLoop<
   acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
   acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
 
-  streamOptions?.abortSignal?.addEventListener('abort', forceClose);
+  streamOptions?.abortSignal?.addEventListener('abort', abortWrapper, { once: true });
 
   const combinedStream = new ReadableStream<any>({
     start(controller) {
