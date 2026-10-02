@@ -58,12 +58,12 @@ describe('useFeedbackAvailable', () => {
   });
 
   describe('when the capabilities endpoint is missing', () => {
-    it('falls back to enabled', async () => {
+    it('falls back to not enabled', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json({ error: 'Not found' }, { status: 404 })));
 
       const { result } = renderHook(() => useFeedbackAvailable(), { wrapper: makeWrapper() });
 
-      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: true }));
+      await waitFor(() => expect(result.current).toEqual({ isLoading: false, enabled: false }));
     });
   });
 });
