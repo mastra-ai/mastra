@@ -36,7 +36,8 @@ function selectedKeys(rows: SpanQueryIdentity[], values: unknown[]): string {
         `(${identityFields
           .map(field => {
             values.push(row[field]);
-            return `"${field}" IS NOT DISTINCT FROM $${values.length}::text`;
+            const operator = field === 'traceId' || field === 'spanId' ? '=' : 'IS NOT DISTINCT FROM';
+            return `"${field}" ${operator} $${values.length}::text`;
           })
           .join(' AND ')})`,
     )
