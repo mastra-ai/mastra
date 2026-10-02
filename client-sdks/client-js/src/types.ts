@@ -1519,6 +1519,23 @@ export type WorkspaceFsMkdirResponse = GeneratedResponse<'POST /workspaces/:work
 export type WorkspaceFsStatResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/stat'>;
 
 /**
+ * skills.sh registry operations (proxied by the workspace API)
+ */
+export type SkillsShSearchParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/search'>;
+export type SkillsShSearchResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/search'>;
+export type SkillsShPopularParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/popular'>;
+export type SkillsShPopularResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/popular'>;
+export type SkillsShSkill = SkillsShPopularResponse['skills'][number];
+export type SkillsShPreviewParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/preview'>;
+export type SkillsShPreviewResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/preview'>;
+export type SkillsShInstallParams = Body<'POST /workspaces/:workspaceId/skills-sh/install'>;
+export type SkillsShInstallResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/install'>;
+export type SkillsShRemoveParams = Body<'POST /workspaces/:workspaceId/skills-sh/remove'>;
+export type SkillsShRemoveResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/remove'>;
+export type SkillsShUpdateParams = Body<'POST /workspaces/:workspaceId/skills-sh/update'>;
+export type SkillsShUpdateResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/update'>;
+
+/**
  * Workspace search result
  */
 export interface WorkspaceSearchResult {

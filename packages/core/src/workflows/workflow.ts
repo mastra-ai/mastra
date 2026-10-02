@@ -68,7 +68,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -127,6 +127,7 @@ import {
   cleanStepResult,
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
+  getSingleStepEntryId,
   hydrateSerializedStepErrors,
   waitForSuspendedSnapshot,
 } from './utils';
@@ -3839,7 +3840,7 @@ export class Run<
     if (await this.hasReachedTerminalStatus()) return;
 
     // Abort any running execution and update in-memory status
-    this.abortController.abort();
+    this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
     this.workflowRunStatus = 'canceled';
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
@@ -3937,6 +3938,36 @@ export class Run<
     }
 
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
+  }
+
+  protected async _resolveTimetravelInputData(inputData: unknown, steps: string[]) {
+    if (steps.length !== 1) {
+      return inputData;
+    }
+    const step = this.workflowSteps[steps[0]!]!;
+    // Only top-level foreach entries are detected; foreach nested in parallel/conditional is out of scope.
+    const isForeachEntry = this.executionGraph.steps.some(
+      entry => entry.type === 'foreach' && getSingleStepEntryId(entry.step) === steps[0],
+    );
+    if (isForeachEntry && this.validateInputs && inputData !== undefined) {
+      if (!Array.isArray(inputData)) {
+        throw new MastraError({
+          category: ErrorCategory.USER,
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          id: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+          text: 'Invalid inputData: \n- : Expected an array for foreach step',
+          details: { type: 'inputData' },
+        });
+      }
+      if (!step?.inputSchema) {
+        return inputData;
+      }
+      return Promise.all(inputData.map(item => this._validateTimetravelInputData(item, step)));
+    }
+    if (!inputData) {
+      return inputData;
+    }
+    return this._validateTimetravelInputData(inputData, step);
   }
 
   protected async _start(
@@ -5361,11 +5392,7 @@ export class Run<
       typeof step === 'string' ? step : step?.id,
     );
 
-    let inputDataToUse = inputData;
-
-    if (inputDataToUse && steps.length === 1) {
-      inputDataToUse = await this._validateTimetravelInputData(inputData, this.workflowSteps[steps[0]!]!);
-    }
+    const inputDataToUse = (await this._resolveTimetravelInputData(inputData, steps)) as typeof inputData;
 
     const timeTravelData = createTimeTravelExecutionParams({
       steps,

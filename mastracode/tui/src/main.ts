@@ -29,6 +29,12 @@ import {
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from './process-memory-diagnostics-lifecycle.js';
+import {
+  formatResumeHint,
+  parseResumeThreadId,
+  shouldRejectResumeWithoutTTY,
+  shouldRunHeadless,
+} from './resume-command.js';
 import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -43,11 +49,13 @@ let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub']
 let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMaintenance'];
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let threadScheduler: Awaited<ReturnType<typeof createMastraCode>>['threadScheduler'] | undefined;
+let stopNotificationDispatch: Awaited<ReturnType<typeof createMastraCode>>['stopNotificationDispatch'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
 let storageClosed = false;
 let cleanupPromise: Promise<void> | null = null;
+let getResumeThreadId: (() => string | null) | undefined;
 
 const CRASH_LOG_PATH = '/tmp/mastra-crash.log';
 
@@ -75,7 +83,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}) {
+async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}, resumeThreadId?: string) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -88,6 +96,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
 
   const initialState = resolveInitialStateFromEnv();
   const result = await createMastraCode({
+    createInitialThread: false,
     coAuthor: TUI_CO_AUTHOR,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
@@ -104,6 +113,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   storageMaintenance = result.storageMaintenance;
   stopPluginSignalProviders = result.stopPluginSignalProviders;
   threadScheduler = result.threadScheduler;
+  stopNotificationDispatch = result.stopNotificationDispatch;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -141,6 +151,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   // createMastraCode() brought up shared resources and minted the single
   // session that all work runs through. The AgentController owns no session of its own.
   const session = result.session;
+  getResumeThreadId = () => (tui ? tui.getResumeThreadId() : session.thread.getId());
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
@@ -166,6 +177,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
@@ -210,6 +222,8 @@ const asyncCleanup = (): Promise<void> => {
       : undefined;
     // Schedules live only in this process; stop their timers so none fires mid-shutdown.
     threadScheduler?.stop();
+    // Release this process's notification dispatch leases before the pubsub that holds them closes.
+    await stopNotificationDispatch?.().catch(() => {});
     const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
     await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
@@ -266,6 +280,14 @@ process.on('exit', () => {
   }
   restoreTerminalForeground();
   releaseAllThreadLocks();
+  try {
+    const threadId = getResumeThreadId?.();
+    if (threadId) {
+      process.stdout.write(`\n${formatResumeHint(threadId)}\n`);
+    }
+  } catch {
+    // session state or stdout may already be closed during exit
+  }
 });
 
 // Start durable diagnostics shutdown before synchronous TUI teardown so a stalled
@@ -395,9 +417,18 @@ async function main() {
     process.exit(1);
   };
 
+  let resumeThreadId: string | undefined;
+  try {
+    resumeThreadId = parseResumeThreadId(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
   const headless = hasHeadlessFlag(process.argv);
-  if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
-  if (headless || process.argv.includes('--help') || process.argv.includes('-h')) {
+  if (shouldRunHeadless(process.argv, resumeThreadId, headless)) {
+    if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
@@ -408,6 +439,12 @@ async function main() {
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
       coAuthor: TUI_CO_AUTHOR,
     });
+  }
+
+  if (shouldRejectResumeWithoutTTY(resumeThreadId, Boolean(process.stdin.isTTY))) {
+    process.stderr.write('mastracode resume requires an interactive terminal.\n');
+    process.exitCode = 1;
+    return;
   }
 
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
@@ -434,7 +471,7 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput));
+  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId);
 }
 
 main().catch(error => {

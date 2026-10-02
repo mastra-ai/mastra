@@ -1217,8 +1217,18 @@ export interface ObservationalMemoryHistoryOptions {
   from?: Date;
   /** Only return records created at or before this date */
   to?: Date;
-  /** Number of records to skip (for pagination) */
+  /** Number of records to skip after filtering and ordering (for pagination) */
   offset?: number;
+  /** Match the literal canonical `<observation-group id="..."` prefix in active or buffered observations. */
+  groupId?: string;
+  /** Only return generations strictly before this generation count. */
+  beforeGeneration?: number;
+  /** Only return generations strictly after this generation count. */
+  afterGeneration?: number;
+  /** Generation ordering. Defaults to DESC (newest first). */
+  sortDirection?: 'ASC' | 'DESC';
+  /** Only return the record with this ID, if it belongs to the requested thread or resource. */
+  recordId?: string;
 }
 
 export interface ObservationalMemoryRecord {

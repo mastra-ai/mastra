@@ -1,5 +1,5 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export interface ScorerSelectorProps {
@@ -29,22 +29,20 @@ export function ScorerSelector({
     }));
 
   return (
-    <FieldBlock.Layout layout="vertical">
-      <FieldBlock.Column>
-        {label ? <FieldBlock.Label name="scorers">{label}</FieldBlock.Label> : null}
-        <Combobox
-          multiple
-          options={options}
-          value={selectedScorers}
-          onValueChange={setSelectedScorers}
-          placeholder="Select scorers..."
-          searchPlaceholder="Search scorers..."
-          emptyText="No scorers available"
-          disabled={disabled || isLoading}
-          container={container}
-        />
-        {helperText ? <FieldBlock.HelpText>{helperText}</FieldBlock.HelpText> : null}
-      </FieldBlock.Column>
-    </FieldBlock.Layout>
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <Combobox
+        multiple
+        options={options}
+        value={selectedScorers}
+        onValueChange={setSelectedScorers}
+        placeholder="Select scorers..."
+        searchPlaceholder="Search scorers..."
+        emptyText="No scorers available"
+        disabled={disabled || isLoading}
+        container={container}
+      />
+      {helperText && <FieldDescription>{helperText}</FieldDescription>}
+    </Field>
   );
 }

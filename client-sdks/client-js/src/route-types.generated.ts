@@ -217,12 +217,12 @@ type InputShared_Auxiliary_744 = {
   children?: InputShared_Auxiliary_744[] | undefined;
 };
 
-type Shared_Auxiliary_752 = {
+type Shared_Auxiliary_753 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_752[] | undefined;
+  children?: Shared_Auxiliary_753[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4119,7 +4119,7 @@ type Shared_Type_81 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_752[] | undefined;
+  files?: Shared_Auxiliary_753[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10278,6 +10278,18 @@ export type PostObservabilityTracesAggregate_Body = {
         | 'duration.p99'
         | 'errorCount'
         | 'errorRate'
+        | 'tokens.input.sum'
+        | 'tokens.input.avg'
+        | 'tokens.output.sum'
+        | 'tokens.output.avg'
+        | 'tokens.total.sum'
+        | 'tokens.total.avg'
+        | 'tokens.reasoning.sum'
+        | 'tokens.reasoning.avg'
+        | 'tokens.cached.sum'
+        | 'tokens.cached.avg'
+        | 'cost.sum'
+        | 'cost.avg'
       )
     | `countDistinct.${string}`
   )[];
@@ -10310,9 +10322,27 @@ export type PostObservabilityTracesAggregate_Response = {
             | 'duration.p99'
             | 'errorCount'
             | 'errorRate'
+            | 'tokens.input.sum'
+            | 'tokens.input.avg'
+            | 'tokens.output.sum'
+            | 'tokens.output.avg'
+            | 'tokens.total.sum'
+            | 'tokens.total.avg'
+            | 'tokens.reasoning.sum'
+            | 'tokens.reasoning.avg'
+            | 'tokens.cached.sum'
+            | 'tokens.cached.avg'
+            | 'cost.sum'
+            | 'cost.avg'
           )
-        | `countDistinct.${string}`]?: number;
+        | `countDistinct.${string}`]?: number | null;
     };
+    cost?:
+      | {
+          coverage: number | null;
+          unit: string | null;
+        }
+      | undefined;
   }[];
   truncated: boolean;
 };

@@ -824,7 +824,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitSpanEnded(
     span: AnySpan,
-    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string },
+    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean },
   ): void {
     let processedSpan: AnySpan | undefined;
     let spanWasProcessed = false;
@@ -846,6 +846,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
               excludedModelUsage.usage,
               excludedModelUsage.provider,
               excludedModelUsage.model,
+              excludedModelUsage.usageIncomplete,
               this.getMetricsContext(processedSpan),
             );
           }
@@ -907,7 +908,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureModelUsageRollup<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string } | undefined {
+  ):
+    | { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean }
+    | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     // If the span itself will be exported, the existing auto-extract pipeline
     // emits its metrics; nothing to roll up.
@@ -927,8 +930,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
     const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { ancestor, usage, provider, model };
+    return { ancestor, usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -941,7 +945,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureExcludedModelUsage<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { usage: UsageStats; provider?: string; model?: string } | undefined {
+  ): { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean } | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     if (span.isInternal) return undefined;
     if (!this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) return undefined;
@@ -962,8 +966,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       liveAttrs?.model,
       stashed?.model,
     );
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { usage, provider, model };
+    return { usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -972,8 +977,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * ancestor's metrics context so cost / token labels point at the visible
    * span instead of the hidden agent that incurred them.
    */
-  private applyUsageRollup(target: { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string }): void {
-    const { ancestor, usage, provider, model } = target;
+  private applyUsageRollup(target: {
+    ancestor: AnySpan;
+    usage: UsageStats;
+    provider?: string;
+    model?: string;
+    usageIncomplete?: boolean;
+  }): void {
+    const { ancestor, usage, provider, model, usageIncomplete } = target;
 
     // Mutate the live ancestor's attributes directly. BaseSpan's constructor
     // guarantees `attributes` is always at least `{}` (see spans/base.ts),
@@ -983,7 +994,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
 
     try {
-      emitTokenMetricsForUsage(usage, provider, model, this.getMetricsContext(ancestor));
+      emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
     } catch (err) {
       this.logger.error('[Observability] Usage rollup metric emission error:', err);
     }

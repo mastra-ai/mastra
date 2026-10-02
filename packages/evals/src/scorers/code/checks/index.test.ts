@@ -219,6 +219,18 @@ describe('checks.matches', () => {
     expect(result.score).toBe(0);
   });
 
+  test.each(['g', 'y'])('scores every matching run when the pattern uses the %s flag', async flag => {
+    const scorer = checks.matches(new RegExp('\\d+°[FC]', flag));
+    const run = (content: string) =>
+      createAgentTestRun({
+        inputMessages: [createTestMessage({ content: 'Temp?', role: 'user', id: 'i1' })],
+        output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
+      });
+
+    expect((await scorer.run(run('72°F'))).score).toBe(1);
+    expect((await scorer.run(run('72°F'))).score).toBe(1);
+  });
+
   test('named export matches namespace', () => {
     expect(matches).toBe(checks.matches);
   });

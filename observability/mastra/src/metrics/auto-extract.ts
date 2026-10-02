@@ -60,9 +60,10 @@ export function emitTokenMetricsForUsage(
   usage: UsageStats,
   provider: string | undefined,
   model: string | undefined,
+  usageIncomplete: boolean | undefined,
   metrics: MetricsContext,
 ): void {
-  emitUsageMetrics({ provider, model } as ModelGenerationAttributes, usage, metrics);
+  emitUsageMetrics({ provider, model, usageIncomplete } as ModelGenerationAttributes, usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */
@@ -110,14 +111,15 @@ function emitUsageMetrics(
     }
   }
 
+  const labels = attrs.usageIncomplete ? { usageIncomplete: 'true' } : undefined;
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
     if (!costContext) {
-      metrics.emit(name, value);
+      metrics.emit(name, value, labels);
       return;
     }
 
-    metrics.emit(name, value, undefined, { costContext });
+    metrics.emit(name, value, labels, { costContext });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {

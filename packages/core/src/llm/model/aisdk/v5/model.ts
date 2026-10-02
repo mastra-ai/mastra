@@ -85,6 +85,11 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
    * @returns A map of supported URL patterns by media type (as a promise or a plain object).
    */
   supportedUrls: PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
+  /**
+   * Whether the wrapped provider model sends native structured output (for example
+   * `@ai-sdk/openai-compatible` models created with `supportsStructuredOutputs: true`).
+   */
+  readonly supportsStructuredOutputs?: boolean;
 
   #model: LanguageModelV2;
 
@@ -94,6 +99,10 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
     this.modelId = this.#model.modelId;
     this.gatewayId = (config as { gatewayId?: string }).gatewayId;
     this.supportedUrls = this.#model.supportedUrls;
+    const supportsStructuredOutputs = (config as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs;
+    if (typeof supportsStructuredOutputs === 'boolean') {
+      this.supportsStructuredOutputs = supportsStructuredOutputs;
+    }
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
