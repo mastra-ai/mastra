@@ -183,10 +183,25 @@ export function buildContinuationOpts(
 // Active-stream slot management
 // ---------------------------------------------------------------------------
 
-/**
- * Register `closer` as the active wrapper for `scopeKey`, aborting any
- * prior registered closer first. No-op for null scopes.
- */
+const runStreamSlotKey = (runId: string) => `run:${runId}`;
+
+/** Return the active untilIdle wrapper registered for a caller-visible run ID. */
+export function getRunStreamSlot(activeStreams: Map<string, () => void>, runId: string): (() => void) | undefined {
+  return activeStreams.get(runStreamSlotKey(runId));
+}
+
+/** Return the active scope wrapper when it still belongs to the expected caller-visible run. */
+export function getScopeStreamSlot(
+  activeStreams: Map<string, () => void>,
+  scopeKey: string,
+  expectedRunId?: string,
+): (() => void) | undefined {
+  const closer = activeStreams.get(scopeKey);
+  if (expectedRunId === undefined || closer === getRunStreamSlot(activeStreams, expectedRunId)) return closer;
+  return undefined;
+}
+
+/** Register the active wrapper for a memory scope, aborting the prior wrapper for that scope. */
 export function acquireStreamSlot(
   activeStreams: Map<string, () => void>,
   scopeKey: string | null,
@@ -198,19 +213,35 @@ export function acquireStreamSlot(
   activeStreams.set(scopeKey, closer);
 }
 
+/** Register the active wrapper under its caller-visible run ID, replacing an older wrapper for that ID. */
+export function acquireRunStreamSlot(
+  activeStreams: Map<string, () => void>,
+  runId: string | undefined,
+  closer: () => void,
+): void {
+  if (!runId) return;
+  const key = runStreamSlotKey(runId);
+  const priorClose = activeStreams.get(key);
+  priorClose?.();
+  activeStreams.set(key, closer);
+}
+
 /**
- * Remove `closer` from the active streams map iff it's still the entry for
- * `scopeKey`. A later call that took over (and replaced the entry) will not
- * get accidentally unregistered.
+ * Remove `closer` from its scope and caller-visible run slots iff it is still
+ * the registered wrapper. A later wrapper that took over either slot is left intact.
  */
 export function releaseStreamSlot(
   activeStreams: Map<string, () => void>,
   scopeKey: string | null,
+  runId: string | undefined,
   closer: () => void,
 ): void {
-  if (!scopeKey) return;
-  if (activeStreams.get(scopeKey) === closer) {
+  if (scopeKey && activeStreams.get(scopeKey) === closer) {
     activeStreams.delete(scopeKey);
+  }
+  if (runId) {
+    const key = runStreamSlotKey(runId);
+    if (activeStreams.get(key) === closer) activeStreams.delete(key);
   }
 }
 
@@ -230,6 +261,8 @@ export interface IdleLoopDeps {
 export interface PostPipeHooks {
   /** Called with each inner result after `firstTurn` or continuation. */
   onInnerResult?: (inner: any) => void;
+  /** Abort the currently active inner stream before the wrapper closes. */
+  onAbortActive?: () => void;
   /** Extra teardown to run inside `forceClose`. */
   onForceClose?: () => void;
 }
@@ -269,15 +302,16 @@ export async function runIdleLoop<
     id: string;
     getDefaultOptions: (opts?: any) => any | Promise<any>;
     getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
+    abortRunStream?: (runId: string) => boolean;
   },
-  TFirstResult extends { fullStream: any },
+  TFirstResult extends { fullStream: any; runId?: string },
   TReturn,
 >(
   agent: TAgent,
   streamOptions: (Record<string, any> & { maxIdleMs?: number }) | undefined,
   deps: IdleLoopDeps,
   firstTurn: (opts: Record<string, any>) => Promise<TFirstResult>,
-  streamForContinuation: (opts: Record<string, any>) => Promise<{ fullStream: ReadableStream<any> }>,
+  streamForContinuation: (opts: Record<string, any>) => Promise<{ fullStream: ReadableStream<any>; runId?: string }>,
   buildResult: (first: TFirstResult, ctx: IdleLoopContext) => TReturn,
   hooks?: PostPipeHooks,
 ): Promise<TReturn> {
@@ -302,17 +336,21 @@ export async function runIdleLoop<
   const { threadId, resourceId, scopeKey } = scope;
   const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
 
-  // Continuation calls reuse the memory thread but drop one-shot hooks.
-  // `_skipBgTaskWait` prevents the inner loop from redundantly waiting for
-  // running bg tasks — this outer method already handles that.
+  // Continuation calls reuse the memory thread but drop segment-scoped options.
+  // Omitting runId lets durable agents start a fresh stream segment instead of
+  // replaying cached history from the caller's initial run.
+  const { runId: _runId, ...continuationStreamOptions } = restStreamOptions as Record<string, any>;
   const baseContinuationOpts = {
-    ...(restStreamOptions ?? {}),
+    ...continuationStreamOptions,
     onFinish: undefined,
     _skipBgTaskWait: true,
   } as Record<string, any>;
 
+  const initialAbort = new AbortController();
+  const callerAbortSignal = restStreamOptions.abortSignal as AbortSignal | undefined;
   const initialStreamOpts = {
     ...(restStreamOptions ?? {}),
+    abortSignal: callerAbortSignal ? AbortSignal.any([callerAbortSignal, initialAbort.signal]) : initialAbort.signal,
     _skipBgTaskWait: true,
   } as Record<string, any>;
 
@@ -324,6 +362,10 @@ export async function runIdleLoop<
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let outerController!: ReadableStreamDefaultController<any>;
+  let wrapperRunId = restStreamOptions.runId as string | undefined;
+  let activeInnerRunId: string | undefined;
+  let continuationAbort: AbortController | undefined;
+  let aborting = false;
   const outerAbort = new AbortController();
 
   // --- Close / idle timer ---
@@ -334,6 +376,7 @@ export async function runIdleLoop<
       clearTimeout(idleTimer);
       idleTimer = undefined;
     }
+    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
     outerAbort.abort();
     try {
       outerController.close();
@@ -341,7 +384,17 @@ export async function runIdleLoop<
       // already closed
     }
     hooks?.onForceClose?.();
-    releaseStreamSlot(deps.activeStreams, scopeKey, forceClose);
+  };
+
+  const abortWrapper = () => {
+    if (closed || aborting) return;
+    aborting = true;
+    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    initialAbort.abort();
+    continuationAbort?.abort();
+    hooks?.onAbortActive?.();
+    if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
+    forceClose();
   };
 
   const tryClose = () => {
@@ -409,9 +462,23 @@ export async function runIdleLoop<
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      const segmentAbort = new AbortController();
+      continuationAbort = segmentAbort;
+      activeInnerRunId = undefined;
+      const existingAbortSignal = continuationOpts.abortSignal as AbortSignal | undefined;
+      continuationOpts.abortSignal = existingAbortSignal
+        ? AbortSignal.any([existingAbortSignal, segmentAbort.signal])
+        : segmentAbort.signal;
       const inner = await streamForContinuation(continuationOpts);
+      activeInnerRunId = inner.runId;
       hooks?.onInnerResult?.(inner);
+      if (closed) {
+        hooks?.onAbortActive?.();
+        if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
+        return;
+      }
       await pipeInner(inner.fullStream);
+      if (continuationAbort === segmentAbort) continuationAbort = undefined;
     } catch (err) {
       try {
         outerController.error(err);
@@ -432,16 +499,17 @@ export async function runIdleLoop<
   };
 
   // --- Setup ---
-  acquireStreamSlot(deps.activeStreams, scopeKey, forceClose);
+  acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
+  acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
 
-  streamOptions?.abortSignal?.addEventListener('abort', forceClose);
+  streamOptions?.abortSignal?.addEventListener('abort', abortWrapper, { once: true });
 
   const combinedStream = new ReadableStream<any>({
     start(controller) {
       outerController = controller;
     },
     cancel() {
-      forceClose();
+      abortWrapper();
     },
   });
 
@@ -503,6 +571,11 @@ export async function runIdleLoop<
   } catch (err) {
     forceClose();
     throw err;
+  }
+  activeInnerRunId = first.runId;
+  if (!wrapperRunId && first.runId) {
+    wrapperRunId = first.runId;
+    acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
   }
   hooks?.onInnerResult?.(first);
 
