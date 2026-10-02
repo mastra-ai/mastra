@@ -2571,9 +2571,6 @@ importers:
       react-router:
         specifier: ^8.0.0
         version: 8.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      shiki:
-        specifier: ^1.29.2
-        version: 1.29.2
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.2.2
