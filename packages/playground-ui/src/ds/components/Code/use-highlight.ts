@@ -13,7 +13,7 @@ export interface Highlighted {
 
 const HIGHLIGHT_SAMPLE_INTERVAL_MS = 75;
 
-/** Tokens land a pass behind a sample of the code taken at most every 75 ms, so the value may still describe earlier code. */
+/** Tokens land a pass behind the code, so the value may still describe the previous code. */
 export function useHighlight(code: string, lang: string | undefined): Highlighted | null {
   const [highlighted, setHighlighted] = useState<Highlighted | null>(null);
   // maxWait equal to the delay turns the debounce into a throttle.
