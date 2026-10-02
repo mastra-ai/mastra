@@ -6,7 +6,6 @@
     "execa": "^9.6.1",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
-    "npm-cli-login": "^1.0.0",
     "rollup": "^4.62.2",
     "verdaccio": "^6.10.4",
     "verdaccio-auth-memory": "^13.1.3",

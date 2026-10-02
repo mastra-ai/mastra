@@ -117,6 +117,11 @@ export interface TraceDataPanelViewProps {
    * trace as one reconstructed agent turn). Rendered without content padding.
    */
   messagesPanelSlot?: ReactNode;
+  /**
+   * Actions rendered at the end of the side column's tab row (e.g. "Open full thread").
+   * `compact` is true when the side column is narrow and controls collapse to icons.
+   */
+  sideHeaderActions?: (options: { compact: boolean }) => ReactNode;
   /** Controlled span view (tree or timeline); falls back to local state starting on the tree. */
   spanView?: TraceSpanView;
   onSpanViewChange?: (view: TraceSpanView) => void;
@@ -159,6 +164,7 @@ export function TraceDataPanelView({
   feedbackTabBadge,
   featuredSpanIds,
   messagesPanelSlot,
+  sideHeaderActions,
   sideView: controlledSideView,
   onSideViewChange,
   spanView: controlledSpanView,
@@ -170,16 +176,17 @@ export function TraceDataPanelView({
   // The side column next to the span tree hosts Messages / Feedback / Scores;
   // which one is shown is purely a local viewing choice.
   const sideViews = useMemo(() => {
-    const views: Array<{ value: TraceSideView; label: ReactNode }> = [];
+    const views: Array<{ value: TraceSideView; name: string; label: ReactNode }> = [];
     if (messagesPanelSlot) {
       views.push({
         value: 'messages',
+        name: 'Messages',
         label: (
           <>
             <Icon size="xs">
               <MessageSquareTextIcon />
             </Icon>
-            Messages
+            <span className="@max-[501px]:sr-only">Messages</span>
           </>
         ),
       });
@@ -187,12 +194,15 @@ export function TraceDataPanelView({
     if (feedbackTabSlot) {
       views.push({
         value: 'feedback',
+        name: 'Feedback',
         label: (
           <>
             <Icon size="xs">
               <MessageSquareReplyIcon />
             </Icon>
-            Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
+            <span className="@max-[501px]:sr-only">
+              Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
+            </span>
           </>
         ),
       });
@@ -200,12 +210,13 @@ export function TraceDataPanelView({
     if (scoresTabSlot) {
       views.push({
         value: 'scores',
+        name: 'Scores',
         label: (
           <>
             <Icon size="xs">
               <ScorersIcon />
             </Icon>
-            Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}
+            <span className="@max-[501px]:sr-only">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</span>
           </>
         ),
       });
@@ -213,6 +224,16 @@ export function TraceDataPanelView({
     return views;
   }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
   const [uncontrolledSideView, setUncontrolledSideView] = useState<TraceSideView>();
+  // Mirrors the side column's `@max-[501px]` container query: the layout collapses in CSS, but
+  // tooltips render in a portal outside the container, so they need the width in JS.
+  const [sideColumnElement, setSideColumnElement] = useState<HTMLDivElement | null>(null);
+  const [compactSide, setCompactSide] = useState(false);
+  useEffect(() => {
+    if (!sideColumnElement || !('ResizeObserver' in globalThis)) return;
+    const observer = new ResizeObserver(() => setCompactSide(sideColumnElement.clientWidth <= 500));
+    observer.observe(sideColumnElement);
+    return () => observer.disconnect();
+  }, [sideColumnElement]);
   const chosenSideView = controlledSideView ?? uncontrolledSideView;
   const sideView = (sideViews.find(view => view.value === chosenSideView) ?? sideViews[0])?.value;
   const handleSideViewChange = (view: TraceSideView) => {
@@ -328,21 +349,42 @@ export function TraceDataPanelView({
 
   const sideColumn =
     traceId && sideView ? (
-      <div data-trace-side-column className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-        <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+      <div
+        ref={setSideColumnElement}
+        data-trace-side-column
+        className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      >
+        {/* Whether the Messages tab exists depends on the spans, so the tabs wait for them;
+            otherwise the column flickers Feedback → Messages as the first tab changes. */}
+        {isLoading ? (
           <DataPanel.Header className="border-b border-border">
-            <TabList variant="pill-ghost" size="sm">
-              {sideViews.map(view => (
-                <Tab key={view.value} value={view.value}>
-                  {view.label}
-                </Tab>
-              ))}
-            </TabList>
+            <div aria-hidden className="h-control-sm" />
           </DataPanel.Header>
-        </Tabs>
-        {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
-        {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
-        {sideView === 'scores' && (
+        ) : (
+          <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+            <DataPanel.Header className="border-b border-border">
+              <TabList variant="pill-ghost" size="sm">
+                {sideViews.map(view => (
+                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                    {view.label}
+                  </Tab>
+                ))}
+              </TabList>
+              {sideHeaderActions && (
+                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                  {sideHeaderActions({ compact: compactSide })}
+                </div>
+              )}
+            </DataPanel.Header>
+          </Tabs>
+        )}
+        {!isLoading && sideView === 'messages' && (
+          <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'feedback' && (
+          <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'scores' && (
           <DataPanel.Content>{scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
         )}
       </div>
