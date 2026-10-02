@@ -12,6 +12,7 @@ import type { useExperimentMetrics } from '@/domains/experiments/hooks/use-exper
 
 export interface ExperimentSideRailProps {
   experiment: DatasetExperiment;
+  /** Experiment-scoped metrics resolved by the page; omitted where metrics are not surfaced. */
   metrics?: ReturnType<typeof useExperimentMetrics>;
   className?: string;
 }
@@ -27,6 +28,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * Rail beside the results table: the pipeline read top-to-bottom, the run's
+ * measurements as a key/value list, and one card per scorer.
+ */
 export function ExperimentSideRail({ experiment, metrics, className }: ExperimentSideRailProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
