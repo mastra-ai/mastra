@@ -15,7 +15,6 @@ overrides:
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   hono@<4.13.8: 4.13.8
   ip-address@<10.7.1: 10.7.2
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
   adm-zip@<=0.6.0: 0.6.1
@@ -40,6 +39,11 @@ overrides:
   tough-cookie@<4.1.3: 4.1.3
   uuid@>=8.0.0 <11.1.1: 11.1.1
   postcss@<8.5.23: 8.5.23
+  raw-body@<4.0.0: 4.0.0
+  nanoid@<5.1.16: 5.1.16
+
+patchedDependencies:
+  body-parser@1.20.6: ec76ade934808e8d70f9819aee48f9db481093ea498d6d3bbcf41c2f6d3ff33f
 
 importers:
 
@@ -1288,9 +1292,9 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   negotiator@0.6.3:
@@ -1460,9 +1464,9 @@ packages:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
 
-  raw-body@2.5.3:
-    resolution: {integrity: sha512-s4VSOf6yN0rvbRZGxs8Om5CWj6seneMwK3oDb4lWDH0UPhWcxwOWw5+qk24bxq87szX1ydrwylIOp2uG1ojUpA==}
-    engines: {node: '>= 0.8'}
+  raw-body@4.0.0:
+    resolution: {integrity: sha512-TMHtwexrgOt9VJ2E5JF9RO8mRXGNgC5wXvKkc5AVSJUt1L5gxvjg7eiCQl96EqUEpCWrnNEkCnbAplYtyuq1IA==}
+    engines: {node: '>=22'}
 
   readable-stream@2.3.8:
     resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
@@ -2396,7 +2400,7 @@ snapshots:
 
   bcryptjs@2.4.3: {}
 
-  body-parser@1.20.6:
+  body-parser@1.20.6(patch_hash=ec76ade934808e8d70f9819aee48f9db481093ea498d6d3bbcf41c2f6d3ff33f):
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
@@ -2407,7 +2411,7 @@ snapshots:
       iconv-lite: 0.4.24
       on-finished: 2.4.1
       qs: 6.16.0
-      raw-body: 2.5.3
+      raw-body: 4.0.0
       type-is: 1.6.18
       unpipe: 1.0.0
     transitivePeerDependencies:
@@ -2640,7 +2644,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.6
+      body-parser: 1.20.6(patch_hash=ec76ade934808e8d70f9819aee48f9db481093ea498d6d3bbcf41c2f6d3ff33f)
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.7.2
@@ -3077,7 +3081,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nanoid@3.3.19: {}
+  nanoid@5.1.16: {}
 
   negotiator@0.6.3: {}
 
@@ -3173,7 +3177,7 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 5.1.16
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -3218,12 +3222,10 @@ snapshots:
 
   range-parser@1.2.1: {}
 
-  raw-body@2.5.3:
+  raw-body@4.0.0:
     dependencies:
       bytes: 3.1.2
       http-errors: 2.0.1
-      iconv-lite: 0.4.24
-      unpipe: 1.0.0
 
   readable-stream@2.3.8:
     dependencies:
