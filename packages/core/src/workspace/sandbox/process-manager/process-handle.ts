@@ -291,14 +291,14 @@ export abstract class ProcessHandle {
   }
 
   /**
-   * Whether the process was killed because an `abortSignal` passed to spawn or
+   * @internal Whether the process was killed because an `abortSignal` passed to spawn or
    * `wait()` fired while it was still running. A direct `kill()` does not set it.
    */
   get killedByAbort(): boolean {
     return this._killedByAbort;
   }
 
-  /** Kill the process for a fired abort signal and record it in {@link killedByAbort}. */
+  /** @internal Kill the process for a fired abort signal and record it in {@link killedByAbort}. */
   async killForAbort(): Promise<void> {
     if (this.exitCode !== undefined) return;
     this._killedByAbort = true;
