@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { queryOptions, useQueries, useQuery } from '@tanstack/react-query';
+import { queryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 
@@ -52,6 +52,17 @@ export function useTraceSpans(
     refetchOnWindowFocus: !passive,
     refetchOnReconnect: !passive,
   });
+}
+
+/**
+ * Returns a function that loads a full trace through the shared `trace-spans` cache, so an
+ * imperative read (e.g. an export) and the trace panel always see the same payload.
+ */
+export function useFetchTraceSpans(): (traceId: string) => Promise<TraceSpansData> {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return (traceId: string) => queryClient.fetchQuery(traceSpansQueryOptions(client, traceId));
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import { ROOT_ENTITY_TYPES } from '@mastra/react/hooks';
-import type { TraceListMode } from '@mastra/react/hooks';
+import type { TraceListMode, TraceMetadataFilterField } from '@mastra/react/hooks';
 import {
   ActivityIcon,
   BoxIcon,
@@ -34,7 +34,6 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { TraceMetadataFilterField } from './hooks/use-trace-metadata-filter-fields';
 import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,

@@ -26,10 +26,6 @@ import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/compone
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
-import {
-  createTraceQueryValuesResolver,
-  useTraceMetadataFilterFields,
-} from '@mastra/playground-ui/domains/traces/hooks/use-trace-metadata-filter-fields';
 import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
 import { useTracesListSource } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import {
@@ -52,6 +48,8 @@ import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMastraClient } from '@mastra/react';
 import {
+  createTraceQueryValuesResolver,
+  useTraceMetadataFilterFields,
   useEntityNames,
   useEnvironments,
   useSpanFeedback,

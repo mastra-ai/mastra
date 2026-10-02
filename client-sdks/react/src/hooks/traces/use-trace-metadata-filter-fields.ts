@@ -5,18 +5,21 @@ import type {
   GetTraceQueryValuesArgs,
   MastraClient,
 } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
-import { DISCOVERY_STALE_TIME } from '@mastra/react/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import type { FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
+
+import { useMastraClient } from '../../mastra-client-context';
+import { DISCOVERY_STALE_TIME } from './discovery-cache';
 
 export type TraceQueryDiscoveryTimeRange = GetTraceQueryFieldsArgs['timeRange'];
+
+/** Lazy value lookup for one discovered field. Structurally compatible with filter bar suggestion resolvers. */
+export type TraceQueryValuesResolver = (ctx: { query: string; signal: AbortSignal }) => Promise<{ value: string }[]>;
 
 export type TraceMetadataFilterField = {
   /** `metadata.<key>` — doubles as the filter bar field id. */
   path: string;
-  suggestions: FilterBarSuggestionsResolver;
+  suggestions: TraceQueryValuesResolver;
 };
 
 // Server caps discovery limits at 100 (TRACE_QUERY_DISCOVERY_MAX_LIMIT).
@@ -40,13 +43,13 @@ export const traceQueryFieldsQueryKey = (timeRange: TraceQueryDiscoveryTimeRange
   ['trace-query-fields', timeRange.from, timeRange.to] as const;
 
 /** Lazy FilterBar suggestions resolver backed by the value-discovery endpoint for one
- *  `predicateScope` + `path`. FilterBar owns debounce/abort; this only fetches. */
+ *  `predicateScope` + `path`. the caller owns debounce/abort; this only fetches. */
 export const createTraceQueryValuesResolver = (
   client: MastraClient,
   timeRange: TraceQueryDiscoveryTimeRange,
   predicateScope: GetTraceQueryValuesArgs['predicateScope'],
   path: string,
-): FilterBarSuggestionsResolver => {
+): TraceQueryValuesResolver => {
   return async ({ query: search, signal }) => {
     const { values } = await client.getTraceQueryValues(
       { timeRange, predicateScope, path, search: search.trim() || undefined, limit: DISCOVERY_LIMIT },
@@ -59,7 +62,7 @@ export const createTraceQueryValuesResolver = (
 /**
  * Discovers the `metadata.*` fields observed on traces in the given time range and returns
  * them as filter bar fields, each with a lazy `suggestions` resolver that fetches the field's
- * values when the user opens the value step (FilterBar owns debounce/abort).
+ * values when the user opens the value step (the caller owns debounce/abort).
  *
  * Resolves to an empty field list when the server or store does not support discovery
  * (`TRACE_QUERY_DISCOVERY_UNSUPPORTED`) so callers never stay blocked.

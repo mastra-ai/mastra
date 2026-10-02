@@ -23,7 +23,7 @@ export {
   useTraceMetadataFilterFields,
   type TraceMetadataFilterField,
   type TraceQueryDiscoveryTimeRange,
-} from './use-trace-metadata-filter-fields';
+} from '@mastra/react/hooks';
 export { useEntityNames } from '@mastra/react/hooks';
 export { useEnvironments } from '@mastra/react/hooks';
 export { useServiceNames } from '@mastra/react/hooks';

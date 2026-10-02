@@ -21,3 +21,5 @@ export * from './use-delete-feedback';
 export * from './use-span-feedback';
 export * from './use-trace-feedback';
 export * from './types';
+export * from './use-trace-metadata-filter-fields';
+export * from './use-trace-column-preferences-storage-key';
