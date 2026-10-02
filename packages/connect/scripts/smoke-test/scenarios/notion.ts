@@ -40,6 +40,38 @@ export const notionScenario: Scenario = {
       )),
     );
 
+    // User surface: grab a user id from list_users (every workspace has at
+    // least the bot user) and round-trip it through both get_user and
+    // retrieve_user. These are two generated views on the same endpoint
+    // with inconsistent casing — exercise both so a schema regression on
+    // either breaks the smoke run.
+    let someUserId: string | undefined;
+    try {
+      const users = await call<{ users?: Array<{ id?: string }>; results?: Array<{ id?: string }> }>(
+        'notion_list_users',
+        { page_size: 5 },
+      );
+      someUserId = users.users?.[0]?.id ?? users.results?.[0]?.id;
+    } catch {
+      // list_users already recorded above.
+    }
+    if (someUserId && tools['notion_get_user']) {
+      try {
+        await call('notion_get_user', { userId: someUserId });
+        steps.push(makeStep('get user', 'notion_get_user', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get user', 'notion_get_user', 'fail', errorMessage(error)));
+      }
+    }
+    if (someUserId && tools['notion_retrieve_user']) {
+      try {
+        await call('notion_retrieve_user', { user_id: someUserId });
+        steps.push(makeStep('retrieve user', 'notion_retrieve_user', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve user', 'notion_retrieve_user', 'fail', errorMessage(error)));
+      }
+    }
+
     // Notion's search returns { results, next_cursor, has_more }, not
     // { items }. Historical gotcha: reading .items here hid real page access.
     const search = await call<{ results?: Array<{ object?: string; id?: string }> }>('notion_search', {
@@ -260,6 +292,164 @@ export const notionScenario: Scenario = {
         steps.push(makeStep('query database', 'notion_query_database', 'pass'));
       } catch (error) {
         steps.push(makeStep('query database', 'notion_query_database', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (databaseId && tools['notion_query_database_filtered']) {
+      try {
+        await call('notion_query_database_filtered', {
+          database_id: databaseId,
+          filter: { property: 'Name', title: { contains: runId } },
+          page_size: 5,
+        });
+        steps.push(makeStep('query database filtered', 'notion_query_database_filtered', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('query database filtered', 'notion_query_database_filtered', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (databaseId && tools['notion_query_database_sorted']) {
+      try {
+        await call('notion_query_database_sorted', {
+          database_id: databaseId,
+          sorts: [{ property: 'Name', direction: 'ascending' }],
+          page_size: 5,
+        });
+        steps.push(makeStep('query database sorted', 'notion_query_database_sorted', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('query database sorted', 'notion_query_database_sorted', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Data-source surface (Notion's multi-source database API). Every
+    // database has at least one implicit data source. retrieve_database
+    // returns it on the `data_sources` array; use that id to drive the
+    // retrieve / query / list_templates / update / create tools.
+    let dataSourceId: string | undefined;
+    if (databaseId && tools['notion_retrieve_database']) {
+      try {
+        const db = await call<{ data_sources?: Array<{ id?: string }> }>('notion_retrieve_database', {
+          database_id: databaseId,
+        });
+        dataSourceId = db.data_sources?.[0]?.id;
+      } catch {
+        // retrieve_database already recorded above.
+      }
+    }
+
+    if (dataSourceId && tools['notion_retrieve_data_source']) {
+      try {
+        await call('notion_retrieve_data_source', { data_source_id: dataSourceId });
+        steps.push(makeStep('retrieve data source', 'notion_retrieve_data_source', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve data source', 'notion_retrieve_data_source', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (dataSourceId && tools['notion_query_data_source']) {
+      try {
+        await call('notion_query_data_source', { data_source_id: dataSourceId });
+        steps.push(makeStep('query data source', 'notion_query_data_source', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('query data source', 'notion_query_data_source', 'fail', errorMessage(error)));
+      }
+    }
+
+    if (dataSourceId && tools['notion_list_data_source_templates']) {
+      try {
+        await call('notion_list_data_source_templates', { dataSourceId });
+        steps.push(makeStep('list data source templates', 'notion_list_data_source_templates', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep('list data source templates', 'notion_list_data_source_templates', 'fail', errorMessage(error)),
+        );
+      }
+    }
+
+    if (dataSourceId && tools['notion_update_data_source']) {
+      try {
+        await call('notion_update_data_source', {
+          dataSourceId,
+          title: [{ type: 'text', text: { content: `${runId} ds (renamed)` } }],
+        });
+        steps.push(makeStep('update data source', 'notion_update_data_source', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('update data source', 'notion_update_data_source', 'fail', errorMessage(error)));
+      }
+    }
+
+    // create_data_source adds a second source to the same database. Casing
+    // of the first field is camelCase because the generated tool is
+    // inconsistent with retrieve/query above — intentionally spell both.
+    if (databaseId && tools['notion_create_data_source']) {
+      try {
+        await call('notion_create_data_source', {
+          databaseId,
+          title: [{ type: 'text', text: { content: `${runId} extra source` } }],
+          properties: {
+            Name: { title: {} },
+          },
+        });
+        steps.push(makeStep('create data source', 'notion_create_data_source', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('create data source', 'notion_create_data_source', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Page property surface. Every page has a `title` property with id
+    // "title"; both tools accept it.
+    if (tools['notion_retrieve_page_property']) {
+      try {
+        await call('notion_retrieve_page_property', { page_id: pageId, property_id: 'title' });
+        steps.push(makeStep('retrieve page property', 'notion_retrieve_page_property', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve page property', 'notion_retrieve_page_property', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['notion_get_page_property_item']) {
+      try {
+        await call('notion_get_page_property_item', { page_id: pageId, property_id: 'title' });
+        steps.push(makeStep('get page property item', 'notion_get_page_property_item', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get page property item', 'notion_get_page_property_item', 'fail', errorMessage(error)));
+      }
+    }
+
+    // retrieve_block_children is an alternate view on list_block_children
+    // (same endpoint, different generated wrapper). Call it on the page.
+    if (tools['notion_retrieve_block_children']) {
+      try {
+        await call('notion_retrieve_block_children', { block_id: pageId });
+        steps.push(makeStep('retrieve block children', 'notion_retrieve_block_children', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('retrieve block children', 'notion_retrieve_block_children', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Move the page under the duplicate (which has the same parent, so
+    // it's a valid reparent target), then move it back. Needs a second
+    // page to move under; the duplicate we created earlier works.
+    if (duplicateId && tools['notion_move_page'] && tools['notion_retrieve_page']) {
+      let originalParent: Record<string, unknown> | undefined;
+      try {
+        const page = await call<{ parent?: Record<string, unknown> }>('notion_retrieve_page', { page_id: pageId });
+        originalParent = page.parent;
+      } catch {
+        // retrieve already recorded above.
+      }
+      try {
+        await call('notion_move_page', { page_id: pageId, parent: { page_id: duplicateId } });
+        steps.push(makeStep('move page', 'notion_move_page', 'pass'));
+        // Put it back where we found it so cleanup can reach it.
+        if (originalParent) {
+          try {
+            await call('notion_move_page', { page_id: pageId, parent: originalParent });
+          } catch (error) {
+            log.warn(`Failed to restore smoke page parent for ${pageId}`, errorMessage(error));
+          }
+        }
+      } catch (error) {
+        steps.push(makeStep('move page', 'notion_move_page', 'fail', errorMessage(error)));
       }
     }
 
