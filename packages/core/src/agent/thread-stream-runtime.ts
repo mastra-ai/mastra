@@ -2035,7 +2035,9 @@ export class AgentThreadStreamRuntime {
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
-      if (isSuspensionBoundary) await suspensionBoundaryHandler?.();
+      if (isSuspensionBoundary) {
+        await suspensionBoundaryHandler?.().catch(() => {});
+      }
       // An error chunk settles `_waitUntilFinished()` without closing
       // `fullStream` (durable error-recovery keeps consuming), so the pump can
       // stay blocked on `read()` forever. The error chunk is the last part

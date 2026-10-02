@@ -9,6 +9,7 @@ import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 function setup() {
   const runtime = new AgentThreadStreamRuntime();
   const pubsub = new EventEmitterPubSub();
+  const publishOriginal = pubsub.publish.bind(pubsub);
   const publish = vi.spyOn(pubsub, 'publish');
   const agent = { id: 'continuation-agent' } as Agent<any, any, any, any>;
   const options = { memory: { thread: 'continuation-thread', resource: 'continuation-user' } };
@@ -30,7 +31,20 @@ function setup() {
     } as any);
   const registrations = () => publish.mock.calls.filter(([, event]) => event.type === 'run-registered');
   const suspensions = () => publish.mock.calls.filter(([, event]) => event.type === 'run-suspended');
-  return { runtime, pubsub, agent, options, runId, makeStream, chunk, finish, registrations, suspensions };
+  return {
+    runtime,
+    pubsub,
+    publish,
+    publishOriginal,
+    agent,
+    options,
+    runId,
+    makeStream,
+    chunk,
+    finish,
+    registrations,
+    suspensions,
+  };
 }
 
 describe('durable thread continuation', () => {
@@ -68,6 +82,34 @@ describe('durable thread continuation', () => {
 
     subscription.unsubscribe();
     await reading;
+  });
+
+  it('keeps the continuation broadcast alive when a suspension boundary publish fails', async () => {
+    const h = setup();
+    let failSuspensionBoundary = true;
+    h.publish.mockImplementation(async (topic, event) => {
+      if (event.type === 'run-suspended' && failSuspensionBoundary) {
+        failSuspensionBoundary = false;
+        throw new Error('suspension boundary publish failed');
+      }
+      await h.publishOriginal(topic, event);
+    });
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'one', args: {} });
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const resumed = h.makeStream();
+    await resumed.ready;
+    expect(
+      h.runtime.continueRun(h.agent, resumed.output, { ...h.options, toolCallId: 'call-1' } as any, h.pubsub),
+    ).toBe(true);
   });
 
   it.each([false, true])('broadcasts one answer and keeps the prefix with delayed reader=%s', async delayed => {
