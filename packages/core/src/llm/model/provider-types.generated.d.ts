@@ -7444,6 +7444,7 @@ export type ProviderModelsMap = {
     'openai/gpt-6-astra',
     'openai/gpt-6-luna',
     'openai/gpt-6-sol',
+    'openai/gpt-6.1-sol',
     'qwen/qwen3.6-flash',
     'qwen/qwen3.6-plus',
     'qwen/qwen3.7-flash',
