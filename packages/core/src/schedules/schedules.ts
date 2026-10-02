@@ -254,6 +254,10 @@ export interface ListSchedulesFilter {
   resourceId?: string;
   /** Agent-schedule only: match the free-form target name. */
   name?: string;
+  /**
+   * Return only schedules with this status. Completed schedules are omitted
+   * from the result unless this is set.
+   */
   status?: ScheduleStatus;
 }
 

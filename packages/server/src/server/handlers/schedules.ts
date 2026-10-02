@@ -95,7 +95,7 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
   responseSchema: listSchedulesResponseSchema,
   summary: 'List schedules',
   description:
-    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
+    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
