@@ -4312,6 +4312,8 @@ export class AgentThreadStreamRuntime {
         const typedPart = data.part as { type?: string } | undefined;
         if (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') {
           remoteRunSuspensionPrompts.add(data.streamId);
+        } else {
+          remoteRunSuspensionPrompts.delete(data.streamId);
         }
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
