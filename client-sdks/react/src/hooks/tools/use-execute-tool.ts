@@ -1,8 +1,7 @@
 import { RequestContext } from '@mastra/core/di';
-import { toast } from '@mastra/playground-ui/utils/toast';
 
-import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useExecuteTool = () => {
   const client = useMastraClient();
@@ -21,17 +20,8 @@ export const useExecuteTool = () => {
         requestContext.set(key, value);
       });
 
-      try {
-        const tool = client.getTool(toolId);
-
-        const response = await tool.execute({ data: input, requestContext });
-
-        return response;
-      } catch (error) {
-        toast.error('Error executing dev tool');
-        console.error('Error executing dev tool:', error);
-        throw error;
-      }
+      const tool = client.getTool(toolId);
+      return tool.execute({ data: input, requestContext });
     },
   });
 };

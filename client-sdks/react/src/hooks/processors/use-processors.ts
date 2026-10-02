@@ -6,8 +6,8 @@ import type {
   ProcessorPhase,
 } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export type {
   GetProcessorDetailResponse as ProcessorDetail,

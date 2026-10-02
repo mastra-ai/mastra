@@ -1,8 +1,8 @@
 import type { TemplateInstallationRequest } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
-import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useMastraClient } from '../../mastra-client-context';
 
 export interface Template {
   slug: string;

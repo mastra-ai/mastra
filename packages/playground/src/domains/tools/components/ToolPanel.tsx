@@ -2,14 +2,13 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useTool, useExecuteTool } from '@mastra/react/hooks';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useTool } from '@/domains/tools/hooks';
-import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -51,11 +50,17 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const handleExecuteTool = async (data: any, requestContext?: Record<string, any>) => {
     if (!tool) return;
 
-    return executeTool({
-      toolId: tool.id,
-      input: data,
-      requestContext,
-    });
+    try {
+      return await executeTool({
+        toolId: tool.id,
+        input: data,
+        requestContext,
+      });
+    } catch (error) {
+      toast.error('Error executing dev tool');
+      console.error('Error executing dev tool:', error);
+      throw error;
+    }
   };
 
   const zodInputSchema = tool?.inputSchema ? jsonSchemaToZodRuntime(parse(tool?.inputSchema)) : z.object({});

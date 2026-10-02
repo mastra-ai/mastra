@@ -1,6 +1,6 @@
-import { useMastraClient, playStreamWithWebAudio } from '@mastra/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useMastraClient } from '../../mastra-client-context';
+import { playStreamWithWebAudio } from '../../voice';
 
 type ClientAgent = ReturnType<ReturnType<typeof useMastraClient>['getAgent']>;
 type VoiceRequestContext = Parameters<ClientAgent['voice']['getSpeakers']>[0];
@@ -13,7 +13,13 @@ type VoiceRequestContext = Parameters<ClientAgent['voice']['getSpeakers']>[0];
  * streaming the audio through Web Audio. Falls back to the browser
  * `speechSynthesis` API otherwise.
  */
-export const useReadAloud = (agentId?: string, requestContext?: VoiceRequestContext) => {
+export const useReadAloud = (
+  agentId?: string,
+  requestContext?: VoiceRequestContext,
+  options?: { onError?: (error: unknown) => void },
+) => {
+  const onErrorRef = useRef(options?.onError);
+  onErrorRef.current = options?.onError;
   const client = useMastraClient();
   const [hasAgentVoice, setHasAgentVoice] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -68,7 +74,7 @@ export const useReadAloud = (agentId?: string, requestContext?: VoiceRequestCont
           return;
         } catch (error) {
           setIsSpeaking(false);
-          toast.error(error instanceof Error ? error.message : 'Voice generation failed.');
+          onErrorRef.current?.(error);
           return;
         }
       }

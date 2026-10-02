@@ -1,6 +1,6 @@
 import type { ListAgentsModelProvidersResponse } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useLLMProviders = () => {
   const client = useMastraClient();

@@ -5,6 +5,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useTools } from '@mastra/react/hooks';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
@@ -12,7 +13,6 @@ import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
 import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
 import type { ToolsSort } from '@/domains/tools/components/tools-list/tools-list';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 const crumbs = [navCrumb('/tools')];
 

@@ -27,15 +27,16 @@ import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import { useReadAloud } from '@mastra/react/hooks';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
-import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -149,7 +150,13 @@ export const Thread = ({
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
+  const {
+    isSpeaking,
+    readAloud,
+    stop: stopSpeaking,
+  } = useReadAloud(agentId, requestContext, {
+    onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
+  });
 
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');

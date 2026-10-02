@@ -1,6 +1,6 @@
 import type { CreateStoredScorerParams, UpdateStoredScorerParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
 
 export const useStoredScorer = (
   scorerId?: string,

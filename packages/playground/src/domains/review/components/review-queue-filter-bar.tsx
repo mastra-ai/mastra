@@ -3,7 +3,7 @@ import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
 import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
-import { useWorkflows } from '@mastra/react/hooks';
+import { useWorkflows, useProcessors } from '@mastra/react/hooks';
 import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -15,7 +15,6 @@ import {
   type DatasetTargetType,
 } from '@/domains/datasets/components/target-type-options';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';

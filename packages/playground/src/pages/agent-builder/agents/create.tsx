@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useWorkflows } from '@mastra/react/hooks';
+import { useWorkflows, useTools } from '@mastra/react/hooks';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -7,7 +7,6 @@ import { AgentBuilderStarter } from '@/domains/agent-builder/components/agent-st
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 const AGENT_BUILDER_AGENTS_ROUTE = '/agent-builder/agents';
 
