@@ -73,24 +73,28 @@ describe('Trace span refresh', () => {
     ['suspended', suspendedTrace],
     ['empty', emptyTrace],
   ] as const)('when a %s trace gains spans before ten seconds have passed', (_, initial) => {
-    it('refreshes immediately on reopening', async () => {
-      const api = serveTrace(initial);
-      const first = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
-      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
-      first.unmount();
-      api.resume();
-      const reopened = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
-      await waitFor(() => expect(reopened.result.current.data?.spans).toHaveLength(2));
-      expect(api.requested).toHaveBeenCalledTimes(2);
+    describe('when called', () => {
+      it('refreshes immediately on reopening', async () => {
+        const api = serveTrace(initial);
+        const first = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+        first.unmount();
+        api.resume();
+        const reopened = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        await waitFor(() => expect(reopened.result.current.data?.spans).toHaveLength(2));
+        expect(api.requested).toHaveBeenCalledTimes(2);
+      });
     });
 
-    it('refreshes immediately on focus', async () => {
-      const api = serveTrace(initial);
-      const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
-      await waitFor(() => expect(result.current.data?.spans).toHaveLength(initial.spans.length));
-      api.resume();
-      await refocus();
-      await waitFor(() => expect(result.current.data?.spans).toHaveLength(2));
+    describe('when called', () => {
+      it('refreshes immediately on focus', async () => {
+        const api = serveTrace(initial);
+        const { result } = renderHook(() => useTraceSpans(traceId), { wrapper: Wrapper });
+        await waitFor(() => expect(result.current.data?.spans).toHaveLength(initial.spans.length));
+        api.resume();
+        await refocus();
+        await waitFor(() => expect(result.current.data?.spans).toHaveLength(2));
+      });
     });
   });
 
@@ -366,19 +370,23 @@ describe('Trace span refresh', () => {
     { traceId, spanId: null },
     { traceId: null, spanId: null },
   ])('when branch identifiers are incomplete ($traceId, $spanId)', args => {
-    it('does not start a request on mount or focus', async () => {
-      const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
-      await refocus();
-      expect(result.current.fetchStatus).toBe('idle');
-      expect(result.current.isError).toBe(false);
-      expect(result.current.data).toBeUndefined();
+    describe('when called', () => {
+      it('does not start a request on mount or focus', async () => {
+        const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
+        await refocus();
+        expect(result.current.fetchStatus).toBe('idle');
+        expect(result.current.isError).toBe(false);
+        expect(result.current.data).toBeUndefined();
+      });
     });
 
-    it('reports the missing identifiers on explicit refetch', async () => {
-      const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
-      await act(async () => {
-        const refreshed = await result.current.refetch();
-        expect(refreshed.error?.message).toBe('traceId and spanId are required');
+    describe('when called', () => {
+      it('reports the missing identifiers on explicit refetch', async () => {
+        const { result } = renderHook(() => useBranch(args), { wrapper: Wrapper });
+        await act(async () => {
+          const refreshed = await result.current.refetch();
+          expect(refreshed.error?.message).toBe('traceId and spanId are required');
+        });
       });
     });
   });

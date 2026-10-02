@@ -13,41 +13,53 @@ const scoresDomainUnavailableError = new Error(
 const unsupportedError = new Error('This storage provider does not support listing scores');
 
 describe('getScoresRefetchInterval', () => {
-  it('disables polling when the observability storage domain is unavailable', () => {
-    const query = { state: { error: unavailableError } };
+  describe('when the observability storage domain is unavailable', () => {
+    it('disables polling', () => {
+      const query = { state: { error: unavailableError } };
 
-    expect(getScoresRefetchInterval(query)).toBe(false);
+      expect(getScoresRefetchInterval(query)).toBe(false);
+    });
   });
 
-  it('disables polling when the storage provider cannot list scores', () => {
-    const query = { state: { error: unsupportedError } };
+  describe('when the storage provider cannot list scores', () => {
+    it('disables polling', () => {
+      const query = { state: { error: unsupportedError } };
 
-    expect(getScoresRefetchInterval(query)).toBe(false);
+      expect(getScoresRefetchInterval(query)).toBe(false);
+    });
   });
 
-  it('keeps polling for supported scores queries', () => {
-    const query = { state: { error: null } };
+  describe('when for supported scores queries', () => {
+    it('keeps polling', () => {
+      const query = { state: { error: null } };
 
-    expect(getScoresRefetchInterval(query)).toBe(15_000);
+      expect(getScoresRefetchInterval(query)).toBe(15_000);
+    });
   });
 });
 
 describe('getTraceSpanScoresRefetchInterval', () => {
-  it('disables polling when the observability storage domain is unavailable', () => {
-    const query = { state: { error: unavailableError } };
+  describe('when the observability storage domain is unavailable', () => {
+    it('disables polling', () => {
+      const query = { state: { error: unavailableError } };
 
-    expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+      expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+    });
   });
 
-  it('disables polling when the scores storage domain is unavailable', () => {
-    const query = { state: { error: scoresDomainUnavailableError } };
+  describe('when the scores storage domain is unavailable', () => {
+    it('disables polling', () => {
+      const query = { state: { error: scoresDomainUnavailableError } };
 
-    expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+      expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+    });
   });
 
-  it('keeps polling for supported queries', () => {
-    const query = { state: { error: null } };
+  describe('when for supported queries', () => {
+    it('keeps polling', () => {
+      const query = { state: { error: null } };
 
-    expect(getTraceSpanScoresRefetchInterval(query)).toBe(15_000);
+      expect(getTraceSpanScoresRefetchInterval(query)).toBe(15_000);
+    });
   });
 });

@@ -31,42 +31,48 @@ const scoresResponse: ListScoresResponse = {
 afterEach(() => cleanup());
 
 describe('useTraceSpanScores', () => {
-  it('loads the scores of the given span', async () => {
-    const onRequest = vi.fn<(url: URL) => void>();
-    server.use(
-      http.get('*/api/observability/traces/trace-1/span-1/scores', ({ request }) => {
-        onRequest(new URL(request.url));
-        return HttpResponse.json(scoresResponse);
-      }),
-    );
+  describe('when called', () => {
+    it('loads the scores of the given span', async () => {
+      const onRequest = vi.fn<(url: URL) => void>();
+      server.use(
+        http.get('*/api/observability/traces/trace-1/span-1/scores', ({ request }) => {
+          onRequest(new URL(request.url));
+          return HttpResponse.json(scoresResponse);
+        }),
+      );
 
-    const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1', spanId: 'span-1' }), { wrapper });
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1', spanId: 'span-1' }), { wrapper });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.scores.map(s => s.id)).toEqual(['score-1']);
-    expect(onRequest.mock.calls[0][0].searchParams.get('perPage')).toBe('10');
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.scores.map(s => s.id)).toEqual(['score-1']);
+      expect(onRequest.mock.calls[0][0].searchParams.get('perPage')).toBe('10');
+    });
   });
 
-  it('does not fetch without a span', () => {
-    const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1' }), { wrapper });
-    expect(result.current.fetchStatus).toBe('idle');
+  describe('when called', () => {
+    it('does not fetch without a span', () => {
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1' }), { wrapper });
+      expect(result.current.fetchStatus).toBe('idle');
+    });
   });
 
-  it('stops polling when observability is unavailable', async () => {
-    server.use(
-      http.get('*/api/observability/traces/trace-1/span-1/scores', () =>
-        HttpResponse.json({ error: 'Observability storage domain is not available' }, { status: 500 }),
-      ),
-    );
+  describe('when observability is unavailable', () => {
+    it('stops polling', async () => {
+      server.use(
+        http.get('*/api/observability/traces/trace-1/span-1/scores', () =>
+          HttpResponse.json({ error: 'Observability storage domain is not available' }, { status: 500 }),
+        ),
+      );
 
-    const { wrapper, queryClient } = makeWrapper();
-    const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1', spanId: 'span-1' }), { wrapper });
+      const { wrapper, queryClient } = makeWrapper();
+      const { result } = renderHook(() => useTraceSpanScores({ traceId: 'trace-1', spanId: 'span-1' }), { wrapper });
 
-    await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
-    const [query] = queryClient.getQueryCache().findAll({ queryKey: ['trace-span-scores'] });
-    expect(query).toBeDefined();
-    expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+      await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
+      const [query] = queryClient.getQueryCache().findAll({ queryKey: ['trace-span-scores'] });
+      expect(query).toBeDefined();
+      expect(getTraceSpanScoresRefetchInterval(query)).toBe(false);
+    });
   });
 });

@@ -49,31 +49,33 @@ afterEach(() => {
 });
 
 describe('useScoresByScorerId', () => {
-  it('loads the first page, then the next page once the end of the list is in view', async () => {
-    const pages: string[] = [];
-    server.use(
-      http.get('*/api/scores/scorer/scorer-1', ({ request }) => {
-        const page = new URL(request.url).searchParams.get('page') ?? '0';
-        pages.push(page);
-        const response: ListScoresResponse = {
-          scores: [makeScore(`score-${page}`)],
-          pagination: { total: 2, page: Number(page), perPage: 25, hasMore: page === '0' },
-        };
-        return HttpResponse.json(response);
-      }),
-    );
+  describe('when called', () => {
+    it('loads the first page, then the next page once the end of the list is in view', async () => {
+      const pages: string[] = [];
+      server.use(
+        http.get('*/api/scores/scorer/scorer-1', ({ request }) => {
+          const page = new URL(request.url).searchParams.get('page') ?? '0';
+          pages.push(page);
+          const response: ListScoresResponse = {
+            scores: [makeScore(`score-${page}`)],
+            pagination: { total: 2, page: Number(page), perPage: 25, hasMore: page === '0' },
+          };
+          return HttpResponse.json(response);
+        }),
+      );
 
-    const { wrapper } = makeWrapper();
-    const { result } = renderHook(() => useScoresByScorerId({ scorerId: 'scorer-1' }), { wrapper });
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useScoresByScorerId({ scorerId: 'scorer-1' }), { wrapper });
 
-    await waitFor(() => expect(result.current.data?.map(s => s.id)).toEqual(['score-0']));
-    expect(pages).toEqual(['0']);
+      await waitFor(() => expect(result.current.data?.map(s => s.id)).toEqual(['score-0']));
+      expect(pages).toEqual(['0']);
 
-    act(() => result.current.setEndOfListElement(document.createElement('div')));
-    await waitFor(() => expect(MockIntersectionObserver.instances.length).toBeGreaterThan(0));
-    act(() => MockIntersectionObserver.instances.at(-1)?.trigger(true));
+      act(() => result.current.setEndOfListElement(document.createElement('div')));
+      await waitFor(() => expect(MockIntersectionObserver.instances.length).toBeGreaterThan(0));
+      act(() => MockIntersectionObserver.instances.at(-1)?.trigger(true));
 
-    await waitFor(() => expect(result.current.data?.map(s => s.id)).toEqual(['score-0', 'score-1']));
-    expect(result.current.hasNextPage).toBe(false);
+      await waitFor(() => expect(result.current.data?.map(s => s.id)).toEqual(['score-0', 'score-1']));
+      expect(result.current.hasNextPage).toBe(false);
+    });
   });
 });

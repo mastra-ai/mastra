@@ -29,30 +29,32 @@ describe('useMemoryWithOMStatus', () => {
     cleanup();
   });
 
-  it('sends resourceId and threadId as query params so the server can resolve OM status', async () => {
-    const onStatus = vi.fn<(url: URL) => void>();
-    server.use(
-      http.get(`${BASE_URL}/api/memory/status`, ({ request }) => {
-        onStatus(new URL(request.url));
-        return HttpResponse.json(omEnabledStatus);
-      }),
-    );
+  describe('when called', () => {
+    it('sends resourceId and threadId as query params so the server can resolve OM status', async () => {
+      const onStatus = vi.fn<(url: URL) => void>();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, ({ request }) => {
+          onStatus(new URL(request.url));
+          return HttpResponse.json(omEnabledStatus);
+        }),
+      );
 
-    const { result } = renderHook(
-      () => useMemoryWithOMStatus({ agentId: AGENT_ID, resourceId: RESOURCE_ID, threadId: THREAD_ID }),
-      { wrapper: makeWrapper() },
-    );
+      const { result } = renderHook(
+        () => useMemoryWithOMStatus({ agentId: AGENT_ID, resourceId: RESOURCE_ID, threadId: THREAD_ID }),
+        { wrapper: makeWrapper() },
+      );
 
-    await waitFor(() => {
-      expect(result.current.data?.observationalMemory?.enabled).toBe(true);
+      await waitFor(() => {
+        expect(result.current.data?.observationalMemory?.enabled).toBe(true);
+      });
+
+      // Regression guard: a wrong argument order would drop resourceId/threadId
+      // from the wire, leaving OM status undefined and the OM UI hidden.
+      expect(onStatus).toHaveBeenCalled();
+      const url = onStatus.mock.calls[0]![0];
+      expect(url.searchParams.get('agentId')).toBe(AGENT_ID);
+      expect(url.searchParams.get('resourceId')).toBe(RESOURCE_ID);
+      expect(url.searchParams.get('threadId')).toBe(THREAD_ID);
     });
-
-    // Regression guard: a wrong argument order would drop resourceId/threadId
-    // from the wire, leaving OM status undefined and the OM UI hidden.
-    expect(onStatus).toHaveBeenCalled();
-    const url = onStatus.mock.calls[0]![0];
-    expect(url.searchParams.get('agentId')).toBe(AGENT_ID);
-    expect(url.searchParams.get('resourceId')).toBe(RESOURCE_ID);
-    expect(url.searchParams.get('threadId')).toBe(THREAD_ID);
   });
 });

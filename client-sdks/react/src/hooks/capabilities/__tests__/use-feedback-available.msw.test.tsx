@@ -27,12 +27,14 @@ afterEach(() => {
 
 describe('useFeedbackAvailable', () => {
   describe('while capabilities are loading', () => {
-    it('is loading and not enabled', () => {
-      server.use(http.get(CAPABILITIES_URL, () => new Promise(() => {})));
+    describe('when called', () => {
+      it('is loading and not enabled', () => {
+        server.use(http.get(CAPABILITIES_URL, () => new Promise(() => {})));
 
-      const { result } = renderHook(() => useFeedbackAvailable(), { wrapper: makeWrapper() });
+        const { result } = renderHook(() => useFeedbackAvailable(), { wrapper: makeWrapper() });
 
-      expect(result.current).toEqual({ isLoading: true, enabled: false });
+        expect(result.current).toEqual({ isLoading: true, enabled: false });
+      });
     });
   });
 

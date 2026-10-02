@@ -67,201 +67,223 @@ afterEach(() => {
 });
 
 describe('useTraces light-list fetching', () => {
-  it('loads the traces list from the light endpoint and surfaces inputPreview rows', async () => {
-    const lightSearches: string[] = [];
-    server.use(listHandler(LIGHT_URL, lightPage0, lightDeltaEmptyBatch, lightSearches));
+  describe('when called', () => {
+    it('loads the traces list from the light endpoint and surfaces inputPreview rows', async () => {
+      const lightSearches: string[] = [];
+      server.use(listHandler(LIGHT_URL, lightPage0, lightDeltaEmptyBatch, lightSearches));
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-alpha']);
-    expect(inputPreviewOf(result.current.data?.spans[0])).toBe('What is the weather in Paris?');
-    expect(lightSearches[0]).toContain('page=0');
-    expect(lightSearches[0]).toContain('perPage=25');
-    unmount();
+      expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-alpha']);
+      expect(inputPreviewOf(result.current.data?.spans[0])).toBe('What is the weather in Paris?');
+      expect(lightSearches[0]).toContain('page=0');
+      expect(lightSearches[0]).toContain('perPage=25');
+      unmount();
+    });
   });
 
-  it('polls the light endpoint in delta mode using the page-0 cursor and merges new rows', async () => {
-    const lightSearches: string[] = [];
-    server.use(listHandler(LIGHT_URL, lightPage0, lightDeltaBatch, lightSearches));
+  describe('when called', () => {
+    it('polls the light endpoint in delta mode using the page-0 cursor and merges new rows', async () => {
+      const lightSearches: string[] = [];
+      server.use(listHandler(LIGHT_URL, lightPage0, lightDeltaBatch, lightSearches));
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(lightSearches.some(s => s.includes('mode=delta'))).toBe(true));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(lightSearches.some(s => s.includes('mode=delta'))).toBe(true));
 
-    const deltaSearch = lightSearches.find(s => s.includes('mode=delta'));
-    expect(deltaSearch).toContain('after=cursor-1');
-    await waitFor(() => expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-bravo', 'trace-alpha']));
-    unmount();
+      const deltaSearch = lightSearches.find(s => s.includes('mode=delta'));
+      expect(deltaSearch).toContain('after=cursor-1');
+      await waitFor(() =>
+        expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-bravo', 'trace-alpha']),
+      );
+      unmount();
+    });
   });
 
-  it('falls back to the full traces endpoint when the light endpoint returns 500', async () => {
-    const fullSearches: string[] = [];
-    server.use(
-      http.get(LIGHT_URL, () => new HttpResponse(null, { status: 500 })),
-      listHandler(FULL_URL, pageOnly(fullTracesPage0), fullDeltaBatch, fullSearches),
-    );
+  describe('when the light endpoint returns 500', () => {
+    it('falls back to the full traces endpoint', async () => {
+      const fullSearches: string[] = [];
+      server.use(
+        http.get(LIGHT_URL, () => new HttpResponse(null, { status: 500 })),
+        listHandler(FULL_URL, pageOnly(fullTracesPage0), fullDeltaBatch, fullSearches),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
 
-    expect(result.current.isError).toBe(false);
-    expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
-    unmount();
+      expect(result.current.isError).toBe(false);
+      expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
+      unmount();
+    });
   });
 
-  it('falls back to the full traces endpoint when the light endpoint returns 404', async () => {
-    const fullSearches: string[] = [];
-    server.use(
-      http.get(LIGHT_URL, () => new HttpResponse(null, { status: 404 })),
-      listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
-    );
+  describe('when the light endpoint returns 404', () => {
+    it('falls back to the full traces endpoint', async () => {
+      const fullSearches: string[] = [];
+      server.use(
+        http.get(LIGHT_URL, () => new HttpResponse(null, { status: 404 })),
+        listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.isError).toBe(false);
-    expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
-    unmount();
+      expect(result.current.isError).toBe(false);
+      expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
+      unmount();
+    });
   });
 
-  it('keeps delta polling on the full endpoint after falling back', async () => {
-    const lightRequests = vi.fn<() => void>();
-    const fullSearches: string[] = [];
-    server.use(
-      http.get(LIGHT_URL, () => {
-        lightRequests();
-        return new HttpResponse(null, { status: 404 });
-      }),
-      listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
-    );
+  describe('when after falling back', () => {
+    it('keeps delta polling on the full endpoint', async () => {
+      const lightRequests = vi.fn<() => void>();
+      const fullSearches: string[] = [];
+      server.use(
+        http.get(LIGHT_URL, () => {
+          lightRequests();
+          return new HttpResponse(null, { status: 404 });
+        }),
+        listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    await waitFor(() => expect(fullSearches.some(s => s.includes('mode=delta'))).toBe(true));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      await waitFor(() => expect(fullSearches.some(s => s.includes('mode=delta'))).toBe(true));
 
-    const deltaSearch = fullSearches.find(s => s.includes('mode=delta'));
-    expect(deltaSearch).toContain('after=cursor-full-1');
-    expect(lightRequests).toHaveBeenCalledTimes(1);
-    unmount();
+      const deltaSearch = fullSearches.find(s => s.includes('mode=delta'));
+      expect(deltaSearch).toContain('after=cursor-full-1');
+      expect(lightRequests).toHaveBeenCalledTimes(1);
+      unmount();
+    });
   });
 
-  it('falls back to the full traces endpoint when the light endpoint 200s with legacy-shape rows', async () => {
-    const lightRequests = vi.fn<() => void>();
-    const fullSearches: string[] = [];
-    server.use(
-      http.get(LIGHT_URL, () => {
-        lightRequests();
-        return HttpResponse.json(legacyLightPage0);
-      }),
-      listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
-    );
+  describe('when the light endpoint 200s with legacy-shape rows', () => {
+    it('falls back to the full traces endpoint', async () => {
+      const lightRequests = vi.fn<() => void>();
+      const fullSearches: string[] = [];
+      server.use(
+        http.get(LIGHT_URL, () => {
+          lightRequests();
+          return HttpResponse.json(legacyLightPage0);
+        }),
+        listHandler(FULL_URL, fullTracesPage0, fullDeltaBatch, fullSearches),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.isError).toBe(false);
-    expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
-    await waitFor(() => expect(fullSearches.some(s => s.includes('mode=delta'))).toBe(true));
-    expect(lightRequests).toHaveBeenCalledTimes(1);
-    unmount();
+      expect(result.current.isError).toBe(false);
+      expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-full']);
+      await waitFor(() => expect(fullSearches.some(s => s.includes('mode=delta'))).toBe(true));
+      expect(lightRequests).toHaveBeenCalledTimes(1);
+      unmount();
+    });
   });
 
-  it('does not fall back when the light endpoint 200s with an empty page', async () => {
-    const fullRequests = vi.fn<() => void>();
-    server.use(
-      http.get(LIGHT_URL, () => HttpResponse.json(legacyLightEmptyPage0)),
-      http.get(FULL_URL, () => {
-        fullRequests();
-        return HttpResponse.json(fullTracesPage0);
-      }),
-    );
+  describe('when the light endpoint 200s with an empty page', () => {
+    it('does not fall back', async () => {
+      const fullRequests = vi.fn<() => void>();
+      server.use(
+        http.get(LIGHT_URL, () => HttpResponse.json(legacyLightEmptyPage0)),
+        http.get(FULL_URL, () => {
+          fullRequests();
+          return HttpResponse.json(fullTracesPage0);
+        }),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.data?.spans).toEqual([]);
-    expect(fullRequests).not.toHaveBeenCalled();
-    unmount();
+      expect(result.current.data?.spans).toEqual([]);
+      expect(fullRequests).not.toHaveBeenCalled();
+      unmount();
+    });
   });
 
-  it('surfaces a permission error without falling back when the light endpoint returns 403', async () => {
-    const fullRequests = vi.fn<() => void>();
-    server.use(
-      http.get(LIGHT_URL, () => new HttpResponse(null, { status: 403 })),
-      http.get(FULL_URL, () => {
-        fullRequests();
-        return HttpResponse.json(fullTracesPage0);
-      }),
-    );
+  describe('when the light endpoint returns 403', () => {
+    it('surfaces a permission error without falling back', async () => {
+      const fullRequests = vi.fn<() => void>();
+      server.use(
+        http.get(LIGHT_URL, () => new HttpResponse(null, { status: 403 })),
+        http.get(FULL_URL, () => {
+          fullRequests();
+          return HttpResponse.json(fullTracesPage0);
+        }),
+      );
 
-    const { result, unmount } = renderTraces();
-    await waitFor(() => expect(result.current.isError).toBe(true));
+      const { result, unmount } = renderTraces();
+      await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(result.current.error?.message).toContain('status: 403');
-    expect(result.current.data).toBeUndefined();
-    expect(fullRequests).not.toHaveBeenCalled();
-    unmount();
+      expect(result.current.error?.message).toContain('status: 403');
+      expect(result.current.data).toBeUndefined();
+      expect(fullRequests).not.toHaveBeenCalled();
+      unmount();
+    });
   });
 
   // A 500 also comes from a DB hiccup or a request timeout, not only from an old core's
   // store throwing. Serving that one request from the full endpoint is right; degrading
   // the list for the rest of the session is not.
-  it('recovers to the light endpoint after a single 500', async () => {
-    let lightFailures = 0;
-    server.use(
-      http.get(LIGHT_URL, () => {
-        if (lightFailures === 0) {
-          lightFailures += 1;
-          return new HttpResponse(null, { status: 500 });
-        }
-        return HttpResponse.json(lightPage0);
-      }),
-      http.get(FULL_URL, () => HttpResponse.json(pageOnly(fullTracesPage0))),
-    );
+  describe('when after a single 500', () => {
+    it('recovers to the light endpoint', async () => {
+      let lightFailures = 0;
+      server.use(
+        http.get(LIGHT_URL, () => {
+          if (lightFailures === 0) {
+            lightFailures += 1;
+            return new HttpResponse(null, { status: 500 });
+          }
+          return HttpResponse.json(lightPage0);
+        }),
+        http.get(FULL_URL, () => HttpResponse.json(pageOnly(fullTracesPage0))),
+      );
 
-    const { result, unmount } = renderTraces();
+      const { result, unmount } = renderTraces();
 
-    // Light rows once the fault clears — a pinned client would be stuck on `trace-full`.
-    await waitFor(() => expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-alpha']));
-    expect(inputPreviewOf(result.current.data?.spans[0])).toBe('What is the weather in Paris?');
-    expect(result.current.isError).toBe(false);
-    unmount();
+      // Light rows once the fault clears — a pinned client would be stuck on `trace-full`.
+      await waitFor(() => expect(result.current.data?.spans.map(s => s.traceId)).toEqual(['trace-alpha']));
+      expect(inputPreviewOf(result.current.data?.spans[0])).toBe('What is the weather in Paris?');
+      expect(result.current.isError).toBe(false);
+      unmount();
+    });
   });
 
   // Only the two legacy-server signals (404/500) may pin a session to full rows.
   // Transient conditions would hit the full endpoint too — they must propagate
   // and leave the client unpinned so light loading resumes once they clear.
-  it.each([
-    ['auth failure', 401],
-    ['rate limiting', 429],
-  ])('surfaces %s without falling back or pinning the client', async (_label, status) => {
-    const fullRequests = vi.fn<() => void>();
-    let lightFailures = 0;
-    server.use(
-      http.get(LIGHT_URL, () => {
-        if (lightFailures === 0) {
-          lightFailures += 1;
-          return new HttpResponse(null, { status });
-        }
-        return HttpResponse.json(lightPage0);
-      }),
-      http.get(FULL_URL, () => {
-        fullRequests();
-        return HttpResponse.json(fullTracesPage0);
-      }),
-    );
+  describe('when the light endpoint fails transiently', () => {
+    it.each([
+      ['auth failure', 401],
+      ['rate limiting', 429],
+    ])('surfaces %s without falling back or pinning the client', async (_label, status) => {
+      const fullRequests = vi.fn<() => void>();
+      let lightFailures = 0;
+      server.use(
+        http.get(LIGHT_URL, () => {
+          if (lightFailures === 0) {
+            lightFailures += 1;
+            return new HttpResponse(null, { status });
+          }
+          return HttpResponse.json(lightPage0);
+        }),
+        http.get(FULL_URL, () => {
+          fullRequests();
+          return HttpResponse.json(fullTracesPage0);
+        }),
+      );
 
-    const first = renderTraces();
-    await waitFor(() => expect(first.result.current.isError).toBe(true));
-    expect(first.result.current.error?.message).toContain(`status: ${status}`);
-    expect(fullRequests).not.toHaveBeenCalled();
-    first.unmount();
+      const first = renderTraces();
+      await waitFor(() => expect(first.result.current.isError).toBe(true));
+      expect(first.result.current.error?.message).toContain(`status: ${status}`);
+      expect(fullRequests).not.toHaveBeenCalled();
+      first.unmount();
 
-    // The condition clears; the same client must still use the light endpoint.
-    const second = renderTraces();
-    await waitFor(() => expect(second.result.current.isLoading).toBe(false), { timeout: 5000 });
-    expect(inputPreviewOf(second.result.current.data?.spans[0])).toBeDefined();
-    expect(fullRequests).not.toHaveBeenCalled();
-    second.unmount();
+      // The condition clears; the same client must still use the light endpoint.
+      const second = renderTraces();
+      await waitFor(() => expect(second.result.current.isLoading).toBe(false), { timeout: 5000 });
+      expect(inputPreviewOf(second.result.current.data?.spans[0])).toBeDefined();
+      expect(fullRequests).not.toHaveBeenCalled();
+      second.unmount();
+    });
   });
 });
