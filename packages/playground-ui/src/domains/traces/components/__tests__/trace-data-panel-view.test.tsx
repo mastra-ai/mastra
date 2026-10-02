@@ -439,6 +439,26 @@ describe('TraceDataPanelView — the body', () => {
     expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
   });
 
+  it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
+    const { rerender } = render(
+      <TraceDataPanelView {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
+    );
+
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText('feedback body')).toBeNull();
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        feedbackTabSlot={() => <p>feedback body</p>}
+        messagesPanelSlot={<p>messages body</p>}
+      />,
+    );
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Messages', 'Feedback']);
+    expect(screen.getByText('messages body')).toBeTruthy();
+  });
+
   it('says a settled trace has no spans', () => {
     render(<TraceDataPanelView {...baseProps} spans={[]} />);
 

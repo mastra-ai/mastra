@@ -354,25 +354,37 @@ export function TraceDataPanelView({
         data-trace-side-column
         className="@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
       >
-        <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+        {/* Whether the Messages tab exists depends on the spans, so the tabs wait for them;
+            otherwise the column flickers Feedback → Messages as the first tab changes. */}
+        {isLoading ? (
           <DataPanel.Header className="border-b border-border">
-            <TabList variant="pill-ghost" size="sm">
-              {sideViews.map(view => (
-                <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                  {view.label}
-                </Tab>
-              ))}
-            </TabList>
-            {sideHeaderActions && (
-              <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
-                {sideHeaderActions({ compact: compactSide })}
-              </div>
-            )}
+            <div aria-hidden className="h-control-sm" />
           </DataPanel.Header>
-        </Tabs>
-        {sideView === 'messages' && <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>}
-        {sideView === 'feedback' && <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>}
-        {sideView === 'scores' && (
+        ) : (
+          <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
+            <DataPanel.Header className="border-b border-border">
+              <TabList variant="pill-ghost" size="sm">
+                {sideViews.map(view => (
+                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                    {view.label}
+                  </Tab>
+                ))}
+              </TabList>
+              {sideHeaderActions && (
+                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                  {sideHeaderActions({ compact: compactSide })}
+                </div>
+              )}
+            </DataPanel.Header>
+          </Tabs>
+        )}
+        {!isLoading && sideView === 'messages' && (
+          <DataPanel.Content className="p-0">{messagesPanelSlot}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'feedback' && (
+          <DataPanel.Content>{feedbackTabSlot?.({ traceId })}</DataPanel.Content>
+        )}
+        {!isLoading && sideView === 'scores' && (
           <DataPanel.Content>{scoresTabSlot?.({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
         )}
       </div>
