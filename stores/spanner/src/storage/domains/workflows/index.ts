@@ -570,6 +570,10 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       let updated: WorkflowRunState | undefined;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
+          // An aborted attempt is retried, so only the committed attempt may
+          // report a win; otherwise a racing claim that lost on retry would
+          // still return the state it computed before the abort.
+          updated = undefined;
           try {
             if (fence) await assertRunFence(tx, TABLE_WORKFLOW_RUN_OWNERS, fence, 'updateWorkflowState');
             const [rows] = await tx.run({
