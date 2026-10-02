@@ -29,7 +29,8 @@ function setup() {
       stepResult: { reason: 'stop' },
     } as any);
   const registrations = () => publish.mock.calls.filter(([, event]) => event.type === 'run-registered');
-  return { runtime, pubsub, agent, options, runId, makeStream, chunk, finish, registrations };
+  const suspensions = () => publish.mock.calls.filter(([, event]) => event.type === 'run-suspended');
+  return { runtime, pubsub, agent, options, runId, makeStream, chunk, finish, registrations, suspensions };
 }
 
 describe('durable thread continuation', () => {
@@ -59,6 +60,7 @@ describe('durable thread continuation', () => {
     await h.chunk('text-delta', { text: 'prefix' });
     await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'read_page', args: {} });
     await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
     if (!delayed) {
       await vi.waitFor(() => expect(parts.some(part => part.type === 'tool-call-approval')).toBe(true));
       expect(subscription.__getCurrentRunRequestContext!()).toBe(initialContext);
@@ -93,6 +95,7 @@ describe('durable thread continuation', () => {
 
     await h.chunk('tool-call-approval', { toolCallId: 'call-2', toolName: 'read_page', args: {} });
     await vi.waitFor(() => expect(resumed.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(2));
     const resumedAgain = h.makeStream();
     await resumedAgain.ready;
     expect(

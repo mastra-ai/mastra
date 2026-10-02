@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentThreadLeaseLostError } from '../thread-stream-runtime';
 import { AGENT_THREAD_KEY_SEPARATOR, createHarness, setupRuntime } from './thread-stream-test-utils';
 
 const LEASE_TTL_MS = 15_000;
@@ -41,9 +42,41 @@ describe('thread stream remote-run liveness', () => {
     await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
 
     expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'error']);
-    expect(collected[2].payload.error).toEqual(
-      new Error(`Thread run ${harness.runId} lost its lease before publishing a terminal event`),
+    expect(collected[2].payload.error).toEqual(new AgentThreadLeaseLostError(harness.runId));
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('does not report a replayed suspended stream as lease loss', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-suspended');
+    const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, harness.runId);
+    pubsub.retain = true;
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await streamPart({
+      type: 'tool-call-suspended',
+      payload: { toolCallId: 'call-1', toolName: 'ask_user', args: {} },
+    });
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
     );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+    await flush();
+
+    pubsub.owners.delete(key);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
+
+    expect(collected.map(part => part.type)).toEqual(['tool-call-suspended']);
+    expect(collected.some(part => part.type === 'error')).toBe(false);
 
     subscription.unsubscribe();
     await consumed;

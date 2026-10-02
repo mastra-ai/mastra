@@ -142,6 +142,13 @@ export class AgentThreadLeaseConflictError extends Error {
   }
 }
 
+export class AgentThreadLeaseLostError extends Error {
+  constructor(runId: string) {
+    super(`Thread run ${runId} lost its lease before publishing a terminal event`);
+    this.name = 'AgentThreadLeaseLostError';
+  }
+}
+
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
 /**
@@ -238,6 +245,8 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   createSubscriberStream?: () => ReadableStream<unknown>;
   /** Settles once every stream-part broadcast publish for this run completed. */
   broadcastFinished?: Promise<void>;
+  /** Whether this stream's current suspension boundary was published. */
+  suspensionPublished?: boolean;
   /** Present only while the broadcast may accept resumed execution segments. */
   continuation?: AgentThreadRunContinuation<OUTPUT>;
 };
@@ -1960,6 +1969,7 @@ export class AgentThreadStreamRuntime {
     let failed = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
+    let suspensionBoundaryHandler: (() => Promise<void>) | undefined;
     // Resolves once the broadcast pump has drained the source stream AND every
     // stream-part publish has completed. Terminal events (`run-completed` /
     // `run-suspended`) must wait on this: publishing the terminal event while
@@ -1993,9 +2003,11 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
+      let isSuspensionBoundary = false;
       if (rawPart && typeof rawPart === 'object' && 'type' in rawPart) {
         const typedPart = rawPart as { type?: string; payload?: { toolCallId?: string; toolName?: string } };
         if (typedPart.type === 'tool-call-approval' || typedPart.type === 'tool-call-suspended') {
+          isSuspensionBoundary = true;
           runtime.#markRunSuspending(runtime.#getState(pubsub), output.runId, streamId, {
             toolCallId: typedPart.payload?.toolCallId,
             toolName: typedPart.payload?.toolName,
@@ -2025,6 +2037,7 @@ export class AgentThreadStreamRuntime {
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
+      if (isSuspensionBoundary) await suspensionBoundaryHandler?.();
       // An error chunk settles `_waitUntilFinished()` without closing
       // `fullStream` (durable error-recovery keeps consuming), so the pump can
       // stay blocked on `read()` forever. The error chunk is the last part
@@ -2229,6 +2242,9 @@ export class AgentThreadStreamRuntime {
       startBroadcast: start,
       cancelBroadcast: cancel,
       canContinueBroadcast: () => started && !done && !cancelled && !failed,
+      setSuspensionBoundaryHandler: (handler: () => Promise<void>) => {
+        suspensionBoundaryHandler = handler;
+      },
       broadcastFinished,
     };
   }
@@ -2786,6 +2802,7 @@ export class AgentThreadStreamRuntime {
     if (resumedToolCallId) this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
     else this.#clearSuspendedRun(state, output.runId);
     existing.lifecycle = 'running';
+    existing.suspensionPublished = false;
     existing.streamOptions = streamOptions;
     existing.currentSegmentOutput = output;
     // Resume callers may only send an approval and never read this segment.
@@ -2843,6 +2860,7 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       startBroadcast,
       canContinueBroadcast,
+      setSuspensionBoundaryHandler,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
@@ -2913,6 +2931,9 @@ export class AgentThreadStreamRuntime {
     // full stream; without this pump the run never reaches a terminal state and
     // its active-run record + thread lease would never release, permanently
     // wedging the thread.
+    if (record.continuation) {
+      setSuspensionBoundaryHandler(() => this.#publishRunSuspended(pubsub, key, record));
+    }
     void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record, registered);
     return registered;
@@ -2957,6 +2978,7 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       cancelBroadcast,
       canContinueBroadcast,
+      setSuspensionBoundaryHandler,
       broadcastFinished,
     } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
     const record: AgentThreadRunRecord<OUTPUT> = {
@@ -3067,9 +3089,35 @@ export class AgentThreadStreamRuntime {
     } else {
       this.#clearSuspendedRun(state, output.runId);
     }
+    if (record.continuation) {
+      setSuspensionBoundaryHandler(() => this.#publishRunSuspended(pubsub, key, record));
+    }
     this.#watchThreadRunCompletion(state, pubsub, key, record, undefined, () => completionWatcherDisabled);
     startBroadcast();
     return { rollback };
+  }
+
+  async #publishRunSuspended(
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+  ): Promise<void> {
+    if (record.suspensionPublished) return;
+    record.suspensionPublished = true;
+    record.lifecycle = 'suspended';
+    // Keep the record intact for resume routing while bounding how long a parked
+    // run remains cached in this process.
+    record.suspendedAt = Date.now();
+    try {
+      await this.#publishAndWait(pubsub, key, {
+        type: 'run-suspended',
+        runId: record.runId,
+        streamId: record.streamId,
+      });
+    } catch (error) {
+      record.suspensionPublished = false;
+      throw error;
+    }
   }
 
   #watchThreadRunCompletion(
@@ -3096,14 +3144,7 @@ export class AgentThreadStreamRuntime {
       this.#cleanupPreparedRun(state, record.runId);
 
       if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
-        record.lifecycle = 'suspended';
-        // Leak fix: stamp when the run parked so the lazy TTL sweep
-        // (#sweepStaleSuspendedRecords) can evict it. The record stays fully intact
-        // for resume routing / thread-blocking / subscriber replay exactly as before
-        // — it is simply no longer retained for the life of the process. Mirrors the
-        // internal-workflow registry, which already bounds parked runs this way.
-        record.suspendedAt = Date.now();
-        this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId, streamId: record.streamId });
+        void this.#publishRunSuspended(pubsub, key, record).catch(() => {});
         return;
       }
 
@@ -4147,7 +4188,7 @@ export class AgentThreadStreamRuntime {
         clearActiveIfCurrent(runId, streamId);
         remoteRun.parts.push({
           type: 'error',
-          payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
+          payload: { error: new AgentThreadLeaseLostError(runId) },
         });
         remoteRun.done = true;
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
@@ -4538,6 +4579,11 @@ export class AgentThreadStreamRuntime {
                   typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
                     ? { ...typedPart, runId: run.runId }
                     : typedPart;
+                if (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') {
+                  // A replayed prompt proves this stream segment is parked. Older origins may not have
+                  // published run-suspended, so do not convert the valid suspension into lease loss.
+                  stopRemoteRunLeaseWatch(run.streamId);
+                }
                 if (
                   !isSignalChunkExcluded(partWithRunId, options.hideSignals) &&
                   !storedStreamIds.has(run.streamId) &&

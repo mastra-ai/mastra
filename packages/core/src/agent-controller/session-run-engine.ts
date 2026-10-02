@@ -7,6 +7,7 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { AgentThreadLeaseLostError } from '../agent/thread-stream-runtime';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -1039,10 +1040,12 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
-        this.retractFailedRunSuspensions({
-          runId: chunk.runId ?? this.#session.run.getRunId(),
-          reason: streamError.message,
-        });
+        if (!(streamError instanceof AgentThreadLeaseLostError)) {
+          this.retractFailedRunSuspensions({
+            runId: chunk.runId ?? this.#session.run.getRunId(),
+            reason: streamError.message,
+          });
+        }
         break;
       }
 
@@ -1645,7 +1648,9 @@ export class SessionRunEngine {
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
-      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      if (!(streamError instanceof AgentThreadLeaseLostError)) {
+        this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      }
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
