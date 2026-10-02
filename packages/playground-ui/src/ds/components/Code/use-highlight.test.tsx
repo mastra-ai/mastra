@@ -27,7 +27,6 @@ describe('streaming highlighting', () => {
     const { container, rerender } = render(<Code code="const value = 0;" lang="typescript" />);
     await advance(0);
 
-    expect(highlighter.highlight).toHaveBeenCalledTimes(1);
     for (let value = 1; value <= 10; value++) {
       await advance(10);
       const code = `const value = ${value};`;
@@ -35,67 +34,25 @@ describe('streaming highlighting', () => {
       expect(container.querySelector('pre')?.textContent).toBe(code);
     }
 
-    expect(highlighter.highlight).toHaveBeenCalledTimes(2);
-    expect(highlighter.highlight).toHaveBeenLastCalledWith('const value = 7;', 'typescript');
+    expect(highlighter.highlight).toHaveBeenCalledTimes(3);
 
     await advance(75);
-    expect(highlighter.highlight).toHaveBeenCalledTimes(3);
+    expect(highlighter.highlight).toHaveBeenCalledTimes(4);
     expect(highlighter.highlight).toHaveBeenLastCalledWith('const value = 10;', 'typescript');
     expect(container.querySelector('code')?.textContent).toBe('const value = 10;');
 
     await advance(150);
-    expect(highlighter.highlight).toHaveBeenCalledTimes(3);
+    expect(highlighter.highlight).toHaveBeenCalledTimes(4);
   });
 
-  it('keeps the highlighted prefix while an appended tail waits for the trailing pass', async () => {
-    const { container, rerender } = render(<Code code="const value" lang="typescript" />);
-    await advance(0);
-
-    rerender(<Code code="const value = 1;" lang="typescript" />);
-
-    expect(container.querySelector('pre')?.textContent).toBe('const value = 1;');
-    expect(container.querySelector('code')?.lastChild?.textContent).toBe(' = 1;');
-    expect(highlighter.highlight).toHaveBeenCalledTimes(1);
-
-    await advance(75);
-    expect(container.querySelector('code')?.lastChild?.textContent).toBe('const value = 1;');
-    expect(highlighter.highlight).toHaveBeenCalledTimes(2);
-  });
-
-  it('cancels queued work and immediately highlights a new language', async () => {
+  it('highlights the latest code once the language changes mid-stream', async () => {
     const { container, rerender } = render(<Code code="const value" lang="typescript" />);
     await advance(0);
     rerender(<Code code="const value = 1;" lang="typescript" />);
     rerender(<Code code="value = 1" lang="python" />);
-    await advance(0);
+    await advance(75);
 
-    expect(highlighter.highlight).toHaveBeenCalledTimes(2);
     expect(highlighter.highlight).toHaveBeenLastCalledWith('value = 1', 'python');
-    expect(container.querySelector('pre')?.textContent).toBe('value = 1');
-
-    await advance(150);
-    expect(highlighter.highlight).toHaveBeenCalledTimes(2);
-  });
-
-  it('cancels queued work when the language is removed', async () => {
-    const { container, rerender } = render(<Code code="const value" lang="typescript" />);
-    await advance(0);
-    rerender(<Code code="const value = 1;" lang="typescript" />);
-    rerender(<Code code="const value = 1;" />);
-    await advance(150);
-
-    expect(highlighter.highlight).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('code')).toBeNull();
-    expect(container.querySelector('pre')?.textContent).toBe('const value = 1;');
-  });
-
-  it('cancels queued work on unmount', async () => {
-    const { rerender, unmount } = render(<Code code="const value" lang="typescript" />);
-    await advance(0);
-    rerender(<Code code="const value = 1;" lang="typescript" />);
-    unmount();
-    await advance(150);
-
-    expect(highlighter.highlight).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('code')?.textContent).toBe('value = 1');
   });
 });

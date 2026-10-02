@@ -40,7 +40,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   vi.mocked(highlight).mockReset();
 });
 
@@ -230,7 +229,6 @@ describe('Code', () => {
   });
 
   it('does not let a superseded pass roll the colors back to an earlier prefix', async () => {
-    vi.useFakeTimers();
     const pending: Array<() => void> = [];
     vi.mocked(highlight).mockImplementation(
       code => new Promise(resolve => pending.push(() => resolve(lineTokens(code)))),
@@ -238,7 +236,6 @@ describe('Code', () => {
 
     const { container, rerender } = render(<Code code="const a" lang="typescript" />);
     rerender(<Code code="const a = 1" lang="typescript" />);
-    await act(async () => vi.advanceTimersByTimeAsync(75));
 
     // The pass for the current code lands first; the stale one for the shorter
     // prefix lands after, and would otherwise uncolor the tail it already had.
@@ -249,7 +246,6 @@ describe('Code', () => {
   });
 
   it('ignores a pass that lands after the code moved on', async () => {
-    vi.useFakeTimers();
     const pending: Array<() => void> = [];
     vi.mocked(highlight).mockImplementation(
       code => new Promise(resolve => pending.push(() => resolve(lineTokens(code)))),
@@ -257,7 +253,6 @@ describe('Code', () => {
 
     const { container, rerender } = render(<Code code="const a" lang="typescript" />);
     rerender(<Code code="let b" lang="typescript" />);
-    await act(async () => vi.advanceTimersByTimeAsync(75));
 
     // The first pass finishes last; its tokens belong to code that is gone.
     await act(async () => pending.pop()?.());

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ThemedToken } from 'shiki/core';
-import { useThrottledCallback } from 'use-debounce';
+import { useDebounce } from 'use-debounce';
 
 import { highlight } from '../CodeEditor/highlight';
 
@@ -11,32 +11,32 @@ export interface Highlighted {
   tokens: ThemedToken[][];
 }
 
-/** Sample tokens every 75 ms; the trailing pass catches the final streamed text. */
+const HIGHLIGHT_SAMPLE_INTERVAL_MS = 75;
+
+/** Tokens land a pass behind a sample of the code taken at most every 75 ms, so the value may still describe earlier code. */
 export function useHighlight(code: string, lang: string | undefined): Highlighted | null {
   const [highlighted, setHighlighted] = useState<Highlighted | null>(null);
-  const request = useRef({ id: 0 });
+  // maxWait equal to the delay turns the debounce into a throttle.
+  const [sampledCode] = useDebounce(code, HIGHLIGHT_SAMPLE_INTERVAL_MS, {
+    leading: true,
+    maxWait: HIGHLIGHT_SAMPLE_INTERVAL_MS,
+  });
 
-  const throttledHighlight = useThrottledCallback((code: string, lang: string) => {
-    const id = ++request.current.id;
+  useEffect(() => {
+    if (!lang) return;
 
-    void highlight(code, lang)
+    let cancelled = false;
+
+    void highlight(sampledCode, lang)
       .then(tokens => {
-        if (id === request.current.id && tokens?.length) setHighlighted({ code, lang, tokens });
+        if (!cancelled && tokens?.length) setHighlighted({ code: sampledCode, lang, tokens });
       })
       .catch(() => {});
-  }, 75);
 
-  useEffect(() => {
-    const currentRequest = request.current;
     return () => {
-      throttledHighlight.cancel();
-      ++currentRequest.id;
+      cancelled = true;
     };
-  }, [lang, throttledHighlight]);
-
-  useEffect(() => {
-    if (lang) throttledHighlight(code, lang);
-  }, [code, lang, throttledHighlight]);
+  }, [sampledCode, lang]);
 
   return lang ? highlighted : null;
 }
