@@ -25,7 +25,15 @@ async function openModelMenu(user: UserEvent) {
   await user.click(await screen.findByRole('button', { name: 'Session model' }));
 }
 
-function useLiveSession({ modelId, thinkingLevel }: { modelId: string; thinkingLevel?: string }) {
+function useLiveSession({
+  modelId,
+  thinkingLevel,
+  listedModelIds = [modelId],
+}: {
+  modelId: string;
+  thinkingLevel?: string;
+  listedModelIds?: string[];
+}) {
   let sessionThinkingLevel = thinkingLevel;
   const stateUpdates: unknown[] = [];
   server.use(
@@ -41,7 +49,12 @@ function useLiveSession({ modelId, thinkingLevel }: { modelId: string; thinkingL
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
-        models: [{ id: modelId, provider: modelId.split('/')[0], modelName: modelId.split('/')[1], hasApiKey: true }],
+        models: listedModelIds.map(id => ({
+          id,
+          provider: id.split('/')[0],
+          modelName: id.split('/')[1],
+          hasApiKey: true,
+        })),
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
@@ -106,6 +119,21 @@ describe('Composer thinking picker', () => {
     expect(await screen.findByRole('button', { name: 'Thinking: Extra high' })).toBeInTheDocument();
   });
 
+  it('keeps thinking adjustable when no other model can be picked', async () => {
+    const stateUpdates = useLiveSession({ modelId: 'anthropic/claude-sonnet-4-6', listedModelIds: [] });
+    const user = userEvent.setup();
+    const { client } = renderComposer();
+
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium' }));
+    expect(screen.queryByRole('button', { name: 'Session model' })).not.toBeInTheDocument();
+    const slider = await screen.findByRole('slider', { name: 'Thinking' });
+    dragTo(slider, 3);
+    fireEvent.pointerUp(slider);
+
+    await waitForMutationsIdle(client);
+    expect(stateUpdates).toEqual([{ state: { thinkingLevel: 'high' } }]);
+  });
+
   it('explains why a model without thinking has no levels to pick', async () => {
     const stateUpdates = useLiveSession({ modelId: 'anthropic/claude-3-5-haiku-20241022' });
     const user = userEvent.setup();
@@ -113,6 +141,8 @@ describe('Composer thinking picker', () => {
 
     const thinking = await screen.findByRole('button', { name: /^Thinking: unavailable\. .+ has no thinking levels$/ });
     expect(thinking).toHaveAttribute('aria-disabled', 'true');
+    await user.hover(thinking);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/has no thinking levels/);
 
     await user.click(thinking);
     expect(screen.queryByRole('slider', { name: 'Thinking' })).not.toBeInTheDocument();
