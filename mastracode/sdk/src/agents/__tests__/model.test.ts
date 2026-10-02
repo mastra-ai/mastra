@@ -54,7 +54,7 @@ vi.mock('../../providers/openai-codex.js', () => ({
   createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
     effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
   ),
-  getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
+  resolveCodexThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
     low: 'low',

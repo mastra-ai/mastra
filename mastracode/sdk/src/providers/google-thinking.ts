@@ -9,12 +9,19 @@
  */
 
 import type { LanguageModelMiddleware } from 'ai';
+import { getGoogleThinkingFamily, resolveThinkingLevelForModel } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 
 type GoogleThinkingConfig = { thinkingLevel: 'minimal' | 'low' | 'medium' | 'high' } | { thinkingBudget: number };
 
+type GoogleThinkingLevel = 'low' | 'medium' | 'high';
+
 // Budgets stay within the smallest Gemini 2.5 maximum (24576 for Flash / Flash-Lite).
-const GEMINI_25_BUDGETS = { low: 1024, medium: 8192, high: 24576 } as const;
+const GEMINI_25_BUDGETS: Record<GoogleThinkingLevel, number> = { low: 1024, medium: 8192, high: 24576 };
+
+function isGoogleThinkingLevel(level: ThinkingLevelSetting): level is GoogleThinkingLevel {
+  return level === 'low' || level === 'medium' || level === 'high';
+}
 
 /**
  * Resolve the Google thinking config for a model and session level.
@@ -24,25 +31,13 @@ export function resolveGoogleThinkingConfig(
   modelId: string,
   level: ThinkingLevelSetting | undefined,
 ): GoogleThinkingConfig | undefined {
-  if (!level || level === 'off') return undefined;
-  const clamped = level === 'xhigh' || level === 'max' ? 'high' : level;
-  const id = modelId.toLowerCase();
-
-  if (id.startsWith('gemini-2.5')) {
-    return { thinkingBudget: GEMINI_25_BUDGETS[clamped] };
-  }
-  // Only Gemini 3 Pro lacks `medium`; Gemini 3.1 Pro accepts it.
-  if (id.startsWith('gemini-3-pro')) {
-    return { thinkingLevel: clamped === 'low' ? 'low' : 'high' };
-  }
-  // Gemini 3.1 Flash Image models only accept `minimal|high`.
-  if (id.startsWith('gemini-3.1-flash-image') || id.startsWith('gemini-3.1-flash-lite-image')) {
-    return { thinkingLevel: clamped === 'low' ? 'minimal' : 'high' };
-  }
-  if (/^gemini-\d/.test(id) && !id.startsWith('gemini-1') && !id.startsWith('gemini-2')) {
-    return { thinkingLevel: clamped };
-  }
-  return undefined;
+  const family = getGoogleThinkingFamily(modelId);
+  if (!level || family === 'none') return undefined;
+  const effective = resolveThinkingLevelForModel(modelId, level);
+  if (!isGoogleThinkingLevel(effective)) return undefined;
+  if (family === 'budget') return { thinkingBudget: GEMINI_25_BUDGETS[effective] };
+  if (family === 'minimal-high') return { thinkingLevel: effective === 'low' ? 'minimal' : 'high' };
+  return { thinkingLevel: effective };
 }
 
 /**

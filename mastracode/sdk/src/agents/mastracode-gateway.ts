@@ -41,12 +41,13 @@ import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
   createReasoningEffortMiddleware,
-  getEffectiveThinkingLevel,
   openaiCodexProvider,
+  resolveCodexThinkingLevel,
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import { xaiProvider } from '../providers/xai.js';
+import { resolveThinkingLevelForModel } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
@@ -164,7 +165,7 @@ function openaiApiKeyProvider(
     thinkingLevel && thinkingLevel !== 'off'
       ? createReasoningEffortMiddleware(
           'openai',
-          THINKING_LEVEL_TO_REASONING_EFFORT[getEffectiveThinkingLevel(modelId, thinkingLevel)],
+          THINKING_LEVEL_TO_REASONING_EFFORT[resolveThinkingLevelForModel(modelId, thinkingLevel)],
         )
       : undefined;
   return wrapLanguageModel({
@@ -663,7 +664,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
         const requestedLevel: ThinkingLevel = this.#thinkingLevel ?? 'medium';
-        const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+        const effectiveLevel = resolveCodexThinkingLevel(resolvedBareModelId, requestedLevel);
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
         const openai = createOpenAI({

@@ -88,7 +88,7 @@ describe('ACP session configuration', () => {
     });
   });
 
-  it('normalizes max when switching to a model whose reasoning scale ends at xhigh', async () => {
+  it('shows max as xhigh on a model whose reasoning scale ends there, without losing the stored choice', async () => {
     const { agent, initial, setState } = await setup();
     await agent.setSessionConfigOption({
       sessionId: initial.sessionId,
@@ -96,13 +96,23 @@ describe('ACP session configuration', () => {
       value: 'openai/gpt-5.6-sol',
     });
     await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'thought_level', value: 'max' });
-    const result = await agent.setSessionConfigOption({
+
+    const clamped = await agent.setSessionConfigOption({
       sessionId: initial.sessionId,
       configId: 'model',
       value: 'openai/gpt-5.5',
     });
-    expect(setState).toHaveBeenLastCalledWith({ thinkingLevel: 'xhigh' });
-    expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
+    expect(setState).toHaveBeenLastCalledWith({ thinkingLevel: 'max' });
+    expect(clamped.configOptions.find(option => option.id === 'thought_level')).toMatchObject({
+      currentValue: 'xhigh',
+    });
+
+    const restored = await agent.setSessionConfigOption({
+      sessionId: initial.sessionId,
+      configId: 'model',
+      value: 'openai/gpt-5.6-sol',
+    });
+    expect(restored.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'max' });
   });
 
   it('notifies clients when the runtime changes mode outside a configuration request', async () => {
