@@ -134,6 +134,11 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
 const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
 /** Persisted keys a thread without its own value must not inherit from the previous thread. */
 const THREAD_SCOPED_STATE_KEYS: readonly string[] = ['thinkingLevel'];
+
+function readStateValue(state: unknown, key: string): unknown {
+  if (typeof state !== 'object' || state === null) return undefined;
+  return Reflect.get(state, key);
+}
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
@@ -679,9 +684,10 @@ export class SessionThread {
       metadata.currentModelId = modelId;
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
-    const inheritedState = session.state.get() as Record<string, unknown>;
+    const inheritedState = session.state.get();
     for (const key of PERSISTED_STATE_KEYS) {
-      if (inheritedState[key] !== undefined) metadata[key] = inheritedState[key];
+      const inheritedValue = readStateValue(inheritedState, key);
+      if (inheritedValue !== undefined) metadata[key] = inheritedValue;
     }
 
     // Stamp the session's scope so thread selection can filter listings back to
@@ -1047,10 +1053,13 @@ export class SessionThread {
       // Applied one key at a time so an invalid persisted value fails schema
       // validation without discarding the mode/model/OM restoration above or
       // the other, still-valid preference.
-      const currentState = session.state.get() as Record<string, unknown>;
+      const currentState = session.state.get();
       for (const key of PERSISTED_STATE_KEYS) {
         const value = meta?.[key];
-        if (value === undefined && (!THREAD_SCOPED_STATE_KEYS.includes(key) || currentState[key] === undefined)) {
+        if (
+          value === undefined &&
+          (!THREAD_SCOPED_STATE_KEYS.includes(key) || readStateValue(currentState, key) === undefined)
+        ) {
           continue;
         }
         try {
