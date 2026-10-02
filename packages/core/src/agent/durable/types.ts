@@ -358,7 +358,7 @@ export interface DurableLLMStepOutput {
   toolCalls: DurableToolCallInput[];
   /** Step result metadata */
   stepResult: {
-    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
+    reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
     logprobs?: LanguageModelV1LogProbs;
@@ -435,6 +435,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   result?: unknown;
   /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
   modelOutputComputed?: boolean;
+  /** A toModelOutput failure serialized for propagation across the durable boundary. */
+  mappingError?: {
+    name: string;
+    message: string;
+    stack?: string;
+  };
   /**
    * Set when execution was interrupted by request abort (not a tool error).
    * The call carries no result/error so the mapping step leaves it incomplete.

@@ -22,6 +22,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'tag-discovery',
   'metric-discovery',
   'trace-query',
+  'trace-aggregate',
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -40,6 +41,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-aggregate',
   'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
@@ -246,6 +248,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async aggregateTraces(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateTraces']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateTraces(...args);
   }
 
   async getTraceQueryObservedFields(
