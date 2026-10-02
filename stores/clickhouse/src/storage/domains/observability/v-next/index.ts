@@ -1130,7 +1130,25 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   }
 
   override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
-    return spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    try {
+      return await spanQueryOps.querySpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryCursorError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
