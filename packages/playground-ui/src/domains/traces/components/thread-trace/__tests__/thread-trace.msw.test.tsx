@@ -154,6 +154,23 @@ describe('ThreadTrace', () => {
     });
   });
 
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      renderView();
+      await waitFor(() => expect(within(getRow('trace-b')).getAllByRole('button').length).toBeGreaterThan(0));
+
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = TRACE_IDS.flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+    });
+  });
+
   describe('row emphasis', () => {
     it('emphasises the first row in view and dims the others', async () => {
       const { intersect } = stubIntersectionObserver();

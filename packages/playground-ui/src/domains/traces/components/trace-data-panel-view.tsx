@@ -17,7 +17,7 @@ import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
-import type { SearchableSpan } from '../types';
+import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
@@ -49,7 +49,7 @@ export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: SearchableSpan[] | undefined;
+  spans: LightSpanRecord[] | undefined;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;

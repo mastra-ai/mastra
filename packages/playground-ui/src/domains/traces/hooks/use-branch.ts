@@ -1,8 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { SearchableSpan } from '../types';
-import { selectSearchableSpans } from '../utils';
+import type { LightSpanRecord } from '../types';
 
 export interface UseBranchArgs {
   traceId: string | null | undefined;
@@ -14,7 +13,7 @@ export function useBranch({
   traceId,
   spanId,
   depth,
-}: UseBranchArgs): UseQueryResult<{ traceId: string; spans: SearchableSpan[] } | null> {
+}: UseBranchArgs): UseQueryResult<{ traceId: string; spans: LightSpanRecord[] } | null> {
   const client = useMastraClient();
 
   return useQuery({
@@ -25,8 +24,6 @@ export function useBranch({
       }
       return client.getBranch({ traceId, spanId, depth });
     },
-    // Builds each span's search haystack once per fetch, cached with the query.
-    select: selectSearchableSpans,
     enabled: !!traceId && !!spanId,
     // A finished subtree can still gain spans from a resumed run or delayed export.
     staleTime: 0,
