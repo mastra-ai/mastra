@@ -1,3 +1,8 @@
+import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
+import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
+import type { SkillsShSkill } from '../hooks/use-skills-sh';
 import {
   Dialog,
   DialogAction,
@@ -8,24 +13,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../types';
+} from '@/ds/components/Dialog';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { SearchInput } from '@/ds/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Txt } from '@/ds/components/Txt';
+import { GithubIcon } from '@/ds/icons/GithubIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 export interface WritableMount {
   path: string;
@@ -81,7 +81,7 @@ function getInstalledSkillId(skill: SkillsShSkill): string | null {
   return `${parsed.owner}/${parsed.repo}/${skill.name}`;
 }
 
-export function AddSkillDialog({
+export function WorkspaceAddSkillDialog({
   open,
   onOpenChange,
   workspaceId,
@@ -213,11 +213,11 @@ export function AddSkillDialog({
                 >
                   {isLoadingPopular || isSearching ? (
                     <div className="flex items-center justify-center py-5">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <Loader2 className="size-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : displaySkills.length === 0 ? (
                     <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
-                      <CircleSlashIcon className="mb-2 h-8 w-8" />
+                      <CircleSlashIcon className="mb-2 size-8" />
                       <Txt>{hasSearchResults ? 'No skills found' : 'No skills available'}</Txt>
                     </div>
                   ) : (
@@ -251,7 +251,7 @@ export function AddSkillDialog({
                                       variant="meta"
                                       className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                     >
-                                      <Check className="h-2.5 w-2.5" />
+                                      <Check className="size-2.5" />
                                       Installed
                                     </Txt>
                                   )}
@@ -259,7 +259,7 @@ export function AddSkillDialog({
                                 <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
                               </div>
                               <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
-                                <Download className="h-3 w-3" />
+                                <Download className="size-3" />
                                 <span>{skill.installs.toLocaleString()}</span>
                               </div>
                             </div>
@@ -277,7 +277,7 @@ export function AddSkillDialog({
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-                    <Package className="mb-2 h-8 w-8" />
+                    <Package className="mb-2 size-8" />
                     <Txt>Select a skill to preview</Txt>
                   </div>
                 ) : (
@@ -285,7 +285,7 @@ export function AddSkillDialog({
                     <div className="border-b border-border bg-card p-4">
                       <div className="flex items-start gap-3">
                         <div className="rounded-lg bg-muted p-2">
-                          <SkillIcon className="h-5 w-5 text-muted-foreground" />
+                          <SkillIcon className="size-5 text-muted-foreground" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <Txt as="h3" variant="subheading" tone="ink" className="truncate">
@@ -293,11 +293,11 @@ export function AddSkillDialog({
                           </Txt>
                           <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <GithubIcon className="h-3 w-3" />
+                              <GithubIcon className="size-3" />
                               {selectedSkill.topSource}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Download className="h-3 w-3" />
+                              <Download className="size-3" />
                               {selectedSkill.installs.toLocaleString()} installs
                             </span>
                           </div>
@@ -310,7 +310,7 @@ export function AddSkillDialog({
                             className={cn(quietTextHover, controlStateColorTransition)}
                             title="View on GitHub"
                           >
-                            <ExternalLink className="h-4 w-4" />
+                            <ExternalLink className="size-4" />
                           </a>
                         )}
                       </div>
@@ -318,7 +318,7 @@ export function AddSkillDialog({
 
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <Loader2 className="size-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -328,7 +328,7 @@ export function AddSkillDialog({
                       </ScrollArea>
                     ) : (
                       <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-                        <Package className="mb-2 h-8 w-8" />
+                        <Package className="mb-2 size-8" />
                         <Txt>Preview unavailable</Txt>
                         {skillsUrl && (
                           <a
@@ -337,7 +337,7 @@ export function AddSkillDialog({
                             rel="noopener noreferrer"
                             className="mt-2 flex items-center gap-1 text-caption text-info-indicator hover:underline"
                           >
-                            View on skills.sh <ExternalLink className="h-3 w-3" />
+                            View on skills.sh <ExternalLink className="size-3" />
                           </a>
                         )}
                       </div>
@@ -350,7 +350,7 @@ export function AddSkillDialog({
 
           {selectedSkill && writableMounts && writableMounts.length > 1 && (
             <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
-              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Folder className="size-4 shrink-0 text-muted-foreground" />
               <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
               <Select value={installMount} onValueChange={setSelectedMount}>
                 <SelectTrigger className="flex-1">
@@ -376,9 +376,9 @@ export function AddSkillDialog({
             {isSelectedSkillInstalled &&
               writableMounts &&
               writableMounts.length > 1 &&
-              installedSkillPaths?.[selectedSkill.name] &&
               (() => {
-                const skillPath = installedSkillPaths[selectedSkill.name]!;
+                const skillPath = installedSkillPaths?.[selectedSkill.name];
+                if (!skillPath) return null;
                 const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
                 return mount ? (
                   <Txt as="span" variant="caption" tone="muted" className="mr-auto">
