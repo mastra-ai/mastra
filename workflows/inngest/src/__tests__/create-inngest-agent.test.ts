@@ -757,7 +757,11 @@ describe('InngestAgent parity surface', () => {
     const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
     const runId = 'resume-thread-continuation-run';
 
-    const result = await durableAgent.resume(runId, { approved: true }, { threadId: 'thread-1', resourceId: 'user-1' });
+    const result = await durableAgent.resume(runId, { approved: true }, {
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      memory: { options: { lastMessages: 5 } },
+    } as any);
     try {
       expect(continueSpy).toHaveBeenCalledWith(
         durableAgent,
@@ -766,7 +770,7 @@ describe('InngestAgent parity surface', () => {
           runId,
           threadId: 'thread-1',
           resourceId: 'user-1',
-          memory: { thread: 'thread-1', resource: 'user-1' },
+          memory: { thread: 'thread-1', resource: 'user-1', options: { lastMessages: 5 } },
         }),
         durableAgent.agent.getPubSub(),
       );
@@ -774,6 +778,28 @@ describe('InngestAgent parity surface', () => {
     } finally {
       result.cleanup();
       registerSpy.mockRestore();
+      continueSpy.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('leaves resume memory unset when no thread target is provided', async () => {
+    const durableAgent = makeIsolatedAgent('resume-without-thread-target');
+    setSuspendedSnapshot(durableAgent);
+    const sendSpy = stubInngestSend();
+    const continueSpy = vi.spyOn(agentThreadStreamRuntime, 'continueRun').mockReturnValue(true);
+    const runId = 'resume-without-thread-target-run';
+
+    const result = await durableAgent.resume(runId, { approved: true });
+    try {
+      expect(continueSpy).toHaveBeenCalledWith(
+        durableAgent,
+        result.output,
+        expect.not.objectContaining({ memory: expect.anything() }),
+        durableAgent.agent.getPubSub(),
+      );
+    } finally {
+      result.cleanup();
       continueSpy.mockRestore();
       sendSpy.mockRestore();
     }

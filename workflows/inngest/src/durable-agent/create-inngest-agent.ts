@@ -1388,13 +1388,24 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         throw error;
       }
 
+      const resumeMemory = (
+        resumeOptions as InngestAgentResumeOptions<TOutput> & {
+          memory?: AgentExecutionOptions<TOutput>['memory'];
+        }
+      )?.memory;
+      const thread = resumeOptions?.threadId ?? resumeMemory?.thread;
       const resumeStreamOptions = {
         ...(resumeOptions ?? {}),
         runId,
-        memory: {
-          resource: resumeOptions?.resourceId,
-          thread: resumeOptions?.threadId,
-        },
+        ...(thread
+          ? {
+              memory: {
+                ...(resumeMemory ?? {}),
+                thread,
+                resource: resumeMemory?.resource ?? resumeOptions?.resourceId,
+              },
+            }
+          : {}),
       } as AgentExecutionOptions<TOutput>;
       const continued = agentThreadStreamRuntime.continueRun(
         proxyRef as unknown as Agent<any, any, any, any>,
