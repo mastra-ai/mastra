@@ -325,6 +325,31 @@ describe('mastra.schedules canonical service', () => {
     }
   });
 
+  it('completes a paused schedule on a cadence edit that leaves no future occurrence', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-10T00:00:00.000Z'));
+    try {
+      const { mastra } = makeMastra(['a']);
+      const schedule = await mastra.schedules.create({
+        agentId: 'a',
+        cron: '0 0 10 23 9 * 2026',
+        timezone: 'UTC',
+        prompt: 'p',
+      });
+      expect((await mastra.schedules.pause(schedule.id)).status).toBe('paused');
+
+      vi.setSystemTime(new Date('2026-09-24T00:00:00.000Z'));
+
+      // The row was paused, so the previous status must not win: an exhausted
+      // cadence is terminal however the row got there.
+      const updated = await mastra.schedules.update(schedule.id, { timezone: 'UTC' });
+      expect(updated.status).toBe('completed');
+      expect(updated.nextFireAt).toBe(schedule.nextFireAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('list hides completed schedules unless explicitly filtered by status', async () => {
     const { mastra } = makeMastra(['a']);
     const completed = await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'x' });

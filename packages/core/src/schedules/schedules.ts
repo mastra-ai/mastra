@@ -528,7 +528,8 @@ export class Schedules {
     // resumes a paused schedule. A completed row whose cadence is edited comes
     // back as `active` when the new cadence has future occurrences; otherwise
     // it stays `completed`. Lifecycle-only patches cannot resume a completed
-    // row.
+    // row, and a cadence edit that leaves no future occurrence completes the
+    // row even if it was `paused`.
     const timingChanged = patch.cron !== undefined || patch.timezone !== undefined;
     if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
       throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');
@@ -548,9 +549,10 @@ export class Schedules {
       );
       nextFireAt = nextFire.nextFireAt;
       // An edit that leaves the row with no future occurrence is accepted, but
-      // it cannot come back as `active`: the cadence is exhausted, so the row
-      // is terminal. `nextFireAt` is retained as the last known occurrence.
-      if (nextFire.completed && nextStatus === 'active') nextStatus = 'completed';
+      // the row cannot stay runnable: the cadence is exhausted, so the row is
+      // terminal regardless of its previous or requested status. `nextFireAt`
+      // is retained as the last known occurrence.
+      if (nextFire.completed) nextStatus = 'completed';
     }
 
     const updated = await store.updateSchedule(existing.id, {
