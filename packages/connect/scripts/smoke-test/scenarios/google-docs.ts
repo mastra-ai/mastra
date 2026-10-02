@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js';
 
 /**
  * Deep Google Docs scenario: creates a doc, exercises the structural edit
@@ -92,10 +92,271 @@ export const googleDocsScenario: Scenario = {
       endIndex: 2,
     });
     await trySimpleEdit('list revisions', 'google_docs_list_revisions', { documentId });
-    await trySimpleEdit('add document tab', 'google_docs_add_document_tab', {
+
+    // Insert a second table to exercise table insert/delete row+column + merge.
+    // Keep the index small; Docs rejects out-of-range inserts.
+    await trySimpleEdit('insert table (for row/col ops)', 'google_docs_insert_table', {
       documentId,
-      title: 'smoke tab',
+      index: 1,
+      rows: 3,
+      columns: 3,
     });
+    // Row/column operations target the table that starts at index 1.
+    await trySimpleEdit('insert table row', 'google_docs_insert_table_row', {
+      documentId,
+      tableStartLocationIndex: 1,
+      rowIndex: 0,
+      columnIndex: 0,
+      insertBelow: true,
+    });
+    await trySimpleEdit('insert table column', 'google_docs_insert_table_column', {
+      documentId,
+      tableStartLocationIndex: 1,
+      rowIndex: 0,
+      columnIndex: 0,
+      insertRight: true,
+    });
+    await trySimpleEdit('merge table cells', 'google_docs_merge_table_cells', {
+      documentId,
+      tableStartLocation: { index: 1 },
+      rowIndex: 0,
+      columnIndex: 0,
+      rowSpan: 1,
+      columnSpan: 2,
+    });
+    await trySimpleEdit('unmerge table cells', 'google_docs_unmerge_table_cells', {
+      documentId,
+      tableRange: {
+        tableCellLocation: { tableStartLocation: { index: 1 }, rowIndex: 0, columnIndex: 0 },
+        rowSpan: 1,
+        columnSpan: 2,
+      },
+    });
+    await trySimpleEdit('update table cell style', 'google_docs_update_table_cell_style', {
+      documentId,
+      tableRange: {
+        tableCellLocation: { tableStartLocation: { index: 1 }, rowIndex: 0, columnIndex: 0 },
+        rowSpan: 1,
+        columnSpan: 1,
+      },
+      tableCellStyle: { backgroundColor: { color: { rgbColor: { red: 0.95, green: 0.95, blue: 1 } } } },
+      fields: 'backgroundColor',
+    });
+    await trySimpleEdit('update table row style', 'google_docs_update_table_row_style', {
+      documentId,
+      tableStartLocation: { index: 1 },
+      rowIndices: [0],
+      tableRowStyle: { minRowHeight: { magnitude: 20, unit: 'PT' } },
+      fields: 'minRowHeight',
+    });
+    await trySimpleEdit('pin table header rows', 'google_docs_pin_table_header_rows', {
+      documentId,
+      tableStartLocation: 1,
+      pinnedHeaderRowsCount: 1,
+    });
+    await trySimpleEdit('delete table row', 'google_docs_delete_table_row', {
+      documentId,
+      tableStartIndex: 1,
+      rowIndex: 1,
+      columnIndex: 0,
+    });
+    await trySimpleEdit('delete table column', 'google_docs_delete_table_column', {
+      documentId,
+      tableStartLocationIndex: 1,
+      rowIndex: 0,
+      columnIndex: 1,
+    });
+
+    // Header + footer + footnote lifecycle.
+    let headerId: string | undefined;
+    let footerId: string | undefined;
+    if (tools['google_docs_create_header']) {
+      try {
+        const result = await call<{ headerId?: string }>('google_docs_create_header', {
+          documentId,
+          text: `header ${runId}`,
+        });
+        headerId = result.headerId;
+        steps.push(makeStep('create header', 'google_docs_create_header', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('create header', 'google_docs_create_header', 'fail', errorMessage(error)));
+      }
+    }
+    if (tools['google_docs_create_footer']) {
+      try {
+        const result = await call<{ footerId?: string }>('google_docs_create_footer', {
+          documentId,
+          text: `footer ${runId}`,
+        });
+        footerId = result.footerId;
+        steps.push(makeStep('create footer', 'google_docs_create_footer', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('create footer', 'google_docs_create_footer', 'fail', errorMessage(error)));
+      }
+    }
+    await trySimpleEdit('create footnote', 'google_docs_create_footnote', {
+      documentId,
+      index: 1,
+    });
+    if (headerId && tools['google_docs_delete_header']) {
+      try {
+        await call('google_docs_delete_header', { documentId, headerId });
+        steps.push(makeStep('delete header', 'google_docs_delete_header', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete header', 'google_docs_delete_header', 'fail', errorMessage(error)));
+      }
+    }
+    if (footerId && tools['google_docs_delete_footer']) {
+      try {
+        await call('google_docs_delete_footer', { documentId, footerId });
+        steps.push(makeStep('delete footer', 'google_docs_delete_footer', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete footer', 'google_docs_delete_footer', 'fail', errorMessage(error)));
+      }
+    }
+
+    // Document + section style updates — use trivial changes.
+    await trySimpleEdit('update document style', 'google_docs_update_document_style', {
+      documentId,
+      documentStyle: { marginTop: { magnitude: 72, unit: 'PT' } },
+      fields: 'marginTop',
+    });
+    await trySimpleEdit('update section style', 'google_docs_update_section_style', {
+      documentId,
+      startIndex: 1,
+      endIndex: 2,
+      sectionStyle: { marginTop: { magnitude: 72, unit: 'PT' } },
+      fields: 'marginTop',
+    });
+
+    // Image lifecycle: insert_inline_image + replace_image.
+    const smokeImage = 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_light_color_42x16dp.png';
+    let imageObjectId: string | undefined;
+    if (tools['google_docs_insert_inline_image']) {
+      try {
+        const result = await call<{ objectId?: string }>('google_docs_insert_inline_image', {
+          documentId,
+          imageUri: smokeImage,
+          location: { index: 1 },
+        });
+        imageObjectId = result.objectId;
+        steps.push(makeStep('insert inline image', 'google_docs_insert_inline_image', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('insert inline image', 'google_docs_insert_inline_image', 'fail', errorMessage(error)));
+      }
+    }
+    if (imageObjectId && tools['google_docs_replace_image']) {
+      try {
+        await call('google_docs_replace_image', { documentId, imageObjectId, uri: smokeImage });
+        steps.push(makeStep('replace image', 'google_docs_replace_image', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('replace image', 'google_docs_replace_image', 'fail', errorMessage(error)));
+      }
+    } else if (tools['google_docs_replace_image']) {
+      // Fall back to probing with a synthetic id — proves the endpoint wires up.
+      steps.push(
+        await probeTool(call, tools, 'replace image (probe)', 'google_docs_replace_image', {
+          documentId,
+          imageObjectId: 'kix.smoke_missing_image',
+          uri: smokeImage,
+        }),
+      );
+    }
+
+    // Named-range content replace + delete (uses snake_case params upstream).
+    await trySimpleEdit('replace named range content', 'google_docs_replace_named_range_content', {
+      document_id: documentId,
+      named_range_name: `smoke-range-${runId}`,
+      text: `${runId}-named-updated`,
+    });
+    await trySimpleEdit('delete named range', 'google_docs_delete_named_range', {
+      documentId,
+      name: `smoke-range-${runId}`,
+    });
+    await trySimpleEdit('delete paragraph bullets', 'google_docs_delete_paragraph_bullets', {
+      documentId,
+      startIndex: 1,
+      endIndex: 2,
+    });
+    // Clip a small range at the end to exercise delete_content_range.
+    await trySimpleEdit('delete content range', 'google_docs_delete_content_range', {
+      documentId,
+      startIndex: 1,
+      endIndex: 2,
+    });
+
+    // Tab lifecycle: add_document_tab is already called; update + delete it.
+    let addedTabId: string | undefined;
+    if (tools['google_docs_add_document_tab']) {
+      try {
+        const result = await call<{ tabId?: string }>('google_docs_add_document_tab', {
+          documentId,
+          title: 'smoke tab',
+        });
+        addedTabId = result.tabId;
+        steps.push(makeStep('add document tab', 'google_docs_add_document_tab', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('add document tab', 'google_docs_add_document_tab', 'fail', errorMessage(error)));
+      }
+    }
+    if (addedTabId && tools['google_docs_update_document_tab_properties']) {
+      try {
+        await call('google_docs_update_document_tab_properties', {
+          documentId,
+          tabId: addedTabId,
+          title: `smoke tab renamed ${runId}`,
+        });
+        steps.push(makeStep('update document tab properties', 'google_docs_update_document_tab_properties', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep(
+            'update document tab properties',
+            'google_docs_update_document_tab_properties',
+            'fail',
+            errorMessage(error),
+          ),
+        );
+      }
+    } else if (tools['google_docs_update_document_tab_properties']) {
+      steps.push(
+        await probeTool(
+          call,
+          tools,
+          'update document tab properties (probe)',
+          'google_docs_update_document_tab_properties',
+          { documentId, tabId: 't.smoke-missing', title: 'smoke tab renamed' },
+        ),
+      );
+    }
+    if (addedTabId && tools['google_docs_delete_document_tab']) {
+      try {
+        await call('google_docs_delete_document_tab', { documentId, tabId: addedTabId });
+        steps.push(makeStep('delete document tab', 'google_docs_delete_document_tab', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('delete document tab', 'google_docs_delete_document_tab', 'fail', errorMessage(error)));
+      }
+    } else if (tools['google_docs_delete_document_tab']) {
+      steps.push(
+        await probeTool(call, tools, 'delete document tab (probe)', 'google_docs_delete_document_tab', {
+          documentId,
+          tabId: 't.smoke-missing',
+        }),
+      );
+    }
+
+    // export_document still goes through google-docs even though it hits the
+    // Drive export endpoint; proxy routing is the point of exercising it.
+    if (tools['google_docs_export_document']) {
+      try {
+        await call('google_docs_export_document', { fileId: documentId, mimeType: 'text/plain' });
+        steps.push(makeStep('export document', 'google_docs_export_document', 'pass'));
+      } catch (error) {
+        // Known upstream bug (PR #699 moves it to google-drive). Record the
+        // invocation but treat the baseUrlOverride proxy rejection as a fail
+        // so operators see the discovery.
+        steps.push(makeStep('export document', 'google_docs_export_document', 'fail', errorMessage(error)));
+      }
+    }
 
     const driveDelete = allTools['google_drive_delete_file'];
     if (driveDelete && typeof driveDelete.execute === 'function') {
