@@ -177,6 +177,7 @@ interface DurablePreparationAgent {
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
   __getGoalConfig(): GoalConfig | undefined;
   __getMaxRetriesConfigured?(): boolean;
   __getMaxProcessorRetries?(): number | undefined;
@@ -851,6 +852,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is

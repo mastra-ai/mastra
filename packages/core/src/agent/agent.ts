@@ -1158,6 +1158,12 @@ export class Agent<
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
   }
 
+  /** @internal */
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void {
+    const pubsub = this.getPubSub();
+    return (runId, listener) => agentThreadStreamRuntime.subscribePendingSignals(runId, listener, pubsub);
+  }
+
   /**
    * Registers the agent the shared `AgentThreadStreamRuntime` calls back into
    * for this agent's signal, message, and subscription APIs. The runtime starts
