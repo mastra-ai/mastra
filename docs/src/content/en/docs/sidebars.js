@@ -760,7 +760,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Integrations',
+      label: 'Connect',
       collapsed: true,
       customProps: {
         tags: ['new'],
@@ -769,7 +769,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'mastra-platform/integrations',
-          label: 'Overview',
+          label: 'Integrations',
         },
         {
           type: 'doc',
