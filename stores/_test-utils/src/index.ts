@@ -11,3 +11,4 @@ export * from './client-acceptance';
 export * from './domain-tests';
 export * from './index-config';
 export * from './composite-tests';
+export { createSpanQueryTests } from './domains/observability-vnext/span-query';

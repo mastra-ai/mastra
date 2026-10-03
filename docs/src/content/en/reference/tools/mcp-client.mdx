@@ -516,6 +516,23 @@ const instructionsByServer = mcp.getServerInstructions()
 console.log(instructionsByServer.db)
 ```
 
+### `getServerInfo()`
+
+Returns the identity each configured MCP server announced when it connected (its `serverInfo`, from the `server/discover` result or, for servers on an older revision, the `initialize` handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. A server's entry is `undefined` if it hasn't connected yet, or if it connected over the `2026-07-28` revision without announcing an identity, which that revision allows. Don't use it to check whether a server is connected. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
+
+```typescript oxfmt:false
+getServerInfo(): Record<string, MCPServerImplementation | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const info = mcp.getServerInfo()
+console.log(info.myServer?.title, info.myServer?.version)
+```
+
 ### `authenticate()`
 
 Runs the interactive OAuth authorization-code flow for a server whose `MCPOAuthClientProvider` uses a loopback redirect URL. A local callback server passes the authorization URL to the provider's `onRedirectToAuthorization` callback and waits for the browser to return the code. It then exchanges the code for tokens and reconnects. See [Interactive browser authentication](#interactive-browser-authentication).

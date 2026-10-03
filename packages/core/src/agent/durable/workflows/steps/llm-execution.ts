@@ -2,6 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
+import { serializeError } from '../../../../events/codec/error';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
@@ -14,6 +15,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
+import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
@@ -23,14 +25,8 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
-import type {
-  SpanType,
-  AIModelGenerationSpan,
-  ExportedSpan,
-  IModelSpanTracker,
-  AnySpan,
-} from '../../../../observability';
-import { EntityType } from '../../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan } from '../../../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import { getRootExportSpan, getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -75,6 +71,20 @@ function resolveTotalTimeoutAbort(signal: AbortSignal | undefined, error?: Error
   if (isMastraTimeoutError(reason) && reason.timeoutType === 'total') return reason;
   if (isMastraTimeoutError(error) && error.timeoutType === 'total') return error;
   return undefined;
+}
+
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
 }
 
 /**
@@ -274,14 +284,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             from: ChunkFrom.AGENT,
             // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
             // transports, which destroys the producer stack and makes crashes
-            // unattributable on the consumer side.
-            payload: {
-              error: {
-                message: fatalError.message,
-                stack: fatalError.stack,
-                name: fatalError.name,
-              },
-            },
+            // unattributable on the consumer side. Own fields (statusCode, ...)
+            // are kept so the caller sees the full provider error.
+            payload: { error: serializeError(fatalError) },
           });
 
           // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
@@ -1316,6 +1321,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // llm-execution tool-result case. Lazy: most streams carry no
             // provider tool results.
             let toolResultTripwire: TripWire | null = null;
+            let outputStreamBlocked = false;
             let toolResultRunner: ProcessorRunner | undefined;
             const getToolResultRunner = (): ProcessorRunner => {
               toolResultRunner ??= new ProcessorRunner({
@@ -1338,6 +1344,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ) => {
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                     await emitChunkEvent(pubsub, runId, data as any);
+                  },
+                }
+              : undefined;
+            const outputStreamWriter = pubsub
+              ? {
+                  custom: async (
+                    data: { type: string; data?: unknown; transient?: boolean },
+                    writerOptions?: { messageId?: string },
+                  ) => {
+                    persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
+                    try {
+                      await emitChunkEvent(pubsub, runId, data as any, true);
+                    } catch (error) {
+                      throw new DurableChunkPublishError(error);
+                    }
                   },
                 }
               : undefined;
@@ -1595,6 +1616,48 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
+                  } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                    try {
+                      await processAndEmitChunk(clientChunk, {
+                        runner: getToolResultRunner(),
+                        processorStates: registryEntry.processorStates,
+                        observabilityContext: createObservabilityContext(
+                          modelSpanTracker?.getTracingContext() ?? tracingContext,
+                        ),
+                        requestContext,
+                        messageList,
+                        streamWriter: outputStreamWriter,
+                        emitChunk: async chunk => {
+                          // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
+                          if (chunk.type === 'tripwire') {
+                            outputStreamBlocked = true;
+                          }
+                          try {
+                            await emitChunkEvent(pubsub, runId, chunk, true);
+                          } catch (error) {
+                            throw new DurableChunkPublishError(error);
+                          }
+                        },
+                        onProcessorError: error => {
+                          if (error instanceof DurableChunkPublishError) {
+                            throw error.cause;
+                          }
+                          throw new DurableOutputProcessorError(error);
+                        },
+                      });
+                    } catch (error) {
+                      if (error instanceof DurableOutputProcessorError) {
+                        const processorError = error.cause instanceof Error ? error.cause : error;
+                        // Keep already-published output and the error record; the failing chunk was never collected.
+                        terminalAttemptContext?.recordTerminalError(processorError);
+                        return emitFatalErrorBail(processorError, currentModel.modelId);
+                      }
+                      throw error;
+                    }
+                    // A blocked chunk ends the stream: it is never collected, and later chunks are never published.
+                    if (outputStreamBlocked) {
+                      break;
+                    }
                   } else {
                     await emitChunkEvent(pubsub, runId, clientChunk);
                   }
@@ -1812,6 +1875,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'error': {
                     const payload = rawChunk.payload as any;
+                    // Pass the provider error through unchanged (keeps statusCode,
+                    // isRetryable, responseBody, ...) so error processors and the
+                    // caller see the same error the regular engine surfaces.
+                    if (payload?.error instanceof Error) {
+                      throw payload.error;
+                    }
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
                     const errorObj = new Error(errorMessage, { cause: payload?.error ?? payload });
                     // Keep the producer's stack so crashes stay attributable to their real throw site.
@@ -1973,8 +2042,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // A processToolResult tripwire fired mid-stream (#14282 parity port):
             // the raw provider tool result was never emitted nor persisted. Join
             // the shared tripwire bail path (mirrors processLLMResponse below).
-            if (toolResultTripwire) {
-              if (pubsub) {
+            // A blocked output-stream chunk joins the same path; its tripwire
+            // chunk was already published by processAndEmitChunk.
+            if (toolResultTripwire || outputStreamBlocked) {
+              if (toolResultTripwire && pubsub) {
                 await emitChunkEvent(pubsub, runId, {
                   type: 'tripwire',
                   runId,

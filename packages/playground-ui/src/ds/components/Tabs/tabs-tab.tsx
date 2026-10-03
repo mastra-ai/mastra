@@ -16,6 +16,8 @@ export type TabProps = {
   disabled?: boolean;
   attention?: boolean;
   disabledTooltip?: React.ReactNode;
+  /** Tooltip shown on hover and keyboard focus of an enabled tab (e.g. when its label is collapsed to an icon). */
+  tooltip?: React.ReactNode;
   className?: string;
 };
 
@@ -26,6 +28,7 @@ export const Tab = ({
   onClose,
   disabled,
   disabledTooltip,
+  tooltip,
   attention = false,
   className,
 }: TabProps) => {
@@ -109,6 +112,15 @@ export const Tab = ({
       <Tooltip>
         <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (tooltip && !disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={tab} />
+        <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
     );
   }

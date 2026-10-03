@@ -9,6 +9,8 @@ import {
   evaluateTraceAggregateRequest,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
+  TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   traceAggregatePercentile,
   traceAggregateResponseMismatch,
 } from './trace-aggregate';
@@ -313,5 +315,64 @@ describe('trace-aggregate conformance cases', () => {
       expect(aggregate.rows.length, testCase.name).toBe(traces.traces.length === 0 ? 0 : 1);
       expect(counted, testCase.name).toBe(traces.traces.length);
     }
+  });
+});
+
+describe('trace-aggregate token and cost conformance cases', () => {
+  it('uses case names unique across both suites', () => {
+    const names = [...TRACE_AGGREGATE_CONFORMANCE_CASES, ...TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES].map(
+      testCase => testCase.name,
+    );
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it.each(TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(TRACE_AGGREGATE_TOKEN_FIXTURE_DATA, testCase.request, testCase.scope);
+    expect(actual).toEqual(testCase.expected);
+    expect(traceAggregateResponseMismatch(actual, testCase)).toBeNull();
+  });
+
+  it('hand-written expectations satisfy the response contract and attach row cost to cost requests', () => {
+    for (const testCase of TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES) {
+      expect(() => traceAggregateResponseSchema.parse(testCase.expected), testCase.name).not.toThrow();
+      expect(testCase.tolerance, testCase.name).toBeUndefined();
+      const requested = testCase.request.measures;
+      const hasCost = requested.some(measure => measure.startsWith('cost.'));
+      for (const row of testCase.expected.rows) {
+        expect(Object.keys(row.measures).sort(), testCase.name).toEqual([...requested].sort());
+        expect(row.cost !== undefined, testCase.name).toBe(hasCost);
+      }
+    }
+  });
+
+  it('counts exactly the traces evaluateTraceQuery returns for the token fixture', () => {
+    // Trace queries are capped at 31 days; August holds every token trace but `early-1` and
+    // `tenant-check`, and the resumed trace counts once.
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+    const traces = evaluateTraceQuery(
+      TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+      planTraceQuery(parseTraceQueryRequest({ timeRange })),
+    );
+    if (!('traces' in traces)) throw new Error('Expected traces');
+    const aggregate = evaluateTraceAggregateRequest(TRACE_AGGREGATE_TOKEN_FIXTURE_DATA, {
+      timeRange,
+      measures: ['count'],
+    });
+    expect(aggregate.rows).toEqual([{ measures: { count: traces.traces.length } }]);
+    expect(traces.traces.length).toBe(11);
+  });
+
+  it('counts duplicate metricId rows once', () => {
+    const data = {
+      ...TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+      metrics: TRACE_AGGREGATE_TOKEN_FIXTURE_DATA.metrics!.filter(metric => metric.traceId === 'sup-1'),
+    };
+    const response = evaluateTraceAggregateRequest(data, {
+      timeRange: { from: '2026-08-14T00:00:00Z', to: '2026-08-15T00:00:00Z' },
+      where: { op: 'eq', left: { path: 'entityName' }, right: { literal: 'support' } },
+      measures: ['tokens.input.sum'],
+    });
+    // sup-1 has two `sup-1-in` rows (1000 each) and sup-2 has no metric rows in this slice.
+    expect(response.rows).toEqual([{ measures: { 'tokens.input.sum': 1000 } }]);
   });
 });

@@ -358,7 +358,7 @@ export const mastra = new Mastra({
 
 **Type:** `Record<string, MastraMemory>`
 
-A registry of memory instances that can be referenced by agents. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports message history for recent messages and working memory for persistent user-specific details. Semantic recall retrieves older messages based on relevance.
+A registry of memory instances that can be referenced by agents, including stored agents that use `{ type: 'id', memoryId: '<key>' }`. Memory gives agents coherence across interactions by retaining relevant information from past conversations. Mastra supports message history for recent messages and working memory for persistent user-specific details. Semantic recall retrieves older messages based on relevance.
 
 Visit the [Memory documentation](/docs/memory/overview) to learn more.
 

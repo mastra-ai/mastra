@@ -91,9 +91,16 @@ const durableToolCallInputSchema = z.object({
  * validation defaults). If validation is enabled, an undeclared field would
  * be silently stripped at the boundary — declare new output fields here.
  */
+const serializedErrorSchema = z.object({
+  name: z.string(),
+  message: z.string(),
+  stack: z.string().optional(),
+});
+
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  mappingError: serializedErrorSchema.optional(),
   // Set when execution was interrupted by request abort (not a tool error); no result/error
   // so the mapping step leaves the call incomplete.
   // Mirrors the non-durable tool-call output schema.
@@ -101,13 +108,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
-  error: z
-    .object({
-      name: z.string(),
-      message: z.string(),
-      stack: z.string().optional(),
-    })
-    .optional(),
+  error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
   approval: z
@@ -199,6 +200,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
+}
+
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
@@ -247,7 +262,11 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            try {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            } catch (error) {
+              throw new DurableChunkPublishError(error);
+            }
           },
         }
       : undefined,
@@ -256,17 +275,19 @@ async function processChunkThroughOutputProcessors(
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
-        await emitChunkEvent(pubsub, runId, c, !!runner);
+        try {
+          await emitChunkEvent(pubsub, runId, c, !!runner);
+        } catch (error) {
+          throw new DurableChunkPublishError(error);
+        }
       }
     },
     onProcessorError: error => {
-      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-      // Fail closed: drop the chunk instead of emitting the unprocessed
-      // original — a throwing redaction processor must not leak the raw
-      // value. The regular loop registers no fallback at all (processor
-      // failures propagate and fail the request); this engine keeps the
-      // run alive but suppresses the chunk.
-      return null;
+      // Publication failures keep the callers' non-fatal emission path.
+      if (error instanceof DurableChunkPublishError) {
+        throw error.cause;
+      }
+      throw new DurableOutputProcessorError(error);
     },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
@@ -935,6 +956,9 @@ export function createDurableToolCallStep() {
                 collectProcessorDataPart,
               );
             } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
           }
@@ -1631,6 +1655,7 @@ export function createDurableToolCallStep() {
         }
         return bailed;
       };
+      let mappingFailure: { error: unknown } | undefined;
 
       try {
         const outcome = await executeToolCall({
@@ -1698,7 +1723,8 @@ export function createDurableToolCallStep() {
             }
           } catch (mappingError) {
             mappingSpan?.error({ error: mappingError as Error, endSpan: true });
-            logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
+            mappingFailure = { error: mappingError };
+            throw mappingError;
           }
         }
 
@@ -1845,6 +1871,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
         }
@@ -1860,11 +1889,18 @@ export function createDurableToolCallStep() {
           ...(consumeDelegationBailSignal() ? { delegationBailed: true } : {}),
         };
       } catch (error) {
-        // Re-throw FGA authorization errors instead of swallowing them —
-        // an authorization denial must fail the run, not be serialized as a
-        // recoverable tool error for the LLM to retry (mirrors the
-        // non-durable tool-call step).
-        if (error instanceof Error && error.name === 'FGADeniedError') {
+        if (mappingFailure?.error === error) {
+          return {
+            ...typedInput,
+            mappingError: serializeError(error),
+          };
+        }
+        // Output processor failures and authorization denials must fail the run
+        // instead of being serialized as recoverable tool errors.
+        if (
+          error instanceof DurableOutputProcessorError ||
+          (error instanceof Error && error.name === 'FGADeniedError')
+        ) {
           throw error;
         }
         const toolError = serializeError(error);
@@ -1904,6 +1940,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
         }

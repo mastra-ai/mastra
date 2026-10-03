@@ -172,6 +172,7 @@ export type StorageRequest =
       newNextFireAt: number;
       lastFireAt: number;
       lastRunId: string;
+      newStatus?: string;
     }
   | {
       op: 'updateSchedule';

@@ -4,14 +4,16 @@
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
+import { askUserTool } from '../../../tools/builtin/ask-user';
 import { Agent } from '../../agent';
+import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
@@ -110,6 +112,89 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     });
     const resultIndex = chunks.findIndex(c => c.type === 'tool-result' && c.payload.toolCallId === 'tc-1');
     expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
+  }, 30000);
+
+  it('preserves suspension resume data when a cold resume disables approval', async () => {
+    const memory = { thread: 'durable-cold-resume', resource: 'r' };
+    const store = new InMemoryStore();
+    const modelPrompts: unknown[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        modelPrompts.push(prompt);
+        const hasResult = JSON.stringify(prompt).includes('User answered: Hilton');
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream<any>([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'm', modelId: 'mock-model', timestamp: new Date(0) },
+            ...(hasResult
+              ? [
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'received Hilton' },
+                  { type: 'text-end', id: 't' },
+                  { type: 'finish', finishReason: 'stop', usage },
+                ]
+              : [
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'tc-1',
+                    toolName: 'ask_user',
+                    input: JSON.stringify({ question: 'hotel?' }),
+                  },
+                  { type: 'finish', finishReason: 'tool-calls', usage },
+                ]),
+          ]),
+        };
+      },
+    });
+    const createAgent = () => {
+      const agent = new Agent({
+        id: 'cold-resume-asker',
+        name: 'cold-resume-asker',
+        instructions: 'ask',
+        model: model as LanguageModelV2,
+        memory: new MockMemory(),
+        tools: { ask_user: askUserTool },
+      });
+      const durableAgent = createDurableAgent({ agent, pubsub });
+      new Mastra({ agents: { durableAgent }, storage: store, logger: false });
+      return durableAgent;
+    };
+
+    const firstAgent = createAgent();
+    const stream = await firstAgent.stream('ask', { memory, maxSteps: 3, requireToolApproval: () => false });
+    await runUntil(stream, 'tool-call-suspended');
+    const workflows = (await store.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: stream.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+      expect(snapshot?.context?.input?.options?.requireToolApproval).toBe(true);
+    });
+    await pubsub.close();
+    pubsub = new EventEmitterPubSub();
+    globalRunRegistry.clear();
+
+    const secondAgent = createAgent();
+    await secondAgent.sendStreamResume({
+      threadId: memory.thread,
+      resourceId: memory.resource,
+      runId: stream.runId,
+      toolCallId: 'tc-1',
+      resumeData: 'Hilton',
+      streamOptions: { memory, maxSteps: 3, requireToolApproval: false },
+    });
+
+    await vi.waitFor(() => expect(modelPrompts).toHaveLength(2));
+    const resumedPrompt = JSON.stringify(modelPrompts[1]);
+    expect(resumedPrompt).toContain('User answered: Hilton');
+    expect(resumedPrompt).not.toContain('Tool input validation failed');
+    expect(resumedPrompt).not.toContain('"approved":true');
   }, 30000);
 
   it('emits an approval tool-call-resumed when an approval-gated call is approved', async () => {
