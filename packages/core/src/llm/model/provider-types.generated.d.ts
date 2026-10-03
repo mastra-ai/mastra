@@ -720,7 +720,6 @@ export type ProviderModelsMap = {
     'inference-net/schematron-v2-turbo',
     'inflatebot/MN-12B-Mag-Mell-R1',
     'kimi-k2-instruct-fast',
-    'kitani/clover-1-150b',
     'lightonai/LightOnOCR-2-1B',
     'liquid/lfm-2.5-2.6b',
     'longcat-2.0',
