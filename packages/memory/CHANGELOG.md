@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.36.0-alpha.2
+
+### Patch Changes
+
+- Fixed CPU usage that kept growing when observational memory was created per request. Apps that build a new `Memory` instance for each request no longer slow down over time on Node.js versions before 24. ([#25872](https://github.com/mastra-ai/mastra/pull/25872))
+
+- Fixed Observational Memory sending an oversized prompt when a large tool result pushed a step over the `messageTokens` threshold. Activating buffered observations could leave the newest messages unobserved and still above the threshold, and the next model call could exceed the model's context window (for example, failing with "prompt is too long"). Observational Memory now activates every buffered observation it needs, then observes any remaining messages synchronously when the context is still above the threshold. Fixes [#19767](https://github.com/mastra-ai/mastra/issues/19767). ([#25060](https://github.com/mastra-ai/mastra/pull/25060))
+
+- Updated dependencies [[`757b1e4`](https://github.com/mastra-ai/mastra/commit/757b1e48e8645fd99551b0af9e8ce1b415f876ea), [`b1a5896`](https://github.com/mastra-ai/mastra/commit/b1a5896196764500614cd435c48c6364a00e8726)]:
+  - @mastra/core@1.75.0-alpha.3
+
 ## 1.36.0-alpha.1
 
 ### Minor Changes
