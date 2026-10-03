@@ -589,16 +589,20 @@ export function validateToolInput<T = unknown>(
     }
   }
 
-  // All attempts failed - return the original (non-stripped) error since it's
-  // more informative about what the schema actually expects
-  const errorMessages = validation.issues
+  // All attempts failed. When nulls caused first-pass failures, report the
+  // path-stripped retry's issues: first-pass issues include nulls on optional
+  // fields that stripping already resolved, hiding the real failure (GitHub #24539).
+  // Otherwise the retry stripped every null (including valid .nullable() values),
+  // so the first-pass issues are the accurate ones.
+  const finalIssues = failingNullPaths.size > 0 ? retryValidation.issues : validation.issues;
+  const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: buildFormattedErrors<T>(validation.issues),
+    validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
   return { error };
@@ -702,11 +706,7 @@ export function validateRequestContext<T = any>(
   const standardSchema = toStandardSchema(schema);
 
   // Validate using standard schema interface
-  const validation = standardSchema['~standard'].validate(contextValues);
-
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(standardSchema, contextValues);
 
   if ('value' in validation) {
     return { data: validation.value };

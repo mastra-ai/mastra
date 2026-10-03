@@ -144,7 +144,6 @@ export function TraceSpanPanel({
       <TraceThreadPanel
         title={title}
         threadId={threadId}
-        anchorTraceId={traceId}
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}

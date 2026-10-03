@@ -1,6 +1,7 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -209,9 +210,9 @@ function CmsScorersEditForm({
           </div>
         </Notice>
       )}
-      <form ref={formRef} className="h-full">
+      <Form ref={formRef} className="h-full">
         <ScorerEditMain form={form} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }

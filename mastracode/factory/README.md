@@ -468,6 +468,12 @@ Reconciliation re-applies label-derived placement. The issue sweep replays an op
 
 A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its Review card closes and the Work item that wrote the code assesses whether it is finished. An opening pull request is evaluated the same way. Its own Review card is filed by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
 
+### GitHub CLI authentication in Factory sessions
+
+Factory offers `github_refresh_token` to sessions backed by an authorized GitHub repository, including Slack sessions that have no repository ID in controller state. The tool is visible before the sandbox starts, but it only works once the sandbox is running. Chat-only and GitLab-backed sessions do not get the tool.
+
+If a sandbox `gh` command fails authentication, run `github_refresh_token` and retry the failed command. It reloads the organization's stored GitHub credential into that sandbox (or obtains repository access when no personal access token is configured); it does not rotate or renew an expired or revoked personal access token. Replace an invalid token in Factory's GitHub integration settings before retrying. The tool does not refresh GitLab credentials or return the GitHub token.
+
 ### GitLab intake and source control
 
 Direct deployments can use either a GitLab Personal Access Token or Group Access Token. Both authenticate the GitLab API and Git-over-HTTPS in the same way; the difference is reach: a personal token follows the user's accessible projects, while a group token is limited to its group and subgroups. Configure the token with `api` and `write_repository` scopes so Factory can manage issues and merge requests, clone repositories, and push session branches.

@@ -270,6 +270,7 @@ const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
   neon: { label: 'Neon', tone: 'green' },
+  postgres: { label: 'Postgres', tone: 'blue' },
   mongodb: { label: 'MongoDB', tone: 'green' },
   redis: { label: 'Redis', tone: 'red' },
 };
