@@ -72,7 +72,7 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
 const drawerPopupVariants = cva(
   cn(
     'drawer-popup group/popup relative z-50 box-border flex [touch-action:auto] flex-col overflow-y-auto overscroll-contain will-change-transform outline-none',
-    'text-foreground',
+    'border-border text-foreground',
     dialogSurfaceStyle,
     'data-[swiping]:select-none',
     "after:pointer-events-none after:absolute after:inset-0 after:bg-transparent after:transition-[background-color] after:duration-[450ms] after:content-['']",
