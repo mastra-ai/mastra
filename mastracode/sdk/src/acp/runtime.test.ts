@@ -214,34 +214,37 @@ describe('ACP runtime factory', () => {
     expect(boot.storage.close).toHaveBeenCalledOnce();
   });
 
-  it.each(['resolve', 'reject'] as const)('continues teardown after two seconds even if dispatch later %ss', async late => {
-    vi.useFakeTimers();
-    const boot = bootResult();
-    const dispatch = deferred();
-    boot.stopNotificationDispatch.mockReturnValueOnce(dispatch.promise);
-    vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);
-    const runtime = await createAcpSession({ cwd: '/project', mcpServers: [] });
-    const cleanup = runtime.cleanup?.();
-    await vi.advanceTimersByTimeAsync(1_999);
-    expect(boot.stopWorkers).not.toHaveBeenCalled();
-    expect(boot.storage.close).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    await cleanup;
-    expect(boot.stopWorkers).toHaveBeenCalledOnce();
-    expect(boot.mcpManager.disconnect).toHaveBeenCalledOnce();
-    expect(boot.signalsPubSub.close).toHaveBeenCalledOnce();
-    expect(boot.storage.close).toHaveBeenCalledOnce();
-    expect(vi.getTimerCount()).toBe(0);
-    if (late === 'resolve') {
-      dispatch.resolve();
-      await dispatch.promise;
-    } else {
-      dispatch.reject(new Error('late dispatch failure'));
-      await vi.advanceTimersByTimeAsync(0);
-    }
-    await runtime.cleanup?.();
-    expect(boot.storage.close).toHaveBeenCalledOnce();
-  });
+  it.each(['resolve', 'reject'] as const)(
+    'continues teardown after two seconds even if dispatch later %ss',
+    async late => {
+      vi.useFakeTimers();
+      const boot = bootResult();
+      const dispatch = deferred();
+      boot.stopNotificationDispatch.mockReturnValueOnce(dispatch.promise);
+      vi.mocked(createMastraCode).mockResolvedValueOnce(boot as never);
+      const runtime = await createAcpSession({ cwd: '/project', mcpServers: [] });
+      const cleanup = runtime.cleanup?.();
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(boot.stopWorkers).not.toHaveBeenCalled();
+      expect(boot.storage.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await cleanup;
+      expect(boot.stopWorkers).toHaveBeenCalledOnce();
+      expect(boot.mcpManager.disconnect).toHaveBeenCalledOnce();
+      expect(boot.signalsPubSub.close).toHaveBeenCalledOnce();
+      expect(boot.storage.close).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+      if (late === 'resolve') {
+        dispatch.resolve();
+        await dispatch.promise;
+      } else {
+        dispatch.reject(new Error('late dispatch failure'));
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      await runtime.cleanup?.();
+      expect(boot.storage.close).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each(['reject', 'throw'] as const)('continues every cleanup phase when teardown hooks %s', async failure => {
     vi.useFakeTimers();
