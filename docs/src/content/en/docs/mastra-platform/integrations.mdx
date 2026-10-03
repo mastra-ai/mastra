@@ -27,6 +27,18 @@ Connect providers from your project's **Integrations** tab in the [platform dash
 
 A running server using [`tools()`](/reference/connect/tools) picks up the new connection within the resolver's TTL (30 seconds by default) with no restart or redeploy. Disconnecting an integration drops its tools the same way.
 
+### From the CLI
+
+The [`mastra connect`](/reference/cli/mastra) command manages the same connections from the terminal:
+
+```bash
+mastra connect list           # providers and their connection status
+mastra connect add linear     # run the provider's authorization flow
+mastra connect remove linear  # unlink a connection from the project
+```
+
+`add` opens OAuth consent screens in your browser and waits for the connection to become active; API-key and Basic auth providers prompt for credentials inline. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`. Removing a connection unlinks it from the project but keeps the organization-level connection, so it can be re-attached later.
+
 ### Multiple connections
 
 A project can hold several connections to the same provider. At runtime, `@mastra/connect` resolves which connection a tool call uses:
@@ -37,7 +49,7 @@ A project can hold several connections to the same provider. At runtime, `@mastr
 
 ### Re-authentication
 
-When a provider revokes or expires a connection's credentials, the connection enters `needs_reauth` status. It is never silently mapped: `tools()` skips it with a warning until someone reconnects it in the dashboard. Fix it by re-running the provider's authorization flow from the Integrations tab.
+When a provider revokes or expires a connection's credentials, the connection enters `needs_reauth` status. It is never silently mapped: `tools()` skips it with a warning until someone reconnects it. Fix it by re-running the provider's authorization flow from the Integrations tab or with `mastra connect add <provider>`.
 
 ## Security model
 
