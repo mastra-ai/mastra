@@ -296,8 +296,8 @@ export abstract class SchedulesStorage extends StorageDomain {
    * was advanced to `newNextFireAt`. Returns false if another instance
    * already advanced it (meaning the caller should skip publishing).
    *
-   * When `newStatus` is provided the row's status is written in the same
-   * atomic update (used to mark one-off / bounded schedules `completed`).
+   * When `newStatus` is provided, the row's status is written in the same
+   * atomic update.
    */
   abstract updateScheduleNextFire(
     id: string,

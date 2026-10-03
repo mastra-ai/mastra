@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
@@ -36,6 +37,7 @@ import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
 import type {
+  AgentAbortEventData,
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
@@ -573,6 +575,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback when the recovered run errors */
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when the recovered run is aborted */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /**
@@ -960,6 +964,13 @@ export class DurableAgent<
         onError: async error => {
           await options?.onError?.(error);
           scheduleAutoCleanup();
+        },
+        onAbort: async data => {
+          try {
+            await options?.onAbort?.(data);
+          } finally {
+            scheduleAutoCleanup();
+          }
         },
         onSuspended: options?.onSuspended,
         // Keep recovered runs observable if they suspend again so a later
@@ -1973,6 +1984,13 @@ export class DurableAgent<
    * intent nothing reads and lets the run stream on.
    */
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+
     // Resolve the run before the base call: aborting releases the thread lease,
     // after which the thread no longer has an active run to look up.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
@@ -1994,6 +2012,12 @@ export class DurableAgent<
    * is still covered by the intent the base implementation records.
    */
   abortRunStream(runId: string): boolean {
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+
     const aborted = super.abortRunStream(runId);
     this.#abortDurableRun(runId);
 
@@ -2708,6 +2732,8 @@ export class DurableAgent<
     const {
       output,
       cleanup: createdStreamCleanup,
+      detach: detachResumeStream,
+      waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -2731,8 +2757,18 @@ export class DurableAgent<
         await resolvedOptions.onError?.(error);
         scheduleAutoCleanup();
       },
+      onAbort: async data => {
+        try {
+          await resolvedOptions.onAbort?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
       onSuspended: resolvedOptions.onSuspended,
-      closeOnSuspend,
+      // Resume segments settle at the persisted workflow result below. A sibling
+      // that was already suspended may not emit another SUSPENDED event, while
+      // evented execution may emit one before its snapshot is safe to resume.
+      closeOnSuspend: false,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       requestContext: resolvedOptions.requestContext,
@@ -2782,6 +2818,16 @@ export class DurableAgent<
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           this.emitErrorInBackground(runId, error);
+        }
+        if (result?.status === 'suspended' && closeOnSuspend) {
+          // The workflow result is the authoritative persisted suspension boundary.
+          // Flush transport buffers, then wait for callbacks already delivered to
+          // this observer before closing only the resume segment. This preserves
+          // onSuspended delivery without advancing queued resumes against a stale
+          // sibling snapshot.
+          await this.pubsub.flush();
+          await waitForEventDelivery();
+          detachResumeStream();
         }
         // Same snapshot cleanup as the initial `start()` path: once resume
         // settles on any non-suspended terminal status the persisted rows are
@@ -3757,6 +3803,7 @@ export class DurableAgent<
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+      onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
@@ -3831,7 +3878,13 @@ export class DurableAgent<
           if (runDead !== false) completeTerminalLifecycle();
         }
       },
-      onAbort: completeTerminalLifecycle,
+      onAbort: async data => {
+        try {
+          await options?.onAbort?.(data);
+        } finally {
+          completeTerminalLifecycle();
+        }
+      },
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
@@ -3947,21 +4000,21 @@ export class DurableAgent<
   }
 
   /**
-   * Read the current number of cached events for this run's stream topic.
-   * Used by `resume()` as the subscription offset so we don't re-deliver
-   * events emitted by the original run (notably the SUSPENDED chunk that
-   * paused it).
+   * Resolve the replay position for this run's stream topic.
+   * Returns the cached event count when history is available, or `latest` when it is unavailable.
+   * Resume and recovery use this position so they don't re-deliver events emitted by the prior segment
+   * (notably the SUSPENDED chunk that paused it) from a persistent transport.
    */
-  async #getPubsubOffset(runId: string): Promise<number> {
+  async #getPubsubOffset(runId: string): Promise<number | 'latest'> {
     const pubsub = this.pubsub as PubSub & {
       getHistory?: (topic: string) => Promise<unknown[]>;
     };
-    if (typeof pubsub.getHistory !== 'function') return 0;
+    if (typeof pubsub.getHistory !== 'function') return 'latest';
     try {
       const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) ? history.length : 0;
+      return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
     } catch {
-      return 0;
+      return 'latest';
     }
   }
 

@@ -336,7 +336,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
         if (await blocksWouldPreventSave(values)) return;
 
         const sharedParams = await buildSharedParams(values);
-        const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+        const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
 
         if (needsCreate) {
           // First save for a code agent — create the stored override.
@@ -428,7 +428,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions, requestContext?
           } else if (needsCreate) {
             // First publish for a code agent — create and immediately publish
             const sharedParams = await buildSharedParams(values);
-            const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+            const editMemory = isCodeAgentOverride ? undefined : (values.memoryRef ?? buildMemoryParams(values));
             const createParams: CreateStoredAgentParams = {
               id: options.agentId,
               ...sharedParams,

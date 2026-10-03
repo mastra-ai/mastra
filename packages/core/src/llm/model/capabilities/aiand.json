@@ -1,14 +1,17 @@
 {
   "attachment": [
+    "deepseek-ai/deepseek-v4.1-flash",
     "google/gemma-4-31b-it",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
     "qwen/qwen3.6-27b",
-    "qwen/qwen3.8-27b"
+    "qwen/qwen3.8-27b",
+    "zai-org/glm-5.3-flash"
   ],
   "temperature": [
     "deepseek-ai/deepseek-v4-flash",
     "deepseek-ai/deepseek-v4-pro",
+    "deepseek-ai/deepseek-v4.1-flash",
     "google/gemma-4-31b-it",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
@@ -17,11 +20,13 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
     "zai-org/glm-5.2",
-    "zai-org/glm-5.3"
+    "zai-org/glm-5.3",
+    "zai-org/glm-5.3-flash"
   ],
   "structuredOutput": [
     "deepseek-ai/deepseek-v4-flash",
     "deepseek-ai/deepseek-v4-pro",
+    "deepseek-ai/deepseek-v4.1-flash",
     "google/gemma-4-31b-it",
     "moonshotai/kimi-k2.7-code",
     "moonshotai/kimi-k3",
@@ -29,6 +34,7 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
     "zai-org/glm-5.2",
-    "zai-org/glm-5.3"
+    "zai-org/glm-5.3",
+    "zai-org/glm-5.3-flash"
   ]
 }

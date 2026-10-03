@@ -1,0 +1,23 @@
+{
+  "attachment": ["deepseek-v4.1-flash", "glm-5.3-flash", "kimi-k3", "qwen3.8-27b"],
+  "temperature": [
+    "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "kimi-k3",
+    "qwen3.6-35b-a3b",
+    "qwen3.8-27b"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "kimi-k3",
+    "qwen3.6-35b-a3b",
+    "qwen3.8-27b"
+  ]
+}

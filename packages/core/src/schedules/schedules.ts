@@ -70,14 +70,24 @@ function resolveCreateTiming(input: {
   nextFireAt: number;
   completed: boolean;
 } {
+  const runAt = input.runAt !== undefined ? toEpochMs(input.runAt) : undefined;
+  const endAt = input.endAt !== undefined ? toEpochMs(input.endAt) : undefined;
+  let nextFireAt: number;
+  let completed: boolean;
   try {
     validateScheduleTiming(input);
+    // A cadence whose final occurrence has already passed is rejected rather
+    // than persisted: the row could never run, so nothing is gained by storing
+    // it. Editing an existing schedule is different — those rows go terminal.
+    ({ nextFireAt, completed } = computeInitialFire({
+      cron: input.cron,
+      timezone: input.timezone,
+      runAt,
+      endAt,
+    }));
   } catch (err) {
     throw invalidTiming(err, 'create');
   }
-  const runAt = input.runAt !== undefined ? toEpochMs(input.runAt) : undefined;
-  const endAt = input.endAt !== undefined ? toEpochMs(input.endAt) : undefined;
-  const { nextFireAt, completed } = computeInitialFire({ cron: input.cron, timezone: input.timezone, runAt, endAt });
   return {
     fields: {
       cron: input.cron ?? '',
@@ -302,6 +312,10 @@ export interface ListSchedulesFilter {
   resourceId?: string;
   /** Agent-schedule only: match the free-form target name. */
   name?: string;
+  /**
+   * Return only schedules with this status. Completed schedules are omitted
+   * from the result unless this is set.
+   */
   status?: ScheduleStatus;
 }
 
@@ -584,7 +598,10 @@ export class Schedules {
     // resume(): a paused row carries a stale nextFireAt (often in the past),
     // so flipping status back to 'active' without recomputing would trigger
     // an immediate spurious fire instead of waiting for the next cron tick.
-    // A completed schedule can only be reactivated by changing its timing.
+    // A completed schedule can only be reactivated by changing its timing: a
+    // completed row whose cadence is edited comes back as `active` when the new
+    // cadence has future occurrences, and stays `completed` when it has none.
+    // Lifecycle-only patches cannot resume a completed row.
     const timingChanged = isOneOff
       ? patch.runAt !== undefined && nextRunAt !== existing.runAt
       : patch.cron !== undefined || patch.timezone !== undefined || patch.endAt !== undefined;
@@ -608,7 +625,11 @@ export class Schedules {
           Date.now(),
         );
         nextFireAt = next.nextFireAt;
-        if (nextStatus === 'active' && next.completed) nextStatus = 'completed';
+        // An edit that leaves the row with no future occurrence is accepted, but
+        // the row cannot stay runnable: the cadence is exhausted, so the row is
+        // terminal regardless of its previous or requested status. `nextFireAt`
+        // is retained as the last known occurrence.
+        if (next.completed) nextStatus = 'completed';
       }
     }
 
@@ -736,6 +757,8 @@ export class Schedules {
       const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt: existing.runAt });
       return toScheduleView(updated)!;
     }
+    // A paused schedule whose cadence has run out has nothing left to resume.
+    // Complete it instead of failing with a server error.
     const { nextFireAt, completed: exhausted } = computeNextFire(existing, Date.now());
     if (exhausted) {
       const completed = await store.updateSchedule(existing.id, { status: 'completed' });

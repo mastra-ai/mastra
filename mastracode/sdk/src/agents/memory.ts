@@ -8,6 +8,7 @@ import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { loadSettings } from '../onboarding/settings.js';
+import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel, resolvePackMemoryModelChain } from './model.js';
@@ -30,7 +31,8 @@ function resolveOmRoleModelForRequest(
 ): GatewayLanguageModel | PackMemoryModelChainEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
-  const resolveOptions = { remapForCodexOAuth: true, requestContext } as const;
+  // OM calls send different content every time, so only their shared instructions are worth caching.
+  const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
 
   // The configured settings file, not the default one: a caller that points the
   // agent at another settings path must get the same pack/override resolution
@@ -236,7 +238,8 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
               })
             : undefined,
           scope: omScope,
-          activateAfterIdle: 'auto',
+          // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
+          activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },
           activateOnProviderChange: true,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,

@@ -169,9 +169,9 @@ The underlying HTTP routes are `POST /api/schedules/:scheduleId/pause` and `POST
 
 When you change the `schedule` config and redeploy, Mastra diffs the existing schedule row against the new config:
 
-- If `cron` or `timezone` changed, `nextFireAt` is recomputed.
+- If `cron` or `timezone` changed, `nextFireAt` is recomputed. A cadence with no future occurrence completes the schedule. A recomputed cadence that can still fire reactivates a completed schedule.
 - If only `inputData`, `initialState`, or `metadata` changed, the row is patched in place and the next fire time is preserved.
-- User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten.
+- User-set status (for example, paused via `client.pauseSchedule`) and fire history are never overwritten, unless the cadence change above requires a status update.
 
 Removing a schedule entry from a workflow's `schedule` array deletes its row on the next boot.
 

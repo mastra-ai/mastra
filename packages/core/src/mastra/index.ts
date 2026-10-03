@@ -2243,7 +2243,11 @@ export class Mastra<
         const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
         const cron = cfg.cron ?? '';
         // A one-off whose `runAt` has already passed is recorded as completed
-        // rather than fired, so a fresh deploy never runs a stale one-off.
+        // rather than fired, so a fresh deploy never runs a stale one-off. A
+        // declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed): that row is registered as
+        // `completed` rather than skipped, so the deployment stays
+        // self-consistent instead of retrying a doomed write on every boot.
         const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
           if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
           const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
@@ -2270,7 +2274,9 @@ export class Mastra<
 
         // Diff config fields and patch the existing row if anything changed.
         // We deliberately leave `status` alone — a row may have been paused
-        // out-of-band via storage, and a redeploy shouldn't unpause it.
+        // out-of-band via storage, and a redeploy shouldn't unpause it. A
+        // recomputed cadence is the exception: it re-arms a completed row when
+        // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
         const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
@@ -2285,11 +2291,9 @@ export class Mastra<
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // A timing change invalidates the stored nextFireAt — recompute from
-        // now so we don't fire on the old schedule. A completed row is only
-        // re-armed by a timing change; an unchanged config never resurrects it.
-        // Otherwise `status` is left alone — a row may have been paused
-        // out-of-band, and a redeploy shouldn't unpause it.
+        // Any timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule, and re-arm or complete the
+        // row per the recomputed cadence.
         if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
           const timing = computeTiming();
           patch.nextFireAt = timing.nextFireAt;

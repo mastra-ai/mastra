@@ -10,8 +10,6 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 import { platformFilesystemProvider, platformSandboxProvider } from '@mastra/platform-workspace';
-import { RedisServerCache } from '@mastra/redis';
-import Redis from 'ioredis';
 import { agent, hasConnectEnv } from './agents/agent';
 import { startScheduleTool, stopScheduleTool } from './tools/schedule-tools';
 import { seedWelcomeThread } from './welcome';
@@ -20,11 +18,6 @@ import { activityDigestWorkflow } from './workflows/activity-digest';
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('DATABASE_URL is not set. Provide a Postgres connection string.');
-}
-
-const redisUrl = process.env.REDIS_URL;
-if (!redisUrl) {
-  throw new Error('REDIS_URL is not set. Redis backs the event cache so streams survive client disconnects.');
 }
 
 export const mastra = new Mastra({
@@ -39,9 +32,6 @@ export const mastra = new Mastra({
     id: 'mastra-storage',
     connectionString: databaseUrl,
   }),
-  // Redis-backed event cache: agent runs record their chunks here so late
-  // subscribers and reconnecting clients can replay missed events.
-  cache: new RedisServerCache({ client: new Redis(redisUrl) }),
   // Studio editing: agent overrides and workflow definitions persist as files
   // under ./mastra/editor (source: 'code'), the workflow builder authors
   // workflows from Studio, and the platform workspace providers let Studio

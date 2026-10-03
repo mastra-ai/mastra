@@ -69,8 +69,8 @@ const badgeToneStyles = {
   },
   success: { ...green, indicator: 'bg-success-indicator' },
   destructive: {
-    strong: 'bg-badge-red-strong text-destructive-foreground',
-    subtle: 'bg-badge-red-subtle text-destructive-foreground',
+    strong: 'bg-badge-red-strong text-badge-red-foreground',
+    subtle: 'bg-badge-red-subtle text-badge-red-foreground',
     indicator: 'bg-destructive-indicator',
   },
   info: { ...blue, indicator: 'bg-info-indicator' },

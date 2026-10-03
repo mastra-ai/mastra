@@ -1101,6 +1101,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         output,
         (streamOptions ?? {}) as AgentExecutionOptions<TOutput>,
         agent.getPubSub(),
+        streamOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
       );
 
       // 4. Return stream result - attach extra properties to output for compatibility
@@ -1267,6 +1268,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // and must not be published to the run's shared stream topic, which would close
       // the original run's stream too.
       let notResumable = false;
+      const didThreadRunPublishTerminal = agentThreadStreamRuntime.captureThreadRunTerminalPublish(
+        runId,
+        agent.getPubSub(),
+      );
 
       const dispatch = ready.then(async () => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
@@ -1385,6 +1390,42 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         streamCleanup();
         finalizeResumeRegistry();
         throw error;
+      }
+
+      const resumeMemory = (
+        resumeOptions as InngestAgentResumeOptions<TOutput> & {
+          memory?: AgentExecutionOptions<TOutput>['memory'];
+        }
+      )?.memory;
+      const thread = resumeOptions?.threadId ?? resumeMemory?.thread;
+      const resumeStreamOptions = {
+        ...(resumeOptions ?? {}),
+        runId,
+        ...(thread
+          ? {
+              memory: {
+                ...(resumeMemory ?? {}),
+                thread,
+                resource: resumeMemory?.resource ?? resumeOptions?.resourceId,
+              },
+            }
+          : {}),
+      } as AgentExecutionOptions<TOutput>;
+      const continued = agentThreadStreamRuntime.continueRun(
+        proxyRef as unknown as Agent<any, any, any, any>,
+        output,
+        resumeStreamOptions,
+        agent.getPubSub(),
+      );
+      const terminalPublishedDuringDispatch = !resumeOptions?.closeOnSuspend && didThreadRunPublishTerminal?.();
+      if (!continued && !terminalPublishedDuringDispatch) {
+        await agentThreadStreamRuntime.registerRun(
+          proxyRef as unknown as Agent<any, any, any, any>,
+          output,
+          resumeStreamOptions,
+          agent.getPubSub(),
+          resumeOptions?.closeOnSuspend ? undefined : { continuation: 'across-suspension' },
+        );
       }
 
       const abort = async (reason?: unknown) => {
@@ -1654,6 +1695,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
 
       let runId = executionOptions.runId ?? agent.getActiveThreadRunId({ threadId, resourceId });
+      let suspendedRun: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'][number] | undefined;
       if (!runId) {
         // listSuspendedRuns also queries this agent's durableLoopWorkflowName.
         let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'] = [];
@@ -1683,7 +1725,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             },
           });
         }
-        runId = matchingRuns[0]?.runId;
+        suspendedRun = matchingRuns[0];
+        runId = suspendedRun?.runId;
       }
 
       if (!runId) {
@@ -1698,12 +1741,84 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         });
       }
 
+      const inMemorySuspension = agentThreadStreamRuntime.getResumableThreadRunSuspension(
+        { threadId, resourceId, runId, toolCallId: options.toolCallId },
+        agent.getPubSub(),
+      );
+      if (!suspendedRun && !inMemorySuspension) {
+        let storageUnavailable = false;
+        const findTargetRun = async () => {
+          try {
+            const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+            return runs.find(
+              run =>
+                run.runId === runId &&
+                (!options.toolCallId || run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId)),
+            );
+          } catch (error) {
+            if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+              storageUnavailable = true;
+              return undefined;
+            }
+            throw error;
+          }
+        };
+
+        suspendedRun = await findTargetRun();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (!suspendedRun && !storageUnavailable && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          suspendedRun = await findTargetRun();
+        }
+        if (!suspendedRun && !storageUnavailable) {
+          throw new MastraError({
+            id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `Agent "${agent.name}" sendToolApproval() could not resolve suspended run "${runId}" before resuming it.`,
+            details: {
+              threadId,
+              resourceId,
+              runId,
+              agentName: agent.name,
+              ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+            },
+          });
+        }
+      }
+
+      const suspendedToolCall = options.toolCallId
+        ? suspendedRun?.toolCalls.find(toolCall => toolCall.toolCallId === options.toolCallId)
+        : suspendedRun?.toolCalls[0];
+      const approvalGated = inMemorySuspension
+        ? inMemorySuspension.kind === 'approval'
+        : suspendedToolCall?.requiresApproval === true;
+      const customResumeDataCanCarryApproval =
+        typeof customResumeData === 'object' && customResumeData !== null && !Array.isArray(customResumeData);
+      if (approvalGated && customResumeData !== undefined && !customResumeDataCanCarryApproval) {
+        throw new MastraError({
+          id: 'AGENT_SEND_TOOL_APPROVAL_INVALID_RESUME_DATA',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Agent "${agent.name}" sendToolApproval() requires custom resumeData to be a non-null object for an approval-gated tool call.`,
+          details: {
+            threadId,
+            resourceId,
+            runId,
+            agentName: agent.name,
+            ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+          },
+        });
+      }
+
       const resumeData =
         customResumeData !== undefined
-          ? customResumeData
+          ? approvalGated && customResumeDataCanCarryApproval
+            ? { ...customResumeData, ...(!approved && declineContext ? declineContext : {}), approved }
+            : customResumeData
           : approved
             ? { approved }
-            : { approved, ...(declineContext ?? {}) };
+            : { ...(declineContext ?? {}), approved };
       const resumeOptions = deepMerge(
         (streamOptions ?? {}) as Record<string, any>,
         executionOptions as Record<string, any>,

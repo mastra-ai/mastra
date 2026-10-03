@@ -1680,6 +1680,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            forEachIndex,
           },
         });
       } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
@@ -1754,6 +1755,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             initialState: currentState,
             state: currentState,
             outputOptions,
+            forEachIndex,
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
