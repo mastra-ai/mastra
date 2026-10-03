@@ -98,7 +98,7 @@ export function notificationDispatchLeaseKey(resourceId: string): string {
  * and a resource's notification dispatch lease.
  */
 function resourceOfLeaseKey(key: string): string | undefined {
-  if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX)) {
+  if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX) && !key.includes(THREAD_KEY_SEPARATOR)) {
     return requireSafePathSegment(key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length));
   }
   return resourceOfThreadKey(

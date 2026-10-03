@@ -287,6 +287,21 @@ describe('SignalsPubSub', () => {
     expect(mocks.instances.some(instance => instance.socketPath.includes('escape'))).toBe(false);
   });
 
+  it('routes thread leases whose resource id starts with the dispatch lease prefix', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const threadResource = 'notification-dispatch:alpha';
+    const threadKey = `${threadResource}\0thread-1`;
+    const pubsub = createSignalsPubSub('mastra-bbb');
+
+    await pubsub.getLeaseProvider().acquireLease(threadKey, 'run-1', 1000);
+    await pubsub.getLeaseProvider().getLeaseOwner(`thread-claim:${threadKey}`);
+
+    expect(findSocket(`/tmp/mc/${threadResource}/.leases.sock`)?.leaseKeys).toEqual([
+      threadKey,
+      `thread-claim:${threadKey}`,
+    ]);
+  });
+
   it("routes another resource's thread stream to that resource's directory", async () => {
     const { createSignalsPubSub } = await import('../signals-pubsub.js');
     const pubsub = createSignalsPubSub('mastra-bbb');
