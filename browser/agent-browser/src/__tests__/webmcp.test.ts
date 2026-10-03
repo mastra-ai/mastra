@@ -372,3 +372,113 @@ describe('WebMCP: delayed-navigation (TOCTOU) regression', () => {
     await browser.close();
   });
 });
+
+describe('WebMCP: attachWebMcpTools URL binding (regression)', () => {
+  // If the page navigates between the list call and the record store, the
+  // tools from page A would otherwise end up stamped with page B's URL,
+  // producing a mismatch the next step cannot invalidate.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects when the page navigates between list and store', async () => {
+    const urls = ['https://a.example/', 'https://a.example/', 'https://b.example/'];
+    let callIndex = 0;
+    mockPage.url.mockImplementation(() => urls[Math.min(callIndex++, urls.length - 1)]);
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'get_price', source: 'mcpb', description: 'd', inputSchema: { type: 'object' } },
+    ]);
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+    const result = await browser.attachWebMcpTools();
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/navigated/);
+    // No tools should have been stored under either URL.
+    expect(browser.getAttachedWebMcpTools()).toEqual([]);
+    await browser.close();
+  });
+});
+
+describe('WebMCP: attachWebMcpTools cache invalidation (regression)', () => {
+  // When attachWebMcpTools updates an existing tool record (same name + URL)
+  // with changed description or inputSchema, the prepare-step cache keyed on
+  // the attached-id set would otherwise return stale wrapper definitions.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://shop.test/');
+  });
+
+  it('rebuilds the prepare-step tool when a reattached tool changes its schema', async () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+
+    mockPage.evaluate.mockResolvedValueOnce([
+      {
+        name: 'add_to_cart',
+        source: 'mcpb',
+        description: 'v1',
+        inputSchema: { type: 'object', properties: { sku: { type: 'string' } } },
+      },
+    ]);
+    await browser.attachWebMcpTools();
+    const first = (await browser.prepareStep({ stepNumber: 1, tools: {} })) as {
+      tools: Record<string, { description?: string }>;
+    };
+    expect(first.tools.page_add_to_cart?.description).toBe('v1');
+
+    // Same name + URL, different description/schema. Attachment order
+    // (and ID set) is identical so an attached-key-based cache would hit;
+    // the invalidation must notice the structural change.
+    mockPage.evaluate.mockResolvedValueOnce([
+      {
+        name: 'add_to_cart',
+        source: 'mcpb',
+        description: 'v2',
+        inputSchema: {
+          type: 'object',
+          properties: { sku: { type: 'string' }, qty: { type: 'number' } },
+          required: ['sku', 'qty'],
+        },
+      },
+    ]);
+    await browser.attachWebMcpTools();
+    const second = (await browser.prepareStep({ stepNumber: 2, tools: {} })) as {
+      tools: Record<string, { description?: string }>;
+    };
+    expect(second.tools.page_add_to_cart?.description).toBe('v2');
+
+    await browser.close();
+  });
+});
+
+describe('WebMCP: close clears all state (regression)', () => {
+  // Reopening the browser to the same URL must not resurrect the previous
+  // session's prepare-step cache or attached-tool records.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://shop.test/');
+  });
+
+  it('clears prepare-step cache and attached tools on close', async () => {
+    const browser = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await browser.launch();
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'ping', source: 'mcpb', description: 'p', inputSchema: { type: 'object' } },
+    ]);
+    await browser.attachWebMcpTools();
+    expect(browser.getAttachedWebMcpTools().length).toBeGreaterThan(0);
+
+    await browser.close();
+    // After close, no tools should remain for any thread.
+    expect(browser.getAttachedWebMcpTools()).toEqual([]);
+  });
+});

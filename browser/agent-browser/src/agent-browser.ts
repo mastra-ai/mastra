@@ -348,6 +348,14 @@ export class AgentBrowser extends MastraBrowser {
       await this.sharedManager.close();
     }
     this.sharedManager = null;
+
+    // Drop all WebMCP state. closeThreadSession evicts per-thread, but a
+    // caller that only ever calls `browser.close()` would otherwise leave
+    // stale caches and attached-tool records around; and if the AgentBrowser
+    // is relaunched to the same URL, those records would reappear from a
+    // completely different browser session.
+    this.webMcpPrepareStepCache.clear();
+    this.manualAttached.clear();
   }
 
   override async closeThreadSession(threadId: string): Promise<void> {
@@ -1828,15 +1836,27 @@ export class AgentBrowser extends MastraBrowser {
         'Pass `webmcp: { enabled: true, toolDiscovery: "manual" }` in the AgentBrowser config.',
       );
     }
+    // Capture the page URL *before* listing so the attached record is bound
+    // to the page that actually supplied the tools. If navigation changes the
+    // page between list and store, the old tools don't get stamped with the
+    // new URL (and vice-versa).
+    const urlBeforeList = await this.getCurrentUrl(threadId);
     const listed = await this.listWebMcpTools(threadId);
     if (!('success' in listed) || listed.success !== true) {
       return listed;
     }
+    const urlAfterList = await this.getCurrentUrl(threadId);
+    if (urlBeforeList !== urlAfterList) {
+      return createError(
+        'browser_error',
+        'The page navigated while listing WebMCP tools; the attachment was rejected to avoid associating tools with the wrong page.',
+        'Retry browser_webmcp_discover now that the page has settled.',
+      );
+    }
+
     const prefix = this.webMcpSettings.toolPrefix;
     const key = threadId ?? DEFAULT_THREAD_ID;
-    // Record the page URL the tools came from so prepareStep can distinguish
-    // "attached for the current page" from "stale from a previous page".
-    const url = await this.getCurrentUrl(threadId);
+    const url = urlBeforeList;
     const existing = this.manualAttached.get(key);
     const record = existing && existing.url === url ? existing : { url, tools: new Map<string, AttachedPageTool>() };
 
@@ -1849,6 +1869,12 @@ export class AgentBrowser extends MastraBrowser {
       }
     }
 
+    // Track whether the attached set changed: a new tool id appeared, or an
+    // existing tool's description or schema differs. If anything changed we
+    // evict the thread's prepare-step cache so the next step sees the updated
+    // tool definitions (the cache key only covers URL + tool ids, so a schema
+    // or description edit under the same name would otherwise go unseen).
+    let attachedSetChanged = false;
     const attached: Array<{ rawName: string; id: string; description: string }> = [];
     for (const pageTool of listed.tools) {
       if (wanted && !wanted.has(pageTool.name)) continue;
@@ -1856,6 +1882,15 @@ export class AgentBrowser extends MastraBrowser {
       if (!id) continue;
       const description =
         pageTool.description ?? `WebMCP tool "${pageTool.name}" from ${listed.origin} (source: ${pageTool.source}).`;
+      const prev = record.tools.get(pageTool.name);
+      if (
+        !prev ||
+        prev.id !== id ||
+        prev.description !== description ||
+        !deepEqualJson(prev.inputSchema, pageTool.inputSchema)
+      ) {
+        attachedSetChanged = true;
+      }
       record.tools.set(pageTool.name, {
         rawName: pageTool.name,
         id,
@@ -1865,6 +1900,9 @@ export class AgentBrowser extends MastraBrowser {
       attached.push({ rawName: pageTool.name, id, description });
     }
     this.manualAttached.set(key, record);
+    if (attachedSetChanged) {
+      this.webMcpPrepareStepCache.delete(key);
+    }
 
     return {
       success: true,
@@ -2128,5 +2166,34 @@ function resolveWebMcpSettings(opts: WebmcpOptions | undefined): {
 
 /** No-op prepareStep used when WebMCP is disabled, so `browser.prepareStep` is always safe to wire. */
 const noopPrepareStep: WebMcpPrepareStepFn = () => undefined;
+
+/**
+ * Structural equality for JSON-ish values. Used to detect whether a tool's
+ * `inputSchema` has changed between successive attach calls, so the thread's
+ * prepare-step cache can be invalidated when the agent-visible schema would
+ * otherwise go stale.
+ */
+function deepEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) if (!deepEqualJson(a[i], b[i])) return false;
+    return true;
+  }
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(bObj, k)) return false;
+    if (!deepEqualJson(aObj[k], bObj[k])) return false;
+  }
+  return true;
+}
 
 export default AgentBrowser;

@@ -428,6 +428,59 @@ const BRIDGE_BODY = /* js */ `
   }
 
   // ---------------------------------------------------------------------
+  // Catalog caps. The agent toolset includes every tool a page lists, so
+  // without bounds a hostile or buggy page could inflate every model
+  // request with a huge tool catalog. Enforce fixed per-tool and
+  // aggregate limits on list; over-limit entries are dropped, oversized
+  // descriptions are truncated.
+  // ---------------------------------------------------------------------
+  var MAX_TOOL_COUNT = 128;
+  var MAX_NAME_LEN = 128;
+  var MAX_DESCRIPTION_LEN = 4096;
+  var MAX_SCHEMA_BYTES = 32768;
+  var MAX_TOTAL_BYTES = 262144;
+
+  function byteLen(s) {
+    try {
+      return typeof s === 'string' ? s.length : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function serializedSize(value) {
+    if (value == null) return 0;
+    try {
+      return JSON.stringify(value).length;
+    } catch (e) {
+      return Infinity;
+    }
+  }
+
+  function applyCatalogCaps(entries) {
+    var out = [];
+    var total = 0;
+    for (var i = 0; i < entries.length; i += 1) {
+      if (out.length >= MAX_TOOL_COUNT) break;
+      var e = entries[i];
+      if (!e || typeof e.name !== 'string') continue;
+      if (e.name.length === 0 || e.name.length > MAX_NAME_LEN) continue;
+      var schemaBytes = serializedSize(e.inputSchema);
+      if (schemaBytes > MAX_SCHEMA_BYTES) continue;
+      var description = typeof e.description === 'string' ? e.description : null;
+      if (description && description.length > MAX_DESCRIPTION_LEN) {
+        description = description.slice(0, MAX_DESCRIPTION_LEN);
+      }
+      var entry = { name: e.name, source: e.source, description: description, inputSchema: e.inputSchema };
+      var entryBytes = byteLen(e.name) + (description ? description.length : 0) + schemaBytes;
+      if (total + entryBytes > MAX_TOTAL_BYTES) break;
+      total += entryBytes;
+      out.push(entry);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------
   // Reader API consumed by AgentBrowser via page.evaluate. Both methods
   // return promises; Playwright awaits them automatically.
   // ---------------------------------------------------------------------
@@ -439,14 +492,14 @@ const BRIDGE_BODY = /* js */ `
           out.push({ name: name, source: 'w3c', description: entry.description, inputSchema: entry.inputSchema });
         });
       }
-      if (!useMcpb) return Promise.resolve(out);
+      if (!useMcpb) return Promise.resolve(applyCatalogCaps(out));
       return mcpbListTools().then(function (serverTools) {
         serverTools.forEach(function (t) {
           // W3C registrations win when a page exposes both under one name.
           if (useW3c && w3cTools.has(t.name)) return;
           out.push({ name: t.name, source: 'mcpb', description: t.description, inputSchema: t.inputSchema });
         });
-        return out;
+        return applyCatalogCaps(out);
       });
     },
     call: function (name, args) {

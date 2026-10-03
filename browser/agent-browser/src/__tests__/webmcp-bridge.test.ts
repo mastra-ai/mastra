@@ -381,3 +381,66 @@ describe('WebMCP bridge: protocol scoping and precedence', () => {
     expect(tools.map(t => t.name)).toEqual(['only']);
   });
 });
+
+describe('WebMCP bridge: catalog caps (hostile page defense)', () => {
+  // Protect every agent step from a page that advertises an unbounded number
+  // of tools or oversized descriptions/schemas. The bridge trims so the model
+  // can't be forced to carry hundreds of KB of untrusted catalog metadata.
+  it('drops tools once the count cap is reached (128)', async () => {
+    const sandbox = makeSandbox({ protocols: ['w3c'] });
+    for (let i = 0; i < 150; i++) {
+      vm.runInContext(
+        `navigator.modelContext.registerTool({ name: 't${i}', description: 'd', execute: () => 1 })`,
+        sandbox,
+      );
+    }
+    const tools = await list(sandbox);
+    expect(tools.length).toBe(128);
+  });
+
+  it('truncates oversized descriptions rather than dropping the tool', async () => {
+    const sandbox = makeSandbox({ protocols: ['w3c'] });
+    // 10,000-char description — well over MAX_DESCRIPTION_LEN (4096).
+    const bigDesc = 'x'.repeat(10_000);
+    vm.runInContext(
+      `navigator.modelContext.registerTool({ name: 'big_desc', description: ${JSON.stringify(bigDesc)}, execute: () => 1 })`,
+      sandbox,
+    );
+    const tools = await list(sandbox);
+    expect(tools.length).toBe(1);
+    expect((tools[0]!.description as string).length).toBe(4096);
+  });
+
+  it('drops tools whose inputSchema exceeds the per-schema byte cap', async () => {
+    const sandbox = makeSandbox({ protocols: ['w3c'] });
+    // Build a schema that stringifies to > MAX_SCHEMA_BYTES (32,768).
+    const props: Record<string, { type: string; description: string }> = {};
+    for (let i = 0; i < 2000; i++) {
+      props[`field_${i}`] = { type: 'string', description: 'x'.repeat(20) };
+    }
+    const bigSchema = { type: 'object', properties: props };
+    vm.runInContext(
+      `navigator.modelContext.registerTool({ name: 'big_schema', description: 'd', inputSchema: ${JSON.stringify(bigSchema)}, execute: () => 1 })`,
+      sandbox,
+    );
+    vm.runInContext(`navigator.modelContext.registerTool({ name: 'ok', description: 'd', execute: () => 1 })`, sandbox);
+    const tools = await list(sandbox);
+    // Oversized schema dropped, small one kept.
+    expect(tools.map(t => t.name)).toEqual(['ok']);
+  });
+
+  it('skips tools whose name is empty or absurdly long', async () => {
+    const sandbox = makeSandbox({ protocols: ['w3c'] });
+    const longName = 'n'.repeat(200);
+    vm.runInContext(
+      `navigator.modelContext.registerTool({ name: ${JSON.stringify(longName)}, description: 'd', execute: () => 1 })`,
+      sandbox,
+    );
+    vm.runInContext(
+      `navigator.modelContext.registerTool({ name: 'keep', description: 'd', execute: () => 1 })`,
+      sandbox,
+    );
+    const tools = await list(sandbox);
+    expect(tools.map(t => t.name)).toEqual(['keep']);
+  });
+});

@@ -21,6 +21,7 @@
  */
 
 import type { PrepareStepFunction } from '@mastra/core/agent';
+import { DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from './agent-browser';
@@ -216,7 +217,15 @@ function makePageTool(opts: {
     description,
     inputSchema: normalizeInputSchema(inputSchema),
     execute: async input => {
-      const result = await browser.callWebMcpTool({ toolName: rawName, args: input }, threadId);
+      // The thread id is baked into this closure at prepare-step time (either
+      // from the step's requestContext in an agent run, or from the config's
+      // fallback). If neither is available we fall through to the stable
+      // DEFAULT_THREAD_ID sentinel rather than letting callWebMcpTool resolve
+      // via the mutable `getCurrentThread()` state — that mutable fallback
+      // could target another concurrent thread's browser if the user drives
+      // `prepareStep` outside an agent run while another run is in flight.
+      const resolvedThreadId = threadId ?? DEFAULT_THREAD_ID;
+      const result = await browser.callWebMcpTool({ toolName: rawName, args: input }, resolvedThreadId);
       if (!('success' in result) || result.success !== true) {
         const err = result as { message?: string };
         throw new Error(err.message ?? `WebMCP tool "${rawName}" failed`);
