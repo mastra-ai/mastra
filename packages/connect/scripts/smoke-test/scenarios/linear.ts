@@ -416,8 +416,20 @@ export const linearScenario: Scenario = {
       // unarchive against the real (non-archived) project — Linear treats it
       // as a no-op or rejects it, either of which proves the endpoint works.
       if (projectId) {
+        steps.push(await probeTool(call, tools, 'unarchive project', 'linear_unarchive_project', { projectId }));
+        // The provider ships no delete_project or archive_project tool, so
+        // the smoke project cannot be cleaned up through the toolset.
+        // Surface the leak loudly instead of ending the run silently green.
+        log.error(
+          `Smoke project ${projectId} ("${runId} smoke project (renamed)") cannot be deleted — the Linear provider has no delete/archive project tool. Delete it manually.`,
+        );
         steps.push(
-          await probeTool(call, tools, 'unarchive project', 'linear_unarchive_project', { projectId }),
+          makeStep(
+            'delete project',
+            undefined,
+            'skip',
+            `no delete/archive project tool in provider — project ${projectId} leaked, delete manually`,
+          ),
         );
       }
     }
@@ -440,6 +452,7 @@ export const linearScenario: Scenario = {
         steps.push(makeStep('delete related issue', 'linear_delete_issue', 'pass'));
       } catch (error) {
         log.error(`Failed to delete related smoke issue ${secondIssueId}`, errorMessage(error));
+        steps.push(makeStep('delete related issue', 'linear_delete_issue', 'fail', errorMessage(error)));
       }
     }
 
