@@ -3714,6 +3714,23 @@ ${formattedMessages}
     const obsBufferKey = this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId));
     const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(obsBufferKey);
     if (pendingChunkWrite) {
+      // A write can start after the step's non-blocking precheck. Re-check here
+      // rather than turn an in-band activation into a wait on the Observer.
+      const blockAfter = this.buffering.isAsyncObservationEnabled()
+        ? this.getEffectiveObservationBlockAfter(record)
+        : undefined;
+      const threshold = calculateDynamicThreshold(
+        this.getEffectiveMessageTokens(record),
+        record.observationTokenCount ?? 0,
+      );
+      if (
+        livePendingTokens !== undefined &&
+        blockAfter !== undefined &&
+        livePendingTokens >= threshold &&
+        livePendingTokens < blockAfter
+      ) {
+        return { activated: false, record };
+      }
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]);
       clearTimeout(timeoutId);

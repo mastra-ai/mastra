@@ -228,9 +228,9 @@ export interface ObservationConfig {
    * Between `messageTokens` and `blockAfter`, only async buffering/activation is
    * used: reaching the observation threshold without an activatable buffered chunk
    * triggers background buffering instead of a blocking observation. At or above
-   * `blockAfter`, a synchronous observation runs when buffered activation did not
-   * happen. Buffered activation is also allowed to overshoot the retention target
-   * past this threshold.
+   * `blockAfter`, a synchronous observation runs if pending tokens still reach it
+   * after buffered activation. Buffered activation is also allowed to overshoot
+   * the retention target past this threshold.
    *
    * Accepts either:
    * - A multiplier (1 ≤ value < 100): multiplied by the record's effective `messageTokens`
