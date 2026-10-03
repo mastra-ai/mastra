@@ -6,8 +6,10 @@ import { resolveCurrentOrg } from '../auth/orgs.js';
 import { resolveProject } from '../env/resolve-project.js';
 import type { IntegrationAuthField, IntegrationCatalogEntry, OrgMember, ProjectConnection } from './api.js';
 import {
+  addConnectionToProject,
   createProjectConnectSession,
   fetchIntegrationCatalog,
+  fetchOrgConnections,
   fetchOrgMembers,
   fetchProjectConnections,
   removeProjectConnection,
@@ -125,7 +127,8 @@ export async function connectProviderAction(
   const catalog = await fetchIntegrationCatalog(ctx.token, ctx.orgId);
   const integration = findIntegration(catalog, provider);
 
-  const existing = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).filter(
+  const projectConnections = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
+  const existing = projectConnections.filter(
     connection => connection.integrationId === integration.id && connection.status === 'active',
   );
   if (existing.length > 0 && !options?.yes) {
@@ -137,6 +140,48 @@ export async function connectProviderAction(
     }
     const proceed = await p.confirm({ message: 'Add another connection?' });
     if (p.isCancel(proceed) || !proceed) return;
+  }
+
+  // Offer to reuse an org-level connection that isn't attached to this
+  // project yet, instead of walking through the provider's auth flow again.
+  if (isInteractive() && !options?.yes) {
+    const attachedIds = new Set(
+      projectConnections.filter(connection => connection.integrationId === integration.id).map(row => row.id),
+    );
+    const orgConnections = await fetchOrgConnections(ctx.token, ctx.orgId, integration.id).catch(
+      () => [] as ProjectConnection[],
+    );
+    const reusable = orgConnections.filter(row => row.status === 'active' && !attachedIds.has(row.id));
+
+    if (reusable.length > 0) {
+      let memberByUserId = new Map<string, OrgMember>();
+      if (reusable.some(row => !row.displayName && !row.accountLabel)) {
+        const members = await fetchOrgMembers(ctx.token, ctx.orgId).catch(() => [] as OrgMember[]);
+        memberByUserId = new Map(members.map(member => [member.userId, member]));
+      }
+
+      const CREATE_NEW = '__create_new__';
+      const choice = await p.select({
+        message: `Your organization already has ${reusable.length === 1 ? 'a' : String(reusable.length)} ${integration.displayName} connection${reusable.length === 1 ? '' : 's'}. Use an existing one?`,
+        options: [
+          ...reusable.map(row => ({
+            value: row.id,
+            label:
+              row.displayName ||
+              row.accountLabel ||
+              `connected by ${memberName(memberByUserId.get(row.connectedByUserId)) ?? 'a teammate'}`,
+          })),
+          { value: CREATE_NEW, label: 'Create a new connection' },
+        ],
+      });
+      if (p.isCancel(choice)) return;
+      if (choice !== CREATE_NEW) {
+        await addConnectionToProject(ctx.token, ctx.orgId, ctx.projectId, choice);
+        const chosen = reusable.find(row => row.id === choice);
+        printConnected(ctx, integration, chosen ? ` (${connectionLabel(chosen)})` : '');
+        return;
+      }
+    }
   }
 
   const fields = authFieldsFor(integration.authType, integration.authFields);
@@ -190,7 +235,10 @@ export async function connectProviderAction(
   const connection = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).find(
     row => row.id === session.connectionId,
   );
-  const account = connection ? ` (${connectionLabel(connection)})` : '';
+  printConnected(ctx, integration, connection ? ` (${connectionLabel(connection)})` : '');
+}
+
+function printConnected(ctx: ConnectContext, integration: IntegrationCatalogEntry, account: string): void {
   console.info(`\n${pc.green('✓')} Connected ${pc.bold(integration.displayName)}${account} to ${ctx.projectName}.`);
   console.info(
     pc.dim(

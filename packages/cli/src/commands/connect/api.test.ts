@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  addConnectionToProject,
   createProjectConnectSession,
   fetchIntegrationCatalog,
+  fetchOrgConnections,
   fetchProjectConnections,
   getIntegrationsApiUrl,
   removeProjectConnection,
@@ -68,6 +70,24 @@ describe('integrations API calls', () => {
     await expect(createProjectConnectSession('tok', 'org_1', 'proj_1', 'linear')).resolves.toEqual(session);
     expect(fetch).toHaveBeenCalledWith(
       'https://integrations.test/v2/projects/proj_1/integrations/linear/connect-sessions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('fetches org connections filtered by provider', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ connections: [{ id: 'con_1' }] })));
+    await expect(fetchOrgConnections('tok', 'org_1', 'linear')).resolves.toEqual([{ id: 'con_1' }]);
+    expect(fetch).toHaveBeenCalledWith(
+      'https://integrations.test/v2/connections?providerKey=linear',
+      expect.objectContaining({ headers: expect.objectContaining({ 'x-organization-id': 'org_1' }) }),
+    );
+  });
+
+  it('attaches an existing connection to a project', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+    await addConnectionToProject('tok', 'org_1', 'proj_1', 'con_1');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://integrations.test/v2/projects/proj_1/connections/con_1',
       expect.objectContaining({ method: 'POST' }),
     );
   });

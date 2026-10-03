@@ -948,13 +948,15 @@ mastra connect list
 
 ### `mastra connect add`
 
-Connects a provider to the project. OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+Connects a provider to the project. When the organization already has connections for the provider that aren't attached to the project, the command lists them and lets you attach an existing connection or create a new one. With no existing connections it goes straight to the provider's auth flow.
+
+OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
 ```bash
 mastra connect add <provider>
 ```
 
-Pass `--yes` to skip confirmation prompts, for example when adding a second connection for an already-connected provider.
+Pass `--yes` to skip all prompts. This always creates a new connection, even when existing connections could be reused.
 
 ### `mastra connect remove`
 

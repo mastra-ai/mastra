@@ -18,7 +18,7 @@ Providers for My Project:
   ○ slack
 ```
 
-`mastra connect add <provider>` connects a provider. OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal:
+`mastra connect add <provider>` connects a provider. If the organization already has connections for that provider, the command offers to attach one of them instead of authorizing again. Otherwise OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal:
 
 ```bash
 $ mastra connect add linear

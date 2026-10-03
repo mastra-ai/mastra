@@ -113,6 +113,44 @@ export async function fetchProjectConnections(
 }
 
 /**
+ * Org-level connections for one provider, including connections that are not
+ * attached to any project yet. Used to offer reuse before creating a new one.
+ */
+export async function fetchOrgConnections(
+  token: string,
+  orgId: string,
+  integrationId: string,
+): Promise<ProjectConnection[]> {
+  const resp = await platformFetch(
+    `${getIntegrationsApiUrl()}/v2/connections?providerKey=${encodeURIComponent(integrationId)}`,
+    { headers: headers(token, orgId) },
+  );
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to fetch connections', resp.status, extractApiErrorDetail(err));
+  }
+  const data = (await resp.json()) as { connections: ProjectConnection[] };
+  return data.connections;
+}
+
+/** Attach an existing org-level connection to the project. */
+export async function addConnectionToProject(
+  token: string,
+  orgId: string,
+  projectId: string,
+  connectionId: string,
+): Promise<void> {
+  const resp = await platformFetch(
+    `${getIntegrationsApiUrl()}/v2/projects/${encodeURIComponent(projectId)}/connections/${encodeURIComponent(connectionId)}`,
+    { method: 'POST', headers: headers(token, orgId) },
+  );
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to add connection to project', resp.status, extractApiErrorDetail(err));
+  }
+}
+
+/**
  * Mint a connect session scoped to the project: the resulting connection is
  * attached to the project as soon as the provider authorizes it.
  */
