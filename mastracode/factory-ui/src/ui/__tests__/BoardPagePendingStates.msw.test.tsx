@@ -3,6 +3,7 @@
  * card must announce where it is going ("Moving to Planning…") instead of
  * silently waiting, and drop the status once the server answers.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -235,7 +236,15 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return { ...renderWithProviders(<RouterProvider router={router} />), router };
+  return {
+    ...renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+    ),
+    router,
+  };
 }
 
 function stubJiraCandidate() {
@@ -1344,7 +1353,8 @@ describe('Board card pending states', () => {
     };
 
     dropInto('planning');
-    expect(await within(card).findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(within(card).getByText('Starting an automated run…')).toBeVisible();
     expect(transitionRequests).toEqual([]);
 
     dropInto('review');

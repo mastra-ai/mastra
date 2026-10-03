@@ -1,6 +1,7 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { GitBranch, Plus } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
@@ -219,7 +220,7 @@ function BoardContent({
       if (payload.fromStage === stage) return;
       const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
       if (!canMoveTo(payload.ownerKind, toPhaseKind)) {
-        items.refuseMove(payload.id, BUSY_CARD_MOVE_REFUSAL);
+        toast.error(BUSY_CARD_MOVE_REFUSAL);
         return;
       }
     }
