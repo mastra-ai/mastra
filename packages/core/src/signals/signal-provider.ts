@@ -1,8 +1,17 @@
 import type { Agent } from '../agent/agent';
 import type { AgentSignalIfIdleOptions } from '../agent/types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import { InMemorySignalSubscriptionsStorage } from '../storage/domains/signal-subscriptions';
+import type {
+  SignalSubscriptionDocumentFence,
+  SignalSubscriptionRecord,
+  SignalSubscriptionsStorage,
+} from '../storage/domains/signal-subscriptions';
+import { createDurableSubscriptionScope } from './durable-subscription-scope';
+import type { DurableSubscriptionScope } from './durable-subscription-scope';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
@@ -146,6 +155,9 @@ export abstract class SignalProvider<TId extends string = string> {
 
   /** Guard to prevent overlapping poll cycles */
   #isPollRunning = false;
+
+  /** Provider-local durable store used until a Mastra instance is attached. Created lazily. */
+  #localSubscriptionStore?: InMemorySignalSubscriptionsStorage;
 
   // ── Connection ──────────────────────────────────────────────────────
 
@@ -356,6 +368,184 @@ export abstract class SignalProvider<TId extends string = string> {
     return this.#subscriptions.size;
   }
 
+  // ── Durable subscription tracking ──────────────────────────────────
+
+  /**
+   * Run `callback` with a {@link DurableSubscriptionScope} over the
+   * `signalSubscriptions` storage domain, if one is available.
+   *
+   * Before a Mastra instance is attached this resolves a provider-local
+   * in-memory store. Once attached it resolves the Mastra storage's
+   * `signalSubscriptions` domain; when that storage does not provide the
+   * domain, `callback` is not invoked and `undefined` is returned.
+   *
+   * The scope stops working once `callback` settles — never retain it.
+   */
+  protected async withConfiguredDurableSubscriptionStore<T>(
+    callback: (scope: DurableSubscriptionScope) => Promise<T>,
+  ): Promise<T | undefined> {
+    const store = await this.#resolveSubscriptionStore();
+    if (!store) return undefined;
+    return this.#runWithScope(store, callback);
+  }
+
+  /**
+   * Run `callback` with a {@link DurableSubscriptionScope} over the
+   * `signalSubscriptions` storage domain.
+   *
+   * @throws MastraError when the attached Mastra storage does not provide the
+   *   `signalSubscriptions` domain. Never falls back to process memory.
+   */
+  protected async withDurableSubscriptionStore<T>(
+    callback: (scope: DurableSubscriptionScope) => Promise<T>,
+  ): Promise<T> {
+    const store = await this.#resolveSubscriptionStore();
+    if (!store) {
+      throw new MastraError({
+        id: 'SIGNAL_PROVIDER_DURABLE_STORAGE_UNSUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `[${this.id}] Durable signal subscriptions need a storage adapter that provides the "signalSubscriptions" domain (for example libSQL or PostgreSQL). The configured Mastra storage does not.`,
+        details: { providerId: this.id },
+      });
+    }
+    return this.#runWithScope(store, callback);
+  }
+
+  /**
+   * Durably subscribe the connected agent's thread to an external resource.
+   * Re-subscribing merges `metadata` and keeps the existing row id.
+   *
+   * @param deliveryOptions - Replaces the stored delivery options when supplied (e.g. `{ ifIdle: true }`).
+   */
+  protected async subscribeDurable(
+    target: SignalProviderTarget,
+    externalResourceId: string,
+    metadata: Record<string, unknown> = {},
+    deliveryOptions?: Record<string, unknown>,
+  ): Promise<SignalSubscriptionRecord> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(scope =>
+      scope.upsertSubscription({
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        externalResourceId,
+        metadata,
+        ...(deliveryOptions ? { deliveryOptions } : {}),
+      }),
+    );
+  }
+
+  /**
+   * Remove a durable subscription and its delivery history.
+   *
+   * @returns `true` if a subscription was removed, `false` if none existed
+   */
+  protected async unsubscribeDurable(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(
+      async scope =>
+        (await scope.deleteSubscriptions({
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+          externalResourceId,
+        })) > 0,
+    );
+  }
+
+  /** Every enabled durable subscription of this agent and provider, across all threads. */
+  protected async getDurableSubscriptions(): Promise<SignalSubscriptionRecord[]> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(
+      async scope => (await scope.listSubscriptions({ enabled: true })).subscriptions,
+    );
+  }
+
+  /** Enabled durable subscriptions of this agent and provider watching `externalResourceId`. */
+  protected async getDurableSubscriptionsForResource(externalResourceId: string): Promise<SignalSubscriptionRecord[]> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(scope => scope.listSubscriptionsForResource({ externalResourceId }));
+  }
+
+  /** Whether the thread has an enabled durable subscription to `externalResourceId`. */
+  protected async hasDurableSubscription(target: SignalProviderTarget, externalResourceId: string): Promise<boolean> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(async scope => {
+      const existing = await scope.getSubscriptionByIdentity({
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        externalResourceId,
+      });
+      return existing?.enabled === true;
+    });
+  }
+
+  /**
+   * Remove durable subscriptions of this agent and provider — only `target`'s
+   * thread when supplied, otherwise every thread.
+   *
+   * @returns the number of subscriptions removed
+   */
+  protected async unsubscribeAllDurable(target?: SignalProviderTarget): Promise<number> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(scope =>
+      scope.deleteSubscriptions(target ? { resourceId: target.resourceId, threadId: target.threadId } : {}),
+    );
+  }
+
+  /**
+   * Enable or disable a durable subscription by id. Rows of an owned document
+   * require that owner's `fence`; a missing or stale fence rejects.
+   *
+   * @returns the updated subscription, or `null` when it does not exist
+   */
+  protected async setDurableSubscriptionEnabled(
+    id: string,
+    enabled: boolean,
+    fence?: SignalSubscriptionDocumentFence,
+  ): Promise<SignalSubscriptionRecord | null> {
+    this.#requireAgentId();
+    return this.withDurableSubscriptionStore(scope => scope.setSubscriptionEnabled({ id, enabled }, fence));
+  }
+
+  async #resolveSubscriptionStore(): Promise<SignalSubscriptionsStorage | undefined> {
+    const mastra = this.mastra;
+    if (!mastra) {
+      this.#localSubscriptionStore ??= new InMemorySignalSubscriptionsStorage();
+      return this.#localSubscriptionStore;
+    }
+    return mastra.getStorage()?.getStore('signalSubscriptions');
+  }
+
+  async #runWithScope<T>(
+    store: SignalSubscriptionsStorage,
+    callback: (scope: DurableSubscriptionScope) => Promise<T>,
+  ): Promise<T> {
+    const { scope, invalidate } = createDurableSubscriptionScope(store, {
+      providerId: this.id,
+      agentId: () => this.#requireAgentId(),
+    });
+    try {
+      return await callback(scope);
+    } finally {
+      invalidate();
+    }
+  }
+
+  #requireAgentId(): string {
+    const agentId = this.#connectedAgent?.id;
+    if (!agentId) {
+      throw new MastraError({
+        id: 'SIGNAL_PROVIDER_NOT_CONNECTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `[${this.id}] Durable signal subscriptions are scoped to an agent. Connect the provider to an agent (new Agent({ signals: [provider] })) before using them.`,
+        details: { providerId: this.id },
+      });
+    }
+    return agentId;
+  }
+
   // ── Polling ────────────────────────────────────────────────────────
 
   /**
@@ -433,10 +623,11 @@ export abstract class SignalProvider<TId extends string = string> {
   start?(): Promise<void> | void;
 
   /**
-   * Called on shutdown. Override to clean up resources.
-   * Default implementation stops polling and clears all subscriptions.
+   * Called on shutdown. Override to clean up resources; overrides may return a promise.
+   * Default implementation stops polling and clears all in-memory subscriptions.
+   * Durable subscriptions are kept.
    */
-  stop(): void {
+  stop(): void | Promise<void> {
     this.stopPolling();
     this.#subscriptions.clear();
     this.#subscriptionsByResource.clear();
