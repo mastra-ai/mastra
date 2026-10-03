@@ -159,6 +159,41 @@ describe('TokenCounter', () => {
 
       expect(contextOf(a)).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4-5' });
     });
+
+    it('isolates concurrent runs on shared and per-request counters', async () => {
+      const shared = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+      const models = ['openai/gpt-4o', 'anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash'];
+      const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const runs = Array.from({ length: 30 }, async (_, i) => {
+        const [provider, modelId] = models[i % models.length]!.split('/');
+        const perRequest = new TokenCounter();
+        const sharedSeen: unknown[] = [];
+        const perRequestSeen: unknown[] = [];
+
+        await Promise.all([
+          shared.runWithModelContext({ provider, modelId }, async () => {
+            for (let step = 0; step < 3; step++) {
+              await tick((i * 7 + step * 3) % 5);
+              sharedSeen.push(contextOf(shared));
+            }
+          }),
+          perRequest.runWithModelContext({ provider, modelId }, async () => {
+            await tick(i % 4);
+            perRequestSeen.push(contextOf(perRequest), contextOf(shared));
+          }),
+        ]);
+
+        return { expected: { provider, modelId }, sharedSeen, perRequestSeen };
+      });
+
+      for (const { expected, sharedSeen, perRequestSeen } of await Promise.all(runs)) {
+        expect(sharedSeen).toEqual([expected, expected, expected]);
+        // Sibling scopes don't leak into each other: the shared counter is unset inside perRequest's scope.
+        expect(perRequestSeen).toEqual([expected, undefined]);
+      }
+    });
   });
 
   describe('countString', () => {
