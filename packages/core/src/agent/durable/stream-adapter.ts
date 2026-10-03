@@ -80,11 +80,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based).
+   * Start replay from this index (0-based), or live-tail from new events only.
    * If undefined, uses full replay (subscribeWithReplay).
-   * If specified, uses efficient indexed replay (subscribeFromOffset).
+   * A numeric offset uses efficient indexed replay when supported.
    */
-  offset?: number;
+  offset?: number | 'latest';
   /**
    * If set, terminate the stream when no pubsub event arrives for this many ms
    * AND the run is not alive (see `isAlive`). A durable run whose driving process
@@ -172,6 +172,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  waitForEventDelivery: () => Promise<void>;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -617,9 +619,21 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Every delivery has to be acked, including the events this consumer filters
   // out, or a durable backend (Redis consumer groups) keeps them pending for the
-  // life of the subscription. The EventCallback is a stable reference because
-  // `unsubscribe` has to be handed the same callback that was subscribed.
-  const subscribedCallback: EventCallback = withAck(handleEvent);
+  // life of the subscription. Track deliveries because in-process pubsub invokes
+  // callbacks synchronously but does not await their promises.
+  const inFlightDeliveries = new Set<Promise<void>>();
+  const ackingHandleEvent = withAck(handleEvent);
+  const subscribedCallback: EventCallback = (event, ack, nack) => {
+    const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
+    inFlightDeliveries.add(delivery);
+    void delivery.finally(() => inFlightDeliveries.delete(delivery)).catch(() => {});
+    return delivery;
+  };
+  const waitForEventDelivery = async () => {
+    while (inFlightDeliveries.size > 0) {
+      await Promise.allSettled([...inFlightDeliveries]);
+    }
+  };
 
   // Create the readable stream
   const stream = new ReadableStream<ChunkType<OUTPUT>>({
@@ -633,9 +647,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       const subscribePromise =
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
-          : pubsub.supportsOffsets
-            ? pubsub.subscribeFromOffset(topic, offset, subscribedCallback)
-            : pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' });
+          : offset === 'latest' || !pubsub.supportsOffsets
+            ? pubsub.subscribe(topic, subscribedCallback, { startFrom: 'latest' })
+            : pubsub.subscribeFromOffset(topic, offset, subscribedCallback);
 
       subscribePromise
         .then(() => {
@@ -731,6 +745,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     output,
     cleanup,
     detach,
+    waitForEventDelivery,
     ready,
   };
 }
