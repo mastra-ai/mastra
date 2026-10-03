@@ -427,6 +427,11 @@ The target must already be saved and freshly advertise the same exact thread end
           },
         )) as SendAgentNotificationSignalResult;
         let accepted = notification.accepted ? await notification.accepted : undefined;
+        // Set when nothing acknowledged the send but the record is still
+        // deliverable from the target's notification inbox. That is a weaker
+        // promise than a policy-level `persist`, which is scheduled and gets
+        // delivered on its own, so the two report different outcomes.
+        let queuedInInbox = false;
         if (!accepted) {
           // Policy-only outcomes do not emit a signal, so they intentionally have no owner acknowledgment.
           if (
@@ -461,6 +466,7 @@ The target must already be saved and freshly advertise the same exact thread end
             // is therefore queued rather than lost: it surfaces on the peer's
             // next turn. Reporting this as a failed send claimed the message was
             // undelivered when it had already been persisted.
+            queuedInInbox = true;
             accepted = { action: 'persist' };
           } else {
             return {
@@ -516,6 +522,7 @@ The target must already be saved and freshly advertise the same exact thread end
             target,
             priority: priority as AgentSignalPriority,
             accepted,
+            queuedInInbox,
           }),
           target,
           priority: priority as AgentSignalPriority,
@@ -607,10 +614,12 @@ function formatSignalResult({
   target,
   priority,
   accepted,
+  queuedInInbox,
 }: {
   target: AgentPeerView;
   priority: AgentSignalPriority;
   accepted: SendAgentSignalAccepted;
+  queuedInInbox?: boolean;
 }): string {
   const label = untrustedPeerLabel(target);
   switch (accepted?.action) {
@@ -619,7 +628,14 @@ function formatSignalResult({
     case 'deliver':
       return `Delivered ${priority} signal to ${label} in run ${accepted.runId}`;
     case 'persist':
-      return `Persisted ${priority} signal for ${label} to process later`;
+      // A signal that reached no claimed owner is parked in the target's
+      // notification inbox. It is not scheduled for delivery the way a
+      // policy-level `persist` is, so say where it actually is instead of
+      // promising it will be processed on its own. A reply obligation is only
+      // recorded once the recipient opens the notification.
+      return queuedInInbox
+        ? `Queued ${priority} signal for ${label} in the notification inbox, where it is read on the recipient's next turn`
+        : `Persisted ${priority} signal for ${label} to process later`;
     case 'discard':
       return `The ${priority} signal to ${label} was discarded`;
     case 'blocked':

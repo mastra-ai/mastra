@@ -460,8 +460,14 @@ describe('agent connection tools', () => {
       priority: 'high',
       expectsReply: true,
       routingAction: 'persist',
+      // A policy-level persist is scheduled and delivers itself, so it may
+      // promise later processing. This outcome is not scheduled, so it must say
+      // where the signal actually is instead of borrowing that promise.
+      content:
+        'Queued high signal for "Peer One" in the notification inbox, where it is read on the recipient\'s next turn',
     });
     expect(result.content).not.toContain('No claimed thread owner responded');
+    expect(result.content).not.toContain('to process later');
     expect(getStored().sentSignals?.map(signal => signal.messageId)).toEqual(['unclaimed-owner-message']);
   });
 
