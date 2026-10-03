@@ -137,6 +137,8 @@ describe('evented nested workflow restart after crash during resume (issue #2536
     const { result, seen, nestedAfter } = await restartOnFreshHost(runId, nestedRunId, parentSnapshot, {
       ...suspendedNested,
       status: nestedStatus,
+      // The nested run's start persists a running snapshot with its paths cleared.
+      ...(nestedStatus === 'running' ? { suspendedPaths: {}, activeStepsPath: {} } : {}),
     });
 
     expect(result.status).toBe('success');

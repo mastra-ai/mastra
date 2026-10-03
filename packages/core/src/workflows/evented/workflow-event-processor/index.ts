@@ -1901,7 +1901,10 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepResults: nestedContext,
               prevResult: {
                 status: 'success',
-                output: nestedContext[suspendedNestedStepId]?.payload ?? (prevResult as any)?.output,
+                output:
+                  nestedContext[suspendedNestedStepId]?.payload !== undefined
+                    ? nestedContext[suspendedNestedStepId].payload
+                    : (prevResult as any)?.output,
               },
               resumeData: nestedResumeData,
               activeStepsPath,
