@@ -84,7 +84,7 @@ export const anthropicScenario: Scenario = {
 
     if (batchId && tools['anthropic_get_message_batch']) {
       try {
-        await call('anthropic_get_message_batch', { batchId });
+        await call('anthropic_get_message_batch', { message_batch_id: batchId });
         steps.push(makeStep('read batch', 'anthropic_get_message_batch', 'pass'));
       } catch (error) {
         steps.push(makeStep('read batch', 'anthropic_get_message_batch', 'fail', errorMessage(error)));
@@ -93,7 +93,7 @@ export const anthropicScenario: Scenario = {
 
     if (batchId && tools['anthropic_cancel_message_batch']) {
       try {
-        await call('anthropic_cancel_message_batch', { batchId });
+        await call('anthropic_cancel_message_batch', { message_batch_id: batchId });
         steps.push(makeStep('cancel batch', 'anthropic_cancel_message_batch', 'pass'));
       } catch (error) {
         log.warn(`Could not cancel smoke batch ${batchId} (may have already completed).`, errorMessage(error));

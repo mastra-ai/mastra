@@ -63,7 +63,6 @@ export const githubScenario: Scenario = {
       ...(await runReadBatch(
         call,
         [
-          ['github_get_authenticated_user', {}],
           ['github_list_issues', { owner, repo, per_page: 5 }],
           ['github_list_labels', { owner, repo, per_page: 5 }],
           ['github_list_pull_requests', { owner, repo, per_page: 5, state: 'all' }],
@@ -71,7 +70,6 @@ export const githubScenario: Scenario = {
           ['github_list_releases', { owner, repo, per_page: 5 }],
           ['github_list_branches', { owner, repo, per_page: 5 }],
           ['github_list_commits', { owner, repo, per_page: 5 }],
-          ['github_list_collaborators', { owner, repo, per_page: 5 }],
           ['github_list_tags', { owner, repo, per_page: 5 }],
         ],
         tools,
@@ -118,21 +116,6 @@ export const githubScenario: Scenario = {
       steps.push(makeStep('update issue title', 'github_update_issue', 'fail', errorMessage(error)));
     }
 
-    if (tools['github_create_issue_comment']) {
-      try {
-        await call('github_create_issue_comment', {
-          owner,
-          repo,
-          issue_number: issueNumber,
-          body: `${runId} smoke comment`,
-        });
-        steps.push(makeStep('create issue comment', 'github_create_issue_comment', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('create issue comment', 'github_create_issue_comment', 'fail', errorMessage(error)));
-      }
-    }
-
-    // Add a second comment via the alternate add_issue_comment variant.
     if (tools['github_add_issue_comment']) {
       try {
         await call('github_add_issue_comment', {

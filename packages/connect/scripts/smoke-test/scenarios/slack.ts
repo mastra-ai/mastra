@@ -70,8 +70,8 @@ export const slackScenario: Scenario = {
     if (messageTs && tools['slack_update_message']) {
       try {
         await call('slack_update_message', {
-          channel: channelId,
-          ts: messageTs,
+          channel_id: channelId,
+          message_ts: messageTs,
           text: `${runId} smoke message (edited)`,
         });
         steps.push(makeStep('update message', 'slack_update_message', 'pass'));
@@ -82,14 +82,14 @@ export const slackScenario: Scenario = {
 
     if (messageTs && tools['slack_add_reaction']) {
       try {
-        await call('slack_add_reaction', { channel: channelId, timestamp: messageTs, name: 'eyes' });
+        await call('slack_add_reaction', { channel_id: channelId, timestamp: messageTs, emoji_name: 'eyes' });
         steps.push(makeStep('add reaction', 'slack_add_reaction', 'pass'));
       } catch (error) {
         steps.push(makeStep('add reaction', 'slack_add_reaction', 'fail', errorMessage(error)));
       }
       if (tools['slack_remove_reaction']) {
         try {
-          await call('slack_remove_reaction', { channel: channelId, timestamp: messageTs, name: 'eyes' });
+          await call('slack_remove_reaction', { channel_id: channelId, timestamp: messageTs, reaction_name: 'eyes' });
           steps.push(makeStep('remove reaction', 'slack_remove_reaction', 'pass'));
         } catch (error) {
           steps.push(makeStep('remove reaction', 'slack_remove_reaction', 'fail', errorMessage(error)));
@@ -99,14 +99,14 @@ export const slackScenario: Scenario = {
 
     if (messageTs && tools['slack_pin_message']) {
       try {
-        await call('slack_pin_message', { channel: channelId, timestamp: messageTs });
+        await call('slack_pin_message', { channel_id: channelId, message_timestamp: messageTs });
         steps.push(makeStep('pin message', 'slack_pin_message', 'pass'));
       } catch (error) {
         steps.push(makeStep('pin message', 'slack_pin_message', 'fail', errorMessage(error)));
       }
       if (tools['slack_unpin_message']) {
         try {
-          await call('slack_unpin_message', { channel: channelId, timestamp: messageTs });
+          await call('slack_unpin_message', { channel_id: channelId, timestamp: messageTs });
           steps.push(makeStep('unpin message', 'slack_unpin_message', 'pass'));
         } catch (error) {
           steps.push(makeStep('unpin message', 'slack_unpin_message', 'fail', errorMessage(error)));
@@ -116,7 +116,7 @@ export const slackScenario: Scenario = {
 
     if (tools['slack_get_channel_info']) {
       try {
-        await call('slack_get_channel_info', { channel: channelId });
+        await call('slack_get_channel_info', { channel_id: channelId });
         steps.push(makeStep('read channel info', 'slack_get_channel_info', 'pass'));
       } catch (error) {
         steps.push(makeStep('read channel info', 'slack_get_channel_info', 'fail', errorMessage(error)));
@@ -125,7 +125,7 @@ export const slackScenario: Scenario = {
 
     if (tools['slack_set_channel_topic']) {
       try {
-        await call('slack_set_channel_topic', { channel: channelId, topic: `${runId} smoke topic` });
+        await call('slack_set_channel_topic', { channel_id: channelId, topic: `${runId} smoke topic` });
         steps.push(makeStep('set channel topic', 'slack_set_channel_topic', 'pass'));
       } catch (error) {
         steps.push(makeStep('set channel topic', 'slack_set_channel_topic', 'fail', errorMessage(error)));
@@ -134,7 +134,7 @@ export const slackScenario: Scenario = {
 
     if (tools['slack_get_conversation_history']) {
       try {
-        await call('slack_get_conversation_history', { channel: channelId, limit: 5 });
+        await call('slack_get_conversation_history', { channel_id: channelId, limit: 5 });
         steps.push(makeStep('read conversation history', 'slack_get_conversation_history', 'pass'));
       } catch (error) {
         steps.push(
@@ -439,7 +439,7 @@ export const slackScenario: Scenario = {
 
     if (messageTs) {
       try {
-        await call('slack_delete_message', { channel: channelId, ts: messageTs });
+        await call('slack_delete_message', { channel_id: channelId, message_ts: messageTs });
         steps.push(makeStep('delete message', 'slack_delete_message', 'pass'));
       } catch (error) {
         steps.push(makeStep('delete message', 'slack_delete_message', 'fail', errorMessage(error)));
@@ -447,7 +447,7 @@ export const slackScenario: Scenario = {
     }
 
     try {
-      await call('slack_archive_channel', { channel: channelId });
+      await call('slack_archive_channel', { channel_id: channelId });
       steps.push(makeStep('archive channel', 'slack_archive_channel', 'pass'));
     } catch (error) {
       log.error(`Failed to archive smoke channel ${channelId} — clean up manually.`, errorMessage(error));

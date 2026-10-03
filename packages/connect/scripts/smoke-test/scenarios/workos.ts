@@ -49,7 +49,7 @@ export const workosScenario: Scenario = {
     }
 
     try {
-      await call('workos_get_organization', { organizationId });
+      await call('workos_get_organization', { organization_id: organizationId });
       steps.push(makeStep('read organization', 'workos_get_organization', 'pass'));
     } catch (error) {
       steps.push(makeStep('read organization', 'workos_get_organization', 'fail', errorMessage(error)));
@@ -57,7 +57,7 @@ export const workosScenario: Scenario = {
 
     try {
       await call('workos_update_organization', {
-        organizationId,
+        organization_id: organizationId,
         name: `${runId} smoke org (renamed)`,
       });
       steps.push(makeStep('update organization', 'workos_update_organization', 'pass'));
@@ -70,8 +70,8 @@ export const workosScenario: Scenario = {
       try {
         const user = await call<{ id: string }>('workos_create_user', {
           email: `smoke+${runId}@mastra-smoke.invalid`,
-          firstName: 'Mastra',
-          lastName: 'Smoke',
+          first_name: 'Mastra',
+          last_name: 'Smoke',
         });
         userId = user.id;
         steps.push(makeStep('create user', 'workos_create_user', 'pass', userId));
@@ -108,7 +108,7 @@ export const workosScenario: Scenario = {
 
     if (membershipId && tools['workos_delete_organization_membership']) {
       try {
-        await call('workos_delete_organization_membership', { organizationMembershipId: membershipId });
+        await call('workos_delete_organization_membership', { membership_id: membershipId });
         steps.push(makeStep('delete membership', 'workos_delete_organization_membership', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke membership ${membershipId}`, errorMessage(error));
@@ -354,7 +354,7 @@ export const workosScenario: Scenario = {
 
     if (userId && tools['workos_delete_user']) {
       try {
-        await call('workos_delete_user', { userId });
+        await call('workos_delete_user', { user_id: userId });
         steps.push(makeStep('delete user', 'workos_delete_user', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke user ${userId}`, errorMessage(error));
@@ -363,7 +363,7 @@ export const workosScenario: Scenario = {
     }
 
     try {
-      await call('workos_delete_organization', { organizationId });
+      await call('workos_delete_organization', { organization_id: organizationId });
       steps.push(makeStep('delete organization', 'workos_delete_organization', 'pass'));
     } catch (error) {
       log.error(`Failed to delete smoke org ${organizationId}`, errorMessage(error));

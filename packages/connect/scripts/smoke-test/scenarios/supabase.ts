@@ -60,7 +60,7 @@ export const supabaseScenario: Scenario = {
       if (authUserId && tools['supabase_update_auth_user']) {
         try {
           await call('supabase_update_auth_user', {
-            userId: authUserId,
+            user_id: authUserId,
             user_metadata: { smoke: runId },
           });
           steps.push(makeStep('update auth user', 'supabase_update_auth_user', 'pass'));
@@ -104,7 +104,7 @@ export const supabaseScenario: Scenario = {
 
       if (authUserId) {
         try {
-          await call('supabase_delete_auth_user', { userId: authUserId });
+          await call('supabase_delete_auth_user', { user_id: authUserId });
           steps.push(makeStep('delete auth user', 'supabase_delete_auth_user', 'pass'));
         } catch (error) {
           log.error(`Failed to delete smoke auth user ${authUserId}`, errorMessage(error));
@@ -143,7 +143,7 @@ export const supabaseScenario: Scenario = {
 
       if (bucketCreated && tools['supabase_update_storage_bucket']) {
         try {
-          await call('supabase_update_storage_bucket', { bucketId: bucketName, public: false });
+          await call('supabase_update_storage_bucket', { id: bucketName, public: false });
           steps.push(makeStep('update storage bucket', 'supabase_update_storage_bucket', 'pass'));
         } catch (error) {
           steps.push(makeStep('update storage bucket', 'supabase_update_storage_bucket', 'fail', errorMessage(error)));
@@ -152,7 +152,7 @@ export const supabaseScenario: Scenario = {
 
       if (bucketCreated && tools['supabase_list_storage_objects']) {
         try {
-          await call('supabase_list_storage_objects', { bucketId: bucketName });
+          await call('supabase_list_storage_objects', { bucket_id: bucketName });
           steps.push(makeStep('list storage objects', 'supabase_list_storage_objects', 'pass'));
         } catch (error) {
           steps.push(makeStep('list storage objects', 'supabase_list_storage_objects', 'fail', errorMessage(error)));
@@ -255,7 +255,7 @@ export const supabaseScenario: Scenario = {
 
       if (bucketCreated) {
         try {
-          await call('supabase_delete_storage_bucket', { bucketId: bucketName });
+          await call('supabase_delete_storage_bucket', { bucket_id: bucketName });
           steps.push(makeStep('delete storage bucket', 'supabase_delete_storage_bucket', 'pass'));
         } catch (error) {
           log.error(`Failed to delete smoke bucket ${bucketName}`, errorMessage(error));

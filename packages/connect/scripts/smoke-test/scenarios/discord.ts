@@ -103,8 +103,8 @@ export const discordScenario: Scenario = {
     if (messageId && tools['discord_update_message']) {
       try {
         await call('discord_update_message', {
-          channelId,
-          messageId,
+          channel_id: channelId,
+          message_id: messageId,
           content: `${runId} smoke message (edited)`,
         });
         steps.push(makeStep('update message', 'discord_update_message', 'pass'));
@@ -115,14 +115,14 @@ export const discordScenario: Scenario = {
 
     if (messageId && tools['discord_create_reaction']) {
       try {
-        await call('discord_create_reaction', { channelId, messageId, emoji: '👀' });
+        await call('discord_create_reaction', { channel_id: channelId, message_id: messageId, emoji: '👀' });
         steps.push(makeStep('create reaction', 'discord_create_reaction', 'pass'));
       } catch (error) {
         steps.push(makeStep('create reaction', 'discord_create_reaction', 'fail', errorMessage(error)));
       }
       if (tools['discord_delete_reaction']) {
         try {
-          await call('discord_delete_reaction', { channelId, messageId, emoji: '👀' });
+          await call('discord_delete_reaction', { channel_id: channelId, message_id: messageId, emoji: '👀' });
           steps.push(makeStep('delete reaction', 'discord_delete_reaction', 'pass'));
         } catch (error) {
           steps.push(makeStep('delete reaction', 'discord_delete_reaction', 'fail', errorMessage(error)));
@@ -134,8 +134,8 @@ export const discordScenario: Scenario = {
     if (messageId && tools['discord_create_thread_from_message']) {
       try {
         const thread = await call<{ id: string }>('discord_create_thread_from_message', {
-          channelId,
-          messageId,
+          channel_id: channelId,
+          message_id: messageId,
           name: `${runId}-thread`,
         });
         threadId = thread.id;

@@ -65,7 +65,7 @@ export const stripeScenario: Scenario = {
     }
 
     try {
-      await call('stripe_get_customer', { customerId });
+      await call('stripe_get_customer', { id: customerId });
       steps.push(makeStep('read customer', 'stripe_get_customer', 'pass'));
     } catch (error) {
       steps.push(makeStep('read customer', 'stripe_get_customer', 'fail', errorMessage(error)));
@@ -73,7 +73,7 @@ export const stripeScenario: Scenario = {
 
     try {
       await call('stripe_update_customer', {
-        customerId,
+        id: customerId,
         description: `${runId} smoke customer (updated)`,
       });
       steps.push(makeStep('update customer', 'stripe_update_customer', 'pass'));
@@ -139,7 +139,7 @@ export const stripeScenario: Scenario = {
 
     if (productId && tools['stripe_update_product']) {
       try {
-        await call('stripe_update_product', { productId, description: 'smoke updated' });
+        await call('stripe_update_product', { id: productId, description: 'smoke updated' });
         steps.push(makeStep('update product', 'stripe_update_product', 'pass'));
       } catch (error) {
         steps.push(makeStep('update product', 'stripe_update_product', 'fail', errorMessage(error)));
@@ -163,7 +163,7 @@ export const stripeScenario: Scenario = {
 
     if (paymentMethodId && tools['stripe_get_payment_method']) {
       try {
-        await call('stripe_get_payment_method', { id: paymentMethodId });
+        await call('stripe_get_payment_method', { payment_method: paymentMethodId });
         steps.push(makeStep('read payment method', 'stripe_get_payment_method', 'pass'));
       } catch (error) {
         steps.push(makeStep('read payment method', 'stripe_get_payment_method', 'fail', errorMessage(error)));
@@ -190,7 +190,7 @@ export const stripeScenario: Scenario = {
 
     if (paymentIntentId && tools['stripe_get_payment_intent']) {
       try {
-        await call('stripe_get_payment_intent', { id: paymentIntentId });
+        await call('stripe_get_payment_intent', { intent_id: paymentIntentId });
         steps.push(makeStep('read payment intent', 'stripe_get_payment_intent', 'pass'));
       } catch (error) {
         steps.push(makeStep('read payment intent', 'stripe_get_payment_intent', 'fail', errorMessage(error)));
@@ -297,7 +297,7 @@ export const stripeScenario: Scenario = {
 
     if (setupIntentId && tools['stripe_delete_setup_intent']) {
       try {
-        await call('stripe_delete_setup_intent', { id: setupIntentId });
+        await call('stripe_delete_setup_intent', { setup_intent_id: setupIntentId });
         steps.push(makeStep('delete setup intent', 'stripe_delete_setup_intent', 'pass'));
       } catch (error) {
         // Stripe cancels (not deletes) a setup intent; some tools return a status check.
@@ -326,7 +326,7 @@ export const stripeScenario: Scenario = {
 
     if (checkoutSessionId && tools['stripe_get_checkout_session']) {
       try {
-        await call('stripe_get_checkout_session', { id: checkoutSessionId });
+        await call('stripe_get_checkout_session', { session_id: checkoutSessionId });
         steps.push(makeStep('read checkout session', 'stripe_get_checkout_session', 'pass'));
       } catch (error) {
         steps.push(makeStep('read checkout session', 'stripe_get_checkout_session', 'fail', errorMessage(error)));
@@ -433,7 +433,7 @@ export const stripeScenario: Scenario = {
       }
       if (creditNoteId && tools['stripe_get_credit_note']) {
         try {
-          await call('stripe_get_credit_note', { credit_note_id: creditNoteId });
+          await call('stripe_get_credit_note', { id: creditNoteId });
           steps.push(makeStep('read credit note', 'stripe_get_credit_note', 'pass'));
         } catch (error) {
           steps.push(makeStep('read credit note', 'stripe_get_credit_note', 'fail', errorMessage(error)));
@@ -503,7 +503,7 @@ export const stripeScenario: Scenario = {
 
     if (invoiceItemId && tools['stripe_delete_invoice_item']) {
       try {
-        await call('stripe_delete_invoice_item', { invoiceItemId });
+        await call('stripe_delete_invoice_item', { invoice_item_id: invoiceItemId });
         steps.push(makeStep('delete invoice item', 'stripe_delete_invoice_item', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke invoice item ${invoiceItemId}`, errorMessage(error));
@@ -570,7 +570,7 @@ export const stripeScenario: Scenario = {
 
     if (productId && tools['stripe_delete_product']) {
       try {
-        await call('stripe_delete_product', { productId });
+        await call('stripe_delete_product', { id: productId });
         steps.push(makeStep('delete product', 'stripe_delete_product', 'pass'));
       } catch (error) {
         // Products with active prices can't be deleted — flag as a known issue.
@@ -580,7 +580,7 @@ export const stripeScenario: Scenario = {
     }
 
     try {
-      await call('stripe_delete_customer', { customerId });
+      await call('stripe_delete_customer', { id: customerId });
       steps.push(makeStep('delete customer', 'stripe_delete_customer', 'pass'));
     } catch (error) {
       log.error(`Failed to delete smoke customer ${customerId}`, errorMessage(error));

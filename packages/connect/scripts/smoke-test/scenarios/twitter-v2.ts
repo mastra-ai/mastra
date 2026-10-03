@@ -22,30 +22,56 @@ export const twitterScenario: Scenario = {
       return steps;
     }
 
-    // Read-only surface.
-    let userId: string | undefined;
-    if (tools['twitter_v2_get_user']) {
+    // The X API v2 toolset has no "me" endpoint, so the authenticated user's
+    // id must be provided explicitly for user-scoped operations. Public reads
+    // fall back to a well-known account looked up via list_users.
+    const authUserId = process.env.MASTRA_SMOKE_TWITTER_USER_ID;
+
+    let lookupUserId: string | undefined;
+    if (tools['twitter_v2_list_users']) {
       try {
-        const user = await call<{ id?: string; data?: { id?: string } }>('twitter_v2_get_user', {});
-        userId = user.id ?? user.data?.id;
+        const res = await call<{ users?: Array<{ id?: string }>; data?: Array<{ id?: string }> }>(
+          'twitter_v2_list_users',
+          { usernames: ['XDevelopers'] },
+        );
+        lookupUserId = res.users?.[0]?.id ?? res.data?.[0]?.id;
+        steps.push(makeStep('list users', 'twitter_v2_list_users', 'pass', lookupUserId));
+      } catch (error) {
+        steps.push(makeStep('list users', 'twitter_v2_list_users', 'fail', errorMessage(error)));
+      }
+    }
+
+    const userId = authUserId ?? lookupUserId;
+    if (userId && tools['twitter_v2_get_user']) {
+      try {
+        await call('twitter_v2_get_user', { id: userId });
         steps.push(makeStep('get user', 'twitter_v2_get_user', 'pass', userId));
       } catch (error) {
         steps.push(makeStep('get user', 'twitter_v2_get_user', 'fail', errorMessage(error)));
       }
     }
 
+    if (userId) {
+      steps.push(
+        ...(await runReadBatch(
+          call,
+          [
+            ['twitter_v2_list_tweets', { user_id: userId, max_results: 5 }],
+            ['twitter_v2_list_mentions', { user_id: userId, max_results: 5 }],
+            ['twitter_v2_list_lists', { userId, maxResults: 5 }],
+            ['twitter_v2_list_liked_tweets', { userId, maxResults: 5 }],
+            ['twitter_v2_list_following', { user_id: userId, max_results: 5 }],
+          ],
+          tools,
+        )),
+      );
+    }
     steps.push(
       ...(await runReadBatch(
         call,
         [
-          ['twitter_v2_list_tweets', { maxResults: 5 }],
-          ['twitter_v2_list_mentions', { maxResults: 5 }],
-          ['twitter_v2_list_lists', { maxResults: 5 }],
-          ['twitter_v2_list_liked_tweets', { maxResults: 5 }],
-          ['twitter_v2_list_following', { maxResults: 5 }],
-          ['twitter_v2_list_spaces', {}],
-          ['twitter_v2_search_tweets', { query: 'mastra', maxResults: 5 }],
-          ['twitter_v2_list_users', { usernames: ['twitter'] }],
+          ['twitter_v2_list_spaces', { query: 'mastra' }],
+          ['twitter_v2_search_tweets', { query: 'mastra', max_results: 10 }],
         ],
         tools,
       )),
@@ -83,14 +109,23 @@ export const twitterScenario: Scenario = {
       }
     }
 
-    if (tweetId && userId && tools['twitter_v2_create_liked_tweet']) {
-      // create_liked_tweet is the explicit POST /users/:id/likes variant.
+    // create_liked_tweet is the explicit POST /users/:id/likes variant; the
+    // user id must match the authenticated user, so it runs for real only
+    // when MASTRA_SMOKE_TWITTER_USER_ID is set and is probed otherwise.
+    if (tweetId && authUserId && tools['twitter_v2_create_liked_tweet']) {
       try {
-        await call('twitter_v2_create_liked_tweet', { userId, tweet_id: tweetId });
+        await call('twitter_v2_create_liked_tweet', { userId: authUserId, tweetId });
         steps.push(makeStep('create liked tweet', 'twitter_v2_create_liked_tweet', 'pass'));
       } catch (error) {
         steps.push(makeStep('create liked tweet', 'twitter_v2_create_liked_tweet', 'fail', errorMessage(error)));
       }
+    } else if (tweetId) {
+      steps.push(
+        await probeTool(call, tools, 'create liked tweet', 'twitter_v2_create_liked_tweet', {
+          userId: '0',
+          tweetId,
+        }),
+      );
     }
 
     if (tweetId && tools['twitter_v2_get_liked_tweet']) {
@@ -102,13 +137,17 @@ export const twitterScenario: Scenario = {
       }
     }
 
-    if (tweetId && userId && tools['twitter_v2_bookmark_tweet']) {
+    if (tweetId && authUserId && tools['twitter_v2_bookmark_tweet']) {
       try {
-        await call('twitter_v2_bookmark_tweet', { userId, tweetId });
+        await call('twitter_v2_bookmark_tweet', { userId: authUserId, tweetId });
         steps.push(makeStep('bookmark tweet', 'twitter_v2_bookmark_tweet', 'pass'));
       } catch (error) {
         steps.push(makeStep('bookmark tweet', 'twitter_v2_bookmark_tweet', 'fail', errorMessage(error)));
       }
+    } else if (tweetId) {
+      steps.push(
+        await probeTool(call, tools, 'bookmark tweet', 'twitter_v2_bookmark_tweet', { userId: '0', tweetId }),
+      );
     }
 
     if (tweetId && tools['twitter_v2_remove_bookmark']) {
@@ -177,7 +216,7 @@ export const twitterScenario: Scenario = {
     }
 
     try {
-      await call('twitter_v2_get_list', { listId });
+      await call('twitter_v2_get_list', { id: listId });
       steps.push(makeStep('read list', 'twitter_v2_get_list', 'pass'));
     } catch (error) {
       steps.push(makeStep('read list', 'twitter_v2_get_list', 'fail', errorMessage(error)));
@@ -186,7 +225,7 @@ export const twitterScenario: Scenario = {
     if (tools['twitter_v2_update_list']) {
       try {
         await call('twitter_v2_update_list', {
-          listId,
+          id: listId,
           name: `${runId} smoke list (renamed)`,
         });
         steps.push(makeStep('update list', 'twitter_v2_update_list', 'pass'));
@@ -196,7 +235,7 @@ export const twitterScenario: Scenario = {
     }
 
     try {
-      await call('twitter_v2_delete_list', { listId });
+      await call('twitter_v2_delete_list', { id: listId });
       steps.push(makeStep('delete list', 'twitter_v2_delete_list', 'pass'));
     } catch (error) {
       log.error(`Failed to delete smoke list ${listId}`, errorMessage(error));

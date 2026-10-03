@@ -416,9 +416,11 @@ export const incidentIoScenario: Scenario = {
     let followUpId: string | undefined;
     try {
       const followUp = await call<{ id: string }>('incident_io_create_follow_up', {
-        incidentId,
-        title: `${runId} smoke follow-up`,
-        description: 'Automated @mastra/connect smoke test. Safe to delete.',
+        body: {
+          incident_id: incidentId,
+          title: `${runId} smoke follow-up`,
+          description: 'Automated @mastra/connect smoke test. Safe to delete.',
+        },
       });
       followUpId = followUp.id;
       steps.push(makeStep('create follow-up', 'incident_io_create_follow_up', 'pass', followUpId));
@@ -429,8 +431,11 @@ export const incidentIoScenario: Scenario = {
     if (followUpId && tools['incident_io_update_follow_up']) {
       try {
         await call('incident_io_update_follow_up', {
-          followUpId,
-          title: `${runId} smoke follow-up (edited)`,
+          id: followUpId,
+          body: {
+            title: `${runId} smoke follow-up (edited)`,
+            status: 'outstanding',
+          },
         });
         steps.push(makeStep('update follow-up', 'incident_io_update_follow_up', 'pass'));
       } catch (error) {
@@ -440,7 +445,7 @@ export const incidentIoScenario: Scenario = {
 
     if (followUpId && tools['incident_io_get_follow_up']) {
       try {
-        await call('incident_io_get_follow_up', { followUpId });
+        await call('incident_io_get_follow_up', { id: followUpId });
         steps.push(makeStep('read follow-up', 'incident_io_get_follow_up', 'pass'));
       } catch (error) {
         steps.push(makeStep('read follow-up', 'incident_io_get_follow_up', 'fail', errorMessage(error)));
@@ -467,7 +472,7 @@ export const incidentIoScenario: Scenario = {
 
     if (followUpId) {
       try {
-        await call('incident_io_delete_follow_up', { followUpId });
+        await call('incident_io_delete_follow_up', { id: followUpId });
         steps.push(makeStep('delete follow-up', 'incident_io_delete_follow_up', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke follow-up ${followUpId}`, errorMessage(error));

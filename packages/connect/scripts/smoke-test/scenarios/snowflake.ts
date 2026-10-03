@@ -67,7 +67,7 @@ export const snowflakeScenario: Scenario = {
     }
     if (statementHandle && tools['snowflake_get_statement_result']) {
       try {
-        await call('snowflake_get_statement_result', { statementHandle });
+        await call('snowflake_get_statement_result', { statement_handle: statementHandle });
         steps.push(makeStep('get statement result', 'snowflake_get_statement_result', 'pass'));
       } catch (error) {
         steps.push(makeStep('get statement result', 'snowflake_get_statement_result', 'fail', errorMessage(error)));

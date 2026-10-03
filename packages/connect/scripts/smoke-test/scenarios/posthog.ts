@@ -67,7 +67,7 @@ export const posthogScenario: Scenario = {
     let dashboardId: number | undefined;
     try {
       const dashboard = await call<{ id: number }>('posthog_create_dashboard', {
-        projectId,
+        project_id: projectId,
         name: `${runId} smoke dashboard`,
       });
       dashboardId = dashboard.id;
@@ -78,7 +78,7 @@ export const posthogScenario: Scenario = {
     }
 
     try {
-      await call('posthog_get_dashboard', { projectId, dashboardId });
+      await call('posthog_get_dashboard', { project_id: projectId, id: dashboardId });
       steps.push(makeStep('read dashboard', 'posthog_get_dashboard', 'pass'));
     } catch (error) {
       steps.push(makeStep('read dashboard', 'posthog_get_dashboard', 'fail', errorMessage(error)));
@@ -87,8 +87,8 @@ export const posthogScenario: Scenario = {
     if (tools['posthog_update_dashboard']) {
       try {
         await call('posthog_update_dashboard', {
-          projectId,
-          dashboardId,
+          project_id: projectId,
+          id: dashboardId,
           name: `${runId} smoke dashboard (renamed)`,
         });
         steps.push(makeStep('update dashboard', 'posthog_update_dashboard', 'pass'));
@@ -508,9 +508,9 @@ export const posthogScenario: Scenario = {
     if (tools['posthog_create_annotation']) {
       try {
         const ann = await call<{ id: number }>('posthog_create_annotation', {
-          projectId,
+          project_id: projectId,
           content: `${runId} smoke annotation`,
-          dateMarker: new Date().toISOString(),
+          date_marker: new Date().toISOString(),
         });
         annotationId = ann.id;
         steps.push(makeStep('create annotation', 'posthog_create_annotation', 'pass', String(annotationId)));
@@ -540,7 +540,7 @@ export const posthogScenario: Scenario = {
     }
     if (annotationId && tools['posthog_delete_annotation']) {
       try {
-        await call('posthog_delete_annotation', { projectId, annotationId });
+        await call('posthog_delete_annotation', { project_id: projectId, annotation_id: annotationId });
         steps.push(makeStep('delete annotation', 'posthog_delete_annotation', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke annotation ${annotationId}`, errorMessage(error));
@@ -553,9 +553,9 @@ export const posthogScenario: Scenario = {
     if (tools['posthog_create_cohort']) {
       try {
         const cohort = await call<{ id: number }>('posthog_create_cohort', {
-          projectId,
+          project_id: projectId,
           name: `${runId} smoke cohort`,
-          groups: [{ properties: [] }],
+          filters: { properties: { type: 'OR', values: [] } },
         });
         cohortId = cohort.id;
         steps.push(makeStep('create cohort', 'posthog_create_cohort', 'pass', String(cohortId)));
@@ -585,7 +585,7 @@ export const posthogScenario: Scenario = {
     }
     if (cohortId && tools['posthog_delete_cohort']) {
       try {
-        await call('posthog_delete_cohort', { projectId, cohortId });
+        await call('posthog_delete_cohort', { project_id: projectId, cohort_id: cohortId });
         steps.push(makeStep('delete cohort', 'posthog_delete_cohort', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke cohort ${cohortId}`, errorMessage(error));
@@ -653,11 +653,16 @@ export const posthogScenario: Scenario = {
     }
 
     // ---- cleanup downstream resources before dashboard delete ----
-    if (experimentId && tools['posthog_delete_experiment']) {
+    // The provider ships no delete_experiment tool; archiving via
+    // update_experiment is PostHog's soft delete, so the smoke experiment
+    // doesn't linger in the active experiments list.
+    if (experimentId && tools['posthog_update_experiment']) {
       try {
-        await call('posthog_delete_experiment', { project_id: pidStr, id: experimentId });
+        await call('posthog_update_experiment', { project_id: pidStr, id: experimentId, archived: true });
+        steps.push(makeStep('archive experiment (cleanup)', 'posthog_update_experiment', 'pass'));
       } catch (error) {
-        log.warn(`Could not delete experiment ${experimentId}`, errorMessage(error));
+        log.error(`Failed to archive smoke experiment ${experimentId} — clean up manually.`, errorMessage(error));
+        steps.push(makeStep('archive experiment (cleanup)', 'posthog_update_experiment', 'fail', errorMessage(error)));
       }
     }
     if (actionId && tools['posthog_delete_action']) {
@@ -689,7 +694,7 @@ export const posthogScenario: Scenario = {
     }
 
     try {
-      await call('posthog_delete_dashboard', { projectId, dashboardId });
+      await call('posthog_delete_dashboard', { project_id: projectId, id: dashboardId });
       steps.push(makeStep('delete dashboard', 'posthog_delete_dashboard', 'pass'));
     } catch (error) {
       log.error(`Failed to delete smoke dashboard ${dashboardId}`, errorMessage(error));

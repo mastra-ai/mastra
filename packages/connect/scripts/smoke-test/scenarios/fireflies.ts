@@ -33,7 +33,6 @@ export const firefliesScenario: Scenario = {
           ['fireflies_list_askfred_threads', { limit: 5 }],
           ['fireflies_list_active_meetings', {}],
           ['fireflies_get_analytics', {}],
-          ['fireflies_list_channels', {}],
         ],
         tools,
       )),
@@ -114,7 +113,7 @@ export const firefliesScenario: Scenario = {
     let threadId: string | undefined;
     try {
       const thread = await call<{ id: string }>('fireflies_create_askfred_thread', {
-        message: `${runId} smoke thread: what are my latest meetings about?`,
+        query: `${runId} smoke thread: what are my latest meetings about?`,
       });
       threadId = thread.id;
       steps.push(makeStep('create askfred thread', 'fireflies_create_askfred_thread', 'pass', threadId));
@@ -135,8 +134,8 @@ export const firefliesScenario: Scenario = {
     if (tools['fireflies_continue_askfred_thread']) {
       try {
         await call('fireflies_continue_askfred_thread', {
-          id: threadId,
-          message: 'and summarize it',
+          thread_id: threadId,
+          query: 'and summarize it',
         });
         steps.push(makeStep('continue askfred thread', 'fireflies_continue_askfred_thread', 'pass'));
       } catch (error) {

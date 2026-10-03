@@ -88,7 +88,7 @@ export const openaiScenario: Scenario = {
 
     if (vectorStoreId && tools['openai_update_vector_store']) {
       try {
-        await call('openai_update_vector_store', { vectorStoreId, name: `smoke-${runId}-renamed` });
+        await call('openai_update_vector_store', { vector_store_id: vectorStoreId, name: `smoke-${runId}-renamed` });
         steps.push(makeStep('update vector store', 'openai_update_vector_store', 'pass'));
       } catch (error) {
         steps.push(makeStep('update vector store', 'openai_update_vector_store', 'fail', errorMessage(error)));
@@ -147,7 +147,7 @@ export const openaiScenario: Scenario = {
 
     if (vectorStoreId && tools['openai_delete_vector_store']) {
       try {
-        await call('openai_delete_vector_store', { vectorStoreId });
+        await call('openai_delete_vector_store', { vector_store_id: vectorStoreId });
         steps.push(makeStep('delete vector store', 'openai_delete_vector_store', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke vector store ${vectorStoreId}`, errorMessage(error));
