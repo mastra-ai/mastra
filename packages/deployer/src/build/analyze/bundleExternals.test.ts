@@ -484,7 +484,7 @@ describe('bundleExternals', () => {
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
       bundlerOptions: {
-        ...normalizeExternals(['ajv']),
+        ...normalizeExternals(),
         alias: { ajv: shimFile },
       },
     });
