@@ -1,6 +1,6 @@
 ---
 title: 'Connect | Mastra platform'
-description: 'Get started with @mastra/connect: give an agent live toolsets backed by Mastra platform connections, plus channels, raw credentials, and sandbox environments.'
+description: 'Get started with @mastra/connect: give an agent live toolsets backed by Mastra platform connections, plus channels and raw credentials.'
 packages:
   - '@mastra/connect'
 ---
@@ -11,7 +11,6 @@ packages:
 
 - [`tools()`](/reference/connect/tools): a live toolset resolver for agents.
 - [`channels()`](/reference/connect/channels): chat channel providers (Slack, Telegram, Discord) for `Mastra({ channels })`.
-- [`environment()`](/reference/connect/environment): credentials materialized as sandbox environment variables.
 - [`credential()`](/reference/connect/credential): the raw credential for a connection, for custom SDK or MCP use.
 
 This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Providers](/docs/mastra-platform/providers).
@@ -130,23 +129,6 @@ export const mastra = new Mastra({
 ```
 
 `channels()` is async: provider instances are constructed up front so their webhook and OAuth routes mount at `Mastra` construction. Slack, Telegram, and Discord are supported, backed by `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`. See the [`channels()` reference](/reference/connect/channels).
-
-## Authenticate a sandbox
-
-Agents that shell out to CLIs inside a sandbox can reuse project connections as environment credentials with [`environment()`](/reference/connect/environment):
-
-```typescript
-import { environment } from '@mastra/connect'
-
-const { env, onStart } = await environment()
-
-const sandbox = new E2BSandbox({
-  env, // GH_TOKEN, GITHUB_TOKEN, …
-  onStart, // wires the git credential helper
-})
-```
-
-GitHub is the first supported provider: its OAuth token is exported as `GH_TOKEN`/`GITHUB_TOKEN`, so `gh` and `git` HTTPS operations authenticate as the connected user.
 
 ## Custom interactions with `credential()`
 

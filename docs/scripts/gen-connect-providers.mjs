@@ -18,6 +18,9 @@ import { join } from 'node:path';
 const root = process.argv[2];
 const providersDir = join(root, 'packages/connect/src/providers');
 
+// Providers present in the package but not part of the documented release.
+const EXCLUDE = new Set(['twitter-v2']);
+
 const DISPLAY = {
   anthropic: 'Anthropic',
   clerk: 'Clerk',
@@ -43,7 +46,6 @@ const DISPLAY = {
   snowflake: 'Snowflake',
   stripe: 'Stripe',
   supabase: 'Supabase',
-  'twitter-v2': 'Twitter/X',
   workos: 'WorkOS',
 };
 
@@ -72,7 +74,6 @@ const LOGOS = {
   snowflake: { slug: 'snowflake' },
   stripe: { slug: 'stripe' },
   supabase: { slug: 'supabase' },
-  'twitter-v2': { slug: 'x', mono: true },
   workos: { slug: 'workos', mono: true },
 };
 
@@ -85,6 +86,7 @@ export function logoJsx(provider) {
 
 const providers = readdirSync(providersDir)
   .filter(p => {
+    if (EXCLUDE.has(p)) return false;
     try {
       return statSync(join(providersDir, p, 'tools')).isDirectory();
     } catch {
@@ -132,7 +134,7 @@ for (const provider of providers) {
     .replace(/ /g, '-');
   tocRows.push(`| ${logoJsx(provider)}[${name}](#${slug}) | \`${provider}\` | ${tools.length} |`);
   out += `\n## ${name}\n\n`;
-  out += `Provider ID: \`${provider}\` · Connection env var: \`MASTRA_${provider.toUpperCase().replace(/-/g, '_')}_CONNECTION_ID\` · ${tools.length} tools\n\n`;
+  out += `Provider ID: \`${provider}\` · ${tools.length} tools\n\n`;
   out += `| Tool | Description |\n| - | - |\n`;
   for (const t of tools) {
     out += `| \`${t.id}\` | ${t.desc || '—'} |\n`;
@@ -141,7 +143,7 @@ for (const provider of providers) {
 
 const header = `---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset shipped in @mastra/connect: provider IDs, connection environment variables, and the full tool list per provider."
+description: "Every generated provider toolset shipped in @mastra/connect: provider IDs and the full tool list per provider."
 packages:
   - "@mastra/connect"
 ---
