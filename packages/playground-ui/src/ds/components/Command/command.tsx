@@ -26,7 +26,31 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
+type CommandDialogVariant = 'default' | 'inset';
+
+const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
+  default: 'overflow-hidden py-0',
+  inset: 'top-1/4 translate-y-0 overflow-hidden bg-muted p-1',
+};
+
+const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
+  default: cn(
+    '[&_[data-slot=command-input-wrapper]_svg]:size-5',
+    '**:[[cmdk-input]]:h-12',
+    '[&_[cmdk-item]_svg]:size-5',
+  ),
+  inset: cn(
+    'gap-1',
+    '[&_[data-slot=command-input-wrapper]_svg]:size-icon-md',
+    '**:[[cmdk-input]]:h-11 **:[[cmdk-input]]:text-label',
+    '[&_[cmdk-item]_svg]:size-icon-sm',
+    '**:[[cmdk-group-heading]]:tracking-normal! **:[[cmdk-group-heading]]:normal-case!',
+    '**:[[cmdk-list]]:h-(--cmdk-list-height) **:[[cmdk-list]]:transition-[height] **:[[cmdk-list]]:duration-normal **:[[cmdk-list]]:ease-out-custom motion-reduce:**:[[cmdk-list]]:transition-none',
+    '**:[[cmdk-empty]]:px-4 **:[[cmdk-empty]]:pt-3 **:[[cmdk-empty]]:pb-1 **:[[cmdk-empty]]:text-left **:[[cmdk-empty]]:text-caption',
+  ),
+};
+
+type CommandDialogBaseProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
   children?: React.ReactNode;
   title?: string;
   description?: string;
@@ -38,8 +62,13 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   overlayClassName?: string;
 };
 
+type CommandDialogProps = CommandDialogBaseProps &
+  ({ variant?: 'default'; footer?: never } | { variant: 'inset'; footer?: React.ReactNode });
+
 const CommandDialog = ({
   children,
+  variant = 'default',
+  footer,
   title = 'Command Palette',
   description = 'Search for commands and actions',
   size,
@@ -70,8 +99,9 @@ const CommandDialog = ({
       <DialogContent
         size={size}
         showOverlay={showOverlay}
+        showCloseButton={variant !== 'inset'}
         overlayClassName={overlayClassName}
-        className={cn('overflow-hidden py-0', contentClassName)}
+        className={cn(commandDialogContentClasses[variant], contentClassName)}
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
@@ -83,14 +113,28 @@ const CommandDialog = ({
           className={cn(
             '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:text-column **:[[cmdk-group-heading]]:text-muted-foreground',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
-            '[&_[data-slot=command-input-wrapper]_svg]:size-5',
-            '**:[[cmdk-input]]:h-12',
             '**:[[cmdk-item]]:p-2',
-            '[&_[cmdk-item]_svg]:size-5',
+            commandDialogCommandClasses[variant],
             commandClassName,
           )}
         >
-          {children}
+          {variant === 'inset' ? (
+            <>
+              <div
+                data-slot="command-dialog-panel"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-background"
+              >
+                {children}
+              </div>
+              {footer ? (
+                <div data-slot="command-dialog-footer" className="flex items-center justify-between gap-3 pr-1">
+                  {footer}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            children
+          )}
         </Command>
       </DialogContent>
     </Dialog>
@@ -246,6 +290,8 @@ const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanE
   );
 };
 CommandShortcut.displayName = 'CommandShortcut';
+
+export type { CommandDialogVariant };
 
 export {
   Command,

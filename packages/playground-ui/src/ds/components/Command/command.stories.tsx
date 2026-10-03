@@ -1,10 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
+  BarChart3,
   Bot,
+  Box,
   Calculator,
   Calendar,
   CreditCard,
+  Folder,
   GitBranch,
+  LifeBuoy,
+  ListTree,
   MessageSquare,
   Rocket,
   Settings,
@@ -370,4 +375,104 @@ export const InDialogWithDisabledRows: Story = {
       </Dialog>
     );
   },
+};
+
+const InsetFooter = () => (
+  <>
+    <Button variant="ghost" size="sm" icon={<MessageSquare />}>
+      Send feedback
+    </Button>
+    <span className="flex items-center gap-1.5">
+      <Kbd size="sm">↑</Kbd>
+      <Kbd size="sm">↓</Kbd>
+      <Kbd size="sm">↵</Kbd>
+      <Kbd size="sm">Esc</Kbd>
+    </span>
+  </>
+);
+
+const InsetResults = ({ search }: { search: string }) => (
+  <CommandList scrollArea scrollAreaViewportClassName="max-h-dropdown">
+    <CommandEmpty>No pages, projects, or commands match.</CommandEmpty>
+    <CommandGroup heading="Observability">
+      <CommandItem>
+        <BarChart3 />
+        Metrics
+      </CommandItem>
+      <CommandItem>
+        <ListTree />
+        Traces
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Infrastructure">
+      <CommandItem>
+        <Box />
+        Deploys
+      </CommandItem>
+      <CommandItem>
+        <Settings />
+        Settings
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Projects">
+      <CommandItem>
+        <Folder />
+        Support agent
+        <CommandShortcut>Current</CommandShortcut>
+      </CommandItem>
+      <CommandItem>
+        <Folder />
+        Research workflow
+      </CommandItem>
+    </CommandGroup>
+    <CommandGroup heading="Help" forceMount={search.length > 0}>
+      {search ? (
+        <CommandItem forceMount value={`ask ai ${search}`}>
+          <Bot />
+          Ask AI: “{search}”<CommandShortcut>⌘ ↵</CommandShortcut>
+        </CommandItem>
+      ) : null}
+      <CommandItem forceMount={search.length > 0} value="help contact support">
+        <LifeBuoy />
+        Contact support
+      </CommandItem>
+    </CommandGroup>
+  </CommandList>
+);
+
+const InsetStory = ({ initialSearch }: { initialSearch: string }) => {
+  const [open, setOpen] = React.useState(true);
+  const [search, setSearch] = React.useState(initialSearch);
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>Open command menu</Button>
+      <CommandDialog
+        open={open}
+        onOpenChange={setOpen}
+        variant="inset"
+        size="lg"
+        showOverlay
+        footer={<InsetFooter />}
+        title="Search"
+        description="Go to a page, switch projects, or run a command."
+        commandLabel="Search pages, projects, and commands"
+      >
+        <CommandInput placeholder="Search pages, projects, and commands" value={search} onValueChange={setSearch} />
+        <InsetResults search={search.trim()} />
+      </CommandDialog>
+    </>
+  );
+};
+
+export const Inset: Story = {
+  render: () => <InsetStory initialSearch="" />,
+};
+
+export const InsetFiltered: Story = {
+  render: () => <InsetStory initialSearch="trace" />,
+};
+
+export const InsetNoResults: Story = {
+  render: () => <InsetStory initialSearch="how do I add memory" />,
 };
