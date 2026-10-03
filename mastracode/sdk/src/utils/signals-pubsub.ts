@@ -60,7 +60,9 @@ function isSafePathSegment(value: string): boolean {
 
 function requireSafePathSegment(value: string): string {
   if (!isSafePathSegment(value)) {
-    throw new Error(`Cannot route a signals pubsub path whose resourceId ${JSON.stringify(value)} is not a safe directory name`);
+    throw new Error(
+      `Cannot route a signals pubsub path whose resourceId ${JSON.stringify(value)} is not a safe directory name`,
+    );
   }
   return value;
 }

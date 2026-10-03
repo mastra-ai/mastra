@@ -318,9 +318,9 @@ describe('SignalsPubSub', () => {
     await expect(pubsub.publish(threadTopic('../escape', 'thread-1'), event)).rejects.toThrow(
       /resourceId .* is not a safe directory name/,
     );
-    await expect(
-      pubsub.getLeaseProvider().acquireLease('../escape\0thread-1', 'run-1', 1000),
-    ).rejects.toThrow(/resourceId .* is not a safe directory name/);
+    await expect(pubsub.getLeaseProvider().acquireLease('../escape\0thread-1', 'run-1', 1000)).rejects.toThrow(
+      /resourceId .* is not a safe directory name/,
+    );
 
     expect(mocks.instances.some(instance => instance.socketPath.includes('escape'))).toBe(false);
   });
