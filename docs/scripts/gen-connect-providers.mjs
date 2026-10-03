@@ -7,7 +7,7 @@
  *   node docs/scripts/gen-connect-providers.mjs .
  *
  * Logos are sourced from theSVG (the same source the platform dashboard
- * uses). LOGOS maps each integration ID to its theSVG slug; `mono: true`
+ * uses). LOGOS maps each provider ID to its theSVG slug; `mono: true`
  * marks single-color marks that the ProviderLogo component tints for
  * light/dark themes, and `src` overrides the URL for providers theSVG
  * lacks.
@@ -132,7 +132,7 @@ for (const provider of providers) {
     .replace(/ /g, '-');
   tocRows.push(`| ${logoJsx(provider)}[${name}](#${slug}) | \`${provider}\` | ${tools.length} |`);
   out += `\n## ${name}\n\n`;
-  out += `Integration ID: \`${provider}\` · Connection env var: \`MASTRA_${provider.toUpperCase().replace(/-/g, '_')}_CONNECTION_ID\` · ${tools.length} tools\n\n`;
+  out += `Provider ID: \`${provider}\` · Connection env var: \`MASTRA_${provider.toUpperCase().replace(/-/g, '_')}_CONNECTION_ID\` · ${tools.length} tools\n\n`;
   out += `| Tool | Description |\n| - | - |\n`;
   for (const t of tools) {
     out += `| \`${t.id}\` | ${t.desc || '—'} |\n`;
@@ -141,7 +141,7 @@ for (const provider of providers) {
 
 const header = `---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset shipped in @mastra/connect: integration IDs, connection environment variables, and the full tool list per provider."
+description: "Every generated provider toolset shipped in @mastra/connect: provider IDs, connection environment variables, and the full tool list per provider."
 packages:
   - "@mastra/connect"
 ---
@@ -150,13 +150,13 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-\`@mastra/connect\` ships generated toolsets for ${providers.length} providers (${total} tools in this version). [\`tools()\`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its integration ID.
+\`@mastra/connect\` ships generated toolsets for ${providers.length} providers (${total} tools in this version). [\`tools()\`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
-Tool keys are stable identifiers of the form \`<integration>_<action>\` and are the values accepted by \`allowTools\` and \`disallowTools\`. Toolsets are versioned with the package, so the exact list depends on the installed \`@mastra/connect\` version; this page reflects the version it shipped with.
+Tool keys are stable identifiers of the form \`<provider>_<action>\` and are the values accepted by \`allowTools\` and \`disallowTools\`. Toolsets are versioned with the package, so the exact list depends on the installed \`@mastra/connect\` version; this page reflects the version it shipped with.
 
-MCP integrations — Airtable, Attio, Canva, Neon, Render, and Sanity — serve their tools from the provider's hosted MCP server at runtime and are not listed here. See [MCP integrations](/docs/mastra-platform/integrations#mcp-integrations) for the list and links to each provider's MCP documentation.
+MCP providers — Airtable, Attio, Canva, Neon, Render, and Sanity — serve their tools from their hosted MCP servers at runtime and are not listed here. See [MCP providers](/docs/mastra-platform/providers#mcp-providers) for the list and links to each provider's MCP documentation.
 
-| Provider | Integration ID | Tools |
+| Provider | Provider ID | Tools |
 | - | - | - |
 ${tocRows.join('\n')}
 `;

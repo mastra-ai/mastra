@@ -7,14 +7,14 @@ packages:
 
 # Connect
 
-`@mastra/connect` turns the [integrations](/docs/mastra-platform/integrations) attached to a Mastra platform project into things your application can use directly:
+`@mastra/connect` turns the [provider connections](/docs/mastra-platform/providers) attached to a Mastra platform project into things your application can use directly:
 
 - [`tools()`](/reference/connect/tools): a live toolset resolver for agents.
 - [`channels()`](/reference/connect/channels): chat channel providers (Slack, Telegram, Discord) for `Mastra({ channels })`.
 - [`environment()`](/reference/connect/environment): credentials materialized as sandbox environment variables.
 - [`credential()`](/reference/connect/credential): the raw credential for a connection, for custom SDK or MCP use.
 
-This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Integrations](/docs/mastra-platform/integrations).
+This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Providers](/docs/mastra-platform/providers).
 
 ## Prerequisites
 
@@ -38,7 +38,7 @@ mastra connect add linear
 
 OAuth providers like Linear open a consent screen in your browser, and the CLI waits until the connection is active; API-key providers prompt for credentials in the terminal. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`.
 
-Providers can also be connected from the project's Integrations tab in the dashboard. [Integrations](/docs/mastra-platform/integrations#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
+Providers can also be connected from the project's Integrations tab in the dashboard. [Providers](/docs/mastra-platform/providers#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
 
 ## Configure the environment
 
@@ -49,7 +49,7 @@ MASTRA_PLATFORM_ACCESS_TOKEN=your-token
 MASTRA_PROJECT_ID=your-project-id
 ```
 
-Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/integrations#environment-variables).
+Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/providers#environment-variables).
 
 ## Give an agent connected tools
 
@@ -67,7 +67,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so running `mastra connect add` (or connecting from the dashboard) makes the new provider's tools available to the running server without a restart.
+With no options, every connected provider with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so running `mastra connect add` (or connecting from the dashboard) makes the new provider's tools available to the running server without a restart.
 
 Ask the agent to do something with a connected provider:
 
@@ -87,7 +87,7 @@ const opsTools = tools({
 })
 ```
 
-Use the object form for per-integration control. `allowTools` and `disallowTools` are mutually exclusive per integration, and unknown integration IDs or tool names throw at startup so configuration errors surface early:
+Use the object form for per-provider control. `allowTools` and `disallowTools` are mutually exclusive per provider, and unknown provider IDs or tool names throw at startup so configuration errors surface early:
 
 ```typescript
 const opsTools = tools({
@@ -168,6 +168,6 @@ Handle returned credentials carefully. They grant direct access to the provider 
 
 ## Next steps
 
-- [Integrations: platform setup and configuration](/docs/mastra-platform/integrations)
+- [Providers: platform setup and configuration](/docs/mastra-platform/providers)
 - [`tools()` reference](/reference/connect/tools)
 - [Provider toolsets reference](/reference/connect/providers)

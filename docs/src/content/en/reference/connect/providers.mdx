@@ -1,6 +1,6 @@
 ---
 title: "Reference: Provider toolsets | Connect"
-description: "Every generated provider toolset shipped in @mastra/connect: integration IDs, connection environment variables, and the full tool list per provider."
+description: "Every generated provider toolset shipped in @mastra/connect: provider IDs, connection environment variables, and the full tool list per provider."
 packages:
   - "@mastra/connect"
 ---
@@ -9,13 +9,13 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-`@mastra/connect` ships generated toolsets for 26 providers (1014 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its integration ID.
+`@mastra/connect` ships generated toolsets for 26 providers (1014 tools in this version). [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
-Tool keys are stable identifiers of the form `<integration>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package, so the exact list depends on the installed `@mastra/connect` version; this page reflects the version it shipped with.
+Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package, so the exact list depends on the installed `@mastra/connect` version; this page reflects the version it shipped with.
 
-MCP integrations — Airtable, Attio, Canva, Neon, Render, and Sanity — serve their tools from the provider's hosted MCP server at runtime and are not listed here. See [MCP integrations](/docs/mastra-platform/integrations#mcp-integrations) for the list and links to each provider's MCP documentation.
+MCP providers — Airtable, Attio, Canva, Neon, Render, and Sanity — serve their tools from their hosted MCP servers at runtime and are not listed here. See [MCP providers](/docs/mastra-platform/providers#mcp-providers) for the list and links to each provider's MCP documentation.
 
-| Provider | Integration ID | Tools |
+| Provider | Provider ID | Tools |
 | - | - | - |
 | <ProviderLogo slug="anthropic" mono /> [Anthropic](#anthropic) | `anthropic` | 12 |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
@@ -46,7 +46,7 @@ MCP integrations — Airtable, Attio, Canva, Neon, Render, and Sanity — serve 
 
 ## Anthropic
 
-Integration ID: `anthropic` · Connection env var: `MASTRA_ANTHROPIC_CONNECTION_ID` · 12 tools
+Provider ID: `anthropic` · Connection env var: `MASTRA_ANTHROPIC_CONNECTION_ID` · 12 tools
 
 | Tool | Description |
 | - | - |
@@ -65,7 +65,7 @@ Integration ID: `anthropic` · Connection env var: `MASTRA_ANTHROPIC_CONNECTION_
 
 ## Clerk
 
-Integration ID: `clerk` · Connection env var: `MASTRA_CLERK_CONNECTION_ID` · 42 tools
+Provider ID: `clerk` · Connection env var: `MASTRA_CLERK_CONNECTION_ID` · 42 tools
 
 | Tool | Description |
 | - | - |
@@ -114,7 +114,7 @@ Integration ID: `clerk` · Connection env var: `MASTRA_CLERK_CONNECTION_ID` · 4
 
 ## Discord
 
-Integration ID: `discord` · Connection env var: `MASTRA_DISCORD_CONNECTION_ID` · 33 tools
+Provider ID: `discord` · Connection env var: `MASTRA_DISCORD_CONNECTION_ID` · 33 tools
 
 | Tool | Description |
 | - | - |
@@ -154,7 +154,7 @@ Integration ID: `discord` · Connection env var: `MASTRA_DISCORD_CONNECTION_ID` 
 
 ## Fireflies.ai
 
-Integration ID: `fireflies` · Connection env var: `MASTRA_FIREFLIES_CONNECTION_ID` · 27 tools
+Provider ID: `fireflies` · Connection env var: `MASTRA_FIREFLIES_CONNECTION_ID` · 27 tools
 
 | Tool | Description |
 | - | - |
@@ -188,7 +188,7 @@ Integration ID: `fireflies` · Connection env var: `MASTRA_FIREFLIES_CONNECTION_
 
 ## GitHub
 
-Integration ID: `github` · Connection env var: `MASTRA_GITHUB_CONNECTION_ID` · 46 tools
+Provider ID: `github` · Connection env var: `MASTRA_GITHUB_CONNECTION_ID` · 46 tools
 
 | Tool | Description |
 | - | - |
@@ -241,7 +241,7 @@ Integration ID: `github` · Connection env var: `MASTRA_GITHUB_CONNECTION_ID` ·
 
 ## Google Analytics
 
-Integration ID: `google-analytics` · Connection env var: `MASTRA_GOOGLE_ANALYTICS_CONNECTION_ID` · 11 tools
+Provider ID: `google-analytics` · Connection env var: `MASTRA_GOOGLE_ANALYTICS_CONNECTION_ID` · 11 tools
 
 | Tool | Description |
 | - | - |
@@ -259,7 +259,7 @@ Integration ID: `google-analytics` · Connection env var: `MASTRA_GOOGLE_ANALYTI
 
 ## Google Calendar
 
-Integration ID: `google-calendar` · Connection env var: `MASTRA_GOOGLE_CALENDAR_CONNECTION_ID` · 43 tools
+Provider ID: `google-calendar` · Connection env var: `MASTRA_GOOGLE_CALENDAR_CONNECTION_ID` · 43 tools
 
 | Tool | Description |
 | - | - |
@@ -309,7 +309,7 @@ Integration ID: `google-calendar` · Connection env var: `MASTRA_GOOGLE_CALENDAR
 
 ## Google Docs
 
-Integration ID: `google-docs` · Connection env var: `MASTRA_GOOGLE_DOCS_CONNECTION_ID` · 37 tools
+Provider ID: `google-docs` · Connection env var: `MASTRA_GOOGLE_DOCS_CONNECTION_ID` · 37 tools
 
 | Tool | Description |
 | - | - |
@@ -353,7 +353,7 @@ Integration ID: `google-docs` · Connection env var: `MASTRA_GOOGLE_DOCS_CONNECT
 
 ## Google Drive
 
-Integration ID: `google-drive` · Connection env var: `MASTRA_GOOGLE_DRIVE_CONNECTION_ID` · 30 tools
+Provider ID: `google-drive` · Connection env var: `MASTRA_GOOGLE_DRIVE_CONNECTION_ID` · 30 tools
 
 | Tool | Description |
 | - | - |
@@ -390,7 +390,7 @@ Integration ID: `google-drive` · Connection env var: `MASTRA_GOOGLE_DRIVE_CONNE
 
 ## Gmail
 
-Integration ID: `google-mail` · Connection env var: `MASTRA_GOOGLE_MAIL_CONNECTION_ID` · 52 tools
+Provider ID: `google-mail` · Connection env var: `MASTRA_GOOGLE_MAIL_CONNECTION_ID` · 52 tools
 
 | Tool | Description |
 | - | - |
@@ -449,7 +449,7 @@ Integration ID: `google-mail` · Connection env var: `MASTRA_GOOGLE_MAIL_CONNECT
 
 ## Google Sheets
 
-Integration ID: `google-sheet` · Connection env var: `MASTRA_GOOGLE_SHEET_CONNECTION_ID` · 18 tools
+Provider ID: `google-sheet` · Connection env var: `MASTRA_GOOGLE_SHEET_CONNECTION_ID` · 18 tools
 
 | Tool | Description |
 | - | - |
@@ -474,7 +474,7 @@ Integration ID: `google-sheet` · Connection env var: `MASTRA_GOOGLE_SHEET_CONNE
 
 ## HubSpot
 
-Integration ID: `hubspot` · Connection env var: `MASTRA_HUBSPOT_CONNECTION_ID` · 49 tools
+Provider ID: `hubspot` · Connection env var: `MASTRA_HUBSPOT_CONNECTION_ID` · 49 tools
 
 | Tool | Description |
 | - | - |
@@ -530,7 +530,7 @@ Integration ID: `hubspot` · Connection env var: `MASTRA_HUBSPOT_CONNECTION_ID` 
 
 ## incident.io
 
-Integration ID: `incident-io` · Connection env var: `MASTRA_INCIDENT_IO_CONNECTION_ID` · 66 tools
+Provider ID: `incident-io` · Connection env var: `MASTRA_INCIDENT_IO_CONNECTION_ID` · 66 tools
 
 | Tool | Description |
 | - | - |
@@ -603,7 +603,7 @@ Integration ID: `incident-io` · Connection env var: `MASTRA_INCIDENT_IO_CONNECT
 
 ## Jira
 
-Integration ID: `jira` · Connection env var: `MASTRA_JIRA_CONNECTION_ID` · 38 tools
+Provider ID: `jira` · Connection env var: `MASTRA_JIRA_CONNECTION_ID` · 38 tools
 
 | Tool | Description |
 | - | - |
@@ -648,7 +648,7 @@ Integration ID: `jira` · Connection env var: `MASTRA_JIRA_CONNECTION_ID` · 38 
 
 ## Linear
 
-Integration ID: `linear` · Connection env var: `MASTRA_LINEAR_CONNECTION_ID` · 46 tools
+Provider ID: `linear` · Connection env var: `MASTRA_LINEAR_CONNECTION_ID` · 46 tools
 
 | Tool | Description |
 | - | - |
@@ -701,7 +701,7 @@ Integration ID: `linear` · Connection env var: `MASTRA_LINEAR_CONNECTION_ID` ·
 
 ## Microsoft Teams
 
-Integration ID: `microsoft-teams` · Connection env var: `MASTRA_MICROSOFT_TEAMS_CONNECTION_ID` · 25 tools
+Provider ID: `microsoft-teams` · Connection env var: `MASTRA_MICROSOFT_TEAMS_CONNECTION_ID` · 25 tools
 
 | Tool | Description |
 | - | - |
@@ -733,7 +733,7 @@ Integration ID: `microsoft-teams` · Connection env var: `MASTRA_MICROSOFT_TEAMS
 
 ## Notion
 
-Integration ID: `notion` · Connection env var: `MASTRA_NOTION_CONNECTION_ID` · 44 tools
+Provider ID: `notion` · Connection env var: `MASTRA_NOTION_CONNECTION_ID` · 44 tools
 
 | Tool | Description |
 | - | - |
@@ -784,7 +784,7 @@ Integration ID: `notion` · Connection env var: `MASTRA_NOTION_CONNECTION_ID` ·
 
 ## OpenAI
 
-Integration ID: `openai` · Connection env var: `MASTRA_OPENAI_CONNECTION_ID` · 26 tools
+Provider ID: `openai` · Connection env var: `MASTRA_OPENAI_CONNECTION_ID` · 26 tools
 
 | Tool | Description |
 | - | - |
@@ -817,7 +817,7 @@ Integration ID: `openai` · Connection env var: `MASTRA_OPENAI_CONNECTION_ID` ·
 
 ## PostHog
 
-Integration ID: `posthog` · Connection env var: `MASTRA_POSTHOG_CONNECTION_ID` · 67 tools
+Provider ID: `posthog` · Connection env var: `MASTRA_POSTHOG_CONNECTION_ID` · 67 tools
 
 | Tool | Description |
 | - | - |
@@ -891,7 +891,7 @@ Integration ID: `posthog` · Connection env var: `MASTRA_POSTHOG_CONNECTION_ID` 
 
 ## Resend
 
-Integration ID: `resend` · Connection env var: `MASTRA_RESEND_CONNECTION_ID` · 80 tools
+Provider ID: `resend` · Connection env var: `MASTRA_RESEND_CONNECTION_ID` · 80 tools
 
 | Tool | Description |
 | - | - |
@@ -978,7 +978,7 @@ Integration ID: `resend` · Connection env var: `MASTRA_RESEND_CONNECTION_ID` ·
 
 ## Slack
 
-Integration ID: `slack` · Connection env var: `MASTRA_SLACK_CONNECTION_ID` · 51 tools
+Provider ID: `slack` · Connection env var: `MASTRA_SLACK_CONNECTION_ID` · 51 tools
 
 | Tool | Description |
 | - | - |
@@ -1036,7 +1036,7 @@ Integration ID: `slack` · Connection env var: `MASTRA_SLACK_CONNECTION_ID` · 5
 
 ## Snowflake
 
-Integration ID: `snowflake` · Connection env var: `MASTRA_SNOWFLAKE_CONNECTION_ID` · 15 tools
+Provider ID: `snowflake` · Connection env var: `MASTRA_SNOWFLAKE_CONNECTION_ID` · 15 tools
 
 | Tool | Description |
 | - | - |
@@ -1058,7 +1058,7 @@ Integration ID: `snowflake` · Connection env var: `MASTRA_SNOWFLAKE_CONNECTION_
 
 ## Stripe
 
-Integration ID: `stripe` · Connection env var: `MASTRA_STRIPE_CONNECTION_ID` · 62 tools
+Provider ID: `stripe` · Connection env var: `MASTRA_STRIPE_CONNECTION_ID` · 62 tools
 
 | Tool | Description |
 | - | - |
@@ -1127,7 +1127,7 @@ Integration ID: `stripe` · Connection env var: `MASTRA_STRIPE_CONNECTION_ID` ·
 
 ## Supabase
 
-Integration ID: `supabase` · Connection env var: `MASTRA_SUPABASE_CONNECTION_ID` · 27 tools
+Provider ID: `supabase` · Connection env var: `MASTRA_SUPABASE_CONNECTION_ID` · 27 tools
 
 | Tool | Description |
 | - | - |
@@ -1161,7 +1161,7 @@ Integration ID: `supabase` · Connection env var: `MASTRA_SUPABASE_CONNECTION_ID
 
 ## Twitter/X
 
-Integration ID: `twitter-v2` · Connection env var: `MASTRA_TWITTER_V2_CONNECTION_ID` · 27 tools
+Provider ID: `twitter-v2` · Connection env var: `MASTRA_TWITTER_V2_CONNECTION_ID` · 27 tools
 
 | Tool | Description |
 | - | - |
@@ -1195,7 +1195,7 @@ Integration ID: `twitter-v2` · Connection env var: `MASTRA_TWITTER_V2_CONNECTIO
 
 ## WorkOS
 
-Integration ID: `workos` · Connection env var: `MASTRA_WORKOS_CONNECTION_ID` · 40 tools
+Provider ID: `workos` · Connection env var: `MASTRA_WORKOS_CONNECTION_ID` · 40 tools
 
 | Tool | Description |
 | - | - |

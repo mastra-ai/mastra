@@ -7,7 +7,7 @@ packages:
 
 # channels()
 
-Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable integration (Slack, Telegram, Discord) are constructed once, up front and credential-less, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
+Returns a live channels resolver over the connections attached to a Mastra platform project, ready to hand to `new Mastra({ channels })`. Provider instances for every channel-capable provider (Slack, Telegram, Discord) are constructed once, up front and credential-less, so their webhook and OAuth routes can mount at `Mastra` construction. Each resolution fetches the project's connections and late-binds credentials into the live instances, so connecting a new channel on the platform takes effect without redeploying the app.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -46,7 +46,7 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
             name: 'integrations',
             type: 'ChannelsIntegrationOverrides',
             description:
-              'Per-integration overrides keyed by integration ID (slack, telegram, discord). See Integration options below.',
+              'Per-provider overrides keyed by provider ID (slack, telegram, discord). See Per-provider options below.',
             isOptional: true,
           },
           {
@@ -70,7 +70,7 @@ The channel implementations come from `@mastra/slack`, `@mastra/telegram`, and `
 ]}
 />
 
-### Integration options
+### Per-provider options
 
 Each value in `integrations` is a `ChannelsIntegrationOptions`:
 
@@ -102,15 +102,15 @@ Each value in `integrations` is a `ChannelsIntegrationOptions`:
 
 The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
 
-- **Callable**: returns the current `Record<string, ChannelProvider>` of integrations with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap.
-- `getRoutes()`: the union of API routes for every non-disabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their integration has an active connection.
+- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap.
+- `getRoutes()`: the union of API routes for every non-disabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
 - `invalidate()`: drops the cached snapshot; the next resolution fetches fresh.
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
 - `disconnect()`: clears the cached snapshot.
 
-Integrations without an active connection don't appear in the resolved map; their routes stay mounted and begin working once a connection is attached.
+Providers without an active connection don't appear in the resolved map; their routes stay mounted and begin working once a connection is attached.
 
-Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed integration ID) reject at call time, while per-integration problems (provider construction failure, `needs_reauth`, ambiguity, credential sync failure) are downgraded to warn-and-skip.
+Failure handling matches [`tools()`](/reference/connect/tools): configuration errors (missing project ID, bad `ttlMs`, malformed provider ID) reject at call time, while per-provider problems (provider construction failure, `needs_reauth`, ambiguity, credential sync failure) are downgraded to warn-and-skip.
 
 ## Errors
 
@@ -120,7 +120,7 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_project_id` | No project ID configured |
 | `missing_access_token` | No platform token configured |
-| `invalid_options` | Malformed integration ID or invalid `ttlMs` |
-| `no_active_connection` | A channel needed its credential while its integration has no active connection |
+| `invalid_options` | Malformed provider ID or invalid `ttlMs` |
+| `no_active_connection` | A channel needed its credential while its provider has no active connection |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `platform_error` | Any other platform request failure |
