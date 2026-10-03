@@ -544,6 +544,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
@@ -577,6 +578,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.abortSignal,
               );
               for (const r of reprocessed) {
                 if (r.blocked) {
@@ -1738,8 +1740,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       this.#consumeStreamPromise = consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: error => {
+          const streamError = getErrorFromUnknown(error, { fallbackMessage: 'Unknown error consuming stream' });
           this.#consumeStreamErrored = true;
-          this.#consumeStreamError = error;
+          this.#consumeStreamError = streamError;
+          this.#error = streamError;
+          this.#status = 'failed';
+          this.#streamFinished = true;
+          Object.values(this.#delayedPromises).forEach(promise => {
+            if (promise.status.type === 'pending') {
+              promise.reject(streamError);
+            }
+          });
+          this.#closeTransportIfNeeded();
+          this.#emitter.emit('stream-error', streamError);
+          this.#emitter.emit('settled');
         },
         logger: this.logger,
       });
@@ -2187,7 +2201,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // If stream already finished, close immediately
         if (self.#streamFinished) {
-          controller.close();
+          if (self.#consumeStreamErrored) {
+            controller.error(self.#consumeStreamError);
+          } else {
+            controller.close();
+          }
           return;
         }
 
@@ -2196,19 +2214,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           safeEnqueue(controller, chunk);
         };
 
-        const finishHandler = () => {
+        const detachListeners = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
+          self.#emitter.off('stream-error', errorHandler);
+        };
+        const finishHandler = () => {
+          detachListeners();
           safeClose(controller);
+        };
+        const errorHandler = (error: unknown) => {
+          detachListeners();
+          controller.error(error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
         self.#emitter.on('finish', finishHandler);
+        self.#emitter.on('stream-error', errorHandler);
 
-        detach = () => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
-        };
+        detach = detachListeners;
       },
 
       pull(_controller) {

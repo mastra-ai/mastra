@@ -224,11 +224,15 @@ const asyncCleanup = (): Promise<void> => {
     threadScheduler?.stop();
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
-    const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
+    // The signals pubsub is Mastra's event bus: in-flight runs and background
+    // tasks drain through it during shutdown, so close it only afterwards. Call
+    // close() on the object; a detached method loses `this` and rejects silently.
+    const pubsubToClose = signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+    await Promise.allSettled([pubsubToClose?.close?.()]);
     // Checkpoint WAL and close the local storage connection after all producers
     // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
     // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
