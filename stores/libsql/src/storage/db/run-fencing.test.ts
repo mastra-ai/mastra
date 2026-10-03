@@ -116,11 +116,10 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function track<T>(promise: Promise<T>, label: string, order: string[]) {
+  function track<T>(promise: Promise<T>) {
     const state = { settled: false };
     const tracked = promise.finally(() => {
       state.settled = true;
-      order.push(label);
     });
     return { promise: tracked, settled: () => state.settled };
   }
@@ -173,7 +172,6 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
 
     // A passes its ownership check, then stops before writing.
     const pause = a.pauseAfterNextFenceCheck();
-    const order: string[] = [];
     const writeA = track(
       workflowsA.updateWorkflowResults({
         workflowName,
@@ -183,27 +181,24 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
         requestContext: {},
         fence: fenceA,
       }),
-      'write-a',
-      order,
     );
     await pause.reached;
 
-    // B's takeover has to wait for A's transaction.
+    // B's takeover has to wait for A's transaction. B reads the run as soon as
+    // its claim returns, so the read shows whether A committed first.
     const claimB = track(
-      workflowsB.claimRunOwnership({ runId, ownerId: 'b', leaseMs: LEASE_MS, force: true }),
-      'claim-b',
-      order,
+      workflowsB
+        .claimRunOwnership({ runId, ownerId: 'b', leaseMs: LEASE_MS, force: true })
+        .then(async claimed => ({ claimed, loaded: await workflowsB.loadWorkflowSnapshot({ workflowName, runId }) })),
     );
     expect(await bLockedOut(claimB.settled)).toBe(true);
 
     pause.release();
     await writeA.promise;
-    const claimedB = await claimB.promise;
-    expect(order).toEqual(['write-a', 'claim-b']);
-    expect(claimedB).toMatchObject({ acquired: true, record: { generation: fenceA.generation + 1, ownerId: 'b' } });
+    const { claimed, loaded } = await claimB.promise;
+    expect(claimed).toMatchObject({ acquired: true, record: { generation: fenceA.generation + 1, ownerId: 'b' } });
 
     // A's write landed before the takeover; nothing from A lands after it.
-    const loaded = await workflowsB.loadWorkflowSnapshot({ workflowName, runId });
     expect((loaded?.context as any)['step-a']?.output).toBe('from-a');
     await expectFenceConflict(
       workflowsA.persistWorkflowSnapshot({
@@ -233,21 +228,25 @@ describe('LibSQL run fencing: a takeover racing an in-flight write', () => {
 
     // A passes its fence check, then stops before writing.
     const pause = a.pauseAfterNextFenceCheck();
-    const order: string[] = [];
-    const writeA = track(memoryA.updateThread({ id: threadId, title: 'from-a', fence: fenceA }), 'write-a', order);
+    const writeA = track(memoryA.updateThread({ id: threadId, title: 'from-a', fence: fenceA }));
     await pause.reached;
 
-    // B's fence raise has to wait for A's transaction.
-    const raiseB = track(memoryB.raiseRunFence(fenceB), 'raise-b', order);
+    // B's fence raise has to wait for A's transaction. B reads the thread as
+    // soon as its raise returns, so the read shows whether A committed first.
+    const raiseB = track(
+      memoryB
+        .raiseRunFence(fenceB)
+        .then(async raised => ({ raised, thread: await memoryB.getThreadById({ threadId }) })),
+    );
     expect(await bLockedOut(raiseB.settled)).toBe(true);
 
     pause.release();
     await writeA.promise;
-    expect(await raiseB.promise).toBe(true);
-    expect(order).toEqual(['write-a', 'raise-b']);
+    const { raised, thread } = await raiseB.promise;
+    expect(raised).toBe(true);
 
     // A's write landed before the raise; nothing from A lands after it.
-    expect((await memoryB.getThreadById({ threadId }))?.title).toBe('from-a');
+    expect(thread?.title).toBe('from-a');
     await expectFenceConflict(memoryA.updateThread({ id: threadId, title: 'stale', fence: fenceA }));
     expect((await memoryB.getThreadById({ threadId }))?.title).toBe('from-a');
   });

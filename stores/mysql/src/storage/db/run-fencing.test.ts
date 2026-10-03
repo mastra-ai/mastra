@@ -103,11 +103,10 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
     throw new Error(`nothing blocked on connection ${id} within 10s`);
   }
 
-  function track<T>(promise: Promise<T>, label: string, order: string[]) {
+  function track<T>(promise: Promise<T>) {
     const state = { settled: false };
     const tracked = promise.finally(() => {
       state.settled = true;
-      order.push(label);
     });
     return { promise: tracked, settled: () => state.settled };
   }
@@ -151,7 +150,6 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
       workflowName,
       runId,
     ]);
-    const order: string[] = [];
     const writeA = track(
       workflowsA.updateWorkflowResults({
         workflowName,
@@ -161,28 +159,25 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
         requestContext: {},
         fence: fenceA,
       }),
-      'write-a',
-      order,
     );
     const idA = await connectionBlockedBy(snapshotLock.id, writeA.settled);
     expect(idA).not.toBeNull();
 
-    // B's takeover has to wait for A's transaction.
+    // B's takeover has to wait for A's transaction. B reads the run as soon as
+    // its claim returns, so the read shows whether A committed first.
     const claimB = track(
-      workflowsB.claimRunOwnership({ runId, ownerId: 'b', leaseMs: LEASE_MS, force: true }),
-      'claim-b',
-      order,
+      workflowsB
+        .claimRunOwnership({ runId, ownerId: 'b', leaseMs: LEASE_MS, force: true })
+        .then(async claimed => ({ claimed, loaded: await workflowsB.loadWorkflowSnapshot({ workflowName, runId }) })),
     );
     expect(await connectionBlockedBy(idA!, claimB.settled)).not.toBeNull();
 
     await snapshotLock.release();
     await writeA.promise;
-    const claimedB = await claimB.promise;
-    expect(order).toEqual(['write-a', 'claim-b']);
-    expect(claimedB).toMatchObject({ acquired: true, record: { generation: fenceA.generation + 1, ownerId: 'b' } });
+    const { claimed, loaded } = await claimB.promise;
+    expect(claimed).toMatchObject({ acquired: true, record: { generation: fenceA.generation + 1, ownerId: 'b' } });
 
     // A's write landed before the takeover; nothing from A lands after it.
-    const loaded = await workflowsB.loadWorkflowSnapshot({ workflowName, runId });
     expect((loaded?.context as any)['step-a']?.output).toBe('from-a');
     await expectFenceConflict(
       workflowsA.persistWorkflowSnapshot({
@@ -212,22 +207,26 @@ describe('MySQL run fencing: a takeover racing an in-flight write', () => {
 
     // A passes its fence check, then waits on the thread row.
     const threadLock = await lockRow('mastra_threads', 'id = ?', [threadId]);
-    const order: string[] = [];
-    const writeA = track(memoryA.updateThread({ id: threadId, title: 'from-a', fence: fenceA }), 'write-a', order);
+    const writeA = track(memoryA.updateThread({ id: threadId, title: 'from-a', fence: fenceA }));
     const idA = await connectionBlockedBy(threadLock.id, writeA.settled);
     expect(idA).not.toBeNull();
 
-    // B's fence raise has to wait for A's transaction.
-    const raiseB = track(memoryB.raiseRunFence(fenceB), 'raise-b', order);
+    // B's fence raise has to wait for A's transaction. B reads the thread as
+    // soon as its raise returns, so the read shows whether A committed first.
+    const raiseB = track(
+      memoryB
+        .raiseRunFence(fenceB)
+        .then(async raised => ({ raised, thread: await memoryB.getThreadById({ threadId }) })),
+    );
     expect(await connectionBlockedBy(idA!, raiseB.settled)).not.toBeNull();
 
     await threadLock.release();
     await writeA.promise;
-    expect(await raiseB.promise).toBe(true);
-    expect(order).toEqual(['write-a', 'raise-b']);
+    const { raised, thread } = await raiseB.promise;
+    expect(raised).toBe(true);
 
     // A's write landed before the raise; nothing from A lands after it.
-    expect((await memoryB.getThreadById({ threadId }))?.title).toBe('from-a');
+    expect(thread?.title).toBe('from-a');
     await expectFenceConflict(memoryA.updateThread({ id: threadId, title: 'stale', fence: fenceA }));
     expect((await memoryB.getThreadById({ threadId }))?.title).toBe('from-a');
   });
