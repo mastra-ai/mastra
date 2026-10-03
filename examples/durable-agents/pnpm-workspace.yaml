@@ -22,5 +22,8 @@ overrides:
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
   # Vanta 2026-09-28: nested-lock security floors
-  'protobufjs@>=7.0.0 <7.6.6': 7.6.6
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'yargs@<18.1.0': 18.2.0
+  'protobufjs@<8.8.0': 8.8.0
+  'zod@<4.0.0': 4.6.5
