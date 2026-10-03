@@ -1,12 +1,20 @@
 import type { SqlStorage } from '@cloudflare/workers-types';
 import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  getDefaultValue,
+  getSqlType,
+  isRunFenceConflictError,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 
 import { deserializeValue } from '../domains/utils';
 import { createSqlBuilder } from '../sql-builder';
 import type { SqlParam, SqlQueryOptions } from '../sql-builder';
+import { executeFenced, runFenceGuard } from './run-fencing';
+import type { RunFenceCheck } from './run-fencing';
 
 export interface DODBConfig {
   sql: SqlStorage;
@@ -405,19 +413,23 @@ export class DODB extends MastraBase {
    * @param tableName The table to insert into
    * @param records The records to insert
    * @param conflictKeys The columns to use for conflict detection (defaults to ['id'])
+   * @param check Run fence every upsert must hold; a refused upsert throws and stops the batch
    */
   async batchUpsert({
     tableName,
     records,
     conflictKeys = ['id'],
+    check,
   }: {
     tableName: TABLE_NAMES;
     records: Record<string, unknown>[];
     conflictKeys?: string[];
+    check?: RunFenceCheck;
   }): Promise<void> {
     if (records.length === 0) return;
 
     const fullTableName = this.getTableName(tableName);
+    const guard = runFenceGuard(check);
 
     try {
       // Process records in batches for better performance
@@ -461,10 +473,10 @@ export class DODB extends MastraBase {
               values as SqlParam[],
               conflictKeys,
               recordToUpsert,
+              guard,
             );
 
-            const { sql, params } = query.build();
-            await this.executeQuery({ sql, params });
+            await executeFenced(this, check, query.build());
           }
         }
 
@@ -475,6 +487,7 @@ export class DODB extends MastraBase {
 
       this.logger.debug(`Successfully batch upserted ${records.length} records into ${tableName}`);
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'BATCH_UPSERT', 'FAILED'),
