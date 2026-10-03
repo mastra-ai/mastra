@@ -23,10 +23,10 @@ type Report = {
   unknown: string[];
 };
 
-const toolIdFromFile = (provider: string, file: string): string => {
+const toolIdFromFile = (file: string): string => {
   const src = readFileSync(file, 'utf8');
   const match = src.match(/id:\s*['"`]([a-z0-9_-]+)['"`]/i);
-  if (!match) throw new Error(`Could not parse id from ${file}`);
+  if (!match?.[1]) throw new Error(`Could not parse id from ${file}`);
   return match[1];
 };
 
@@ -37,7 +37,7 @@ const providerTools = (provider: string): string[] => {
     // Underscore-prefixed files are shared helpers, not tools (e.g. discord/_bot-token.ts).
     .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts') && !f.startsWith('_'))
     .map(f => join(dir, f));
-  return files.map(f => toolIdFromFile(provider, f)).sort();
+  return files.map(f => toolIdFromFile(f)).sort();
 };
 
 const providers = readdirSync(providersRoot)
@@ -56,7 +56,9 @@ for (const provider of providers) {
     const src = readFileSync(scenarioFile, 'utf8');
     const prefix = provider.replace(/-/g, '_');
     const re = new RegExp(`['"\`](${prefix}_[a-z0-9_]+)['"\`]`, 'g');
-    for (const m of src.matchAll(re)) covered.add(m[1]);
+    for (const m of src.matchAll(re)) {
+      if (m[1]) covered.add(m[1]);
+    }
   }
 
   const missing = tools.filter(t => !covered.has(t));

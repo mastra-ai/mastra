@@ -20,6 +20,15 @@ export class MastraConnectError extends Error {
   readonly code: MastraConnectErrorCode;
   readonly status?: number;
   readonly detail?: string;
+  /**
+   * Axios-compatible alias for {@link status}. Generated provider tools come
+   * from upstream Nango templates whose error handlers check
+   * `error.response.status` (the axios/Nango SDK shape). Exposing the HTTP
+   * status under `response.status` as well lets that generated code work
+   * unchanged against the errors this package throws. Only set when the error
+   * carries an HTTP status.
+   */
+  readonly response?: { status: number };
 
   constructor(code: MastraConnectErrorCode, message: string, options?: { status?: number; detail?: string }) {
     super(message);
@@ -27,6 +36,9 @@ export class MastraConnectError extends Error {
     this.code = code;
     this.status = options?.status;
     this.detail = options?.detail ? truncate(options.detail) : undefined;
+    if (typeof options?.status === 'number') {
+      this.response = { status: options.status };
+    }
   }
 }
 
