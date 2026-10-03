@@ -411,7 +411,9 @@ async function main() {
   );
   if (process.argv[loginIndex] === 'login') {
     const { runLoginCommand } = await import('./login-command.js');
-    return process.exit(await runLoginCommand({ args: process.argv.slice(loginIndex + 1) }));
+    const code = await runLoginCommand({ args: process.argv.slice(loginIndex + 1) });
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(code);
   }
 
   const initialPrompt = takeInitialPrompt(process.argv, process.env);

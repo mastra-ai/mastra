@@ -86,6 +86,14 @@ describe('runLoginCommand', () => {
     expect(output()).not.toContain('sk-ant-secret');
   });
 
+  it('does not echo an API key pasted ahead with the other answers', async () => {
+    const add = String(getOAuthProviders().length + 1);
+    const { exitCode, authStorage, output } = run([add, 'anthropic', 'sk-ant-secret'], undefined, true);
+    await expect(exitCode).resolves.toBe(0);
+    expect(authStorage.setStoredApiKey).toHaveBeenCalledWith('anthropic', 'sk-ant-secret');
+    expect(output()).not.toContain('sk-ant-secret');
+  });
+
   it.each([
     ['an unknown option', ['99'], 'No option selected'],
     ['an unknown API key provider', [String(getOAuthProviders().length + 1), 'nope'], 'Unknown provider: nope'],

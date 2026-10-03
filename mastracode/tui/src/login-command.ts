@@ -8,7 +8,7 @@ import { seedProviderOMDefault } from '@mastra/code-sdk/onboarding/om-settings';
 import { openUrlInBrowser } from '@mastra/code-sdk/utils/open-url';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 
-type Ask = (prompt: string) => Promise<string>;
+type Ask = (prompt: string, options?: { secret?: boolean }) => Promise<string>;
 
 interface LoginCommandOptions {
   args?: string[];
@@ -56,16 +56,10 @@ async function signIn(
   say(`Signed in to ${provider.name}`);
 }
 
-async function addApiKey(
-  ask: Ask,
-  mute: (muted: boolean) => void,
-  authStorage: AuthStorage,
-  say: (line: string) => void,
-): Promise<void> {
+async function addApiKey(ask: Ask, authStorage: AuthStorage, say: (line: string) => void): Promise<void> {
   const providerId = (await ask('Provider (for example anthropic, openai, google): ')).trim();
   if (!(providerId in PROVIDER_REGISTRY)) throw new Error(`Unknown provider: ${providerId}`);
-  mute(true);
-  const key = (await ask('API key: ').finally(() => mute(false))).trim();
+  const key = (await ask('API key: ', { secret: true })).trim();
   say('');
   if (!key) throw new Error('No API key entered');
   authStorage.setStoredApiKey(providerId, key);
@@ -79,19 +73,28 @@ export async function runLoginCommand({
   authStorage = new AuthStorage(),
   openUrl = openUrlInBrowser,
 }: LoginCommandOptions = {}): Promise<number> {
-  let muted = false;
-  const echo = new Writable({
-    write(chunk, encoding, callback) {
-      if (!muted) output.write(chunk, encoding);
-      callback();
-    },
+  let echo = false;
+  const rl = createInterface({
+    input,
+    output: new Writable({
+      write(chunk, encoding, callback) {
+        if (echo) output.write(chunk, encoding);
+        callback();
+      },
+    }),
+    prompt: '',
+    terminal: Boolean(input.isTTY),
   });
-  const rl = createInterface({ input, output: echo, prompt: '', terminal: Boolean(input.isTTY) });
+  rl.on('line', () => {
+    echo = false;
+  });
   const lines = rl[Symbol.asyncIterator]();
   const say = (line: string) => output.write(`${line}\n`);
-  const ask: Ask = async prompt => {
+  const ask: Ask = async (prompt, { secret = false } = {}) => {
     output.write(prompt);
+    echo = !secret;
     const line = await lines.next();
+    echo = false;
     if (line.done) throw new Error('Input ended before sign-in finished');
     return line.value;
   };
@@ -114,14 +117,7 @@ export async function runLoginCommand({
     if (provider) {
       await signIn(ask, provider, authStorage, openUrl, say);
     } else {
-      await addApiKey(
-        ask,
-        value => {
-          muted = value;
-        },
-        authStorage,
-        say,
-      );
+      await addApiKey(ask, authStorage, say);
     }
     return 0;
   } catch (error) {
