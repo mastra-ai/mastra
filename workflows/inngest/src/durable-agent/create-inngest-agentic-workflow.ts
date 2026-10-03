@@ -13,6 +13,7 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
+  globalRunRegistry,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -341,7 +342,24 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const effectiveMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
-        return shouldContinue && underMaxSteps;
+        if (!shouldContinue || !underMaxSteps) {
+          return false;
+        }
+
+        // stopWhen is a closure parked on the in-process run registry; on a
+        // cross-worker resume the entry is absent and we fall back to maxSteps.
+        const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+        if (stopWhen && state.accumulatedSteps.length > 0) {
+          const steps = state.accumulatedSteps as any;
+          const conditions = await Promise.all(
+            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
+          );
+          if (conditions.some(Boolean)) {
+            return false;
+          }
+        }
+
+        return true;
       })
       // Map final state to output format, close agent span, and emit finish event
       .map(
