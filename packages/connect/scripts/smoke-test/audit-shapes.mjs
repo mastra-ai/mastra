@@ -22,24 +22,42 @@ for (const provider of readdirSync(providersRoot)) {
     const idMatch = src.match(/id:\s*['"`]([a-z0-9_]+)['"`]/i);
     if (!idMatch) continue;
     const schemaMatch = src.match(/export const \w+InputSchema\s*=\s*z\.object\(\{/);
-    if (!schemaMatch) { schemas.set(idMatch[1], null); continue; }
+    if (!schemaMatch) {
+      schemas.set(idMatch[1], null);
+      continue;
+    }
     const start = src.indexOf('{', schemaMatch.index + schemaMatch[0].length - 1);
     // walk braces to find the schema object body
-    let depth = 0, end = start;
+    let depth = 0,
+      end = start;
     for (let i = start; i < src.length; i++) {
       if (src[i] === '{') depth++;
-      else if (src[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
     }
     const body = src.slice(start + 1, end);
     // top-level keys: at brace/paren depth 0 within body
-    const all = new Set(); const required = new Set();
-    let d = 0, p = 0; const lines = [];
+    const all = new Set();
+    const required = new Set();
+    let d = 0,
+      p = 0;
+    const lines = [];
     let cur = '';
     for (let i = 0; i < body.length; i++) {
       const c = body[i];
-      if (c === '{' ) d++; else if (c === '}') d--;
-      else if (c === '(') p++; else if (c === ')') p--;
-      if (c === ',' && d === 0 && p === 0) { lines.push(cur); cur = ''; } else cur += c;
+      if (c === '{') d++;
+      else if (c === '}') d--;
+      else if (c === '(') p++;
+      else if (c === ')') p--;
+      if (c === ',' && d === 0 && p === 0) {
+        lines.push(cur);
+        cur = '';
+      } else cur += c;
     }
     if (cur.trim()) lines.push(cur);
     for (const seg of lines) {
@@ -76,22 +94,39 @@ for (const f of readdirSync(scenariosRoot)) {
     }
     checked++;
     const start = re.lastIndex - 1;
-    let depth = 0, end = start;
+    let depth = 0,
+      end = start;
     for (let i = start; i < src.length; i++) {
       if (src[i] === '{') depth++;
-      else if (src[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
     }
     const body = src.slice(start + 1, end);
     const hasSpread = /\.\.\./.test(body);
     // top-level keys of the literal
     const keys = new Set();
-    let d = 0, p = 0, b = 0; let cur = ''; const segs = [];
+    let d = 0,
+      p = 0,
+      b = 0;
+    let cur = '';
+    const segs = [];
     for (let i = 0; i < body.length; i++) {
       const c = body[i];
-      if (c === '{') d++; else if (c === '}') d--;
-      else if (c === '(') p++; else if (c === ')') p--;
-      else if (c === '[') b++; else if (c === ']') b--;
-      if (c === ',' && d === 0 && p === 0 && b === 0) { segs.push(cur); cur = ''; } else cur += c;
+      if (c === '{') d++;
+      else if (c === '}') d--;
+      else if (c === '(') p++;
+      else if (c === ')') p--;
+      else if (c === '[') b++;
+      else if (c === ']') b--;
+      if (c === ',' && d === 0 && p === 0 && b === 0) {
+        segs.push(cur);
+        cur = '';
+      } else cur += c;
     }
     if (cur.trim()) segs.push(cur);
     for (const seg of segs) {
@@ -119,10 +154,14 @@ for (const f of readdirSync(scenariosRoot)) {
 }
 console.log(`\nchecked ${checked} object-literal call site(s)`);
 if (skippedNonLiteral > 0) {
-  console.log(`⚠️ skipped ${skippedNonLiteral} call site(s) whose input is not an object literal (variable/array) — not shape-checked`);
+  console.log(
+    `⚠️ skipped ${skippedNonLiteral} call site(s) whose input is not an object literal (variable/array) — not shape-checked`,
+  );
 }
 if (skippedNoSchema > 0) {
-  console.log(`⚠️ skipped ${skippedNoSchema} call site(s) whose tool InputSchema could not be parsed — not shape-checked`);
+  console.log(
+    `⚠️ skipped ${skippedNoSchema} call site(s) whose tool InputSchema could not be parsed — not shape-checked`,
+  );
 }
 console.log(`${findings} finding(s)`);
 process.exit(findings > 0 ? 1 : 0);
