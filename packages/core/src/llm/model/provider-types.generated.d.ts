@@ -7897,6 +7897,7 @@ export type ProviderModelsMap = {
     'openrouter/nvidia/nemotron-3-ultra-550b-a55b',
     'openrouter/nvidia/nemotron-3.5-content-safety',
     'openrouter/nvidia/nemotron-3.5-lightning',
+    'openrouter/nvidia/switchyard',
     'openrouter/openai/gpt-oss-120b',
     'openrouter/openai/gpt-oss-20b',
     'openrouter/openai/gpt-oss-safeguard-20b',

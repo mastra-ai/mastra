@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 const SnowflakeSchema = z.string();
 
@@ -113,8 +114,7 @@ export function listMessagesTool(proxy: PlatformProxy) {
     outputSchema: listMessagesOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listMessagesOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-      const botToken = metadata?.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       if (!botToken) {
         throw new platformProxy.ActionError({

@@ -26,12 +26,7 @@ export interface ToolMappingParentSpan {
  * because MessageList keys off its presence and would otherwise override the
  * real result with `undefined`, producing a tool message with no output.
  *
- * Mapping-failure policy is engine-supplied: when
- * `onMappingError` is omitted the error propagates. The default engine omits
- * it — a toModelOutput failure fails the run, the released contract. The
- * durable engine supplies a warn-and-continue handler because redelivery
- * would re-run the mapper on every attempt; the tool result itself is still
- * usable without the mapped output.
+ * Mapping failures propagate so a broken `toModelOutput` fails the run.
  *
  * Deliberately NOT consolidated with the background-task path
  * (`background-task-result-core.ts`), which always overwrites
@@ -50,7 +45,6 @@ export async function computeModelOutputProviderMetadata(deps: {
   /** Parent for the MAPPING child span (main: current tracing span; durable:
    * the MODEL_STEP span rebuilt from serialized state). */
   parentSpan?: ToolMappingParentSpan;
-  onMappingError?: (error: unknown) => void;
 }): Promise<Record<string, unknown> | undefined> {
   const { tool, result } = deps;
   let modelOutput: unknown;
@@ -73,9 +67,7 @@ export async function computeModelOutputProviderMetadata(deps: {
       mappingSpan?.end({ output: modelOutput });
     } catch (err) {
       mappingSpan?.error({ error: err as Error, endSpan: true });
-      if (!deps.onMappingError) throw err;
-      deps.onMappingError(err);
-      modelOutput = undefined;
+      throw err;
     }
   }
 

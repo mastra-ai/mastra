@@ -97,8 +97,9 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
+import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
+import { computeNextFire } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -2238,14 +2239,25 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
+        // A declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed). Compute the timing before
+        // writing: the row is registered as `completed` rather than skipped, so
+        // the deployment stays self-consistent instead of retrying a doomed
+        // write on every boot.
+        const computeTiming = () => {
+          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        };
+
         if (!existing) {
+          const timing = computeTiming();
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
             cron: cfg.cron,
             timezone: cfg.timezone,
-            status: 'active',
-            nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+            status: timing.status,
+            nextFireAt: timing.nextFireAt,
             createdAt: now,
             updatedAt: now,
             metadata: cfg.metadata,
@@ -2255,7 +2267,9 @@ export class Mastra<
 
         // Diff config fields and patch the existing row if anything changed.
         // We deliberately leave `status` alone — a row may have been paused
-        // out-of-band via storage, and a redeploy shouldn't unpause it.
+        // out-of-band via storage, and a redeploy shouldn't unpause it. A
+        // recomputed cadence is the exception: it re-arms a completed row when
+        // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
         const cronChanged = existing.cron !== cfg.cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
@@ -2268,7 +2282,10 @@ export class Mastra<
         // Cron or timezone change invalidates the stored nextFireAt — recompute
         // from now so we don't fire on the old schedule.
         if (cronChanged || timezoneChanged) {
-          patch.nextFireAt = computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now });
+          const timing = computeTiming();
+          patch.nextFireAt = timing.nextFireAt;
+          if (timing.status === 'completed') patch.status = 'completed';
+          else if (existing.status === 'completed') patch.status = 'active';
         }
 
         if (Object.keys(patch).length > 0) {
