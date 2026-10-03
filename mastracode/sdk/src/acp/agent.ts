@@ -19,7 +19,7 @@ import type {
   AvailableCommand,
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
-import { AuthStorage, getOAuthProviders } from '../auth/storage.js';
+import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
 import { seedProviderOMDefault } from '../onboarding/om-settings.js';
 import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
@@ -105,6 +105,16 @@ function listAuthMethods({ auth, _meta }: InitializeRequest['clientCapabilities'
 function hasUsableModel(available: { id: string; hasApiKey: boolean }[], currentModelId: string): boolean {
   if (available.some(model => model.hasApiKey)) return true;
   return currentModelId !== '' && !available.some(model => model.id === currentModelId);
+}
+
+function credentialedDefaultModel(
+  available: { id: string; hasApiKey: boolean }[],
+  currentModelId: string,
+): string | undefined {
+  const current = available.find(model => model.id === currentModelId);
+  if (!current || current.hasApiKey) return undefined;
+  const credentialed = new Set(available.filter(model => model.hasApiKey).map(model => model.id));
+  return Object.values(PROVIDER_DEFAULT_MODELS).find(modelId => credentialed.has(modelId));
 }
 
 /** One ACP connection, with an independent Mastra Code runtime for each conversation. */
@@ -226,6 +236,8 @@ export class MastraCodeAcpAgent implements Agent {
       }
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
+      const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
+      if (defaultModelId) await runtime.session.model.switch({ modelId: defaultModelId });
       const models: NewSessionResponse['models'] = {
         currentModelId: runtime.session.model.get() ?? '',
         availableModels: includeCurrentModel(

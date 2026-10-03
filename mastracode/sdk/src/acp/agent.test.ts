@@ -186,11 +186,15 @@ describe('ACP Agent - Provider authentication', () => {
   function newSession(models: { id: string; hasApiKey: boolean }[] | Error, currentModelId: string) {
     const createThread = vi.fn(async () => ({ id: 'thread-1' }));
     const cleanup = vi.fn().mockResolvedValue(undefined);
+    let modelId = currentModelId;
+    const switchModel = vi.fn(async ({ modelId: next }: { modelId: string }) => {
+      modelId = next;
+    });
     const session = {
       subscribe: () => () => {},
       thread: { create: createThread, switch: async () => {} },
       mode: { get: () => 'default' },
-      model: { get: () => currentModelId },
+      model: { get: () => modelId, switch: switchModel },
     } as unknown as Session;
     const agent = new MastraCodeAcpAgent(
       { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection,
@@ -206,7 +210,7 @@ describe('ACP Agent - Provider authentication', () => {
         cleanup,
       }),
     );
-    return { created: agent.newSession({ cwd: '/tmp', mcpServers: [] }), createThread, cleanup };
+    return { created: agent.newSession({ cwd: '/tmp', mcpServers: [] }), createThread, cleanup, switchModel };
   }
 
   it.each([
@@ -236,5 +240,46 @@ describe('ACP Agent - Provider authentication', () => {
     await expect(created).rejects.toThrow('catalog unavailable');
     expect(createThread).not.toHaveBeenCalled();
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('moves a new session off a default model without credentials to a signed-in provider default', async () => {
+    const { created, switchModel } = newSession(
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: false },
+        { id: 'anthropic/claude-haiku-4-5', hasApiKey: true },
+        { id: 'xai/grok-4.5', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    );
+    await expect(created).resolves.toMatchObject({ models: { currentModelId: 'xai/grok-4.5' } });
+    expect(switchModel).toHaveBeenCalledWith({ modelId: 'xai/grok-4.5' });
+  });
+
+  it.each([
+    [
+      'the current model has credentials',
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: true },
+        { id: 'xai/grok-4.5', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    ],
+    [
+      'the current model is a custom model outside the catalog',
+      [{ id: 'xai/grok-4.5', hasApiKey: true }],
+      'local/llama',
+    ],
+    [
+      'no provider default has credentials',
+      [
+        { id: 'openai/gpt-5.5', hasApiKey: false },
+        { id: 'groq/llama', hasApiKey: true },
+      ],
+      'openai/gpt-5.5',
+    ],
+  ])('keeps the current model when %s', async (_case, models, currentModelId) => {
+    const { created, switchModel } = newSession(models, currentModelId);
+    await expect(created).resolves.toMatchObject({ models: { currentModelId } });
+    expect(switchModel).not.toHaveBeenCalled();
   });
 });
