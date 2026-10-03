@@ -14,6 +14,13 @@ import { MockStore } from '../../storage/mock';
 import { createStep, createWorkflow } from '.';
 
 function build(onResume: (data: any) => Promise<void>) {
+  // A step before the gate, so the gate's execution path is not the [0] default.
+  const pre = createStep({
+    id: 'pre',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async () => ({}),
+  });
   const gate = createStep({
     id: 'gate',
     inputSchema: z.object({}),
@@ -32,6 +39,7 @@ function build(onResume: (data: any) => Promise<void>) {
     inputSchema: z.object({}),
     outputSchema: z.object({ approved: z.boolean() }),
   })
+    .then(pre)
     .then(gate)
     .commit();
   const parent = createWorkflow({

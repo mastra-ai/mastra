@@ -1575,6 +1575,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         const storedResult = (snapshot?.context as any)?.[leafId];
         if (storedResult?.status === 'suspended') {
+          // The nested run's start clears its suspendedPaths before the inner
+          // step claims the resume, so keep them here for restart.
+          const nestedRunId = getEntryWorkflow(leaf) ? storedResult.metadata?.nestedRunId : undefined;
+          const resumedNestedPaths = nestedRunId
+            ? (await workflowsStore.loadWorkflowSnapshot({ workflowName: leafId, runId: nestedRunId }))?.suspendedPaths
+            : undefined;
           await workflowsStore.updateWorkflowResults({
             workflowName: workflowId,
             runId,
@@ -1587,6 +1593,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               // For a nested workflow step, the inner steps the caller resumed,
               // so restart can target them instead of guessing.
               ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
+              ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
             },
             requestContext,
           });
@@ -1862,11 +1869,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         // the resume data, so resume it with the data recorded on the parent.
         const nestedContext = (snapshot.context ?? {}) as Record<string, any>;
         const recordedNestedSteps = (stepResults[leafId] as any)?.resumedNestedSteps as string[] | undefined;
+        const nestedSuspendedPaths: Record<string, number[]> = {
+          ...((stepResults[leafId] as any)?.resumedNestedPaths ?? {}),
+          ...(snapshot.suspendedPaths ?? {}),
+        };
         const suspendedNestedStepId = recordedNestedSteps?.length
           ? nestedContext[recordedNestedSteps[0]!]?.status === 'suspended'
             ? recordedNestedSteps[0]
             : undefined
-          : (Object.keys(snapshot.suspendedPaths ?? {}).find(id => nestedContext[id]?.status === 'suspended') ??
+          : (Object.keys(nestedSuspendedPaths).find(id => nestedContext[id]?.status === 'suspended') ??
             Object.keys(nestedContext).find(id => nestedContext[id]?.status === 'suspended'));
         const nestedResumeSteps = recordedNestedSteps?.length ? recordedNestedSteps : [suspendedNestedStepId!];
         const nestedHasRunningStep = Object.values(nestedContext).some(result => result?.status === 'running');
@@ -1894,7 +1905,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 activeStepsPath,
                 resumeData: nestedResumeData,
               },
-              executionPath: (snapshot.suspendedPaths?.[suspendedNestedStepId] ??
+              executionPath: (nestedSuspendedPaths[suspendedNestedStepId] ??
                 snapshot.activeStepsPath?.[suspendedNestedStepId]) as any,
               runId: nestedRunId,
               resumeSteps: nestedResumeSteps,
