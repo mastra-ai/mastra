@@ -80,9 +80,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Resource ID for memory */
   resourceId?: string;
   /**
-   * Start replay from this index (0-based), or live-tail from new events only.
-   * If undefined, uses full replay (subscribeWithReplay).
-   * A numeric offset uses efficient indexed replay when supported.
+   * Inclusive, zero-based PubSub event index, or `latest` to live-tail. Numeric indexes count all
+   * cached run-topic events, including lifecycle events, not chunks. Omit it to replay all available
+   * cached events; transports without numeric offsets live-tail numeric values instead. Skipping earlier
+   * text deltas produces partial text and may make structured output fail to parse; beyond retained
+   * history, a number also skips lower-index live events on numeric-offset transports. See
+   * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
    */
   offset?: number | 'latest';
   /**

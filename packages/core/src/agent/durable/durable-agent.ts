@@ -3798,6 +3798,14 @@ export class DurableAgent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       idleTimeoutMs?: number;
       isAlive?: () => boolean | Promise<boolean>;
