@@ -85,6 +85,7 @@ Called before the parent agent delegates to a subagent. Return an object to cont
 - `proceed: false`: Reject the delegation with a `rejectionReason`
 - `modifiedPrompt`: Rewrite the prompt sent to the subagent
 - `modifiedMaxSteps`: Limit the subagent's iteration count
+- `threadMetadata`: Attach metadata (for example a `tenantId`) to the subagent's thread when it's created, so you can filter threads with `memory.listThreads({ filter: { metadata } })`
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {
