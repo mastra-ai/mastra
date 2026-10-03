@@ -111,12 +111,19 @@ export class MastraCodeAcpAgent implements Agent {
       protocolVersion: PROTOCOL_VERSION,
       agentInfo: { name: 'mastracode', title: 'Mastra Code', version: getCurrentVersion() },
       agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: false } },
+      authMethods: [
+        {
+          id: 'mastracode-login',
+          name: 'Log in with Mastra Code',
+          description: 'Open Mastra Code to sign in to a provider or add an API key',
+          type: 'terminal',
+          args: [],
+        },
+      ],
     };
   }
 
-  async authenticate(): Promise<void> {
-    throw RequestError.invalidParams(undefined, 'Configure authentication through Mastra Code before starting ACP');
-  }
+  async authenticate(): Promise<void> {}
 
   newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
     const creating = Promise.resolve().then(() => this.createNewSession(request));

@@ -29,7 +29,9 @@ A client that accepts command and argument fields can use:
 }
 ```
 
-Configure provider authentication in Mastra Code before starting the client, or supply API keys in the server process's environment. ACP sessions don't load project `.env` files into the shared process environment. The server doesn't offer interactive ACP authentication.
+Configure provider authentication in Mastra Code before starting the client, or supply API keys in the server process's environment. ACP sessions don't load project `.env` files into the shared process environment.
+
+The `initialize` response advertises one terminal authentication method, `mastracode-login`. A client that supports terminal authentication runs `mastracode` without `--acp` in a terminal, where you can sign in to a provider or add an API key. New sessions pick up the saved credentials.
 
 After initialization, the client calls `session/new` with an absolute `cwd` and an `mcpServers` array. The response includes the session ID and configuration choices. Send that ID with subsequent prompts and configuration requests.
 

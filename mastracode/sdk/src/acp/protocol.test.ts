@@ -124,6 +124,13 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
+  it('offers terminal login and accepts authentication after it', async () => {
+    const { client } = await connect();
+    const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
+    expect(authMethods).toEqual([expect.objectContaining({ id: 'mastracode-login', type: 'terminal', args: [] })]);
+    await expect(client.authenticate({ methodId: 'mastracode-login' })).resolves.toBeDefined();
+  });
+
   it('keeps the original creation error on the wire when cleanup also fails', async () => {
     const { client, createThread, cleanup } = await connect();
     const error = RequestError.invalidParams({ thread: 'broken' }, 'thread creation failed');
