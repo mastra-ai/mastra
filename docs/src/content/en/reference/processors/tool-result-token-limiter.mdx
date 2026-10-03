@@ -1,0 +1,65 @@
+---
+title: "Reference: ToolResultTokenLimiter | Processors"
+description: "Use ToolResultTokenLimiter to truncate large tool results before they're stored or sent to the language model."
+packages:
+  - "@mastra/core"
+---
+
+# ToolResultTokenLimiter
+
+The `ToolResultTokenLimiter` is an **output processor** that truncates tool results over a token limit. It runs during the agent's turn, after a tool returns and before the result is stored in the message list, streamed to clients, or sent to the model on the next step. For tools that define `toModelOutput`, the model sees the mapped output of the original result instead. See [Behavior](#behavior).
+
+## Usage example
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiterProcessor, ToolResultTokenLimiter } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'You research topics using the available tools.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { fetchPage },
+  inputProcessors: [new TokenLimiterProcessor(8000)],
+  outputProcessors: [new ToolResultTokenLimiter({ limit: 4000 })],
+})
+```
+
+When you use it with [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor), set the per-result limit well below that budget. The prompt budget also counts the tool call arguments, message roles, system messages, and per-message overhead, so a result capped at the full budget still doesn't fit.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'number | ToolResultTokenLimiterOptions',
+    description: 'The token limit, or an options object.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'ToolResultTokenLimiterOptions',
+        parameters: [
+          {
+            name: 'limit',
+            type: 'number',
+            description:
+              'Maximum number of tokens a single tool result may use, including the truncation marker. Must be an integer of at least 64.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Behavior
+
+- Results at or under the limit pass through unchanged.
+- Larger results are converted to text (objects become JSON strings), cut to fit the limit, and end with a marker such as `[truncated: showing 2,000 of 18,400 tokens]`, so the model can see the result is partial and ask for less. Token counts are estimates.
+- The truncated value replaces the stored result. The full output of a truncated result isn't kept in memory or message history.
+- A tool's `toModelOutput` receives the original, untruncated result. The model sees the full mapped output. The stored result is still truncated.
+- Results from background tasks the agent waits for are limited like any other tool result. Results that arrive after the turn ends pass through unchanged.
+- Tool errors, results from provider-executed tools, and results that can't be serialized to JSON pass through unchanged.
+- Each tool result is limited on its own. Use [`TokenLimiterProcessor`](/reference/processors/token-limiter-processor) to limit the total size of the prompt.
