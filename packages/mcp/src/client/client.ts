@@ -76,6 +76,15 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+const JSON_SCHEMA_TYPE_NAMES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
+
+/**
+ * Bounded-walk state shared across one recursive schema visit. Mirrors the
+ * policy `getJsonSchemaComplexityError` applies to the same untrusted input:
+ * a tool catalogue is server-controlled, so no single visit may cost unbounded
+ * CPU, whether through breadth, repeated references, or a cycle.
+ */
+type JsonSchemaWalkBudget = { nodes: number; seen: Set<object> };
 
 /**
  * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
@@ -1267,10 +1276,211 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.jsonSchemaValidator;
   }
 
+  /**
+   * Repairs the common `required`-inside-`properties` malformation without
+   * mutating the server-supplied object. Example of the bug:
+   *   { "properties": { "coin": { "type": "string" }, "required": ["coin"] } }
+   * Should be:
+   *   { "properties": { "coin": { "type": "string" } }, "required": ["coin"] }
+   * Only string arrays are hoisted, so a valid property literally named
+   * `required` is preserved; an existing top-level list wins.
+   */
+  private normalizeMisplacedRequired(schema: JSONSchema7): JSONSchema7 {
+    if (schema && typeof schema === 'object' && 'properties' in schema) {
+      const props = schema.properties;
+      const required: unknown = props?.required;
+      if (props && Array.isArray(required) && required.every((value: unknown) => typeof value === 'string')) {
+        this.log('debug', 'Normalizing misplaced required list in MCP tool input schema');
+        const properties = { ...props };
+        delete properties.required;
+        return { ...schema, properties, required: schema.required ?? required };
+      }
+    }
+    return schema;
+  }
+
+  /**
+   * Structural check for the schema shapes strict function-calling providers
+   * reject up front. Providers validate the whole `tools` array before running
+   * anything, so one malformed schema would fail every request. Returns a
+   * short reason when the schema is invalid, null when it is acceptable.
+   */
+  private getInputSchemaShapeError(
+    schema: unknown,
+    depth = 0,
+    budget: JsonSchemaWalkBudget = { nodes: 0, seen: new Set() },
+  ): string | null {
+    if (depth > MAX_JSON_SCHEMA_DEPTH) {
+      return `exceeds the maximum depth of ${MAX_JSON_SCHEMA_DEPTH}`;
+    }
+    // A boolean subschema is valid JSON Schema (2020-12) and stays valid where it
+    // appears nested (`unevaluatedProperties: false`, a tuple's boolean
+    // `additionalItems`). Only the root is rejected: MCP requires a tool input
+    // schema to have an object root, and the provider-facing schema a boolean
+    // becomes carries no `type: "object"`, which is one of the shapes that make a
+    // provider reject the whole tools array rather than a single tool.
+    if (typeof schema === 'boolean') return depth === 0 ? 'must be an object schema' : null;
+    if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
+      return 'expected a schema object';
+    }
+    // A repeated reference carries no new information, so revisiting it cannot
+    // change the verdict — and skipping it is what makes cycles and shared
+    // sub-schemas terminate instead of fanning out exponentially.
+    if (budget.seen.has(schema)) return null;
+    budget.seen.add(schema);
+    // Backstop, not the primary bound: `getJsonSchemaComplexityError` runs
+    // first over a superset of these edges and trips the same limit, so in
+    // practice this branch is not what rejects a broad schema. It is kept so
+    // that this walk stays independently bounded if it is ever called without
+    // the complexity check in front of it.
+    budget.nodes += 1;
+    if (budget.nodes > MAX_JSON_SCHEMA_NODES) {
+      return `exceeds the maximum node count of ${MAX_JSON_SCHEMA_NODES}`;
+    }
+    const node = schema as Record<string, unknown>;
+
+    if (node.type !== undefined) {
+      const typeEntries = Array.isArray(node.type) ? node.type : [node.type];
+      if (typeEntries.length === 0) {
+        return '"type" must be a non-empty string or string array';
+      }
+      if (typeEntries.some((entry: unknown) => typeof entry !== 'string')) {
+        return '"type" entries must be strings';
+      }
+      if (Array.isArray(node.type) && new Set(typeEntries).size !== typeEntries.length) {
+        return '"type" array must not contain duplicates';
+      }
+      if (typeEntries.some((entry: unknown) => typeof entry === 'string' && !JSON_SCHEMA_TYPE_NAMES.has(entry))) {
+        return '"type" contains an invalid type name';
+      }
+    }
+    if (node.enum !== undefined && !Array.isArray(node.enum)) {
+      return '"enum" must be an array';
+    }
+    if (node.required !== undefined) {
+      if (!Array.isArray(node.required) || node.required.some((entry: unknown) => typeof entry !== 'string')) {
+        return '"required" must be an array of strings';
+      }
+    }
+    if (node.items !== undefined) {
+      // draft-07 allows tuple-form items: an array of schemas, one per position.
+      // 2020-12 moved that shape to prefixItems; validate each entry either way,
+      // plus additionalItems for the positions past the tuple.
+      if (Array.isArray(node.items)) {
+        for (const [index, itemSchema] of node.items.entries()) {
+          const itemError = this.getInputSchemaShapeError(itemSchema, depth + 1, budget);
+          if (itemError) return `"items" entry ${index} ${itemError}`;
+        }
+        if (node.additionalItems !== undefined && typeof node.additionalItems !== 'boolean') {
+          const additionalError = this.getInputSchemaShapeError(node.additionalItems, depth + 1, budget);
+          if (additionalError) return `"additionalItems" ${additionalError}`;
+        }
+      } else {
+        const itemsError = this.getInputSchemaShapeError(node.items, depth + 1, budget);
+        if (itemsError) return `"items" ${itemsError}`;
+      }
+    }
+    for (const combinator of ['anyOf', 'oneOf', 'allOf'] as const) {
+      const branches = node[combinator];
+      if (branches !== undefined) {
+        if (!Array.isArray(branches)) {
+          return `"${combinator}" must be an array`;
+        }
+        for (const branch of branches) {
+          const branchError = this.getInputSchemaShapeError(branch, depth + 1, budget);
+          if (branchError) return `"${combinator}" entry ${branchError}`;
+        }
+      }
+    }
+    if (node.properties !== undefined) {
+      if (node.properties === null || typeof node.properties !== 'object' || Array.isArray(node.properties)) {
+        return '"properties" must be an object';
+      }
+      for (const [propertyName, propertySchema] of Object.entries(node.properties)) {
+        const propertyError = this.getInputSchemaShapeError(propertySchema, depth + 1, budget);
+        if (propertyError) {
+          return `property "${propertyName}" ${propertyError}`;
+        }
+      }
+    }
+    if (node.patternProperties !== undefined) {
+      if (node.patternProperties === null || typeof node.patternProperties !== 'object' || Array.isArray(node.patternProperties)) {
+        return '"patternProperties" must be an object';
+      }
+      for (const [pattern, propertySchema] of Object.entries(node.patternProperties)) {
+        const propertyError = this.getInputSchemaShapeError(propertySchema, depth + 1, budget);
+        if (propertyError) {
+          return `patternProperty "${pattern}" ${propertyError}`;
+        }
+      }
+    }
+    if (node.additionalProperties !== undefined && typeof node.additionalProperties !== 'boolean') {
+      const additionalError = this.getInputSchemaShapeError(node.additionalProperties, depth + 1, budget);
+      if (additionalError) return `"additionalProperties" ${additionalError}`;
+    }
+    for (const schemaKeyword of ['not', 'propertyNames', 'contentSchema', 'unevaluatedProperties', 'unevaluatedItems'] as const) {
+      if (node[schemaKeyword] !== undefined) {
+        const schemaError = this.getInputSchemaShapeError(node[schemaKeyword], depth + 1, budget);
+        if (schemaError) return `"${schemaKeyword}" ${schemaError}`;
+      }
+    }
+    if (node.dependentSchemas !== undefined) {
+      if (node.dependentSchemas === null || typeof node.dependentSchemas !== 'object' || Array.isArray(node.dependentSchemas)) {
+        return '"dependentSchemas" must be an object';
+      }
+      for (const [propertyName, dependentSchema] of Object.entries(node.dependentSchemas)) {
+        const dependentError = this.getInputSchemaShapeError(dependentSchema, depth + 1, budget);
+        if (dependentError) return `dependentSchemas entry "${propertyName}" ${dependentError}`;
+      }
+    }
+    if (node.prefixItems !== undefined) {
+      if (!Array.isArray(node.prefixItems)) {
+        return '"prefixItems" must be an array';
+      }
+      for (const [index, itemSchema] of node.prefixItems.entries()) {
+        const itemError = this.getInputSchemaShapeError(itemSchema, depth + 1, budget);
+        if (itemError) return `"prefixItems" entry ${index} ${itemError}`;
+      }
+    }
+    if (node.contains !== undefined) {
+      const containsError = this.getInputSchemaShapeError(node.contains, depth + 1, budget);
+      if (containsError) return `"contains" ${containsError}`;
+    }
+    for (const conditional of ['if', 'then', 'else'] as const) {
+      if (node[conditional] !== undefined) {
+        const conditionalError = this.getInputSchemaShapeError(node[conditional], depth + 1, budget);
+        if (conditionalError) return `"${conditional}" ${conditionalError}`;
+      }
+    }
+    if (node.$defs !== undefined) {
+      if (node.$defs === null || typeof node.$defs !== 'object' || Array.isArray(node.$defs)) {
+        return '"$defs" must be an object';
+      }
+      for (const [defName, defSchema] of Object.entries(node.$defs)) {
+        const defError = this.getInputSchemaShapeError(defSchema, depth + 1, budget);
+        if (defError) return `$defs entry "${defName}" ${defError}`;
+      }
+    }
+    if (node.definitions !== undefined) {
+      if (node.definitions === null || typeof node.definitions !== 'object' || Array.isArray(node.definitions)) {
+        return '"definitions" must be an object';
+      }
+      for (const [defName, defSchema] of Object.entries(node.definitions)) {
+        const defError = this.getInputSchemaShapeError(defSchema, depth + 1, budget);
+        if (defError) return `definitions entry "${defName}" ${defError}`;
+      }
+    }
+    return null;
+  }
+
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
+    // Only reachable with an object schema: buildToolFromListEntry skips a tool
+    // whose input schema has a boolean root before it gets here.
+    const rawSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+    const schema = this.normalizeMisplacedRequired(rawSchema);
+    const dialectSchema = withDefaultDialect(schema);
+    const standardSchema = toStandardSchema(dialectSchema);
+    const complexityError = getJsonSchemaComplexityError(dialectSchema);
     if (!complexityError) return standardSchema;
 
     return {
@@ -1397,6 +1607,28 @@ export class InternalMastraMCPClient extends MastraBase {
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
     try {
+      // Validate before building so one malformed schema cannot poison the
+      // whole tools array at the provider. The malformed tool is skipped with
+      // a warning naming the server and the tool; valid siblings stay usable.
+      // A boolean root is unwrapped without `in` (which throws on it) and then
+      // rejected by the shape check, deliberately rather than by that throw.
+      const rawInputSchema = (
+        typeof tool.inputSchema === 'boolean' ? tool.inputSchema : 'jsonSchema' in tool.inputSchema ? tool.inputSchema.jsonSchema : tool.inputSchema
+      ) as JSONSchema7;
+      const normalizedInputSchema = this.normalizeMisplacedRequired(rawInputSchema);
+      const inputSchemaComplexityError = getJsonSchemaComplexityError(normalizedInputSchema);
+      // Both checks are bounded walks over the same server-controlled data, so
+      // run the shape check only when the complexity check has not already
+      // rejected the schema — otherwise an over-complexity catalogue pays for
+      // the traversal twice to reach a verdict we already have.
+      const inputSchemaShapeError = inputSchemaComplexityError
+        ? null
+        : this.getInputSchemaShapeError(normalizedInputSchema);
+      if (inputSchemaShapeError) {
+        this.log('warning', `Skipping MCP tool "${tool.name}" from server "${this.name}": invalid input schema (${inputSchemaShapeError})`);
+        return undefined;
+      }
+
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
 
