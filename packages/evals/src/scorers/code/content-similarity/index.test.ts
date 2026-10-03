@@ -41,6 +41,16 @@ describe('ContentSimilarityMetric', () => {
     expect(result.score).toBe(1);
   });
 
+  it('should keep default normalization when only id/name are provided', async () => {
+    const customScorer = createContentSimilarityScorer({ id: 'custom-similarity', name: 'Custom Similarity' });
+    const inputMessages = [createTestMessage({ content: 'The   Quick\nBrown    FOX', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
+    const result = await customScorer.run(createAgentTestRun({ inputMessages, output }));
+    expect(customScorer.id).toBe('custom-similarity');
+    expect(customScorer.name).toBe('Custom Similarity');
+    expect(result.score).toBe(1);
+  });
+
   it('should be case sensitive when ignoreCase is false', async () => {
     const caseSensitiveMetric = createContentSimilarityScorer({ ignoreCase: false });
     const inputMessages = [createTestMessage({ content: 'The Quick Brown FOX', role: 'user', id: 'test-input' })];

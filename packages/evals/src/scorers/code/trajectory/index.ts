@@ -17,9 +17,10 @@ import type {
   TrajectoryEfficiencyResult,
   TrajectoryBlacklistResult,
   ToolFailureAnalysisResult,
+  ScorerIdentityOptions,
 } from '../../utils';
 
-interface TrajectoryAccuracyScorerCodeOptions {
+interface TrajectoryAccuracyScorerCodeOptions extends ScorerIdentityOptions {
   /**
    * The expected trajectory to compare against.
    * Accepts a Trajectory (full trajectory steps) or ExpectedStep[] (lightweight matchers).
@@ -108,8 +109,8 @@ export function createTrajectoryAccuracyScorerCode(options: TrajectoryAccuracySc
   };
 
   return createScorer({
-    id: 'code-trajectory-accuracy-scorer',
-    name: 'Trajectory Accuracy Scorer',
+    id: options.id ?? 'code-trajectory-accuracy-scorer',
+    name: options.name ?? 'Trajectory Accuracy Scorer',
     description: getDescription(),
     type: 'trajectory',
   })
@@ -375,7 +376,7 @@ export interface TrajectoryScoreWeights {
   blacklist?: number;
 }
 
-export interface TrajectoryScorerCodeOptions {
+export interface TrajectoryScorerCodeOptions extends ScorerIdentityOptions {
   /**
    * Default expectation config for all runs.
    * Per-item `run.expectedTrajectory` values override these defaults.
@@ -432,8 +433,8 @@ export function createTrajectoryScorerCode(options: TrajectoryScorerCodeOptions 
   };
 
   return createScorer({
-    id: 'code-trajectory-scorer',
-    name: 'Trajectory Scorer',
+    id: options.id ?? 'code-trajectory-scorer',
+    name: options.name ?? 'Trajectory Scorer',
     description: 'Multi-dimensional trajectory evaluation: accuracy, efficiency, blacklist, and tool failures',
     type: 'trajectory',
   })

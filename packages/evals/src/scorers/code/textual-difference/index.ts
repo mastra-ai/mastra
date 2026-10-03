@@ -1,5 +1,6 @@
 import { createScorer } from '@mastra/core/evals';
 import { getTextContentFromMastraDBMessage } from '../../utils';
+import type { ScorerIdentityOptions } from '../../utils';
 
 /**
  * Calculates similarity ratio similar to SequenceMatcher.ratio()
@@ -114,10 +115,10 @@ function findCommonWords(arr1: string[], arr2: string[]): number {
   return matches;
 }
 
-export function createTextualDifferenceScorer() {
+export function createTextualDifferenceScorer(options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'textual-difference-scorer',
-    name: 'Textual Difference Scorer',
+    id: options.id ?? 'textual-difference-scorer',
+    name: options.name ?? 'Textual Difference Scorer',
     description: 'Calculate textual difference between input and output using sequence matching algorithms.',
     type: 'agent',
   })

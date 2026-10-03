@@ -73,6 +73,34 @@ function mixedToolMessage(toolName: string) {
 
 // ─── includes ─────────────────────────────────────────────────────────────────
 
+describe('checks id/name overrides', () => {
+  test('every check accepts a custom id and name', () => {
+    const opts = { id: 'custom-id', name: 'Custom Name' };
+    const scorers = [
+      checks.includes('a', opts),
+      checks.excludes('a', opts),
+      checks.equals('a', opts),
+      checks.matches(/a/, opts),
+      checks.similarity('a', opts),
+      checks.calledTool('t', opts),
+      checks.didNotCall('t', opts),
+      checks.toolOrder(['t'], opts),
+      checks.maxToolCalls(1, opts),
+      checks.usedNoTools(opts),
+      checks.noToolErrors(opts),
+    ];
+    for (const scorer of scorers) {
+      expect(scorer.id).toBe('custom-id');
+      expect(scorer.name).toBe('Custom Name');
+    }
+  });
+
+  test('defaults are unchanged when no override is given', () => {
+    expect(checks.calledTool('t').id).toBe('check-called-tool');
+    expect(checks.calledTool('t').name).toBe('Called Tool Check');
+  });
+});
+
 describe('checks.includes', () => {
   test('should score 1 when output contains the expected text (case-insensitive)', async () => {
     const scorer = checks.includes('sunny');

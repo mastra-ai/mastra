@@ -10,6 +10,14 @@ import type {
 } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 
+/** Optional overrides for a prebuilt scorer's identity, so the same factory can be used more than once in a run. */
+export interface ScorerIdentityOptions {
+  /** Override the scorer id. Must be unique across the scorers/gates of a single `runEvals` call. */
+  id?: string;
+  /** Override the scorer display name. */
+  name?: string;
+}
+
 export type ScorerRunInputForLLMJudge =
   | ScorerRunInputForAgent
   | string
