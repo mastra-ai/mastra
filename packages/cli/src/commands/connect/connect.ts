@@ -203,9 +203,7 @@ function findIntegration(catalog: IntegrationCatalogEntry[], provider: string): 
   const integration = catalog.find(entry => entry.id === provider.toLowerCase());
   if (!integration) {
     const query = provider.toLowerCase();
-    const near = catalog
-      .filter(entry => entry.id.includes(query) || query.includes(entry.id))
-      .map(entry => entry.id);
+    const near = catalog.filter(entry => entry.id.includes(query) || query.includes(entry.id)).map(entry => entry.id);
     const hint = near.length > 0 ? ` Did you mean: ${near.join(', ')}?` : '';
     throw new Error(`Unknown provider: ${provider}.${hint} List providers with: mastra connect list`);
   }

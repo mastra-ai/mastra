@@ -98,9 +98,12 @@ export async function fetchProjectConnections(
   orgId: string,
   projectId: string,
 ): Promise<ProjectConnection[]> {
-  const resp = await platformFetch(`${getIntegrationsApiUrl()}/v2/projects/${encodeURIComponent(projectId)}/connections`, {
-    headers: headers(token, orgId),
-  });
+  const resp = await platformFetch(
+    `${getIntegrationsApiUrl()}/v2/projects/${encodeURIComponent(projectId)}/connections`,
+    {
+      headers: headers(token, orgId),
+    },
+  );
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to fetch project connections', resp.status, extractApiErrorDetail(err));

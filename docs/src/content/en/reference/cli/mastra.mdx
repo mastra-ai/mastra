@@ -240,15 +240,15 @@ A run request must match the artifact's embedded build ID and include the ordere
 
 Protocol exit codes are:
 
-| Code | Meaning |
-| - | - |
-| `0` | Completed |
+| Code | Meaning                    |
+| ---- | -------------------------- |
+| `0`  | Completed                  |
 | `10` | Completed with item errors |
-| `20` | Fatal failure |
-| `21` | Retryable failure |
-| `30` | Cancelled |
-| `31` | Timed out |
-| `70` | Protocol failure |
+| `20` | Fatal failure              |
+| `21` | Retryable failure          |
+| `30` | Cancelled                  |
+| `31` | Timed out                  |
+| `70` | Protocol failure           |
 
 ### Packet field handling
 
@@ -940,7 +940,7 @@ The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or t
 
 ### `mastra connect list`
 
-Lists the available providers. Providers already connected to the project are shown in green; unconnected providers are shown in grey.
+Lists the available providers. Providers already connected to the project are shown in green, and unconnected providers are shown in grey.
 
 ```bash
 mastra connect list
@@ -948,7 +948,7 @@ mastra connect list
 
 ### `mastra connect add`
 
-Connects a provider to the project. OAuth providers open the provider's consent screen in your browser; API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+Connects a provider to the project. OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
 ```bash
 mastra connect add <provider>
@@ -1123,8 +1123,8 @@ mastra traces import <provider> [options]
 
 The following provider is currently supported:
 
-| Provider | Argument | Requirements |
-| - | - | - |
+| Provider | Argument   | Requirements                                       |
+| -------- | ---------- | -------------------------------------------------- |
 | Langfuse | `langfuse` | Langfuse Cloud or self-hosted Langfuse v4 or later |
 
 See [Import existing traces](/docs/mastra-platform/observability#import-existing-traces) for the complete workflow, data mapping, local-file lifecycle, and limits.
@@ -1161,15 +1161,15 @@ Uploads without asking for confirmation.
 
 The command loads `.env` and `.env.local` from the current directory.
 
-| Variable | Required | Description |
-| - | - | - |
-| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. |
-| `LANGFUSE_SECRET_KEY` | For new Langfuse imports | Secret project API key. |
-| `LANGFUSE_BASE_URL` | No | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
-| `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
-| `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
+| Variable                       | Required                                        | Description                                                                                                       |
+| ------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `LANGFUSE_PUBLIC_KEY`          | For new Langfuse imports                        | Public project API key.                                                                                           |
+| `LANGFUSE_SECRET_KEY`          | For new Langfuse imports                        | Secret project API key.                                                                                           |
+| `LANGFUSE_BASE_URL`            | No                                              | Langfuse host. Defaults to `https://cloud.langfuse.com`.                                                          |
+| `MASTRA_API_TOKEN`             | For headless authentication                     | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`.                     |
+| `MASTRA_ORG_ID`                | With `MASTRA_API_TOKEN`                         | Organization that owns the destination project.                                                                   |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
-| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. Takes precedence over `--project`. |
+| `MASTRA_PROJECT_ID`            | When no project is otherwise linked             | Destination project ID. Takes precedence over `--project`.                                                        |
 
 ### Examples
 
