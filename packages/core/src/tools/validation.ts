@@ -622,7 +622,7 @@ export function validateToolInput<T = unknown>(
   // Otherwise the retry stripped every null (including valid .nullable() values),
   // so the first-pass issues are the accurate ones. A failed prompt-alias retry
   // builds on all prior corrections, so its issues take precedence.
-  const finalIssues = aliasIssues ?? (failingNullPaths.size > 0 ? retryValidation.issues : validation.issues);
+  const finalIssues = aliasIssues ?? (failingNullPaths.size > 0 ? retryValidation.issues : currentIssues);
   const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');

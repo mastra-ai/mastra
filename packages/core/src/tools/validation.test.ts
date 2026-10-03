@@ -2563,4 +2563,11 @@ describe('validateToolInput - combined fallback corrections (GitHub #25825)', ()
     expect(result.error?.message).not.toContain('- prompt');
     expect(result.error?.message).not.toContain('- note');
   });
+
+  it('does not report fields already fixed by coercion', () => {
+    const schema = z.object({ args: z.array(z.string()), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a"]', count: 'x' });
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- args');
+  });
 });
