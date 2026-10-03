@@ -733,6 +733,44 @@ describe('createDurableAgentStream', () => {
     cleanup();
   });
 
+  it('should wait for delivered pubsub callbacks to finish', async () => {
+    const { createDurableAgentStream, emitChunkEvent } = await import('../stream-adapter');
+
+    let releaseCallback!: () => void;
+    const callbackBlocked = new Promise<void>(resolve => {
+      releaseCallback = resolve;
+    });
+    const onChunk = vi.fn(async () => {
+      await callbackBlocked;
+    });
+    const { cleanup, ready, waitForEventDelivery } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-delivery-barrier',
+      messageId: 'msg-delivery-barrier',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      onChunk,
+    });
+    await ready;
+
+    await emitChunkEvent(pubsub, 'test-delivery-barrier', {
+      type: 'text-delta',
+      payload: { text: 'test' },
+    } as any);
+    await vi.waitFor(() => expect(onChunk).toHaveBeenCalledOnce());
+
+    let settled = false;
+    const delivery = waitForEventDelivery().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseCallback();
+    await delivery;
+    expect(settled).toBe(true);
+    cleanup();
+  });
+
   it('should terminate when subscription setup fails', async () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
     const subscribeError = new Error('subscription failed');
@@ -798,6 +836,29 @@ describe('createDurableAgentStream', () => {
       3,
       expect.any(Function),
     );
+    cleanup();
+  });
+
+  it('should live-tail when cached history is unavailable', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+    vi.spyOn(pubsub, 'supportsOffsets', 'get').mockReturnValue(true);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe');
+    const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
+
+    const { cleanup, ready } = createDurableAgentStream({
+      pubsub,
+      runId: 'test-cache-miss-resume',
+      messageId: 'msg-cache-miss',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      offset: 'latest',
+    });
+
+    await ready;
+
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-cache-miss-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
+    expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
     cleanup();
   });
 
