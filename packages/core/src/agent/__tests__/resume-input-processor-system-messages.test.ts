@@ -113,12 +113,21 @@ describe('resumed runs keep input processor system messages', () => {
         return { messages, systemMessages: [{ role: 'system', content: 'Replaced instructions' }] };
       },
     };
-    const { agent, prompts } = setup([processor]);
+    const taggedPerStep: unknown[][] = [];
+    const tagInspector: Processor = {
+      id: 'tag-inspector',
+      processInputStep: ({ messageList }) => {
+        taggedPerStep.push(messageList.getSystemMessages('guidance').map(m => m.content));
+      },
+    };
+    const { agent, prompts } = setup([processor, tagInspector]);
     await runWithApproval(agent);
 
     expect(prompts).toHaveLength(2);
     expect(systemTexts(prompts[0]!)).toEqual(['Replaced instructions', 'Tagged guidance']);
     expect(systemTexts(prompts[1]!)).toEqual(systemTexts(prompts[0]!));
+    expect(taggedPerStep.length).toBeGreaterThanOrEqual(2);
+    for (const tagged of taggedPerStep) expect(tagged).toEqual(['Tagged guidance']);
   });
 
   it('does not trip TokenLimiterProcessor on resume', async () => {

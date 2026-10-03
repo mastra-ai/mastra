@@ -71,10 +71,12 @@ async function replayInputProcessorSystemMessages({
   // Mirror the replayed buckets so replacements, removals and tags match a fresh run.
   messageList.replaceAllSystemMessages(replayList.getSystemMessages());
   const replayedTagged = replayList.getPersisted.taggedSystemMessages;
+  // Clear every tag first so re-adding follows the replay's tag order.
   for (const tag of new Set([...Object.keys(existingTagged), ...Object.keys(replayedTagged)])) {
     messageList.clearSystemMessages(tag);
-    const messages = replayedTagged[tag];
-    if (messages?.length) messageList.addSystem(messages, tag);
+  }
+  for (const [tag, messages] of Object.entries(replayedTagged)) {
+    if (messages.length) messageList.addSystem(messages, tag);
   }
 }
 
