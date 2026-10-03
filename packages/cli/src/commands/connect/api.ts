@@ -109,8 +109,8 @@ export async function fetchProjectConnections(
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to fetch project connections', resp.status, extractApiErrorDetail(err));
   }
-  const data = (await resp.json()) as { connections: ProjectConnection[] };
-  return data.connections;
+  const data = (await resp.json()) as { connections?: ProjectConnection[] };
+  return data.connections ?? [];
 }
 
 /**
@@ -130,8 +130,8 @@ export async function fetchOrgConnections(
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to fetch connections', resp.status, extractApiErrorDetail(err));
   }
-  const data = (await resp.json()) as { connections: ProjectConnection[] };
-  return data.connections;
+  const data = (await resp.json()) as { connections?: ProjectConnection[] };
+  return data.connections ?? [];
 }
 
 /** Attach an existing org-level connection to the project. */

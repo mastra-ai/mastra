@@ -126,10 +126,29 @@ describe('submitCredentialAuth', () => {
 
   it('posts API keys to the api-key endpoint', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }));
-    await submitCredentialAuth({ integrationId: 'resend', sessionToken: 'tok', credentials: { apiKey: 'sk-1' } });
+    await submitCredentialAuth({
+      integrationId: 'resend',
+      authType: 'API_KEY',
+      sessionToken: 'tok',
+      credentials: { apiKey: 'sk-1' },
+    });
     expect(fetch).toHaveBeenCalledWith(
       'https://api.nango.dev/api-auth/api-key/resend?connect_session_token=tok',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ apiKey: 'sk-1' }) }),
+    );
+  });
+
+  it('routes API_KEY auth with a custom credential name to the api-key endpoint', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }));
+    await submitCredentialAuth({
+      integrationId: 'custom',
+      authType: 'API_KEY',
+      sessionToken: 'tok',
+      credentials: { token: 'sk-1' },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://api.nango.dev/api-auth/api-key/custom?connect_session_token=tok',
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 
@@ -137,6 +156,7 @@ describe('submitCredentialAuth', () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }));
     await submitCredentialAuth({
       integrationId: 'jira',
+      authType: 'BASIC',
       sessionToken: 'tok',
       credentials: { username: 'u', password: 'pw' },
     });
@@ -151,7 +171,12 @@ describe('submitCredentialAuth', () => {
       new Response(JSON.stringify({ error: { code: 'connection_test_failed', message: 'nope' } }), { status: 400 }),
     );
     await expect(
-      submitCredentialAuth({ integrationId: 'resend', sessionToken: 'tok', credentials: { apiKey: 'bad' } }),
+      submitCredentialAuth({
+        integrationId: 'resend',
+        authType: 'API_KEY',
+        sessionToken: 'tok',
+        credentials: { apiKey: 'bad' },
+      }),
     ).rejects.toThrow('The provider rejected these credentials. Check them and try again.');
   });
 
@@ -162,7 +187,12 @@ describe('submitCredentialAuth', () => {
       }),
     );
     await expect(
-      submitCredentialAuth({ integrationId: 'ghost', sessionToken: 'tok', credentials: { apiKey: 'k' } }),
+      submitCredentialAuth({
+        integrationId: 'ghost',
+        authType: 'API_KEY',
+        sessionToken: 'tok',
+        credentials: { apiKey: 'k' },
+      }),
     ).rejects.toThrow('integration not found');
   });
 });

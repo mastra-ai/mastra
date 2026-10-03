@@ -153,11 +153,12 @@ export function oauthConnectUrl(integrationId: string, sessionToken: string, par
  */
 export async function submitCredentialAuth(input: {
   integrationId: string;
+  authType: string | null;
   sessionToken: string;
   credentials: Record<string, string>;
   params?: Record<string, string>;
 }): Promise<void> {
-  const path = 'apiKey' in input.credentials ? 'api-auth/api-key' : 'api-auth/basic';
+  const path = input.authType === 'API_KEY' ? 'api-auth/api-key' : 'api-auth/basic';
   const url = `${NANGO_HOST}/${path}/${encodeURIComponent(input.integrationId)}${connectQuery(input.sessionToken, input.params)}`;
   const resp = await fetch(url, {
     method: 'POST',

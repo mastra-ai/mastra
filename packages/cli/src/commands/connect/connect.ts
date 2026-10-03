@@ -184,9 +184,12 @@ export async function connectProviderAction(
     const attachedIds = new Set(
       projectConnections.filter(connection => connection.integrationId === integration.id).map(row => row.id),
     );
-    const orgConnections = await fetchOrgConnections(ctx.token, ctx.orgId, integration.id).catch(
-      () => [] as ProjectConnection[],
-    );
+    let orgConnections: ProjectConnection[] = [];
+    try {
+      orgConnections = await fetchOrgConnections(ctx.token, ctx.orgId, integration.id);
+    } catch {
+      console.warn(pc.yellow('Could not check for existing connections in your organization. Creating a new one.'));
+    }
     const reusable = orgConnections.filter(row => row.status === 'active' && !attachedIds.has(row.id));
 
     if (reusable.length > 0) {
@@ -231,6 +234,7 @@ export async function connectProviderAction(
     try {
       await submitCredentialAuth({
         integrationId: integration.id,
+        authType: integration.authType,
         sessionToken: session.sessionToken,
         credentials,
         params,
