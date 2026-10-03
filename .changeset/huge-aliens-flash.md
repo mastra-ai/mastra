@@ -17,7 +17,7 @@
 '@mastra/pg': patch
 ---
 
-Added a `GET /agents/:agentId/avatar` route that streams stored avatar bytes from `mastra.getAvatarStore()` with the recorded mime type. Extended avatar validation to accept `mastra-avatar:<agentId>` references and absolute `http(s)://` URLs alongside the existing `data:` scheme. Stored-agent `GET` and `LIST` responses now rewrite `mastra-avatar:` values into the resolvable route URL so existing UIs render them as normal `<img src>` without changes.
+Added a `GET /agents/:agentId/avatar` route that streams stored avatar bytes from `mastra.getAvatarStore()` with the recorded mime type. Extended avatar validation to accept `mastra-avatar:<agentId>` references and absolute `http(s)://` URLs alongside the existing `data:` scheme. Stored-agent `GET` and `LIST` responses now rewrite `mastra-avatar:` values into the resolvable route URL so existing UIs render them as normal `<img src>` without changes. Deleting a stored agent also cascade-deletes its stored avatar (best-effort, logged on failure).
 
 Usage:
 

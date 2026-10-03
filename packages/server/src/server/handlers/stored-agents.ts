@@ -1072,6 +1072,16 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
+      // Cascade: drop the agent's stored avatar so the bytes don't linger (or
+      // resurrect under a reused id). Failure must not abort the delete.
+      try {
+        await mastra.getAvatarStore()?.delete(storedAgentId);
+      } catch (cascadeError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to cascade-delete avatar for agent', { storedAgentId, error: cascadeError });
+      }
+
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
 

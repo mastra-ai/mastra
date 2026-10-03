@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import { LocalAvatarStore, WorkspaceAvatarStore } from '../agent/avatar-store';
+import { StorageAvatarStore } from '../agent/avatar-store';
 import type { AvatarStore } from '../agent/avatar-store';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
@@ -502,11 +502,13 @@ export interface Config<
   /**
    * Persistent store for agent avatars set via `agent.setAvatar(bytes, mime)`.
    *
-   * When omitted, Mastra picks a default:
-   * - `WorkspaceAvatarStore(workspace)` if a `workspace` with a filesystem is attached
-   * - `LocalAvatarStore()` (tmpdir-backed) otherwise
+   * When omitted, avatars are stored in the configured `storage` adapter via
+   * `StorageAvatarStore` (the `agentAvatars` storage domain), so they are as
+   * durable as the rest of your Mastra data with zero extra configuration.
    *
-   * Pass an explicit store (e.g. an S3-backed implementation) to override.
+   * Pass an explicit store to override — e.g. `WorkspaceAvatarStore` to keep
+   * avatars in a workspace filesystem, or a custom S3/CDN-backed
+   * implementation of the `AvatarStore` interface.
    */
   avatarStore?: AvatarStore;
 
@@ -1845,20 +1847,12 @@ export class Mastra<
       this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
     }
 
-    // Avatar store: user-provided > workspace-backed (if a filesystem exists) > local tmp.
-    if (config?.avatarStore) {
-      this.#avatarStore = config.avatarStore;
-    } else if (this.#workspace && (this.#workspace as { filesystem?: unknown }).filesystem) {
-      try {
-        this.#avatarStore = new WorkspaceAvatarStore(this.#workspace as any);
-      } catch {
-        this.#avatarStore = new LocalAvatarStore();
-        this.#warnLocalAvatarStoreDefault();
-      }
-    } else {
-      this.#avatarStore = new LocalAvatarStore();
-      this.#warnLocalAvatarStoreDefault();
-    }
+    // Avatar store: user-provided > storage-backed default. Avatars follow the
+    // configured storage adapter (durable, replicated, lifecycle alongside the
+    // agent record). WorkspaceAvatarStore / LocalAvatarStore remain opt-in via
+    // `config.avatarStore`. The existing in-memory-storage fallback warning
+    // already covers the non-durable zero-config case.
+    this.#avatarStore = config?.avatarStore ?? new StorageAvatarStore(storage);
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
@@ -3572,19 +3566,6 @@ export class Mastra<
    */
   public getAvatarStore(): AvatarStore | undefined {
     return this.#avatarStore;
-  }
-
-  #localAvatarStoreDefaultWarned = false;
-  #warnLocalAvatarStoreDefault(): void {
-    if (this.#localAvatarStoreDefaultWarned) return;
-    this.#localAvatarStoreDefaultWarned = true;
-    try {
-      this.#logger?.warn?.(
-        'Mastra selected a temporary-directory `LocalAvatarStore` for agent avatars because no `avatarStore` was configured and no workspace filesystem is attached. This store is NOT durable across process restarts or replicas — agent avatars may disappear. Configure `avatarStore` (or attach a workspace with a filesystem) for production deployments.',
-      );
-    } catch {
-      // logger not available yet — silently swallow
-    }
   }
 
   /**

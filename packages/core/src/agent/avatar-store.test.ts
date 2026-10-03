@@ -2,6 +2,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Mastra } from '../mastra';
+import { InMemoryStore } from '../storage/mock';
 import { Workspace } from '../workspace';
 import { LocalFilesystem } from '../workspace/filesystem/local-filesystem';
 import {
@@ -10,6 +12,7 @@ import {
   isSupportedAvatarMime,
   LocalAvatarStore,
   mimeForExt,
+  StorageAvatarStore,
   SUPPORTED_AVATAR_MIME_TYPES,
   WorkspaceAvatarStore,
 } from './avatar-store';
@@ -112,6 +115,73 @@ describe('LocalAvatarStore', () => {
   });
 });
 
+describe('StorageAvatarStore', () => {
+  let storage: InMemoryStore;
+  let store: StorageAvatarStore;
+
+  beforeEach(() => {
+    storage = new InMemoryStore();
+    store = new StorageAvatarStore(storage);
+  });
+
+  it('put stores bytes in the agentAvatars domain and returns a mastra-avatar URL', async () => {
+    const result = await store.put('agent-s-1', PNG_HEADER, 'image/png');
+    expect(result).toEqual({ url: 'mastra-avatar:agent-s-1' });
+
+    const domain = await storage.getStore('agentAvatars');
+    const row = await domain!.get('agent-s-1');
+    expect(row?.mime).toBe('image/png');
+    expect(Buffer.from(row!.data, 'base64').equals(PNG_HEADER)).toBe(true);
+    expect(row?.sizeBytes).toBe(PNG_HEADER.length);
+  });
+
+  it('get round-trips bytes and mime', async () => {
+    await store.put('agent-s-2', PNG_HEADER, 'image/png');
+    const got = await store.get('agent-s-2');
+    expect(got?.mime).toBe('image/png');
+    expect(got?.bytes.equals(PNG_HEADER)).toBe(true);
+  });
+
+  it('get returns null when no avatar stored', async () => {
+    expect(await store.get('missing')).toBeNull();
+  });
+
+  it('put replaces an existing avatar (last write wins)', async () => {
+    await store.put('agent-s-3', PNG_HEADER, 'image/png');
+    const gif = Buffer.from('GIF89a');
+    await store.put('agent-s-3', gif, 'image/gif');
+    const got = await store.get('agent-s-3');
+    expect(got?.mime).toBe('image/gif');
+    expect(got?.bytes.equals(gif)).toBe(true);
+  });
+
+  it('delete removes the stored avatar', async () => {
+    await store.put('agent-s-4', PNG_HEADER, 'image/png');
+    await store.delete('agent-s-4');
+    expect(await store.get('agent-s-4')).toBeNull();
+  });
+
+  it('rejects unsupported mime types without writing', async () => {
+    await expect(store.put('agent-s-5', PNG_HEADER, 'image/bmp')).rejects.toThrow(/Unsupported avatar mime/);
+    expect(await store.get('agent-s-5')).toBeNull();
+  });
+
+  it('rejects unsafe agent ids', async () => {
+    await expect(store.put('../evil', PNG_HEADER, 'image/png')).rejects.toThrow(/Invalid agent id/);
+  });
+
+  it('put throws a clear error when the adapter lacks the agentAvatars domain', async () => {
+    delete (storage.stores as Record<string, unknown>).agentAvatars;
+    await expect(store.put('agent-s-6', PNG_HEADER, 'image/png')).rejects.toThrow(/does not support/);
+  });
+
+  it('get/delete are no-ops when the adapter lacks the agentAvatars domain', async () => {
+    delete (storage.stores as Record<string, unknown>).agentAvatars;
+    expect(await store.get('agent-s-7')).toBeNull();
+    await expect(store.delete('agent-s-7')).resolves.toBeUndefined();
+  });
+});
+
 describe('WorkspaceAvatarStore', () => {
   let dir: string;
   let workspace: Workspace<any, any>;
@@ -153,5 +223,24 @@ describe('WorkspaceAvatarStore', () => {
     // Workspace without a filesystem — only skills configured.
     const bare = { filesystem: undefined } as unknown as Workspace<any, any>;
     expect(() => new WorkspaceAvatarStore(bare)).toThrow(/requires a workspace with a filesystem/);
+  });
+});
+
+describe('Mastra avatar store wiring', () => {
+  it('defaults to a StorageAvatarStore backed by the configured storage', async () => {
+    const mastra = new Mastra({ storage: new InMemoryStore() });
+    const store = mastra.getAvatarStore();
+    expect(store).toBeInstanceOf(StorageAvatarStore);
+
+    await store!.put('agent-m-1', PNG_HEADER, 'image/png');
+    const got = await store!.get('agent-m-1');
+    expect(got?.mime).toBe('image/png');
+    expect(got?.bytes.equals(PNG_HEADER)).toBe(true);
+  });
+
+  it('honors an explicit avatarStore override', () => {
+    const custom = new LocalAvatarStore();
+    const mastra = new Mastra({ avatarStore: custom });
+    expect(mastra.getAvatarStore()).toBe(custom);
   });
 });

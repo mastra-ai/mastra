@@ -5,11 +5,18 @@
  * at 512 KB. This module lets an agent (or user code) persist larger avatars
  * out-of-band and reference them via a compact `mastra-avatar:<agentId>` URL,
  * which the server resolves back to bytes at request time.
+ *
+ * The default store is {@link StorageAvatarStore}, which keeps avatars in the
+ * configured Mastra storage adapter next to the rest of the agent's data.
+ * {@link WorkspaceAvatarStore} (workspace filesystem) and
+ * {@link LocalAvatarStore} (local disk; tests/dev) are opt-in alternatives,
+ * and fully custom stores (S3, CDN, ...) can implement {@link AvatarStore}.
  */
 
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { MastraCompositeStore } from '../storage/base';
 import type { Workspace } from '../workspace';
 import type { WorkspaceFilesystem } from '../workspace/filesystem';
 
@@ -96,10 +103,61 @@ function assertSafeAgentId(agentId: string): void {
 }
 
 /**
+ * Store avatars in Mastra's storage layer (the `agentAvatars` storage domain).
+ *
+ * This is the default avatar store: avatars live alongside the rest of the
+ * agent's data (metadata, versions) in whatever storage adapter the user
+ * configured, so they are durable and shared across replicas without any
+ * extra configuration. Bytes are persisted base64-encoded for cross-adapter
+ * portability.
+ */
+export class StorageAvatarStore implements AvatarStore {
+  private readonly storage: MastraCompositeStore;
+
+  constructor(storage: MastraCompositeStore) {
+    this.storage = storage;
+  }
+
+  async put(agentId: string, bytes: Buffer, mime: string): Promise<PutAvatarResult> {
+    assertSafeAgentId(agentId);
+    // Validates the mime type (throws on unsupported).
+    extForMime(mime);
+    const store = await this.storage.getStore('agentAvatars');
+    if (!store) {
+      throw new Error(
+        `Storage adapter '${this.storage.id}' does not support the 'agentAvatars' domain. ` +
+          `Configure an avatarStore on Mastra (e.g. a custom AvatarStore or WorkspaceAvatarStore), ` +
+          `or use a storage adapter that implements agent avatar storage.`,
+      );
+    }
+    await store.put({ agentId, data: bytes.toString('base64'), mime });
+    return { url: `mastra-avatar:${agentId}` };
+  }
+
+  async get(agentId: string): Promise<StoredAvatar | null> {
+    assertSafeAgentId(agentId);
+    const store = await this.storage.getStore('agentAvatars');
+    if (!store) return null;
+    const row = await store.get(agentId);
+    if (!row) return null;
+    return { bytes: Buffer.from(row.data, 'base64'), mime: row.mime };
+  }
+
+  async delete(agentId: string): Promise<void> {
+    assertSafeAgentId(agentId);
+    const store = await this.storage.getStore('agentAvatars');
+    if (!store) return;
+    await store.delete(agentId);
+  }
+}
+
+/**
  * Store avatars in a `Workspace`'s filesystem under `.mastra/avatars/`.
  *
  * Works with any `WorkspaceFilesystem` provider (Local, Mastra, S3, AgentFS,
  * ...). No special-casing per provider — path resolution is the provider's job.
+ *
+ * Opt-in: pass it explicitly via `new Mastra({ avatarStore: new WorkspaceAvatarStore(workspace) })`.
  */
 export class WorkspaceAvatarStore implements AvatarStore {
   private readonly fs: WorkspaceFilesystem;
@@ -168,8 +226,10 @@ export class WorkspaceAvatarStore implements AvatarStore {
 /**
  * Store avatars on the local filesystem via `node:fs/promises`.
  *
- * Used when `Mastra` has no `Workspace` attached. Default base path is a
- * process-scoped tmpdir; pass `basePath` for persistence.
+ * Opt-in helper for tests and local development. Default base path is a
+ * process-scoped tmpdir; pass `basePath` for persistence. Not suitable for
+ * production (not shared across replicas, lost on host teardown) — prefer the
+ * default `StorageAvatarStore` or a custom store.
  */
 export class LocalAvatarStore implements AvatarStore {
   private readonly basePath: string;

@@ -3,6 +3,7 @@ import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type {
   StorageAgentType,
+  StorageAgentAvatarType,
   StorageMCPClientType,
   StorageMCPServerType,
   StorageMessageType,
@@ -71,6 +72,8 @@ export class InMemoryDB {
   readonly feedbackCursorIds = new Map<FeedbackRecord, number>();
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
+  /** Agent avatars keyed by agentId. */
+  readonly agentAvatars = new Map<string, StorageAgentAvatarType>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
   readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
   readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
@@ -149,6 +152,7 @@ export class InMemoryDB {
     this.feedbackCursorIds.clear();
     this.agents.clear();
     this.agentVersions.clear();
+    this.agentAvatars.clear();
     this.promptBlocks.clear();
     this.promptBlockVersions.clear();
     this.scorerDefinitions.clear();

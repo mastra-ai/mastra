@@ -30,6 +30,7 @@ export {
 } from '../schedules';
 export * from './agent';
 export {
+  StorageAvatarStore,
   LocalAvatarStore,
   WorkspaceAvatarStore,
   SUPPORTED_AVATAR_MIME_TYPES,
