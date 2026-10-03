@@ -314,8 +314,8 @@ describe('aiV5UIMessagesToAIV5ModelMessages — MCP content tool result output',
       type: 'content',
       value: [
         { type: 'text', text: 'Screenshot captured' },
-        { type: 'image-data', data: 'base64image', mediaType: 'image/png' },
-        { type: 'file-data', data: 'base64audio', mediaType: 'audio/wav' },
+        { type: 'media', data: 'base64image', mediaType: 'image/png' },
+        { type: 'media', data: 'base64audio', mediaType: 'audio/wav' },
       ],
     });
     expect(uiToJSON).not.toHaveBeenCalled();
