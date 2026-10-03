@@ -41,6 +41,7 @@ import {
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
 } from '../observation-groups';
+import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
@@ -11380,6 +11381,8 @@ describe('Full Async Buffering Flow', () => {
     observerFailures?: number;
     failurePolicy?: 'abort' | 'continue';
     maxRetries?: number;
+    /** Awaited before each observer call returns; lets a test hold a buffer op in flight */
+    observerGate?: () => Promise<void> | undefined;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11426,6 +11429,7 @@ describe('Full Async Buffering Flow', () => {
 
         // Observer call
         observerCalls.push({ input: promptText });
+        await opts.observerGate?.();
         if (observerCalls.length <= (opts.observerFailures ?? 0)) {
           throw Object.assign(new Error('observer failed'), { statusCode: 503 });
         }
@@ -11512,10 +11516,13 @@ describe('Full Async Buffering Flow', () => {
 
     // Helper to call processInputStep
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
-    async function step(stepNumber: number, opts?: { freshState?: boolean }) {
+    async function step(stepNumber: number, opts?: { freshState?: boolean; input?: MastraDBMessage[] }) {
       if (opts?.freshState) {
         Object.keys(sharedState).forEach(k => delete sharedState[k]);
         sharedMessageList = new MessageList({ threadId, resourceId });
+      }
+      for (const msg of opts?.input ?? []) {
+        sharedMessageList.add(msg, 'input');
       }
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
@@ -12496,11 +12503,16 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
-  it('should trigger sync observation at step > 0 even when bufferTokens is set without blockAfter', async () => {
+  it('should keep observing at step > 0 when bufferTokens is set without blockAfter', async () => {
     // Regression test: when async buffering is enabled (bufferTokens set) but blockAfter
-    // is NOT configured, sync observation at step > 0 must still fire once pending tokens
+    // is NOT configured, observation at step > 0 must still fire once pending tokens
     // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
     // which silently disabled ALL sync observation when blockAfter was unset.
+    //
+    // With threshold→blockAfter band semantics, pending tokens between the threshold
+    // (2000) and the default blockAfter (1.2x = 2400) are handled by background band
+    // buffering + activation instead of a blocking sync observation — so the observer
+    // still runs, just asynchronously across steps.
     const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
       messageTokens: 2000, // Threshold that will be exceeded
       bufferTokens: 500, // Async buffering enabled
@@ -12536,16 +12548,344 @@ describe('Full Async Buffering Flow', () => {
       );
     }
 
-    // Step 1: the blockAfter gate must not have silently disabled sync
-    // observation — the regression this test guards is `if (!blockAfter) return
-    // false` disabling ALL sync observation at step > 0.
+    // Steps 1-2: the blockAfter gate must not have silently disabled observation —
+    // the regression this test guards is `if (!blockAfter) return false` disabling
+    // ALL sync observation at step > 0. Step 1 activates the step-0 buffered chunk
+    // (a swap, no observer call) leaving the fresh messages in the threshold→blockAfter
+    // band; step 2 triggers band buffering, which runs the observer on them.
     await step(1);
+    await waitForAsyncOps();
+    await step(2);
     await waitForAsyncOps();
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
     const record = await storage.getObservationalMemory(threadId, resourceId);
     expect(record?.activeObservations).toBeTruthy();
+  });
+
+  it('should buffer in the threshold→blockAfter band instead of running a blocking sync observation', async () => {
+    // ~2200 pending tokens sit between the threshold (2000) and blockAfter (2x = 4000).
+    // Reaching the threshold without a buffered chunk must trigger background band
+    // buffering — NOT a blocking sync observation (the sync-at-threshold race that
+    // caused blocking observer calls on every turn even with async buffering enabled).
+    const { om, step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.observationBlockAfter).toBe(4000);
+    expect(status.inAsyncObservationBand).toBe(true);
+    expect(status.shouldBuffer).toBe(true);
+
+    await step(0);
+    await waitForAsyncOps();
+
+    // Band buffering ran the observer in the background and produced a chunk...
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(getBufferedChunks(record).length).toBeGreaterThan(0);
+    // ...but no sync observation committed observations directly.
+    expect(record?.activeObservations ?? '').toBe('');
+
+    // The next step activates the buffered chunk (a swap, no extra observer call).
+    const callsBeforeActivation = observerCalls.length;
+    await step(1);
+    const postActivation = await storage.getObservationalMemory(threadId, resourceId);
+    expect(postActivation?.activeObservations).toContain('Observed');
+    expect(observerCalls.length).toBe(callsBeforeActivation);
+  });
+
+  it('should run a blocking sync observation once pending tokens reach blockAfter with no buffered chunk', async () => {
+    // ~2200 pending tokens exceed blockAfter (2x threshold 1000 = 2000). With no
+    // activatable chunk, the band no longer applies — a sync observation must fire
+    // so context is bounded.
+    const { step, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 250,
+      bufferActivation: 1.0,
+      blockAfter: 2, // 2x threshold = 2000
+      reflectionObservationTokens: 50000,
+      messageCount: 20, // ~2200 tokens: past blockAfter
+    });
+
+    await step(0);
+
+    // Sync observation committed directly during the step — no async wait needed.
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.activeObservations).toContain('Observed');
+  });
+
+  it('should not wait on an in-flight buffer op to activate in the threshold→blockAfter band', async () => {
+    let holdObserver: Promise<void> | undefined;
+    const { om, step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+        observerGate: () => holdObserver,
+      });
+
+    // Turn 1, step 0 buffers a chunk in the background (observer not held).
+    await step(0);
+    await waitForAsyncOps();
+    expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+
+    // More messages arrive, still inside the band, and a background buffer op for them
+    // is still running when the next turn starts.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const bandMessages = Array.from({ length: 3 }, (_, i) => ({
+      id: `band-msg-${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Band ${i}: ${filler}` }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+      threadId,
+      resourceId,
+    }));
+    await storage.saveMessages({ messages: bandMessages });
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.inAsyncObservationBand).toBe(true);
+    expect(status.canActivate).toBe(true);
+
+    let releaseObserver!: () => void;
+    holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
+    const callsBeforeOp = observerCalls.length;
+    const inFlightOp = om.buffer({ threadId, resourceId, messages: bandMessages, pendingTokens: status.pendingTokens });
+    let turn2Step0: Promise<unknown> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeOp + 1));
+      expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
+
+      // Turn 2, step 0: a chunk is ready, but activating now would wait on the held op.
+      // Reflection still runs: it doesn't wait on the observation op.
+      const maybeReflect = vi.spyOn(om.reflector, 'maybeReflect');
+      turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+      ]);
+      expect(outcome).toBe('completed');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations ?? '').toBe('');
+      expect(maybeReflect).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'turn-sync' }));
+    } finally {
+      clearTimeout(timer);
+      holdObserver = undefined;
+      releaseObserver();
+      await turn2Step0?.catch(() => {});
+    }
+    await inFlightOp;
+    await waitForAsyncOps();
+
+    // With no op in flight, the next step activates the buffered chunks.
+    await step(1);
+    expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+  });
+
+  it('should activate a persisted chunk without waiting for the buffer op to finish indexing', async () => {
+    // A buffer op stays registered through its post-persist work (indexing, thread title),
+    // which can take seconds with a real embedder. Only the chunk write
+    // conflicts with activation, so a persisted chunk must activate in the band meanwhile.
+    let releaseIndexing!: () => void;
+    const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
+    const indexSpy = vi
+      .spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups')
+      .mockImplementation(() => indexingHeld);
+    try {
+      const { om, step, waitForAsyncOps, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+      const bufferKey = `obs:thread:${threadId}`;
+
+      // Turn 1 buffers a chunk; the op persists it, then sits in its indexing tail.
+      await step(0);
+      await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+      expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
+      expect(om.buffering.isChunkWriteInProgress(bufferKey)).toBe(false);
+
+      // Turn 2, step 0: the chunk is ready and nothing can append another one.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+      ]);
+      clearTimeout(timer);
+      expect(outcome).toBe('completed');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+
+      // When the op finishes, its buffering bookkeeping must not overwrite activation's reset.
+      releaseIndexing();
+      await turn2Step0;
+      await waitForAsyncOps();
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey)).toBe(0);
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastBufferedAtTokens ?? 0).toBe(0);
+    } finally {
+      releaseIndexing();
+      indexSpy.mockRestore();
+    }
+  });
+
+  describe('threshold→blockAfter band with a ready chunk at step > 0', () => {
+    async function setupReadyChunkInBand(holdObserver: () => Promise<void> | undefined) {
+      const scenario = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+        observerGate: holdObserver,
+      });
+      const { step, waitForAsyncOps, storage, threadId, resourceId } = scenario;
+
+      // Step 0 buffers a chunk in the background; it completes before step 1.
+      const list = await step(0);
+      await waitForAsyncOps();
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+
+      // The agent responds with enough content to cross the next buffer interval,
+      // still inside the band.
+      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      for (let i = 0; i < 6; i++) {
+        list.add(
+          {
+            id: `band-response-${i}`,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: `Band ${i}: ${filler}` }] },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+            threadId,
+            resourceId,
+          } as MastraDBMessage,
+          'response',
+        );
+      }
+      const status = await scenario.om.getStatus({ threadId, resourceId, messages: list.get.all.db() });
+      expect(status.inAsyncObservationBand).toBe(true);
+      expect(status.canActivate).toBe(true);
+      return scenario;
+    }
+
+    async function raceStep(run: () => Promise<unknown>) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const pending = run();
+      try {
+        return await Promise.race([
+          pending.then(() => 'completed' as const),
+          new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    it('should activate the ready chunk instead of starting a buffer op that would defer it', async () => {
+      let holdObserver: Promise<void> | undefined;
+      const { step, observerCalls, storage, threadId, resourceId } = await setupReadyChunkInBand(() => holdObserver);
+
+      // Any new buffer op would stay in flight and defer activation.
+      let releaseObserver!: () => void;
+      holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
+      const callsBeforeStep = observerCalls.length;
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect(observerCalls.length).toBe(callsBeforeStep);
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        holdObserver = undefined;
+        releaseObserver();
+        await step1?.catch(() => {});
+      }
+    });
+
+    it('should activate without waiting on an in-flight reflection buffer op', async () => {
+      const { step, storage, threadId, resourceId } = await setupReadyChunkInBand(() => undefined);
+
+      // A reflection buffer op is still running; waitForBuffering would wait on it.
+      const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+      const reflectionKey = `refl:thread:${threadId}`;
+      let releaseReflection!: () => void;
+      ops.set(reflectionKey, new Promise<void>(resolve => (releaseReflection = resolve)));
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        ops.delete(reflectionKey);
+        releaseReflection();
+        await step1?.catch(() => {});
+      }
+    });
+  });
+
+  it('should keep the new user input in the input bucket when step 0 buffers it', async () => {
+    // Semantic recall embeds new user messages from messageList.get.input.db(); the
+    // buffer path must not move the turn's prompt out of that bucket.
+    const { step, waitForAsyncOps, observerCalls, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
+    const prompt = {
+      id: 'new-user-prompt',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'What did we decide about the launch date?' }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+      threadId,
+      resourceId,
+    } as MastraDBMessage;
+
+    const list = await step(0, { input: [prompt] });
+    await waitForAsyncOps();
+
+    expect(observerCalls.some(call => call.input.includes('launch date'))).toBe(true);
+    expect(list.get.input.db().map(m => m.id)).toContain('new-user-prompt');
+  });
+
+  it('should resolve a multiplier blockAfter against a per-record messageTokens override', async () => {
+    // Instance threshold 10000 → default blockAfter 1.2x = 12000. The record override
+    // lowers the threshold to 3000, so the band must end at 3600, not 12000.
+    const { om, step, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 2000,
+      bufferActivation: 0.8,
+      reflectionObservationTokens: 50000,
+      messageCount: 40, // ~4400 tokens: past the override's blockAfter
+    });
+    await om.getStatus({ threadId, resourceId });
+    await om.updateRecordConfig(threadId, resourceId, { observation: { messageTokens: 3000 } });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.threshold).toBe(3000);
+    expect(status.observationBlockAfter).toBe(3600);
+    expect(status.inAsyncObservationBand).toBe(false);
+
+    await step(0);
+    expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
   });
 
   it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {

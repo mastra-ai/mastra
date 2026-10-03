@@ -224,18 +224,20 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which buffered activation is allowed to overshoot the
-   * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and activating
-   * buffered chunks does not bring pending tokens back under it.
+   * Token threshold above which a blocking synchronous observation is allowed.
+   * Between `messageTokens` and `blockAfter`, only async buffering/activation is
+   * used: reaching the observation threshold without an activatable buffered chunk
+   * triggers background buffering instead of a blocking observation. At or above
+   * `blockAfter`, a synchronous observation runs if pending tokens still reach it
+   * after buffered activation. Buffered activation is also allowed to overshoot
+   * the retention target past this threshold.
    *
    * Accepts either:
-   * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
-   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
+   * - A multiplier (1 ≤ value < 100): multiplied by the record's effective `messageTokens`
+   *   (per-record overrides included). e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
    * - An absolute token count (≥ 100): must be greater than `messageTokens`.
    *
-   * Only relevant when `bufferTokens` is set.
-   * If not set, synchronous observation is never used when async buffering is enabled.
+   * Only relevant when `bufferTokens` is set. Defaults to 1.2 when async buffering is enabled.
    */
   blockAfter?: number;
 

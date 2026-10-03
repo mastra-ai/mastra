@@ -77,32 +77,48 @@ export class ObservationStep {
     let didThresholdCleanup = false;
     let observerExchange: StepContext['observerExchange'];
 
-    // ── Step 0: Activate buffered chunks ──────────────────────
-    if (this.stepNumber === 0) {
-      const step0Messages = getObservableMessages(messageList);
-      const activation = await om.activate({
-        threadId,
-        resourceId,
-        checkThreshold: true,
-        messages: step0Messages,
-        record: this.turn.record,
-        currentModel: this.turn.actorModelContext,
-        writer: this.turn.writer,
-        messageList,
-      });
+    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    // True while a background observation buffer op may still append a chunk — the only
+    // phase activate() waits for (its chunk swap is read-then-write). The op's later
+    // post-persist work (indexing, thread title) doesn't block activation.
+    const isChunkWriteInFlight = () => om.buffering.isChunkWriteInProgress(observationBufferKey);
 
-      this.turn.setRecord(activation.record);
-      if (activation.activated) {
-        activated = true;
-        if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(activation.activatedMessageIds);
-        }
-        await om.resetBufferingState({
+    // ── Step 0: Activate buffered chunks ──────────────────────
+    // activate() waits for an in-flight chunk write. In the threshold→blockAfter band that
+    // wait must not block the turn, so leave activation to a later step.
+    // Reflection below still runs: it never waits on the observation op.
+    const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
+    const deferStep0Activation =
+      this.stepNumber === 0 &&
+      isChunkWriteInFlight() &&
+      (await om.getStatus({ threadId, resourceId, record: this.turn.record, messages: step0Messages }))
+        .inAsyncObservationBand;
+    if (this.stepNumber === 0) {
+      if (!deferStep0Activation) {
+        const activation = await om.activate({
           threadId,
           resourceId,
-          recordId: activation.record.id,
+          checkThreshold: true,
+          messages: step0Messages,
+          record: this.turn.record,
+          currentModel: this.turn.actorModelContext,
+          writer: this.turn.writer,
+          messageList,
         });
-        await this.turn.refreshRecord();
+
+        this.turn.setRecord(activation.record);
+        if (activation.activated) {
+          activated = true;
+          if (activation.activatedMessageIds?.length) {
+            messageList.removeByIds(activation.activatedMessageIds);
+          }
+          await om.resetBufferingState({
+            threadId,
+            resourceId,
+            recordId: activation.record.id,
+          });
+          await this.turn.refreshRecord();
+        }
       }
 
       // Check if reflection is needed (whether or not activation happened).
@@ -157,11 +173,38 @@ export class ObservationStep {
       messages: getObservableMessages(messageList),
     });
 
+    if (
+      statusSnapshot.inAsyncObservationBand &&
+      !statusSnapshot.canActivate &&
+      !hasIncompleteToolCalls &&
+      !isChunkWriteInFlight()
+    ) {
+      // In the band without a chunk per the turn's cached record. A background buffer op
+      // may have persisted its chunk since the record was cached; refresh once so a ready
+      // chunk is activated instead of lingering behind a newly started buffer op.
+      await this.turn.refreshRecord();
+      statusSnapshot = await om.getStatus({
+        threadId,
+        resourceId,
+        record: this.turn.record,
+        messages: getObservableMessages(messageList),
+      });
+    }
+
+    // In the threshold→blockAfter band with a chunk ready and no chunk write in flight,
+    // activate this step instead of starting another buffer op: its chunk write would be
+    // in flight by the activation check below and defer the ready chunk.
+    const activateBeforeBuffering =
+      statusSnapshot.inAsyncObservationBand &&
+      statusSnapshot.canActivate &&
+      !hasIncompleteToolCalls &&
+      !isChunkWriteInFlight();
+
     // Trigger buffering if interval boundary crossed (fire-and-forget, all steps).
     // A pending tool call on the newest message doesn't block the whole batch:
     // admit only the safe prefix before it — the same policy idle buffering
     // applies at turn end (see selectSafeBufferPrefix).
-    if (statusSnapshot.shouldBuffer) {
+    if (statusSnapshot.shouldBuffer && !activateBeforeBuffering) {
       const allMessages = getObservableMessages(messageList);
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
@@ -196,11 +239,14 @@ export class ObservationStep {
         }
 
         // Once a buffered chunk has been sealed and persisted, it should no longer
-        // remain in the live response/input buckets. Move the exact same messages
-        // into memory so later step-save drains don't pull them back out and grow
-        // them again under the old response id.
-        messageList.removeByIds(safeCandidates.map(msg => msg.id));
-        for (const msg of safeCandidates) {
+        // remain in the live response bucket. Move the exact same messages into
+        // memory so later step-save drains don't pull them back out and grow them
+        // again under the old response id. Input messages stay put: they don't grow,
+        // and semantic recall embeds the turn's new user messages from the input bucket.
+        const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
+        const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
+        messageList.removeByIds(sealedOutput.map(msg => msg.id));
+        for (const msg of sealedOutput) {
           messageList.add(msg, 'memory');
         }
       }
@@ -231,11 +277,18 @@ export class ObservationStep {
 
     // ── Save messages + threshold observation ──────
     // Historically gated to step > 0 (pre-async-buffering relic, 27d7398c51). A single
-    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer requires
+    // over-threshold message at step 0 hit neither the buffer path (shouldBuffer then required
     // pendingTokens < threshold) nor this one — the #16523 dead zone. Now the block also
     // runs at step 0, but ONLY when observation is imminent, so buckets aren't drained on
     // turns where nothing will fire.
-    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+    // In the threshold→blockAfter band nothing may block: run the threshold pipeline
+    // only to activate an already-buffered chunk, and only when no chunk write is in
+    // flight. activate() waits for an in-flight chunk write (that wait is what keeps its
+    // read-then-write chunk swap from dropping a concurrently appended chunk), which
+    // would turn the swap into a wait on the observer model. Otherwise defer to a later step.
+    const bandDefersObservation =
+      statusSnapshot.inAsyncObservationBand && (!statusSnapshot.canActivate || isChunkWriteInFlight());
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
     /** In-flight message ids the step-0 cleanup must never remove from live context. */
     let step0PreserveIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
@@ -292,7 +345,7 @@ export class ObservationStep {
       // Threshold observation (skip if tool calls pending)
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
+        const obsResult = await this.runThresholdObservation(statusSnapshot.inAsyncObservationBand);
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
@@ -398,9 +451,9 @@ export class ObservationStep {
   /**
    * Run the full threshold observation pipeline:
    * waitForBuffering → re-check → activate buffered chunks → reflect → observe
-   * (sync fallback when pending tokens are still at or above the threshold)
+   * (sync fallback at blockAfter when async buffering is enabled)
    */
-  private async runThresholdObservation(): Promise<{
+  private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
@@ -412,7 +465,12 @@ export class ObservationStep {
     const om = this.turn.om;
 
     // Wait for any in-flight buffering to settle, then refresh the turn cache once.
-    await om.waitForBuffering(threadId, resourceId);
+    // In the threshold→blockAfter band this path is only entered to activate a ready
+    // chunk with no chunk write in flight — skip the wait so a buffer op's post-persist
+    // work or an in-flight reflection buffer op doesn't block the activation swap.
+    if (!inAsyncObservationBand) {
+      await om.waitForBuffering(threadId, resourceId);
+    }
     await this.turn.refreshRecord();
 
     // A step-0 seeded response message exists ONLY as a marker anchor in the live list.
@@ -436,11 +494,8 @@ export class ObservationStep {
       return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
-    // Activate buffered chunks first. Buffering stops once pending tokens reach the
-    // threshold, so the content that crossed it is never in a chunk and activation
-    // alone may not bring the context back under the threshold. Keep activating while
-    // chunks remain — every message a chunk owns must be activated before the sync
-    // observer runs, or it would observe them a second time.
+    // A large batch may leave an uncovered tail after activation. Drain buffered
+    // chunks before sync observation so their messages are not observed twice.
     let pendingMessages = observableMessages;
     const activatedMessageIds: string[] = [];
     let activated = false;
@@ -456,7 +511,16 @@ export class ObservationStep {
         messageList,
       });
       this.turn.setRecord(activation.record);
-      if (!activation.activated) break;
+      if (!activation.activated) {
+        await this.turn.refreshRecord();
+        status = await om.getStatus({
+          threadId,
+          resourceId,
+          record: this.turn.record,
+          messages: pendingMessages,
+        });
+        break;
+      }
 
       activated = true;
       const ids = new Set(activation.activatedMessageIds ?? []);
@@ -470,14 +534,28 @@ export class ObservationStep {
       });
     }
 
+    // A bounded activation wait can leave older chunks (or a late write) pending.
+    // Defer rather than sync-observe newer messages and later roll the cursor back.
+    // Keep prior activation cleanup, and don't reflect onto a new generation while
+    // the stalled write still targets this one.
+    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    if ((status.shouldObserve && status.canActivate) || om.buffering.isChunkWriteInProgress(observationBufferKey)) {
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
+
     if (activated) {
       // Check reflection after activation — use maybeReflect so that a
       // completed buffered reflection is activated instantly instead of
       // running a redundant sync reflection from scratch.
-      const postActivationRecord = this.turn.record;
+      const preReflectionRecord = this.turn.record;
       await om.reflector.maybeReflect({
-        record: postActivationRecord,
-        observationTokens: postActivationRecord.observationTokenCount ?? 0,
+        record: preReflectionRecord,
+        observationTokens: preReflectionRecord.observationTokenCount ?? 0,
         threadId,
         writer: this.turn.writer,
         messageList,
@@ -487,6 +565,14 @@ export class ObservationStep {
         lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
         reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         trigger: 'turn-sync',
+      });
+      await this.turn.refreshRecord();
+      const postActivationRecord = this.turn.record;
+      status = await om.getStatus({
+        threadId,
+        resourceId,
+        record: postActivationRecord,
+        messages: pendingMessages,
       });
 
       if (!status.shouldObserve) {
@@ -499,8 +585,21 @@ export class ObservationStep {
       }
     }
 
-    // Sync observation — we've waited for buffering and activated what we could;
-    // we're still above threshold, so observe the remaining messages synchronously.
+    if (
+      status.inAsyncObservationBand ||
+      status.canActivate ||
+      om.buffering.isChunkWriteInProgress(observationBufferKey)
+    ) {
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
+
+    // Sync observation — activation left the remaining messages at/above blockAfter
+    // (or async buffering is disabled).
     let obsResult;
     try {
       obsResult = await om.observe({

@@ -282,6 +282,7 @@ function createOM(
 // Clean up static maps between ALL tests to prevent ordering-dependent failures
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
+  BufferingCoordinator.pendingChunkWrites.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
@@ -1299,7 +1300,8 @@ describe('buffer()', () => {
     const stored = await storage.listMessages({ threadId, perPage: false });
     const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
     expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
-    expect(markerTypes.includes('data-om-buffering-end')).toBe(transient);
+    // The end marker is emitted once the chunk is stored, before indexing runs.
+    expect(markerTypes.includes('data-om-buffering-end')).toBe(true);
   });
 
   it('should not buffer when no unobserved messages exist', async () => {
@@ -1409,6 +1411,29 @@ describe('activate()', () => {
     const actResult = await om.activate({ threadId });
     expect(actResult.activated).toBe(true);
     expect(actResult.record.activeObservations).toBeTruthy();
+  });
+
+  it('should not activate while an in-process chunk write is still pending after the wait', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+    expect((await om.buffer({ threadId })).buffered).toBe(true);
+
+    // Simulate a buffer op whose chunk write hangs past activate()'s wait.
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(`obs:thread:${threadId}`);
+    vi.useFakeTimers();
+    try {
+      const activation = om.activate({ threadId });
+      await vi.advanceTimersByTimeAsync(60_000);
+      const result = await activation;
+      expect(result.activated).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      releaseChunkWrite();
+    }
+
+    const status = await om.getStatus({ threadId });
+    expect(status.bufferedChunkCount).toBe(1);
+    expect((await om.activate({ threadId })).activated).toBe(true);
   });
 
   it('should return activatedMessageIds', async () => {

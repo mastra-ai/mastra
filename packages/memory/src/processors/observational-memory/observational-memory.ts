@@ -423,6 +423,9 @@ export class ObservationalMemory {
   /** Buffering state coordinator — manages static maps and buffering lifecycle. */
   readonly buffering: BufferingCoordinator;
 
+  /** Unresolved observation blockAfter (multiplier or absolute); resolved per record. */
+  private observationBlockAfterSetting: number | undefined;
+
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
@@ -681,6 +684,13 @@ export class ObservationalMemory {
     const observationActivateAfterIdlePath =
       config.observation?.activateAfterIdle !== undefined ? 'observation.activateAfterIdle' : 'activateAfterIdle';
 
+    this.observationBlockAfterSetting = asyncBufferingDisabled
+      ? undefined
+      : (config.observation?.blockAfter ??
+        ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
+          ? 1.2
+          : undefined));
+
     // Resolve observation config with defaults
     this.observationConfig = {
       model: observationModel,
@@ -712,15 +722,10 @@ export class ObservationalMemory {
       activateAfterIdle: parseActivationTTLConfig(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
-      blockAfter: asyncBufferingDisabled
-        ? undefined
-        : resolveBlockAfter(
-            config.observation?.blockAfter ??
-              ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
-                ? 1.2
-                : undefined),
-            config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
-          ),
+      blockAfter: resolveBlockAfter(
+        this.observationBlockAfterSetting,
+        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+      ),
       previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
@@ -1245,6 +1250,14 @@ export class ObservationalMemory {
       return recordTokens;
     }
     return this.observationConfig.messageTokens;
+  }
+
+  /**
+   * Resolve the observation blockAfter for a record. A multiplier scales the record's
+   * effective messageTokens (per-record overrides included); an absolute value is used as-is.
+   */
+  private getEffectiveObservationBlockAfter(record: ObservationalMemoryRecord): number | undefined {
+    return resolveBlockAfter(this.observationBlockAfterSetting, this.getEffectiveMessageTokens(record));
   }
 
   /**
@@ -2341,6 +2354,33 @@ ${formattedMessages}
       }
     }
 
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
+    try {
+      await this.bufferObservationChunk(
+        record,
+        threadId,
+        unobservedMessages,
+        bufferKey,
+        releaseChunkWrite,
+        writer,
+        requestContext,
+        observabilityContext,
+      );
+    } finally {
+      releaseChunkWrite();
+    }
+  }
+
+  private async bufferObservationChunk(
+    record: ObservationalMemoryRecord,
+    threadId: string,
+    unobservedMessages: MastraDBMessage[],
+    bufferKey: string,
+    releaseChunkWrite: () => void,
+    writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
+    observabilityContext?: ObservabilityContext,
+  ): Promise<void> {
     // Re-fetch record to get latest state after waiting
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     if (!freshRecord) {
@@ -2435,7 +2475,7 @@ ${formattedMessages}
       `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${tokensToBuffer}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
     );
 
-    const result = await this.runBufferedObservationCycle(
+    await this.runBufferedObservationCycle(
       { threadId, resourceId: freshRecord.resourceId ?? undefined, trigger: 'async-buffer' },
       () =>
         ObservationStrategy.create(this, {
@@ -2449,15 +2489,14 @@ ${formattedMessages}
           requestContext,
           observabilityContext,
           trigger: 'async-buffer',
+          onBufferedChunkPersisted: async () => {
+            // Update the buffer cursor so the next buffer only sees messages newer than this one.
+            const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+            BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTs.getTime() + 1));
+            releaseChunkWrite();
+          },
         }).run(),
     );
-
-    if (result?.observed) {
-      // Update the buffer cursor so the next buffer only sees messages newer than this one.
-      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
-      const cursor = new Date(maxTs.getTime() + 1);
-      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
-    }
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -3025,9 +3064,13 @@ ${formattedMessages}
    * @example
    * ```ts
    * const status = await om.getStatus({ threadId });
-   * if (status.shouldObserve) {
+   * if (status.shouldObserve && status.canActivate) {
+   *   await om.activate({ threadId });
+   * } else if (status.shouldObserve && !status.inAsyncObservationBand) {
+   *   // At/above blockAfter (or async buffering disabled): observe synchronously
    *   await om.observe({ threadId });
    * } else if (status.shouldBuffer) {
+   *   // Below the threshold, or in the threshold→blockAfter band: buffer in the background
    *   await om.buffer({ threadId });
    * }
    * if (status.shouldReflect) {
@@ -3055,6 +3098,14 @@ ${formattedMessages}
     canActivate: boolean;
     asyncObservationEnabled: boolean;
     asyncReflectionEnabled: boolean;
+    /** Resolved absolute observation blockAfter (only set when async observation is enabled). */
+    observationBlockAfter?: number;
+    /**
+     * Pending tokens are in the threshold→blockAfter band: past the observation
+     * threshold but below blockAfter, so async buffering/activation should be
+     * used instead of a blocking synchronous observation.
+     */
+    inAsyncObservationBand: boolean;
     scope: 'resource' | 'thread';
   }> {
     const { threadId, resourceId, record: providedRecord, messages } = opts;
@@ -3091,10 +3142,17 @@ ${formattedMessages}
     const bufferedChunkCount = bufferedChunks.length;
     const bufferedChunkTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
 
-    // Should buffer? Check interval boundary using DB-backed state
+    // Should buffer? Check interval boundary using DB-backed state.
+    // Buffering is also allowed in the threshold→blockAfter band: reaching the
+    // observation threshold without a buffered chunk must kick off background
+    // buffering (so a chunk becomes activatable) rather than leaving sync
+    // observation as the only way out of the band.
     const asyncObservationEnabled = this.buffering.isAsyncObservationEnabled();
+    const observationBlockAfter = asyncObservationEnabled ? this.getEffectiveObservationBlockAfter(record) : undefined;
+    const inAsyncObservationBand =
+      observationBlockAfter !== undefined && pendingTokens >= threshold && pendingTokens < observationBlockAfter;
     let shouldBuffer = false;
-    if (asyncObservationEnabled && pendingTokens < threshold) {
+    if (asyncObservationEnabled && (pendingTokens < threshold || inAsyncObservationBand)) {
       const lockKey = this.buffering.getLockKey(threadId, resourceId);
       shouldBuffer = this.buffering.shouldTriggerAsyncObservation(
         pendingTokens,
@@ -3139,6 +3197,8 @@ ${formattedMessages}
       canActivate,
       asyncObservationEnabled,
       asyncReflectionEnabled: this.buffering.isAsyncReflectionEnabled(),
+      observationBlockAfter,
+      inAsyncObservationBand,
       scope: this.scope,
     };
   }
@@ -3347,6 +3407,7 @@ ${formattedMessages}
       resolveOp = resolve;
     });
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
+    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
 
     // Keep the caller's turn-scoped record current while using a fresh storage snapshot
     // for the asynchronous write path.
@@ -3436,6 +3497,25 @@ ${formattedMessages}
         void writer.custom({ ...startMarker, transient: true }).catch(() => {});
       }
 
+      // Record the chunk as soon as it's persisted, before the op's post-persist work
+      // (indexing, thread title). Activation may run from then on, so this
+      // bookkeeping must not land after activation resets it.
+      let chunkRecorded = false;
+      const recordBufferedChunk = async () => {
+        if (chunkRecorded) return;
+        chunkRecorded = true;
+        // Update the boundary tokens in storage + in-memory cache for interval tracking
+        await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
+        flagCleared = true;
+        setBufferingState(false, newTokens);
+        BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
+
+        // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
+        const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
+        BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTimestamp.getTime() + 1));
+        releaseChunkWrite();
+      };
+
       // Call the observer via strategy pattern, firing config-level hooks
       // around the cycle — fire-and-forget callers never see this result.
       const result = await this.runBufferedObservationCycle(
@@ -3456,6 +3536,7 @@ ${formattedMessages}
             currentModel: opts.currentModel,
             observabilityContext,
             trigger: 'async-buffer',
+            onBufferedChunkPersisted: recordBufferedChunk,
           }).run(),
       );
 
@@ -3481,16 +3562,7 @@ ${formattedMessages}
         });
       }
 
-      // Update the boundary tokens in storage + in-memory cache for interval tracking
-      await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
-      flagCleared = true;
-      setBufferingState(false, newTokens);
-      BufferingCoordinator.lastBufferedBoundary.set(bufferKey, newTokens);
-
-      // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
-      const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
-      const cursor = new Date(maxTimestamp.getTime() + 1);
-      BufferingCoordinator.lastBufferedAtTime.set(bufferKey, cursor);
+      await recordBufferedChunk();
 
       const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
       return { buffered: true, record: updatedRecord };
@@ -3498,6 +3570,7 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
+      releaseChunkWrite();
       unregisterOp(record.id, 'bufferingObservation');
       BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
       resolveOp!();
@@ -3633,24 +3706,37 @@ ${formattedMessages}
       }
     }
 
-    // Wait for any in-progress buffering to complete (check DB flag)
-    if (record.isBufferingObservation) {
-      // If the op is active in this process, wait for it
-      const lockKey = this.buffering.getLockKey(threadId, resourceId);
-      const bufferKey = this.buffering.getObservationBufferKey(lockKey);
-      const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
-      if (asyncOp) {
-        try {
-          await Promise.race([
-            asyncOp,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60_000)),
-          ]);
-        } catch {
-          // Timeout or error — proceed with what we have
-        }
+    // Wait for an in-process buffer op that may still append a chunk: the swap below reads
+    // then writes the buffered chunks, so a concurrent append could be dropped. Work the op
+    // does after persisting its chunk (indexing, thread title) can't conflict.
+    // If the write is still pending after the wait, skip activation rather than risk it.
+    // An op in another process can't be awaited; activate whatever chunks exist.
+    const obsBufferKey = this.buffering.getObservationBufferKey(this.buffering.getLockKey(threadId, resourceId));
+    const pendingChunkWrite = BufferingCoordinator.pendingChunkWrites.get(obsBufferKey);
+    if (pendingChunkWrite) {
+      // A write can start after the step's non-blocking precheck. Re-check here
+      // rather than turn an in-band activation into a wait on the Observer.
+      const blockAfter = this.buffering.isAsyncObservationEnabled()
+        ? this.getEffectiveObservationBlockAfter(record)
+        : undefined;
+      const threshold = calculateDynamicThreshold(
+        this.getEffectiveMessageTokens(record),
+        record.observationTokenCount ?? 0,
+      );
+      if (
+        livePendingTokens !== undefined &&
+        blockAfter !== undefined &&
+        livePendingTokens >= threshold &&
+        livePendingTokens < blockAfter
+      ) {
+        return { activated: false, record };
       }
-      // If not in this process, the flag might be stale or from another replica.
-      // Proceed with activation of whatever chunks exist.
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([pendingChunkWrite, new Promise<void>(resolve => (timeoutId = setTimeout(resolve, 60_000)))]);
+      clearTimeout(timeoutId);
+      if (BufferingCoordinator.pendingChunkWrites.has(obsBufferKey)) {
+        return { activated: false, record };
+      }
     }
 
     // Re-fetch to get latest chunks after any completed buffering
@@ -3673,9 +3759,8 @@ ${formattedMessages}
     const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
     const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
 
-    const forceMaxActivation = !!(
-      this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
-    );
+    const blockAfter = this.getEffectiveObservationBlockAfter(freshRecord);
+    const forceMaxActivation = !!(blockAfter && currentPendingTokens >= blockAfter);
 
     // Storage adapters decrement the persisted pending count during the swap. Keep
     // that base aligned with the live count used to select chunks so the returned
