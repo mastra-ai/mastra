@@ -48,6 +48,7 @@ export type MainSidebarNavLinkProps = Omit<ComponentProps<'li'>, 'children'> & {
 
 type SlottedNavChildProps = {
   className?: string;
+  children?: React.ReactNode;
   'aria-current'?: 'page';
 };
 
@@ -116,20 +117,26 @@ function navInteractiveRow({
   // The current row is announced, not merely tinted: its fill is the only thing that says
   // "you are here", and a fill says nothing to a screen reader.
   const current = isActive ? ('page' as const) : undefined;
-  if (render) {
-    return React.cloneElement(render, { className: cn(className, render.props.className), 'aria-current': current });
-  }
+  const caret =
+    link?.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null;
 
-  if (asChild) {
-    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+  if (render || asChild) {
+    const slotted = render ?? children;
+    if (!React.isValidElement<SlottedNavChildProps>(slotted)) {
       throw new Error(
         'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
       );
     }
 
-    return React.cloneElement(children, {
-      className: cn(className, children.props.className),
+    return React.cloneElement(slotted, {
+      className: cn(className, slotted.props.className),
       'aria-current': current,
+      children: (
+        <>
+          {slotted.props.children}
+          {caret}
+        </>
+      ),
     });
   }
 
@@ -142,7 +149,7 @@ function navInteractiveRow({
       {link.icon}
       <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
       {children}
-      {link.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null}
+      {caret}
     </Link>
   );
 }
