@@ -26,8 +26,17 @@ $ mastra connect add linear
 Opening your browser to authorize Linear…
 ◇ Connection is active
 
-✓ Connected Linear (charlie) to My Project.
+Your organization's existing Linear connections:
+  • Mastra   connected by Charlie Green  Sep 25, 2026
+  • charlie  connected by Charlie Green  Oct 2, 2026
+
+◆ Set a display name so this connection is easy to tell apart (leave blank to skip)
+│ charlie 2
+
+✓ Connected Linear (charlie 2) to My Project.
 ```
+
+After a new connection goes active, the command suggests a unique display name so the connection is easy to tell apart later, and warns before saving a name that duplicates another connection's name.
 
 `mastra connect remove <provider>` unlinks a provider connection from the project (the org-level connection is kept):
 

@@ -134,6 +134,27 @@ export async function fetchOrgConnections(
   return data.connections ?? [];
 }
 
+/**
+ * Rename a connection. The platform trims the name and caps it at 100
+ * characters; renaming requires the org admin role.
+ */
+export async function updateConnectionDisplayName(
+  token: string,
+  orgId: string,
+  connectionId: string,
+  displayName: string,
+): Promise<void> {
+  const resp = await platformFetch(`${getIntegrationsApiUrl()}/v2/connections/${encodeURIComponent(connectionId)}`, {
+    method: 'PATCH',
+    headers: { ...headers(token, orgId), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to set the display name', resp.status, extractApiErrorDetail(err));
+  }
+}
+
 /** Attach an existing org-level connection to the project. */
 export async function addConnectionToProject(
   token: string,

@@ -952,11 +952,13 @@ Connects a provider to the project. When the organization already has connection
 
 OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
+Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming.
+
 ```bash
 mastra connect add <provider>
 ```
 
-Pass `--yes` to skip all prompts. This always creates a new connection, even when existing connections could be reused.
+Pass `--yes` to skip all prompts. This always creates a new connection without a display name, even when existing connections could be reused.
 
 ### `mastra connect remove`
 

@@ -18,6 +18,7 @@ vi.mock('./api.js', () => ({
   addConnectionToProject: vi.fn(),
   createProjectConnectSession: vi.fn(),
   removeProjectConnection: vi.fn(),
+  updateConnectionDisplayName: vi.fn(),
 }));
 
 const CANCEL = Symbol('cancel');
@@ -30,7 +31,7 @@ vi.mock('@clack/prompts', () => ({
   spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
 }));
 
-import { select } from '@clack/prompts';
+import { confirm, select, text } from '@clack/prompts';
 
 import {
   addConnectionToProject,
@@ -39,6 +40,7 @@ import {
   fetchOrgConnections,
   fetchOrgMembers,
   fetchProjectConnections,
+  updateConnectionDisplayName,
 } from './api.js';
 import { connectProviderAction, listProvidersAction } from './connect.js';
 
@@ -147,10 +149,13 @@ describe('connectProviderAction', () => {
     else process.env.CI = originalCI;
     vi.restoreAllMocks();
     vi.mocked(select).mockReset();
+    vi.mocked(text).mockReset();
+    vi.mocked(confirm).mockReset();
     vi.mocked(fetchProjectConnections).mockReset();
     vi.mocked(fetchOrgConnections).mockReset();
     vi.mocked(addConnectionToProject).mockReset();
     vi.mocked(createProjectConnectSession).mockReset();
+    vi.mocked(updateConnectionDisplayName).mockReset();
   });
 
   it('attaches an existing org connection when the user picks one', async () => {
@@ -210,6 +215,94 @@ describe('connectProviderAction', () => {
 
     expect(addConnectionToProject).not.toHaveBeenCalled();
     expect(createProjectConnectSession).toHaveBeenCalled();
+  });
+
+  it('shows the display name first with the account in the detail column, never the id', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({
+        id: 'conn_a',
+        displayName: 'Prod',
+        accountLabel: 'Mastra',
+        connectedAt: '2026-09-25T12:00:00.000Z',
+      }),
+      connection({ id: 'conn_b', accountLabel: 'charlie', connectedAt: '2026-10-02T12:00:00.000Z' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('conn_a');
+
+    await connectProviderAction('linear');
+
+    const { options } = vi.mocked(select).mock.calls[0]![0] as { options: { label: string }[] };
+    const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '');
+    const labels = options.map(option => stripAnsi(option.label));
+    expect(labels[0]).toBe('Prod     Mastra  connected by Charlie Smith  Sep 25, 2026');
+    expect(labels[1]).toBe('charlie          connected by Charlie Smith  Oct 2, 2026');
+    expect(labels.join('\n')).not.toContain('conn_');
+  });
+
+  it('saves the display name entered after a new connection goes active', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+    vi.mocked(text).mockResolvedValue('Prod Linear');
+
+    await connectProviderAction('linear');
+
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'Prod Linear');
+    expect(output.join('\n')).toContain('(Prod Linear) to My Project');
+  });
+
+  it('suggests a name that does not collide with existing connections', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'Mastra' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([connection({ id: 'conn_org', accountLabel: 'Mastra' })]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValue(undefined as never);
+
+    await connectProviderAction('linear');
+
+    const textCall = vi.mocked(text).mock.calls[0]![0] as { initialValue?: string };
+    expect(textCall.initialValue).toBe('Mastra 2');
+    // Existing connections are listed so the user can see what's taken.
+    expect(output.join('\n')).toContain("Your organization's existing Linear connections:");
+    expect(updateConnectionDisplayName).not.toHaveBeenCalled();
+  });
+
+  it('warns and confirms before using a name that collides', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_org', displayName: 'Prod', accountLabel: 'Mastra' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValue('prod');
+    vi.mocked(confirm).mockResolvedValue(true);
+
+    await connectProviderAction('linear');
+
+    const confirmCall = vi.mocked(confirm).mock.calls[0]![0] as { message: string };
+    expect(confirmCall.message).toContain('already named "Prod"');
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'prod');
+  });
+
+  it('re-prompts when the user declines a colliding name', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_org', displayName: 'Prod', accountLabel: 'Mastra' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValueOnce('Prod').mockResolvedValueOnce('Prod 2');
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await connectProviderAction('linear');
+
+    expect(text).toHaveBeenCalledTimes(2);
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'Prod 2');
   });
 
   it('skips the reuse prompt entirely with --yes', async () => {

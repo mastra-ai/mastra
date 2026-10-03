@@ -13,6 +13,7 @@ import {
   fetchOrgMembers,
   fetchProjectConnections,
   removeProjectConnection,
+  updateConnectionDisplayName,
 } from './api.js';
 import {
   authFieldKey,
@@ -46,8 +47,13 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 
+/**
+ * Human name for a connection, mirroring the platform UI: the display name,
+ * falling back to the provider account label. Empty when neither is known —
+ * callers drop the label instead of ever showing a connection id.
+ */
 function connectionLabel(connection: ProjectConnection): string {
-  return connection.displayName || connection.accountLabel || connection.id;
+  return connection.displayName || connection.accountLabel || '';
 }
 
 function memberName(member: OrgMember | undefined): string | undefined {
@@ -65,26 +71,42 @@ function formatConnectionDate(connection: ProjectConnection): string {
 }
 
 /**
- * Aligned select rows for picking one connection among several: account
- * label, who connected it, and when. Padding keeps the columns lined up in
- * clack's select renderer.
+ * Aligned rows describing connections, mirroring the platform UI's account
+ * picker: the connection's name first, then dimmed detail — the provider
+ * account when a display name covers it, who connected it, and when.
+ * Padding keeps the columns lined up in clack's select renderer.
  */
+function connectionRows(
+  connections: ProjectConnection[],
+  memberByUserId: Map<string, OrgMember>,
+): { id: string; text: string }[] {
+  const rows = connections.map(connection => ({
+    id: connection.id,
+    name: connectionLabel(connection) || 'Account name unavailable',
+    account:
+      connection.displayName && connection.accountLabel && connection.displayName !== connection.accountLabel
+        ? connection.accountLabel
+        : '',
+    by: `connected by ${memberName(memberByUserId.get(connection.connectedByUserId)) ?? 'a teammate'}`,
+    date: formatConnectionDate(connection),
+  }));
+  const nameWidth = Math.max(...rows.map(row => row.name.length));
+  const accountWidth = Math.max(...rows.map(row => row.account.length));
+  const byWidth = Math.max(...rows.map(row => row.by.length));
+  return rows.map(row => {
+    const detail = [accountWidth > 0 ? row.account.padEnd(accountWidth) : '', row.by.padEnd(byWidth), row.date]
+      .filter(Boolean)
+      .join('  ')
+      .trimEnd();
+    return { id: row.id, text: `${row.name.padEnd(nameWidth)}  ${pc.dim(detail)}` };
+  });
+}
+
 function connectionChoices(
   connections: ProjectConnection[],
   memberByUserId: Map<string, OrgMember>,
 ): { value: string; label: string }[] {
-  const rows = connections.map(connection => ({
-    value: connection.id,
-    account: connection.displayName || connection.accountLabel || '(no label)',
-    by: `connected by ${memberName(memberByUserId.get(connection.connectedByUserId)) ?? 'a teammate'}`,
-    date: formatConnectionDate(connection),
-  }));
-  const accountWidth = Math.max(...rows.map(row => row.account.length));
-  const byWidth = Math.max(...rows.map(row => row.by.length));
-  return rows.map(row => ({
-    value: row.value,
-    label: `${row.account.padEnd(accountWidth)}  ${pc.dim(`${row.by.padEnd(byWidth)}  ${row.date}`.trimEnd())}`,
-  }));
+  return connectionRows(connections, memberByUserId).map(row => ({ value: row.id, label: row.text }));
 }
 
 /** Org member lookup for attributing connections to whoever connected them. */
@@ -129,9 +151,7 @@ export async function listProvidersAction(options?: { project?: string }): Promi
     const needsReauth = rows.filter(row => row.status === 'needs_reauth');
 
     if (active.length > 0) {
-      const labels = active
-        .map(row => row.displayName || row.accountLabel)
-        .filter((label): label is string => Boolean(label));
+      const labels = active.map(connectionLabel).filter(Boolean);
       let detail: string;
       if (labels.length > 0) {
         detail = `— connected (${labels.join(', ')})`;
@@ -168,8 +188,10 @@ export async function connectProviderAction(
     connection => connection.integrationId === integration.id && connection.status === 'active',
   );
   if (existing.length > 0 && !options?.yes) {
-    const accounts = existing.map(connectionLabel).join(', ');
-    console.info(`${integration.displayName} is already connected to ${ctx.projectName} (${accounts}).`);
+    const accounts = existing.map(connectionLabel).filter(Boolean).join(', ');
+    console.info(
+      `${integration.displayName} is already connected to ${ctx.projectName}${accounts ? ` (${accounts})` : ''}.`,
+    );
     if (!isInteractive()) {
       console.info('Pass --yes to add another connection.');
       return;
@@ -207,7 +229,8 @@ export async function connectProviderAction(
       if (choice !== CREATE_NEW) {
         await addConnectionToProject(ctx.token, ctx.orgId, ctx.projectId, choice);
         const chosen = reusable.find(row => row.id === choice);
-        printConnected(ctx, integration, chosen ? ` (${connectionLabel(chosen)})` : '');
+        const chosenLabel = chosen ? connectionLabel(chosen) : '';
+        printConnected(ctx, integration, chosenLabel ? ` (${chosenLabel})` : '');
         return;
       }
     }
@@ -265,7 +288,83 @@ export async function connectProviderAction(
   const connection = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).find(
     row => row.id === session.connectionId,
   );
-  printConnected(ctx, integration, connection ? ` (${connectionLabel(connection)})` : '');
+
+  let displayName: string | undefined;
+  if (isInteractive() && !options?.yes) {
+    displayName = await promptDisplayName(ctx, integration, session.connectionId, connection);
+  }
+
+  const label = displayName ?? (connection ? connectionLabel(connection) : '');
+  printConnected(ctx, integration, label ? ` (${label})` : '');
+}
+
+/**
+ * Offer to name the new connection so it can be told apart from other
+ * connections to the same provider. Lists the provider's existing
+ * connections, pre-fills a suggestion that does not collide with them, and
+ * asks for confirmation if the chosen name duplicates another one.
+ */
+async function promptDisplayName(
+  ctx: ConnectContext,
+  integration: IntegrationCatalogEntry,
+  connectionId: string,
+  connection: ProjectConnection | undefined,
+): Promise<string | undefined> {
+  let others: ProjectConnection[] = [];
+  try {
+    others = (await fetchOrgConnections(ctx.token, ctx.orgId, integration.id)).filter(row => row.id !== connectionId);
+  } catch {
+    // Naming is optional polish; keep going without the collision context.
+  }
+
+  if (others.length > 0) {
+    const memberByUserId = await fetchMemberMap(ctx);
+    console.info(`\nYour organization's existing ${integration.displayName} connections:`);
+    for (const row of connectionRows(others, memberByUserId)) {
+      console.info(`  ${pc.dim('•')} ${row.text}`);
+    }
+  }
+
+  const taken = new Set(
+    others
+      .flatMap(row => [row.displayName, row.accountLabel])
+      .filter(Boolean)
+      .map(value => value!.toLowerCase()),
+  );
+  const base = connection?.accountLabel || integration.displayName;
+  let suggestion = base;
+  for (let n = 2; taken.has(suggestion.toLowerCase()); n++) {
+    suggestion = `${base} ${n}`;
+  }
+
+  for (;;) {
+    const answer = await p.text({
+      message: 'Set a display name so this connection is easy to tell apart (leave blank to skip)',
+      initialValue: suggestion,
+      validate: value =>
+        value && value.trim().length > 100 ? 'Display names are limited to 100 characters.' : undefined,
+    });
+    if (p.isCancel(answer) || !answer || !String(answer).trim()) return undefined;
+    const name = String(answer).trim();
+
+    const duplicate = others.find(row => row.displayName?.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      const useAnyway = await p.confirm({
+        message: `Another ${integration.displayName} connection is already named "${duplicate.displayName}". Use this name anyway?`,
+      });
+      if (p.isCancel(useAnyway)) return undefined;
+      if (!useAnyway) continue;
+    }
+
+    try {
+      await updateConnectionDisplayName(ctx.token, ctx.orgId, connectionId, name);
+      return name;
+    } catch (error) {
+      // Renaming needs the org admin role; the connection itself is fine.
+      console.warn(pc.yellow(`Could not set the display name: ${error instanceof Error ? error.message : error}`));
+      return undefined;
+    }
+  }
 }
 
 function printConnected(ctx: ConnectContext, integration: IntegrationCatalogEntry, account: string): void {
@@ -415,5 +514,6 @@ export async function removeConnectionAction(
 }
 
 function describeConnection(provider: string, connection: ProjectConnection): string {
-  return `${provider.toLowerCase()} (${connectionLabel(connection)})`;
+  const label = connectionLabel(connection);
+  return label ? `${provider.toLowerCase()} (${label})` : `${provider.toLowerCase()}`;
 }

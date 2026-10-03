@@ -8,6 +8,7 @@ import {
   fetchProjectConnections,
   getIntegrationsApiUrl,
   removeProjectConnection,
+  updateConnectionDisplayName,
 } from './api.js';
 
 describe('getIntegrationsApiUrl', () => {
@@ -89,6 +90,15 @@ describe('integrations API calls', () => {
     expect(fetch).toHaveBeenCalledWith(
       'https://integrations.test/v2/projects/proj_1/connections/con_1',
       expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('renames a connection', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ id: 'con_1' })));
+    await updateConnectionDisplayName('tok', 'org_1', 'con_1', 'Prod Linear');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://integrations.test/v2/connections/con_1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ displayName: 'Prod Linear' }) }),
     );
   });
 
