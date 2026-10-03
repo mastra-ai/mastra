@@ -234,9 +234,8 @@ export const saveScorePayloadSchema = scoreRowDataSchema
     /**
      * Optional caller-supplied stable id. When provided, storage adapters
      * upsert by this id (latest write wins) instead of inserting a new row
-     * with a random id. Used by caller-driven experiments so retried
-     * submissions converge on one score row per (experiment, item, attempt,
-     * scorer).
+     * with a random id. Used by experiments so repeated executions converge
+     * on one score row per logical scorer occurrence.
      */
     id: z.string().optional(),
   });

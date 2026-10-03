@@ -328,12 +328,13 @@ describe('Dataset', () => {
   });
 
   // 23. startExperimentAsync
-  it('startExperimentAsync returns pending status immediately', async () => {
+  it('startExperimentAsync returns pending status with scorer IDs persisted immediately', async () => {
     await ds.addItem({ input: { prompt: 'Hello' } });
+    const scorer = createMockScorer('async-scorer', 'Async scorer');
 
     const { experimentId, status } = await ds.startExperimentAsync({
       task: async () => 'ok',
-      scorers: [],
+      scorers: [scorer],
     });
 
     expect(status).toBe('pending');
@@ -342,6 +343,7 @@ describe('Dataset', () => {
     // Verify run record exists
     const run = await experimentsStorage.getExperimentById({ id: experimentId });
     expect(run).not.toBeNull();
+    expect(run?.scorerIds).toEqual(['async-scorer']);
 
     // Wait for fire-and-forget to complete
     await new Promise(r => setTimeout(r, 500));
