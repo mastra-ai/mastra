@@ -86,7 +86,8 @@ export class ObservationStep {
     // ── Step 0: Activate buffered chunks ──────────────────────
     // activate() waits for an in-flight chunk write. In the threshold→blockAfter band that
     // wait must not block the turn, so leave activation to a later step.
-    // Reflection below still runs: it never waits on the observation op.
+    // Reflection below still runs: it never waits on the observation op, and if it starts a
+    // new generation the in-flight chunk is written to that generation, not the retired one.
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     const deferStep0Activation =
       this.stepNumber === 0 &&

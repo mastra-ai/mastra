@@ -26,3 +26,5 @@ await memory.updateObservationalMemoryConfig({
 If an in-flight chunk write outlasts the bounded activation wait, observation defers to a later step without discarding messages or completed activations. This prevents duplicate observation and preserves cursor order when the write finishes.
 
 Fixed semantic recall missing a turn's new user message when background buffering picked it up on the first step.
+
+Fixed buffered observations being lost when a reflection activated while they were still being generated. The observations were saved to the previous memory generation, never activated, and their messages were observed again later. They are now saved to the current generation.
