@@ -1216,6 +1216,7 @@ export class DurableAgent<
           },
           tracingPolicy: agentTracingPolicy,
           tracingOptions: origAgentSpanData?.traceId ? { traceId: origAgentSpanData.traceId } : undefined,
+          ...(origAgentSpanData?.id ? { resumedFromSpanId: origAgentSpanData.id } : {}),
           requestContext,
           mastra: this.#mastra,
         });
@@ -2676,7 +2677,7 @@ export class DurableAgent<
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
-    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
+    // steps + terminal end() target these via the registry override.
     // Opened before the stream adapter so per-chunk processor spans parent under it.
     const origTraceId = entry.agentSpan?.traceId;
     const origSpanId = entry.agentSpan?.id;
@@ -2701,6 +2702,7 @@ export class DurableAgent<
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
+          ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
           tracingPolicy: agentTracingPolicy,
           tracingOptions: { traceId: origTraceId },
           requestContext: resolvedOptions.requestContext,
