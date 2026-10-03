@@ -18,7 +18,7 @@ This page walks through the first agent. Platform-side setup — connecting prov
 
 ## Prerequisites
 
-- A Mastra platform project with at least one provider connected from the project's Integrations tab.
+- A Mastra platform project.
 - A platform access token for that project.
 
 ## Install
@@ -36,6 +36,16 @@ MASTRA_PROJECT_ID=your-project-id
 
 Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/integrations#environment-variables).
 
+## Connect a provider
+
+Connect at least one provider to the project, either from the project's Integrations tab in the dashboard or with the [`mastra connect`](/reference/cli/mastra) CLI command:
+
+```bash
+mastra connect add linear
+```
+
+OAuth providers open a consent screen in your browser; API-key providers prompt for credentials in the terminal. Use `mastra connect list` to see which providers are connected. [Integrations](/docs/mastra-platform/integrations#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
+
 ## Give an agent connected tools
 
 [`tools()`](/reference/connect/tools) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools` and Mastra calls it on every generate/stream:
@@ -52,7 +62,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so connecting a new provider in the dashboard makes its tools available to the running server without a restart.
+With no options, every connected integration with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so connecting a new provider — from the dashboard or with `mastra connect add` — makes its tools available to the running server without a restart.
 
 Ask the agent to do something with a connected provider:
 
