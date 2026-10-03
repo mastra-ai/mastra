@@ -12,6 +12,7 @@ export type {
   CreateNotificationInput,
   ListDueNotificationsInput,
   ListNotificationsInput,
+  MarkNotificationDeliveredInput,
   NotificationDeliveryAction,
   NotificationDeliveryDecision,
   NotificationDeliveryThreadState,
