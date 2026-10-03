@@ -171,29 +171,25 @@ describe('claimed-owner wake conditions', () => {
       lastDeliveryError: expect.stringContaining('No claimed thread owner responded'),
     });
 
-    // Once the owner can answer, the same send through the wake path succeeds.
-    pubsub.ownerAnswersDiscovery = true;
-    const retry = await sender.sendNotificationSignal(
-      { source: 'agent-connection', kind: 'peer-signal', priority: 'high', summary: 'are you there again' },
-      requiredOwnerWake,
-    );
-    await expect(retry.accepted).resolves.toMatchObject({ action: 'deliver' });
+    // The failed immediate delivery leaves the record pending, but with a due
+    // time, so it is both readable from the recipient's inbox now and
+    // recoverable by the dispatcher afterwards. Without that due time nothing
+    // would ever retry it, and the terminal `failed` state would be
+    // unreachable for immediate-deliver records, so a sender that queued a
+    // signal could never learn it had terminally failed.
+    expect(result.record.deliverAt).toBeInstanceOf(Date);
+    const pendingInbox = await notifications.listNotifications({ threadId: target.threadId, status: 'pending' });
+    expect(pendingInbox.map(record => record.id)).toContain(result.record.id);
 
-    // An immediate-deliver record carries neither deliverAt nor summaryAt, so
-    // dueTime is +Infinity and the deferred dispatcher never schedules it. The
-    // pending record is the recipient's only trace: it surfaces when the
-    // recipient's inbox is read, which is how the peer saw the reported sends.
-    expect(result.record.deliverAt).toBeUndefined();
-    expect(result.record.summaryAt).toBeUndefined();
+    // Once the owner answers discovery again, the dispatcher retry delivers it.
+    pubsub.ownerAnswersDiscovery = true;
     const dispatchResult = await dispatchDueNotifications({
       mastra,
       storage: notifications,
       now: new Date(Date.now() + 60_000),
     });
-    expect(dispatchResult.delivered).toEqual([]);
+    expect(dispatchResult.delivered).toHaveLength(1);
     expect(dispatchResult.failed).toEqual([]);
-    const pendingInbox = await notifications.listNotifications({ threadId: target.threadId, status: 'pending' });
-    expect(pendingInbox.map(record => record.id)).toContain(result.record.id);
 
     claim.unsubscribe();
   }, 30_000);

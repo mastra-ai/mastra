@@ -9273,14 +9273,23 @@ export class Agent<
       try {
         delivered = await result.accepted;
       } catch (error) {
+        // An immediate `deliver` record carries no schedule: without one a
+        // failed attempt leaves it pending forever, because no dispatch pass
+        // considers it due. That also makes the `pending` -> `failed`
+        // transition unreachable for these records, so a sender that queued a
+        // signal could never learn it terminally failed. Give it a due time so
+        // the dispatcher retries it up to MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+        // and activate the dispatcher schedule for it.
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
+          deliverAt: now,
           ...resolveDeliveryFailureUpdate(record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
+        needsDispatcher = true;
         results.push({ record: failed, decision });
         continue;
       }
