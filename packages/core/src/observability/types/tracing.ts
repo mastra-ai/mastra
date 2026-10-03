@@ -292,9 +292,9 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   /** Model provider (e.g., 'openai', 'anthropic') */
   provider?: string;
   /**
-   * Definitions of the tools made available to the model for this generation,
-   * captured once per generation. Per-step tool names (after `activeTools`
-   * filtering) live on MODEL_INFERENCE spans as `availableTools`.
+   * Definitions of the tools offered to the model during this generation: the
+   * union of each step's tool set after input processors ran. Per-step tool
+   * names live on MODEL_INFERENCE spans as `availableTools`.
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */

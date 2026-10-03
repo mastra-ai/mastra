@@ -23,6 +23,7 @@ import type {
   AnySpan,
   IModelSpanTracker,
   ModelInferenceContext,
+  ModelToolDefinition,
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
@@ -41,6 +42,7 @@ import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
 import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
+import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -1255,6 +1257,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+  // Tool definitions offered to the model, merged by name across steps. Input
+  // processors can narrow (`activeTools`) or extend (`tools`) the set per step,
+  // so the MODEL_GENERATION `tools` attribute is refreshed before each call.
+  const offeredToolDefinitions = new Map<string, ModelToolDefinition>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
     if (!terminal) {
@@ -1978,6 +1984,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }) as unknown as ReturnType<typeof execute>;
         } else if (isSupportedLanguageModel(currentStep.model)) {
           validateModelTimeoutSettings(currentStep.modelSettings?.timeout);
+
+          if (modelSpanTracker) {
+            for (const tool of getToolDefinitionsForTracing({
+              tools: currentStep.tools,
+              toolChoice: currentStep.toolChoice,
+              activeTools: currentStep.activeTools as string[] | undefined,
+            }) ?? []) {
+              offeredToolDefinitions.set(tool.name, tool);
+            }
+            if (offeredToolDefinitions.size > 0) {
+              modelSpanTracker.updateGeneration({ attributes: { tools: [...offeredToolDefinitions.values()] } });
+            }
+          }
 
           // Apply request-side context to MODEL_INFERENCE using the post-processor
           // tool set + per-step settings, then open the inference span. Doing this
