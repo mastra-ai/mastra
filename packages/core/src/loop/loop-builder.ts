@@ -22,6 +22,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
+  TRANSCRIPT_STEPS_KEY,
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
@@ -472,7 +473,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       const drainOutcome = await drainSignalsToTranscript({
-        drainPendingSignals: rt.drainPendingSignals,
+        drainPendingSignals: rest.options?.abortSignal?.aborted ? undefined : rt.drainPendingSignals,
         rotateResponseMessageId: sealMessageId => rest.rotateResponseMessageId(sealMessageId),
         addSignal: signal => messageList.addSignal(signal),
         emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -495,12 +496,15 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
+      const transcriptIndices = readScoped(scopeCtx, TRANSCRIPT_STEPS_KEY, 'transcriptSteps');
+      const discarded = transcriptIndices?.[typedInputData.output.steps.length - 1] === null;
+      const responseMessages = discarded ? messageList.get.response.aiV5.model() : typedInputData.messages.nonUser;
+      const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
 
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(state.previousContentLength);
+      const currentContent = discarded ? [] : allContent.slice(state.previousContentLength);
       state.previousContentLength = allContent.length;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');

@@ -63,6 +63,18 @@ for await (const chunk of subscription.stream) {
 
 When the thread has a running agent stream, `sendMessage()` becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the message as the first input.
 
+### Input during reasoning
+
+In the default agent loop, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
+
+Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
+
+Interrupted requests count toward `maxSteps`. The next request requires remaining steps and a run that hasn't been cancelled. If the step budget is exhausted, signals may be saved to history without an answer. Mastra doesn't extend the budget or start another run to answer them.
+
+Already-streamed reasoning may remain visible until the client reloads history. Cancelling a model request also doesn't force a custom processor to stop: the next request waits for in-flight processing to settle. Mastra discards framework-owned response buffers and clears buffers in its built-in batching and structured-output processors, but doesn't undo arbitrary custom-processor state, custom history writes, or external side effects. Interrupted requests can use billable tokens even when the provider doesn't report usage.
+
+This reasoning interruption applies to the default loop, not the experimental durable or evented agents or the Inngest engine.
+
 ## Message input
 
 ### Send a message now

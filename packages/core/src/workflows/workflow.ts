@@ -21,6 +21,7 @@ import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
+import { bindModelAttempt, getModelAttempt } from '../loop/shared/model-attempt';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
@@ -1367,6 +1368,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
           }
 
           case 'outputStream': {
+            const modelAttempt = streamParts ? getModelAttempt(streamParts) : undefined;
+            if (modelAttempt?.discarded) return { ...passThrough, part: null };
             // Skip data-* chunks for processors that haven't opted in
             if (part && (part as ChunkType).type.startsWith('data-') && !processor.processDataParts) {
               return { ...passThrough, part };
@@ -1437,6 +1440,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                   // new span creation at the guard above.
                 }
               } catch (error) {
+                if (modelAttempt?.discarded) return { ...passThrough, state: mutableState, part: null };
                 // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
                   processorSpan?.error({
@@ -1461,6 +1465,11 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 throw error;
               }
 
+              if (modelAttempt?.discarded) return { ...passThrough, state: mutableState, part: null };
+              if (result && modelAttempt) {
+                if (!modelAttempt.observe(result)) return { ...passThrough, state: mutableState, part: null };
+                bindModelAttempt(result, modelAttempt);
+              }
               return { ...passThrough, state: mutableState, part: result };
             }
             return { ...passThrough, part };

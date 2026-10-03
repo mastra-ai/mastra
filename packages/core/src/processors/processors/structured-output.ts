@@ -6,6 +6,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import { bindModelAttempt, getModelAttempt } from '../../loop/shared/model-attempt';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
@@ -121,6 +122,18 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
     const { part, state, streamParts, requestContext, messageList, abortSignal, ...rest } = args;
+    const modelAttempt = getModelAttempt(streamParts);
+    const priorRequestState = this.requestStates.get(state);
+    const prior = priorRequestState && { ...priorRequestState };
+    modelAttempt?.addDiscardCleanup(state, () => {
+      if (priorRequestState && prior) {
+        Object.assign(priorRequestState, prior);
+        priorRequestState.structuredOutputError = prior.structuredOutputError;
+      } else {
+        this.requestStates.delete(state);
+      }
+    });
+    if (modelAttempt?.discarded) return null;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
@@ -137,7 +150,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           observabilityContext,
           requestContext,
           messageList,
-          abortSignal,
+          modelAttempt?.controller.signal ?? abortSignal,
         );
         return part;
 
@@ -184,6 +197,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     requestState.isStructuringAgentStreamStarted = true;
     try {
       const attemptParts = streamParts.slice(requestState.streamPartsStartIndex);
+      const modelAttempt = getModelAttempt(streamParts);
+      if (modelAttempt) bindModelAttempt(attemptParts, modelAttempt);
       // On a retry the message list's response messages still include the rejected attempt,
       // so feed only the current attempt's own output instead.
       const responseContext: MessageInput[] =
@@ -315,6 +330,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
 
       return this.agent.stream(messages, {
+        abortSignal,
         model: this.structuringModel,
         requestContext: structuringRequestContext,
         toolChoice: 'none',
@@ -339,6 +355,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     return this.structuringAgent.stream(
       `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
       {
+        abortSignal,
         structuredOutput,
         providerOptions: this.providerOptions,
         abortSignal,
