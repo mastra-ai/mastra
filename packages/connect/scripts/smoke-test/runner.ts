@@ -5,7 +5,7 @@ import { isValidationError } from '@mastra/core/tools';
 import { tools as createToolsResolver } from '../../src/tools.js';
 import { TOOLS as REGISTERED_PROVIDERS } from '../../src/registry.js';
 import type { Scenario, ScenarioStep, ResolvedToolset } from './scenario.js';
-import { toolsForProvider } from './scenario.js';
+import { enrichToolError, toolsForProvider } from './scenario.js';
 import { scenarios as REGISTERED_SCENARIOS } from './scenarios/index.js';
 
 export interface RunnerOptions {
@@ -216,33 +216,4 @@ function format(data: unknown): string {
   } catch {
     return String(data);
   }
-}
-
-interface MaybeConnectError {
-  message?: unknown;
-  code?: unknown;
-  status?: unknown;
-  detail?: unknown;
-}
-
-/**
- * Normalizes thrown values into a single Error whose message carries the
- * platform/provider detail, HTTP status, and error code the client stashed on
- * `MastraConnectError`. Without this, scenarios surface opaque strings like
- * "Provider request failed (400)." and operators can't tell what the upstream
- * actually rejected.
- */
-function enrichToolError(toolId: string, error: unknown): Error {
-  if (!(error instanceof Error)) {
-    return new Error(`${toolId}: ${String(error)}`);
-  }
-  const extras: string[] = [];
-  const data = error as MaybeConnectError;
-  if (typeof data.status === 'number') extras.push(`status=${data.status}`);
-  if (typeof data.code === 'string' && data.code) extras.push(`code=${data.code}`);
-  if (typeof data.detail === 'string' && data.detail) extras.push(`detail=${data.detail}`);
-  if (extras.length === 0) return error;
-  const enriched = new Error(`${error.message} [${extras.join(', ')}]`);
-  enriched.stack = error.stack;
-  return enriched;
 }

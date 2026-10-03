@@ -288,6 +288,7 @@ export const hubspotScenario: Scenario = {
       if (batchCompanyId && tools['hubspot_delete_company']) {
         try {
           await call('hubspot_delete_company', { id: batchCompanyId });
+          steps.push(makeStep('delete batch company', 'hubspot_delete_company', 'pass'));
         } catch (error) {
           log.error(`Failed to delete smoke batch company ${batchCompanyId} — clean up manually.`, {
             error: errorMessage(error),
