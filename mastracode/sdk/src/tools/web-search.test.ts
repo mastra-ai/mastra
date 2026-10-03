@@ -4,6 +4,21 @@ import { z } from 'zod';
 const providerMocks = vi.hoisted(() => ({
   parallelSearchExecute: vi.fn(),
   parallelExtractExecute: vi.fn(),
+  firecrawlSearchExecute: vi.fn(),
+  firecrawlScrapeExecute: vi.fn(),
+}));
+
+vi.mock('@mastra/firecrawl', () => ({
+  createFirecrawlSearchTool: () => ({
+    description: 'firecrawl search',
+    inputSchema: z.object({ query: z.string() }),
+    execute: providerMocks.firecrawlSearchExecute,
+  }),
+  createFirecrawlScrapeTool: () => ({
+    description: 'firecrawl scrape',
+    inputSchema: z.object({ url: z.string() }),
+    execute: providerMocks.firecrawlScrapeExecute,
+  }),
 }));
 
 vi.mock('@mastra/parallel', () => ({
@@ -40,6 +55,8 @@ vi.mock('../onboarding/settings.js', () => ({
 
 import {
   createConfiguredWebTools,
+  createFirecrawlWebExtractTool,
+  createFirecrawlWebSearchTool,
   createParallelWebExtractTool,
   createParallelWebSearchTool,
   resolveWebSearchProvider,
@@ -48,10 +65,12 @@ import {
 describe('createConfiguredWebTools', () => {
   const originalParallelKey = process.env.PARALLEL_API_KEY;
   const originalTavilyKey = process.env.TAVILY_API_KEY;
+  const originalFirecrawlKey = process.env.FIRECRAWL_API_KEY;
 
   beforeEach(() => {
     delete process.env.PARALLEL_API_KEY;
     delete process.env.TAVILY_API_KEY;
+    delete process.env.FIRECRAWL_API_KEY;
     settingsMock.webSearchProvider = 'auto';
   });
 
@@ -61,6 +80,36 @@ describe('createConfiguredWebTools', () => {
 
     if (originalTavilyKey === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = originalTavilyKey;
+
+    if (originalFirecrawlKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+    else process.env.FIRECRAWL_API_KEY = originalFirecrawlKey;
+  });
+
+  it('honors an explicit Firecrawl preference when its key is configured', () => {
+    process.env.FIRECRAWL_API_KEY = 'fc-key';
+    process.env.TAVILY_API_KEY = 'tavily-key';
+    settingsMock.webSearchProvider = 'firecrawl';
+
+    const tools = createConfiguredWebTools();
+
+    expect(tools?.web_search.description).toBe('firecrawl search');
+    expect(tools?.web_extract.description).toBe('firecrawl scrape');
+  });
+
+  it('selects Firecrawl in auto mode only when it is the sole configured key', () => {
+    process.env.FIRECRAWL_API_KEY = 'fc-key';
+    expect(createConfiguredWebTools()?.web_search.description).toBe('firecrawl search');
+
+    process.env.PARALLEL_API_KEY = 'parallel-key';
+    expect(createConfiguredWebTools()?.web_search.description).toBe('parallel search');
+  });
+
+  it('resolveWebSearchProvider falls back from firecrawl when its key is missing', () => {
+    process.env.TAVILY_API_KEY = 'tavily-key';
+    expect(resolveWebSearchProvider('firecrawl')).toBe('tavily');
+
+    process.env.FIRECRAWL_API_KEY = 'fc-key';
+    expect(resolveWebSearchProvider('firecrawl')).toBe('firecrawl');
   });
 
   it('selects Tavily in auto mode when both provider keys are configured', () => {
@@ -210,5 +259,79 @@ describe('Parallel web tool adapters', () => {
     await expect(tool.execute!({ urls: ['https://example.com/page'] }, {} as never)).rejects.toThrow(
       'Parallel extract returned no output',
     );
+  });
+});
+
+describe('Firecrawl web tool adapters', () => {
+  beforeEach(() => {
+    providerMocks.firecrawlSearchExecute.mockReset();
+    providerMocks.firecrawlScrapeExecute.mockReset();
+  });
+
+  it('formats Firecrawl web results for Mastra Code', async () => {
+    providerMocks.firecrawlSearchExecute.mockResolvedValueOnce({
+      web: [
+        { url: 'https://example.com/result', title: 'Example result', description: 'A relevant snippet.' },
+        { url: 'https://example.com/untitled' },
+      ],
+      news: [],
+      images: [],
+    });
+    const tool = createFirecrawlWebSearchTool();
+
+    const output = await tool.execute!({ query: 'example query' }, {} as never);
+
+    expect(output).toBe(
+      '## Example result\nhttps://example.com/result\nA relevant snippet.\n\n## https://example.com/untitled\nhttps://example.com/untitled',
+    );
+    expect(providerMocks.firecrawlSearchExecute).toHaveBeenCalledWith({ query: 'example query' }, expect.anything());
+  });
+
+  it('surfaces Firecrawl search validation errors', async () => {
+    providerMocks.firecrawlSearchExecute.mockResolvedValueOnce({
+      error: true,
+      message: 'Invalid Firecrawl search input',
+      validationErrors: { errors: ['Invalid Firecrawl search input'], fields: {} },
+    });
+    const tool = createFirecrawlWebSearchTool();
+
+    await expect(tool.execute!({ query: 'example query' }, {} as never)).rejects.toThrow(
+      'Invalid Firecrawl search input',
+    );
+  });
+
+  it('accepts the shared multi-URL web-extract input and scrapes each URL', async () => {
+    providerMocks.firecrawlScrapeExecute
+      .mockResolvedValueOnce({ url: 'https://example.com/page', markdown: 'Page content.' })
+      .mockRejectedValueOnce(new Error('403 forbidden'));
+    const tool = createFirecrawlWebExtractTool();
+    const inputSchema = tool.inputSchema as z.ZodType;
+
+    expect(inputSchema.safeParse({ url: 'https://example.com/page' }).success).toBe(false);
+    expect(inputSchema.safeParse({ urls: ['https://example.com/page'] }).success).toBe(true);
+
+    const output = await tool.execute!(
+      { urls: ['https://example.com/page', 'https://example.com/blocked'] },
+      {} as never,
+    );
+
+    expect(output).toBe(
+      '## https://example.com/page\nPage content.\n\n## https://example.com/blocked\nError: 403 forbidden',
+    );
+    expect(providerMocks.firecrawlScrapeExecute).toHaveBeenCalledTimes(2);
+    expect(providerMocks.firecrawlScrapeExecute).toHaveBeenNthCalledWith(
+      1,
+      { url: 'https://example.com/page' },
+      expect.anything(),
+    );
+  });
+
+  it('reports missing Firecrawl scrape output inline instead of failing the batch', async () => {
+    providerMocks.firecrawlScrapeExecute.mockResolvedValueOnce(undefined);
+    const tool = createFirecrawlWebExtractTool();
+
+    const output = await tool.execute!({ urls: ['https://example.com/page'] }, {} as never);
+
+    expect(output).toBe('## https://example.com/page\nError: Firecrawl extract returned no output');
   });
 });
