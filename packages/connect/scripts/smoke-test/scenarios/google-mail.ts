@@ -448,10 +448,23 @@ export const googleMailScenario: Scenario = {
         const current = tools['google_mail_get_language_settings']
           ? await call<{ displayLanguage?: string }>('google_mail_get_language_settings', {})
           : undefined;
-        await call('google_mail_update_language_settings', {
-          displayLanguage: current?.displayLanguage ?? 'en',
-        });
-        steps.push(makeStep('update language settings', 'google_mail_update_language_settings', 'pass'));
+        if (!current?.displayLanguage) {
+          // Read-then-write-back only: never guess a language and mutate the
+          // user's mailbox blind.
+          steps.push(
+            makeStep(
+              'update language settings',
+              'google_mail_update_language_settings',
+              'skip',
+              'current language unavailable — not mutating blind',
+            ),
+          );
+        } else {
+          await call('google_mail_update_language_settings', {
+            displayLanguage: current.displayLanguage,
+          });
+          steps.push(makeStep('update language settings', 'google_mail_update_language_settings', 'pass'));
+        }
       } catch (error) {
         steps.push(
           makeStep('update language settings', 'google_mail_update_language_settings', 'fail', errorMessage(error)),

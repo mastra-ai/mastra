@@ -382,7 +382,11 @@ export const linearScenario: Scenario = {
       }
     }
 
-    // Project: short-lived.
+    // Project: real lifecycle for full coverage. The provider ships no
+    // delete_project or archive_project tool, so the smoke project cannot be
+    // cleaned up through the toolset — an accepted, documented leak (one tiny
+    // runId-tagged project per run) rather than downgrading create/get/update
+    // to probes and losing real coverage.
     if (tools['linear_create_project']) {
       let projectId: string | undefined;
       try {
@@ -411,15 +415,15 @@ export const linearScenario: Scenario = {
           steps.push(makeStep('update project', 'linear_update_project', 'fail', errorMessage(error)));
         }
       }
-      // Projects: the provider ships unarchive_project but no archive_project,
-      // so we cannot put the project into an archived state first. Probe
-      // unarchive against the real (non-archived) project — Linear treats it
-      // as a no-op or rejects it, either of which proves the endpoint works.
+      // The provider ships unarchive_project but no archive_project, so we
+      // cannot put the project into an archived state first. Probe unarchive
+      // against the real (non-archived) project — Linear treats it as a no-op
+      // or rejects it, either of which proves the endpoint works.
       if (projectId) {
         steps.push(await probeTool(call, tools, 'unarchive project', 'linear_unarchive_project', { projectId }));
-        // The provider ships no delete_project or archive_project tool, so
-        // the smoke project cannot be cleaned up through the toolset.
-        // Surface the leak loudly instead of ending the run silently green.
+        // Surface the leak loudly, but as a skip: this is a known provider
+        // tooling gap, not a per-run cleanup failure — recording `fail` would
+        // keep every run permanently red for something the scenario can't fix.
         log.error(
           `Smoke project ${projectId} ("${runId} smoke project (renamed)") cannot be deleted — the Linear provider has no delete/archive project tool. Delete it manually.`,
         );

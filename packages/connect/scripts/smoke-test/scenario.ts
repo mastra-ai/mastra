@@ -169,11 +169,44 @@ export async function callForeignTool<T = unknown>(
   if (!tool || typeof tool.execute !== 'function') {
     throw new Error(`Tool ${toolId} not available in project toolset`);
   }
-  const result = await (tool.execute as (input: unknown) => Promise<unknown>)(input);
-  if (isValidationError(result)) {
-    throw new Error(`input validation failed for ${toolId}: ${result.message}`);
+  try {
+    const result = await (tool.execute as (input: unknown) => Promise<unknown>)(input);
+    if (isValidationError(result)) {
+      throw new Error(`input validation failed for ${toolId}: ${result.message}`);
+    }
+    return result as T;
+  } catch (error) {
+    throw enrichToolError(toolId, error);
   }
-  return result as T;
+}
+
+interface MaybeConnectError {
+  message?: unknown;
+  code?: unknown;
+  status?: unknown;
+  detail?: unknown;
+}
+
+/**
+ * Normalizes thrown values into a single Error whose message carries the
+ * platform/provider detail, HTTP status, and error code the client stashed on
+ * `MastraConnectError`. Without this, scenarios surface opaque strings like
+ * "Provider request failed (400)." and operators can't tell what the upstream
+ * actually rejected.
+ */
+export function enrichToolError(toolId: string, error: unknown): Error {
+  if (!(error instanceof Error)) {
+    return new Error(`${toolId}: ${String(error)}`);
+  }
+  const extras: string[] = [];
+  const data = error as MaybeConnectError;
+  if (typeof data.status === 'number') extras.push(`status=${data.status}`);
+  if (typeof data.code === 'string' && data.code) extras.push(`code=${data.code}`);
+  if (typeof data.detail === 'string' && data.detail) extras.push(`detail=${data.detail}`);
+  if (extras.length === 0) return error;
+  const enriched = new Error(`${error.message} [${extras.join(', ')}]`);
+  enriched.stack = error.stack;
+  return enriched;
 }
 
 function stripPrefix(toolId: string): string {
