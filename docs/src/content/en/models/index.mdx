@@ -335,6 +335,32 @@ const agent = new Agent({
 
 Each field also accepts a function of `requestContext`, matching how dynamic models are resolved.
 
+The deep merge can add or override call-time keys, but it can't remove them. Set `providerOptionsMode: 'replace'` on an entry to send only that entry's `providerOptions`. Use it when call-time options are tuned for the primary model, such as a provider routing order, and a fallback on another vendor would reject them.
+
+```typescript title="src/mastra/agents/cross-vendor-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  id: 'cross-vendor',
+  name: 'Cross Vendor Agent',
+  instructions: 'You are a helpful assistant.',
+  model: [
+    { model: '__GATEWAY_OPENAI_MODEL__', maxRetries: 2 },
+    {
+      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      maxRetries: 2,
+      providerOptionsMode: 'replace',
+      providerOptions: { anthropic: { sendReasoning: false } },
+    },
+  ],
+});
+
+// The OpenAI entry receives these options. The Anthropic entry receives only its own.
+await agent.generate('Hello', {
+  providerOptions: { openai: { reasoningEffort: 'high' } },
+});
+```
+
 ## Use local models with Mastra
 
 Mastra also supports local models like `gpt-oss`, `Qwen3`, `DeepSeek` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).

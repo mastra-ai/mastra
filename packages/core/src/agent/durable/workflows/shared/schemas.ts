@@ -86,6 +86,7 @@ export const modelListEntrySchema = z.object({
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
     providerOptions: z.record(z.string(), z.any()).optional(),
+    providerOptionsMode: z.enum(['merge', 'replace']).optional(),
   }),
   maxRetries: z.number(),
   enabled: z.boolean(),

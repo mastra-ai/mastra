@@ -14,8 +14,9 @@ import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import { resolveModelProviderOptions } from './provider-options';
 import { resolveResponseModelId } from './server-side-fallback';
-import type { MastraModelOptions } from './shared.types';
+import type { MastraModelOptions, SharedProviderOptions } from './shared.types';
 
 // Like `stepCountIs`, but processor retry steps re-run the same step, so they
 // do not count against `maxSteps`. Retries stay bounded by maxProcessorRetries.
@@ -85,8 +86,9 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
-  getProviderOptions() {
-    return this.#firstModel.providerOptions;
+  /** Provider options the first model runs with, layered on the given call-level options. */
+  getProviderOptions(callProviderOptions?: SharedProviderOptions) {
+    return resolveModelProviderOptions(callProviderOptions, this.#firstModel);
   }
 
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
