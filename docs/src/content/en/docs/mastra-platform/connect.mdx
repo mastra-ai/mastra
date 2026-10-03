@@ -1,0 +1,155 @@
+---
+title: 'Connect | Mastra platform'
+description: 'Get started with @mastra/connect: give an agent live toolsets backed by Mastra platform connections, plus channels and raw credentials.'
+packages:
+  - '@mastra/connect'
+---
+
+# Connect
+
+`@mastra/connect` turns the [provider connections](/docs/mastra-platform/providers) attached to a Mastra platform project into things your application can use directly:
+
+- [`tools()`](/reference/connect/tools): a live toolset resolver for agents.
+- [`channels()`](/reference/connect/channels): chat channel providers (Slack, Telegram, Discord) for `Mastra({ channels })`.
+- [`credential()`](/reference/connect/credential): the raw credential for a connection, for custom SDK or MCP use.
+
+This page walks through the first agent. Platform-side setup — connecting providers, multiple connections, re-auth — is covered in [Providers](/docs/mastra-platform/providers).
+
+## Prerequisites
+
+- A Mastra project with a Mastra platform project to attach connections to.
+- The [`mastra` CLI](/reference/cli/mastra), signed in with `mastra auth login`.
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/connect
+```
+
+## Connect a provider
+
+Use [`mastra connect`](/reference/cli/mastra) to see the provider catalog and run an authorization flow:
+
+```bash
+mastra connect list
+mastra connect add linear
+```
+
+OAuth providers like Linear open a consent screen in your browser, and the CLI waits until the connection is active; API-key providers prompt for credentials in the terminal. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`.
+
+Providers can also be connected from the project's Integrations tab in the dashboard. [Providers](/docs/mastra-platform/providers#connect-a-provider) covers the full flow, including multiple connections and re-authentication.
+
+## Configure the environment
+
+At runtime, `@mastra/connect` authenticates to the platform with an access token. Create one with `mastra auth tokens create` and put it alongside the project ID in your app's environment:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-token
+MASTRA_PROJECT_ID=your-project-id
+```
+
+Both values can also be passed explicitly through options. See the [full environment variable list](/docs/mastra-platform/providers#environment-variables).
+
+## Give an agent connected tools
+
+[`tools()`](/reference/connect/tools) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools` and Mastra calls it on every generate/stream:
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  instructions: 'You manage our workspaces.',
+  model: 'openai/gpt-5-mini',
+  tools: tools(),
+})
+```
+
+With no options, every connected provider with a shipped toolset is included. The resolver serves a cached snapshot and revalidates from the platform every 30 seconds, so running `mastra connect add` (or connecting from the dashboard) makes the new provider's tools available to the running server without a restart.
+
+Ask the agent to do something with a connected provider:
+
+```typescript
+const response = await opsAgent.generate('Summarize my open Linear issues.')
+```
+
+The agent sees tools like `linear_list_issues` and `linear_create_issue`; each call is proxied through the platform with the connection's credentials injected server-side.
+
+## Limit what an agent can touch
+
+The `integrations` option is an allowlist. The string-array shorthand enables providers with no overrides:
+
+```typescript
+const opsTools = tools({
+  integrations: ['linear', 'github'],
+})
+```
+
+Use the object form for per-provider control. `allowTools` and `disallowTools` are mutually exclusive per provider, and unknown provider IDs or tool names throw at startup so configuration errors surface early:
+
+```typescript
+const opsTools = tools({
+  integrations: {
+    linear: { allowTools: ['linear_list_issues', 'linear_create_issue'] },
+    github: { disallowTools: ['github_delete_repository'] },
+    slack: { disabled: true },
+  },
+})
+```
+
+## Resolve toolsets on demand
+
+Call the resolver directly when you want the current tool record, for example for the `toolsets` option at generate time:
+
+```typescript
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+const toolsets = await connected()
+
+const response = await agent.generate('Summarize my open issues.', { toolsets })
+```
+
+The resolver also exposes `invalidate()`, `refresh()`, and `disconnect()`. Call `refresh()` to pick up a connection you just attached without waiting for the TTL.
+
+## Add chat channels
+
+For channel-capable providers, [`channels()`](/reference/connect/channels) resolves the same project connections into `ChannelProvider` instances and plugs into `Mastra({ channels })`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  // ...
+  channels: await channels(),
+})
+```
+
+`channels()` is async: provider instances are constructed up front so their webhook and OAuth routes mount at `Mastra` construction. Slack, Telegram, and Discord are supported, backed by `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`. See the [`channels()` reference](/reference/connect/channels).
+
+## Custom interactions with `credential()`
+
+For use cases the toolsets don't cover, such as driving a provider SDK directly, [`credential()`](/reference/connect/credential) fetches the raw credential for a connection:
+
+```typescript
+import { credential } from '@mastra/connect'
+
+const cred = await credential('c_yourconnectionid')
+
+if (cred.type === 'oauth2') {
+  startSdkSession(cred.accessToken)
+} else {
+  startSdkSession(cred.apiKey)
+}
+```
+
+Handle returned credentials carefully. They grant direct access to the provider account and bypass the proxy's guardrails.
+
+## Next steps
+
+- [Providers: platform setup and configuration](/docs/mastra-platform/providers)
+- [`tools()` reference](/reference/connect/tools)
+- [Provider toolsets reference](/reference/connect/providers)

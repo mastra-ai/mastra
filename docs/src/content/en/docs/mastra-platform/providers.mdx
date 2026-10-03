@@ -1,0 +1,135 @@
+---
+title: 'Providers | Mastra platform'
+description: 'Connect third-party providers once in Mastra platform, then use those connections as agent toolsets, channels, and sandbox credentials with @mastra/connect.'
+packages:
+  - '@mastra/connect'
+---
+
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
+
+# Providers
+
+Mastra platform connects your project to third-party providers like Linear, Notion, Slack, and GitHub. You complete a provider's authorization flow once and the platform stores the connection. Your application then consumes those connections through the [`@mastra/connect`](/docs/mastra-platform/connect) package as agent toolsets, chat channels, raw credentials, or sandbox environment variables.
+
+Your app never handles provider credentials. Every tool call is routed through the platform connection proxy, which injects credentials, refreshes OAuth tokens, and enforces per-connection access rules on your behalf.
+
+## Concepts
+
+- **Provider**: a supported third-party service, identified by a provider ID such as `linear`, `notion`, or `google-mail`.
+- **Connection**: an authorized link between your project and one provider account. A project can hold multiple connections for the same provider, for example two Slack workspaces.
+- **Toolset**: the generated tools for one provider, shipped inside `@mastra/connect`. [`tools()`](/reference/connect/tools) maps each active connection to its toolset at runtime.
+
+## Connect a provider
+
+Connect providers from your project's **Integrations** tab in the [platform dashboard](https://projects.mastra.ai):
+
+1. Pick the provider.
+1. Complete its authorization flow. OAuth providers open the provider's consent screen; API-key providers accept the key directly.
+1. The resulting connection becomes active for the project immediately.
+
+A running server using [`tools()`](/reference/connect/tools) picks up the new connection within the resolver's TTL (30 seconds by default) with no restart or redeploy. Disconnecting a provider drops its tools the same way.
+
+### From the CLI
+
+The [`mastra connect`](/reference/cli/mastra) command manages the same connections from the terminal:
+
+```bash
+mastra connect list           # providers and their connection status
+mastra connect add linear     # run the provider's authorization flow
+mastra connect remove linear  # unlink a connection from the project
+```
+
+`add` opens OAuth consent screens in your browser and waits for the connection to become active; API-key and Basic auth providers prompt for credentials inline. The target project resolves from `MASTRA_PROJECT_ID`, the `--project` flag, or the `.mastra-project.json` written by `mastra deploy`. Removing a connection unlinks it from the project but keeps the organization-level connection, so it can be re-attached later.
+
+### Multiple connections
+
+A project can hold several connections to the same provider. At runtime, `@mastra/connect` resolves which connection a tool call uses:
+
+1. An explicit `connectionId` option pins one connection.
+1. Otherwise, a single active connection is used automatically.
+1. Otherwise the provider is left unpinned: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns.
+
+### Re-authentication
+
+When a provider revokes or expires a connection's credentials, the connection enters `needs_reauth` status. It is never silently mapped: `tools()` skips it with a warning until someone reconnects it. Fix it by re-running the provider's authorization flow from the Integrations tab or with `mastra connect add <provider>`.
+
+## Security model
+
+- Provider credentials are stored by the platform and injected server-side. They never reach your application process unless you explicitly fetch them with [`credential()`](/reference/connect/credential).
+- Tool traffic flows through the platform proxy, so calls can be authorized, audited, and counted without logging tool arguments or results.
+- Proxy destinations are restricted. A request may only target the provider's API hosts; per-connection values such as a Supabase project URL extend the allowlist for that connection only.
+- Access limiting in your app is name-based: the `integrations` allowlist and per-provider `allowTools`/`disallowTools` on [`tools()`](/reference/connect/tools).
+
+## Environment variables
+
+`@mastra/connect` reads these environment variables. Every one can also be passed explicitly through options, which always win.
+
+| Variable | Purpose |
+| - | - |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform access token used to authenticate every request |
+| `MASTRA_PLATFORM_SECRET_KEY` | Fallback token when `MASTRA_PLATFORM_ACCESS_TOKEN` is unset |
+| `MASTRA_ORG_ID` | Organization ID; sent as the `x-organization-id` header when set |
+| `MASTRA_PROJECT_ID` | Project ID used to list connections |
+| `MASTRA_PLATFORM_REGION` | `us` or `eu`; selects the regional integrations endpoint |
+| `MASTRA_INTEGRATIONS_API_URL` | Explicit integrations service base URL; overrides region resolution |
+
+The default integrations endpoint is `https://integrations.mastra.ai`. Setting `MASTRA_PLATFORM_REGION` to `us` or `eu` selects `https://integrations.us.mastra.ai` or `https://integrations.eu.mastra.ai`.
+
+## Supported providers
+
+`@mastra/connect` ships generated toolsets for these providers. See the [provider toolsets reference](/reference/connect/providers) for every tool.
+
+| Provider ID | Provider |
+| - | - |
+| `anthropic` | <ProviderLogo slug="anthropic" mono /> Anthropic |
+| `clerk` | <ProviderLogo slug="clerk" mono /> Clerk |
+| `discord` | <ProviderLogo slug="discord" /> Discord |
+| `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai |
+| `github` | <ProviderLogo slug="github" mono /> GitHub |
+| `google-analytics` | <ProviderLogo slug="google-analytics" /> Google Analytics |
+| `google-calendar` | <ProviderLogo slug="google-calendar" /> Google Calendar |
+| `google-docs` | <ProviderLogo slug="google-docs" /> Google Docs |
+| `google-drive` | <ProviderLogo slug="google-drive" /> Google Drive |
+| `google-mail` | <ProviderLogo slug="gmail" /> Gmail |
+| `google-sheet` | <ProviderLogo slug="google-sheets" /> Google Sheets |
+| `hubspot` | <ProviderLogo slug="hubspot" /> HubSpot |
+| `incident-io` | <ProviderLogo slug="incident" /> incident.io |
+| `jira` | <ProviderLogo slug="jira" /> Jira |
+| `linear` | <ProviderLogo slug="linear" /> Linear |
+| `microsoft-teams` | <ProviderLogo slug="microsoft-teams" /> Microsoft Teams |
+| `notion` | <ProviderLogo slug="notion" mono /> Notion |
+| `openai` | <ProviderLogo slug="openai" mono /> OpenAI |
+| `posthog` | <ProviderLogo slug="posthog" /> PostHog |
+| `resend` | <ProviderLogo slug="resend" mono /> Resend |
+| `slack` | <ProviderLogo slug="slack" /> Slack |
+| `snowflake` | <ProviderLogo slug="snowflake" /> Snowflake |
+| `supabase` | <ProviderLogo slug="supabase" /> Supabase |
+| `workos` | <ProviderLogo slug="workos" mono /> WorkOS |
+
+Toolsets are generated and versioned with the package: upgrading `@mastra/connect` picks up new providers and tools without API changes.
+
+### MCP providers
+
+Beyond the generated toolsets, `tools()` discovers any connected provider that advertises MCP capability in the platform catalog, with no package release required. Discovered MCP tools use the same flat tool contract, namespaced as `<provider-id>_<tool-name>`.
+
+These providers serve their tools over their hosted MCP servers. The tools an agent sees come from the provider at resolution time, so consult the provider's own MCP documentation for the available tools:
+
+| Provider ID | Provider | Provider MCP docs |
+| - | - | - |
+| `airtable-mcp` | <ProviderLogo slug="airtable" /> Airtable | [Airtable MCP server](https://airtable.com/developers/agents/mcp/getting-started) |
+| `attio-mcp` | <ProviderLogo slug="attio" mono /> Attio | [Attio MCP](https://docs.attio.com/mcp/overview) |
+| `canva-mcp` | <ProviderLogo slug="canva" /> Canva | [Canva MCP](https://www.canva.dev/docs/apps/mcp/) |
+| `clay-mcp` | <ProviderLogo src="https://app.nango.dev/images/template-logos/clay-mcp.svg" /> Clay | [MCP in Clay](https://university.clay.com/docs/mcp-settings) |
+| `granola-mcp` | <ProviderLogo slug="granola" /> Granola | [Granola MCP](https://docs.granola.ai/help-center/sharing/integrations/mcp) |
+| `neon-mcp` | <ProviderLogo slug="neon" /> Neon | [Neon MCP server](https://neon.com/docs/ai/neon-mcp-server) |
+| `render-mcp` | <ProviderLogo slug="render" mono /> Render | [Render MCP server](https://render.com/docs/mcp-server) |
+| `robinhood-mcp` | <ProviderLogo slug="robinhood" /> Robinhood | [Agentic Trading](https://robinhood.com/us/en/support/agentic-trading) |
+| `sanity-mcp` | <ProviderLogo slug="sanity" mono /> Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
+
+MCP tool catalogs can change independently of your deployment, so every discovered MCP tool requires tool approval by default; the server's own annotations cannot lift the requirement. List the tool keys an agent may run unattended in that provider's `autoApproveTools` option.
+
+## Next steps
+
+- [Use connections in your app with `@mastra/connect`](/docs/mastra-platform/connect)
+- [`tools()` reference](/reference/connect/tools)
+- [Provider toolsets reference](/reference/connect/providers)

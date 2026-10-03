@@ -1,0 +1,215 @@
+---
+title: 'Reference: tools() | Connect'
+description: "API reference for tools() in @mastra/connect: a live toolset resolver over a project's platform connections that picks up new connections without a restart."
+packages:
+  - '@mastra/connect'
+---
+
+# tools()
+
+Returns a live toolset resolver over the connections attached to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected provider and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
+
+```typescript title="src/mastra/agents/ops.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const opsAgent = new Agent({
+  name: 'ops',
+  model: 'openai/gpt-5-mini',
+  tools: tools(),
+})
+```
+
+Returns: `ToolsResolver`, a resolver producing a flat tool record keyed by tool key (for example `linear_create_issue`). See [The resolver](#the-resolver).
+
+See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [Providers](/docs/mastra-platform/providers) for platform setup.
+
+`connect()` is a deprecated drop-in alias for `tools()`, retained for one release cycle.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ToolsOptions',
+    description: 'Optional discovery and client configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ToolsOptions',
+        parameters: [
+          {
+            name: 'projectId',
+            type: 'string',
+            description: 'Platform project whose connections to discover. Falls back to MASTRA_PROJECT_ID.',
+            isOptional: true,
+          },
+          {
+            name: 'integrations',
+            type: 'string[] | Record<string, ToolsIntegrationOptions>',
+            description:
+              'Providers to enable, keyed by provider ID. The string-array shorthand enables providers with no overrides; the object form adds per-provider options. See Per-provider options below.',
+            isOptional: true,
+          },
+          {
+            name: 'client',
+            type: 'ConnectClientOptions',
+            description: 'Platform client overrides. See ConnectClientOptions below.',
+            isOptional: true,
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description:
+              'How long a resolved snapshot stays fresh, in milliseconds. Default 30000. 0 revalidates on every resolution.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### Per-provider options
+
+Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'connectionId',
+    type: 'string',
+    description: 'Pin a specific connection ID, bypassing single-active-connection resolution.',
+    isOptional: true,
+  },
+  {
+    name: 'allowTools',
+    type: 'string[]',
+    description:
+      'Restrict the returned toolset to these tool keys. Unknown names throw at build time. Mutually exclusive with disallowTools.',
+    isOptional: true,
+  },
+  {
+    name: 'disallowTools',
+    type: 'string[]',
+    description:
+      'Remove these tool keys from the returned toolset. Unknown names throw at build time. Mutually exclusive with allowTools.',
+    isOptional: true,
+  },
+  {
+    name: 'autoApproveTools',
+    type: 'string[]',
+    description:
+      "MCP tool keys that may run without tool approval. Every other discovered MCP tool requires approval regardless of the server's annotations. An unknown name skips the provider with a warning.",
+    isOptional: true,
+  },
+  {
+    name: 'disabled',
+    type: 'boolean',
+    description: 'Exclude this provider entirely, even if a connection exists.',
+    isOptional: true,
+  },
+]}
+/>
+
+### ConnectClientOptions
+
+Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Platform access token. Falls back to MASTRA_PLATFORM_ACCESS_TOKEN, then MASTRA_PLATFORM_SECRET_KEY.',
+    isOptional: true,
+  },
+  {
+    name: 'orgId',
+    type: 'string',
+    description: 'Organization ID. Falls back to MASTRA_ORG_ID; sent as the x-organization-id header when present.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description:
+      'Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL, then the regional default from MASTRA_PLATFORM_REGION (us or eu), then https://integrations.mastra.ai.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'typeof globalThis.fetch',
+    description: 'Fetch implementation, for testing or custom transports. Defaults to globalThis.fetch.',
+    isOptional: true,
+  },
+]}
+/>
+
+## The resolver
+
+The returned `ToolsResolver` caches its toolset snapshot. Within `ttlMs` of the last fetch, resolutions return the cached snapshot. After that, the cached snapshot is served immediately while a background refresh runs (stale-while-revalidate). Connections attached to the project after startup become available within the TTL, and detached connections are dropped, with no restart or redeploy required.
+
+Call the resolver directly when you need a plain tool record, for example for the `toolsets` option at generate time:
+
+```typescript
+import { tools } from '@mastra/connect'
+
+const connected = tools()
+
+const toolsets = await connected()
+
+const response = await agent.generate('Summarize my open issues.', { toolsets })
+```
+
+The resolver also exposes three methods for manual control:
+
+- `invalidate()` drops the cached snapshot so the next resolution fetches fresh.
+- `refresh()` fetches from the platform immediately, then updates the cache and returns the tool record. Rejects if the platform fetch fails.
+- `disconnect()` closes MCP transports owned by this resolver and clears its cached snapshot.
+
+Failure handling is tuned for long-running servers:
+
+- Configuration errors (missing project ID or token, unknown `integrations` keys or tool names, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw eagerly at `tools()` call time.
+- If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
+- Actionable per-provider problems during resolution (needs re-auth, ambiguity) are downgraded to warn-and-skip so one bad provider never takes down the whole toolset.
+
+## The `integrations` allowlist
+
+When `integrations` is provided, only listed providers are returned. Without it, every connected provider with a shipped toolset is included. A listed provider with no connection in the project yet is skipped and included automatically once a connection is attached.
+
+Tool keys for `allowTools` and `disallowTools` are listed per provider in the [provider toolsets reference](/reference/connect/providers).
+
+## Connection resolution
+
+For each provider present in the project's connections:
+
+1. An explicit `connectionId` option wins.
+1. Otherwise, a single active connection is used automatically.
+1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
+
+Connections in `needs_reauth` status are never silently mapped: they're skipped with a warning until reconnected on the platform.
+
+## MCP providers
+
+Beyond the shipped toolsets, the resolver discovers any connected provider that advertises MCP capability in the platform catalog. Discovered tools use the same flat contract, namespaced as `<provider-id>_<tool-name>`. If a provider has both a shipped toolset and an MCP capability, the MCP catalog is preferred.
+
+The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the provider's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the provider is detached, or `disconnect()` is called.
+
+Every discovered MCP tool requires tool approval by default because a remote catalog cannot be trusted to classify its own tools. Use `autoApproveTools` to list the tool keys an agent may run unattended, for example `neon: { autoApproveTools: ['neon_list_projects'] }`.
+
+## Errors
+
+Throws `MastraConnectError` with a `code` property:
+
+| Code | When |
+| - | - |
+| `missing_project_id` | No project ID configured |
+| `missing_access_token` | No platform token configured |
+| `invalid_options` | Unknown provider ID or tool name, conflicting filters, or invalid `ttlMs` |
+| `unauthorized` | The platform rejected the token (401/403) |
+| `proxy_error` | A proxied provider request failed; `status` and `detail` carry the provider response |
+| `unknown_connection` | A tool call supplied a `connection_name` that matches no active connection |
+| `platform_error` | Any other platform request failure |

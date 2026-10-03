@@ -652,9 +652,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/context-engineering',
               label: 'Context engineering',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -668,9 +665,6 @@ const sidebars = {
               type: 'doc',
               id: 'guides/authentication-identity',
               label: 'Authentication',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -763,6 +757,26 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
+    },
+    {
+      type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/providers',
+          label: 'Providers',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect',
+          label: 'Use in your app',
+        },
+      ],
     },
     {
       type: 'doc',
