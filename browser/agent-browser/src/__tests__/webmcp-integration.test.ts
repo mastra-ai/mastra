@@ -30,6 +30,7 @@ type PageLike = {
   evaluate: (script: string) => Promise<unknown>;
   title: () => Promise<string>;
   goto: (url: string) => Promise<unknown>;
+  reload: () => Promise<unknown>;
 };
 
 /** getPage is private on AgentBrowser; tests reach in to verify page state. */
@@ -901,6 +902,165 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
         expect(s1).toBeDefined();
         expect(s2).toBe(s1);
         expect(s3).toBe(s1);
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+
+    it('bridge survives a page reload: tools re-register and remain callable', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      try {
+        await browser.ensureReady();
+        await browser.goto({ url });
+
+        // Baseline: tools present, calls succeed.
+        const before = await browser.listWebMcpTools();
+        expect(before.success).toBe(true);
+        const addedBefore = await browser.callWebMcpTool({ toolName: 'add_to_cart', args: { sku: 'sku-pre', qty: 1 } });
+        expect(addedBefore.success).toBe(true);
+
+        // Reload the page. `addInitScript` runs again on the fresh document, so
+        // the bridge re-installs. The W3C tool from the page's inline <script>
+        // and the MCP-B server also come back as part of the page's own JS.
+        const page = await getPage(browser);
+        await page.reload();
+
+        const after = await browser.listWebMcpTools();
+        expect(after.success).toBe(true);
+        if (after.success) {
+          expect(after.tools.map(t => t.name).sort()).toEqual(['add_to_cart', 'get_cart', 'get_price']);
+        }
+
+        // State really is fresh (the page's inline `var cart = []` ran again),
+        // and both protocols still work after the reload.
+        const addedAfter = await browser.callWebMcpTool({
+          toolName: 'add_to_cart',
+          args: { sku: 'sku-post', qty: 2 },
+        });
+        expect(addedAfter.success).toBe(true);
+        if (addedAfter.success) expect(addedAfter.result).toEqual({ ok: true, cartSize: 1 });
+
+        const cart = await browser.callWebMcpTool({ toolName: 'get_cart' });
+        expect(cart.success).toBe(true);
+        if (cart.success) expect(cart.result).toEqual({ items: [{ sku: 'sku-post', qty: 2 }] });
+      } finally {
+        await browser.close();
+      }
+    }, 30_000);
+
+    it('parallel tool calls on the same page do not collide', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      try {
+        await browser.ensureReady();
+        await browser.goto({ url });
+
+        // Fire several calls concurrently across both protocols. The bridge
+        // multiplexes a shared JSON-RPC id counter and a shared pending-response
+        // map; if either races, results get swapped, dropped, or hang.
+        const [price1, price2, added1, added2] = await Promise.all([
+          browser.callWebMcpTool({ toolName: 'get_price', args: { sku: 'A' } }), // MCP-B
+          browser.callWebMcpTool({ toolName: 'get_price', args: { sku: 'B' } }), // MCP-B
+          browser.callWebMcpTool({ toolName: 'add_to_cart', args: { sku: 'A', qty: 1 } }), // MCP-B
+          browser.callWebMcpTool({ toolName: 'add_to_cart', args: { sku: 'B', qty: 2 } }), // MCP-B
+        ]);
+
+        expect(price1.success).toBe(true);
+        expect(price2.success).toBe(true);
+        expect(added1.success).toBe(true);
+        expect(added2.success).toBe(true);
+
+        // Each get_price response was routed back to its own request — sku-in
+        // matches sku-out.
+        if (price1.success) expect(price1.result).toEqual({ sku: 'A', priceCents: 129900 });
+        if (price2.success) expect(price2.result).toEqual({ sku: 'B', priceCents: 129900 });
+
+        // Both writes landed. Order isn't deterministic (concurrent), so
+        // normalize before asserting.
+        const page = await getPage(browser);
+        const finalCart = (await page.evaluate('cart')) as Array<{ sku: string; qty: number }>;
+        expect([...finalCart].sort((a, b) => a.sku.localeCompare(b.sku))).toEqual([
+          { sku: 'A', qty: 1 },
+          { sku: 'B', qty: 2 },
+        ]);
+
+        // And a W3C read sees the final state, proving the W3C surface wasn't
+        // starved while MCP-B calls were in flight.
+        const cart = await browser.callWebMcpTool({ toolName: 'get_cart' });
+        expect(cart.success).toBe(true);
+        if (cart.success) {
+          const items = (cart.result as { items: Array<{ sku: string; qty: number }> }).items;
+          expect([...items].sort((a, b) => a.sku.localeCompare(b.sku))).toEqual([
+            { sku: 'A', qty: 1 },
+            { sku: 'B', qty: 2 },
+          ]);
+        }
+      } finally {
+        await browser.close();
+      }
+    }, 30_000);
+
+    it('surfaces W3C tool handler exceptions as tool errors (not hangs or unhandled rejections)', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      try {
+        await browser.ensureReady();
+        await browser.goto({ url });
+
+        // Register a W3C tool whose execute throws. Must come back as a tool
+        // error with a meaningful message, not stall the pending promise.
+        const page = await getPage(browser);
+        await page.evaluate(`navigator.modelContext.registerTool({
+          name: 'boom',
+          description: 'Always throws',
+          inputSchema: { type: 'object', properties: {} },
+          execute: function () { throw new Error('kaboom from page handler'); },
+        })`);
+
+        const result = await browser.callWebMcpTool({ toolName: 'boom' });
+        expect(result.success).toBe(false);
+        if (!result.success) expect(result.message).toMatch(/kaboom from page handler/);
+
+        // And the bridge is still healthy after that: other tools still work.
+        const cart = await browser.callWebMcpTool({ toolName: 'get_cart' });
+        expect(cart.success).toBe(true);
+      } finally {
+        await browser.close();
+      }
+    }, 30_000);
+
+    it('agent.stream drives WebMCP page tools end-to-end (streaming path, not just agent.generate)', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+
+      const model = createScriptedModel({
+        modelId: 'scripted-webmcp-stream',
+        script: [
+          { toolName: 'browser_goto', input: { url } },
+          { toolName: 'page_add_to_cart', input: { sku: 'sku-stream', qty: 3 } },
+          { toolName: 'page_get_cart', input: {} },
+          { text: 'Streamed.' },
+        ],
+      });
+
+      const agent = new Agent({
+        id: 'webmcp-stream-agent',
+        name: 'stream',
+        instructions: 'Add to cart and read it.',
+        model: model as never,
+        browser,
+      });
+
+      try {
+        // Exercise the stream path explicitly. The scripted model's doStream
+        // emits tool-call chunks that the loop must consume, dispatch, and feed
+        // back in — same prepareStep merging, same WebMCP tool execution.
+        const stream = await agent.stream('Add 3 sku-stream.', { maxSteps: 10 });
+        let text = '';
+        for await (const chunk of stream.textStream) {
+          text += chunk;
+        }
+        expect(text).toBe('Streamed.');
+
+        const page = await getPage(browser);
+        await expect(page.evaluate('cart')).resolves.toEqual([{ sku: 'sku-stream', qty: 3 }]);
       } finally {
         await browser.close();
       }
