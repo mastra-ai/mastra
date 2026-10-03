@@ -271,6 +271,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             dataChunkStreamWriter,
           );
 
+          if (modelAttempt?.discarded) return;
           if (blocked) {
             enqueueTripwire(reason, tripwireOptions, processorId);
             return;
