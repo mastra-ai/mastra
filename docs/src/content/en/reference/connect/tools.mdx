@@ -7,7 +7,7 @@ packages:
 
 # tools()
 
-Returns a live toolset resolver over the connections attached to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected integration and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
+Returns a live toolset resolver over the connections attached to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected provider and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
 
 ```typescript title="src/mastra/agents/ops.ts"
 import { Agent } from '@mastra/core/agent'
@@ -22,7 +22,7 @@ export const opsAgent = new Agent({
 
 Returns: `ToolsResolver`, a resolver producing a flat tool record keyed by tool key (for example `linear_create_issue`). See [The resolver](#the-resolver).
 
-See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [Integrations](/docs/mastra-platform/integrations) for platform setup.
+See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [Providers](/docs/mastra-platform/providers) for platform setup.
 
 `connect()` is a deprecated drop-in alias for `tools()`, retained for one release cycle.
 
@@ -49,7 +49,7 @@ See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [
             name: 'integrations',
             type: 'string[] | Record<string, ToolsIntegrationOptions>',
             description:
-              'Providers to enable. The string-array shorthand enables providers with no overrides; the object form adds per-integration options. See Integration options below.',
+              'Providers to enable, keyed by provider ID. The string-array shorthand enables providers with no overrides; the object form adds per-provider options. See Per-provider options below.',
             isOptional: true,
           },
           {
@@ -72,7 +72,7 @@ See [Connect](/docs/mastra-platform/connect) for the getting-started guide and [
 ]}
 />
 
-### Integration options
+### Per-provider options
 
 Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
 
@@ -82,7 +82,7 @@ Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
     name: 'connectionId',
     type: 'string',
     description:
-      'Pin a specific connection ID. Bypasses the MASTRA_<INTEGRATION>_CONNECTION_ID env-var fallback and single-active-connection resolution.',
+      'Pin a specific connection ID. Bypasses the MASTRA_<PROVIDER>_CONNECTION_ID env-var fallback and single-active-connection resolution.',
     isOptional: true,
   },
   {
@@ -109,7 +109,7 @@ Each value in the `integrations` object form is a `ToolsIntegrationOptions`:
   {
     name: 'disabled',
     type: 'boolean',
-    description: 'Exclude this integration entirely, even if a connection exists.',
+    description: 'Exclude this provider entirely, even if a connection exists.',
     isOptional: true,
   },
 ]}
@@ -173,31 +173,31 @@ The resolver also exposes three methods for manual control:
 
 Failure handling is tuned for long-running servers:
 
-- Configuration errors (missing project ID or token, unknown `integrations` keys or tool names, both `allowTools` and `disallowTools` on one integration, invalid `ttlMs`) throw eagerly at `tools()` call time.
+- Configuration errors (missing project ID or token, unknown `integrations` keys or tool names, both `allowTools` and `disallowTools` on one provider, invalid `ttlMs`) throw eagerly at `tools()` call time.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
-- Actionable per-integration problems during resolution (needs re-auth, ambiguity) are downgraded to warn-and-skip so one bad integration never takes down the whole toolset.
+- Actionable per-provider problems during resolution (needs re-auth, ambiguity) are downgraded to warn-and-skip so one bad provider never takes down the whole toolset.
 
-## Integrations allowlist
+## The `integrations` allowlist
 
-When `integrations` is provided, only listed integrations are returned. Without it, every connected integration with a shipped toolset is included. A listed integration with no connection in the project yet is skipped and included automatically once a connection is attached.
+When `integrations` is provided, only listed providers are returned. Without it, every connected provider with a shipped toolset is included. A listed provider with no connection in the project yet is skipped and included automatically once a connection is attached.
 
 Tool keys for `allowTools` and `disallowTools` are listed per provider in the [provider toolsets reference](/reference/connect/providers).
 
 ## Connection resolution
 
-For each integration present in the project's connections:
+For each provider present in the project's connections:
 
-1. An explicit `connectionId` option or the integration's `MASTRA_<INTEGRATION>_CONNECTION_ID` env var wins.
+1. An explicit `connectionId` option or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var wins.
 1. Otherwise, a single active connection is used automatically.
-1. Otherwise the integration is left unpinned and routed per call: the toolset gains a `<integration>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
+1. Otherwise the provider is left unpinned and routed per call: the toolset gains a `<provider>__list_connections` tool, every other tool takes a required `connection_name` input, and the agent picks a connection per call using the display names `list_connections` returns. A `connection_name` that matches no active connection fails that call with `unknown_connection`.
 
 Connections in `needs_reauth` status are never silently mapped: they're skipped with a warning until reconnected on the platform.
 
-## MCP integrations
+## MCP providers
 
-Beyond the shipped toolsets, the resolver discovers any attached integration that advertises MCP capability in the platform integration catalog. Discovered tools use the same flat contract, namespaced as `<integration-id>_<tool-name>`. If an integration has both a shipped toolset and an MCP capability, the MCP catalog is preferred.
+Beyond the shipped toolsets, the resolver discovers any connected provider that advertises MCP capability in the platform catalog. Discovered tools use the same flat contract, namespaced as `<provider-id>_<tool-name>`. If a provider has both a shipped toolset and an MCP capability, the MCP catalog is preferred.
 
-The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the integration's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the integration is detached, or `disconnect()` is called.
+The application sends only its platform token; the platform removes caller authentication before injecting the provider credential and proxying each protocol request to the provider's MCP server. MCP sessions are reused across refreshes and closed when the connection changes, the provider is detached, or `disconnect()` is called.
 
 Every discovered MCP tool requires tool approval by default because a remote catalog cannot be trusted to classify its own tools. Use `autoApproveTools` to list the tool keys an agent may run unattended, for example `neon: { autoApproveTools: ['neon_list_projects'] }`.
 
@@ -209,7 +209,7 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_project_id` | No project ID configured |
 | `missing_access_token` | No platform token configured |
-| `invalid_options` | Unknown integration ID or tool name, conflicting filters, or invalid `ttlMs` |
+| `invalid_options` | Unknown provider ID or tool name, conflicting filters, or invalid `ttlMs` |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `proxy_error` | A proxied provider request failed; `status` and `detail` carry the provider response |
 | `unknown_connection` | A tool call supplied a `connection_name` that matches no active connection |

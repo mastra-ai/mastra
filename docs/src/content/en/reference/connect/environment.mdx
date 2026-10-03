@@ -54,7 +54,7 @@ GitHub is the first provider with an environment contributor. Its OAuth token is
             name: 'integrations',
             type: 'Record<string, EnvironmentIntegrationOptions>',
             description:
-              'Per-integration overrides keyed by integration ID: connectionId pins a connection, disabled: true excludes the provider.',
+              'Per-provider overrides keyed by provider ID: connectionId pins a connection, disabled: true excludes the provider.',
             isOptional: true,
           },
           {
@@ -73,7 +73,7 @@ GitHub is the first provider with an environment contributor. Its OAuth token is
 
 ## Behavior
 
-Connection resolution matches [`tools()`](/reference/connect/tools): a per-integration `connectionId` or the provider's `MASTRA_<INTEGRATION>_CONNECTION_ID` env var wins, else a single active connection is used. Ambiguity, `needs_reauth` status, and credential-fetch failures warn and skip that provider. Configuration errors (missing project ID, malformed integration ID) throw at call time so they surface at startup.
+Connection resolution matches [`tools()`](/reference/connect/tools): a per-provider `connectionId` or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var wins, else a single active connection is used. Ambiguity, `needs_reauth` status, and credential-fetch failures warn and skip that provider. Configuration errors (missing project ID, malformed provider ID) throw at call time so they surface at startup.
 
 The returned `env` is a snapshot, not a live resolver. OAuth tokens expire, so call `environment()` again for a fresh token when starting new sandboxes. Never log the returned values.
 
@@ -85,6 +85,6 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_project_id` | No project ID configured |
 | `missing_access_token` | No platform token configured |
-| `invalid_options` | Malformed integration ID in `integrations` |
+| `invalid_options` | Malformed provider ID in `integrations` |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `platform_error` | Any other platform request failure |

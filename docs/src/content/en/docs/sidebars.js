@@ -773,8 +773,8 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'mastra-platform/integrations',
-          label: 'Integrations',
+          id: 'mastra-platform/providers',
+          label: 'Providers',
         },
         {
           type: 'doc',
