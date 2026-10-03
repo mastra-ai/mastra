@@ -85,7 +85,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * cached events; transports without numeric offsets live-tail numeric values instead. Skipping earlier
    * text deltas produces partial text and may make structured output fail to parse; beyond retained
    * history, a number also skips lower-index live events on numeric-offset transports. See
-   * `https://mastra.ai/reference/agents/durable-agent#observerunid-options`.
+   * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
    */
   offset?: number | 'latest';
   /**
