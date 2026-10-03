@@ -71,6 +71,33 @@ function makeProvider(config: Partial<ConstructorParameters<typeof DiscordProvid
   return { provider, storage };
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(opts.body)` yields "[object Object]" and parsing
+ * throws. Reply callbacks that need the body must therefore be async and read it.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+  if (Array.isArray(body)) {
+    return body
+      .map(chunk => (typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')))
+      .join('');
+  }
+  if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    const chunks: string[] = [];
+    for await (const chunk of body as AsyncIterable<unknown>) {
+      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8'));
+    }
+    return chunks.join('');
+  }
+  return String(body);
+}
+
 /** Stub `GET /applications/@me` — the bot-token validation call. */
 function stubValidateApp(opts: { ok?: boolean; name?: string; verifyKey?: string; id?: string } = {}) {
   const { ok = true, name = 'Test App', verifyKey = APP.publicKey, id = APP.applicationId } = opts;
@@ -97,8 +124,8 @@ function stubGuildCommands(guildId: string, appId: string = APP.applicationId): 
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/api/v10/applications/${appId}/guilds/${guildId}/commands`, method: 'PUT' })
-    .reply(200, opts => {
-      calls.push(JSON.parse(String(opts.body)));
+    .reply(200, async opts => {
+      calls.push(JSON.parse(await readMockBody(opts.body)));
       return [];
     })
     .persist();
@@ -111,8 +138,8 @@ function stubGlobalCommands(appId: string = APP.applicationId): () => Record<str
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/api/v10/applications/${appId}/commands`, method: 'PUT' })
-    .reply(200, opts => {
-      calls.push(JSON.parse(String(opts.body)));
+    .reply(200, async opts => {
+      calls.push(JSON.parse(await readMockBody(opts.body)));
       return [];
     })
     .persist();

@@ -515,6 +515,12 @@ overrides:
   'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1'
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'undici@<8.11.2': 8.11.2
+  # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
+  # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
+  # bundles for global fetch (7.x), and undici 8 rejects that handler with
+  # UND_ERR_INVALID_ARG ("invalid onRequestStart method"). Leave this one consumer on the
+  # 6.x line it declares (^6.24.0), which is already the patched release for that line.
+  '@qdrant/js-client-rest>undici': 6.29.0
   'yargs@<18.1.0': 18.2.0
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0

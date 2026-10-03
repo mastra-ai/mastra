@@ -36,6 +36,33 @@ function makeProvider(config: Partial<ConstructorParameters<typeof TelegramProvi
   return { provider, storage };
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(opts.body)` yields "[object Object]" and parsing
+ * throws. Reply callbacks that need the body must therefore be async and read it.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+  if (Array.isArray(body)) {
+    return body
+      .map(chunk => (typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')))
+      .join('');
+  }
+  if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    const chunks: string[] = [];
+    for await (const chunk of body as AsyncIterable<unknown>) {
+      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8'));
+    }
+    return chunks.join('');
+  }
+  return String(body);
+}
+
 function stubGetMe(token: string, opts: { ok?: boolean; username?: string } = {}) {
   const { ok = true, username = 'my_test_bot' } = opts;
   const status = ok ? 200 : 401;
@@ -58,8 +85,8 @@ function stubMethod(token: string, method: string): () => Record<string, unknown
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/bot${token}/${method}`, method: 'POST' })
-    .reply(200, opts => {
-      captured = JSON.parse(String(opts.body));
+    .reply(200, async opts => {
+      captured = JSON.parse(await readMockBody(opts.body));
       return { ok: true, result: true };
     });
   return () => captured;
@@ -477,8 +504,8 @@ describe('TelegramProvider webhook route — happy path (update → agent → re
     mockAgent
       .get(API_ORIGIN)
       .intercept({ path: `/bot${token}/${method}`, method: 'POST' })
-      .reply(200, opts => {
-        const body = JSON.parse(String(opts.body)) as Record<string, unknown>;
+      .reply(200, async opts => {
+        const body = JSON.parse(await readMockBody(opts.body)) as Record<string, unknown>;
         calls.push(body);
         return {
           ok: true,

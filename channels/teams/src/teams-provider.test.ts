@@ -54,6 +54,33 @@ function makeTokenResolver(): TeamsTokenResolver & ReturnType<typeof vi.fn> {
   return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? 'graph-token' : 'dev-portal-token'));
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(reqOpts.body)` yields "[object Object]" and
+ * parsing throws. Reply callbacks that need the body must therefore be async.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+  if (Array.isArray(body)) {
+    return body
+      .map(chunk => (typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')))
+      .join('');
+  }
+  if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    const chunks: string[] = [];
+    for await (const chunk of body as AsyncIterable<unknown>) {
+      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8'));
+    }
+    return chunks.join('');
+  }
+  return String(body);
+}
+
 /** Stub the client-credentials token mint used to validate self-managed bot credentials. */
 function stubCredentialMint(opts: { ok?: boolean; tenant?: string } = {}): () => string | undefined {
   const { ok = true, tenant = 'botframework.com' } = opts;
@@ -63,8 +90,8 @@ function stubCredentialMint(opts: { ok?: boolean; tenant?: string } = {}): () =>
     .intercept({ path: `/${tenant}/oauth2/v2.0/token`, method: 'POST' })
     .reply(
       ok ? 200 : 401,
-      reqOpts => {
-        captured = String(reqOpts.body);
+      async reqOpts => {
+        captured = await readMockBody(reqOpts.body);
         return ok
           ? { token_type: 'Bearer', access_token: 'bf-token', expires_in: 3599 }
           : { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.' };
@@ -86,23 +113,23 @@ function stubProvisioning() {
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: '/v1.0/applications', method: 'POST' })
-    .reply(201, reqOpts => {
-      createAppBody = JSON.parse(String(reqOpts.body));
+    .reply(201, async reqOpts => {
+      createAppBody = JSON.parse(await readMockBody(reqOpts.body));
       createAppAuth = (reqOpts.headers as Record<string, string>).authorization;
       return { id: OBJECT_ID, appId: MINTED_APP_ID };
     });
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: `/v1.0/applications/${OBJECT_ID}/addPassword`, method: 'POST' })
-    .reply(200, reqOpts => {
-      addPasswordBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      addPasswordBody = JSON.parse(await readMockBody(reqOpts.body));
       return { secretText: MINTED_SECRET, keyId: 'key-1' };
     });
   mockAgent
     .get(DEV_PORTAL_ORIGIN)
     .intercept({ path: '/api/botframework', method: 'POST' })
-    .reply(200, reqOpts => {
-      botRegistrationBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      botRegistrationBody = JSON.parse(await readMockBody(reqOpts.body));
       botRegistrationAuth = (reqOpts.headers as Record<string, string>).authorization;
       return {};
     });
