@@ -292,21 +292,17 @@ describe('what a card shows', () => {
 });
 
 describe('canMoveTo', () => {
-  const parkedSession: BoardCardOwner = { kind: 'session', status: 'ready' };
-  const retrying: BoardCardOwner = { kind: 'automation', progressLabel: 'Retrying…' };
-  const yourMove: BoardCardOwner = { kind: 'you', progressLabel: 'Moving…' };
-
-  it.each<[string, BoardCardOwner, InstalledPhaseInfo['kind'] | undefined, boolean]>([
-    ['a free card', { kind: 'free' }, undefined, true],
-    ['a parked session', parkedSession, 'terminal', true],
-    ['a parked session', parkedSession, 'resting', true],
-    ['a parked session', parkedSession, 'working', false],
-    ['a parked session', parkedSession, undefined, false],
-    ['an automatic retry', retrying, 'terminal', true],
-    ['an automatic retry', retrying, 'working', false],
-    ['your own move', yourMove, 'terminal', false],
-  ])('%s into a %s phase: %s', (_, owner, phaseKind, allowed) => {
-    expect(canMoveTo(owner, phaseKind)).toBe(allowed);
+  it.each<[BoardCardOwner['kind'], InstalledPhaseInfo['kind'] | undefined, boolean]>([
+    ['free', undefined, true],
+    ['session', 'terminal', true],
+    ['session', 'resting', true],
+    ['session', 'working', false],
+    ['session', undefined, false],
+    ['automation', 'terminal', true],
+    ['automation', 'working', false],
+    ['you', 'terminal', false],
+  ])('a card held by %s into a %s phase: %s', (ownerKind, phaseKind, allowed) => {
+    expect(canMoveTo(ownerKind, phaseKind)).toBe(allowed);
   });
 });
 

@@ -234,7 +234,8 @@ export function WorkItemCard({
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}
         onDragStart={event => {
-          if (!lockedByYou) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+          if (lockedByYou) return;
+          setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: owner.kind });
         }}
         className={cn(
           'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',

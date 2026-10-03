@@ -89,7 +89,7 @@ export function WorkItemMenuItems({
         TRIAGE_DECISIONS.map(choice => (
           <DropdownMenu.Item
             key={choice.stage}
-            disabled={!canMoveTo(owner, phaseKind(choice.stage))}
+            disabled={!canMoveTo(owner.kind, phaseKind(choice.stage))}
             onClick={() => onMove(choice.stage)}
           >
             <BoardStageIcon stage={choice.stage} />
@@ -125,7 +125,7 @@ export function WorkItemMenuItems({
         .map(stage => (
           <DropdownMenu.Item
             key={stage.id}
-            disabled={!canMoveTo(owner, phaseKind(stage.id))}
+            disabled={!canMoveTo(owner.kind, phaseKind(stage.id))}
             onClick={() => onMove(stage.id)}
           >
             <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />

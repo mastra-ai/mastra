@@ -54,6 +54,11 @@ export function useBoardItems({
   const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind));
 
+  const refuseMove = (itemId: string, reason: string) => {
+    setTransitionReasons(current => ({ ...current, [itemId]: reason }));
+    onFailure?.(reason);
+  };
+
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
     setTransitionReasons(current => {
       if (!(item.id in current)) return current;
@@ -61,10 +66,6 @@ export function useBoardItems({
       delete next[item.id];
       return next;
     });
-    const refused = (reason: string) => {
-      setTransitionReasons(current => ({ ...current, [item.id]: reason }));
-      onFailure?.(reason);
-    };
     // `mutateAsync`, because the search palette closes on select: react-query
     // drops the callbacks passed to `mutate` once the caller unmounts.
     void transition
@@ -76,9 +77,11 @@ export function useBoardItems({
         ...(item.stages.length === 1 && item.stages[0] === toStage ? { reenter: true } : {}),
       })
       .then(result => {
-        if (result.status === 'rejected') refused(result.reason);
+        if (result.status === 'rejected') refuseMove(item.id, result.reason);
       })
-      .catch(error => refused(error instanceof Error ? error.message : 'The transition could not be evaluated.'))
+      .catch(error =>
+        refuseMove(item.id, error instanceof Error ? error.message : 'The transition could not be evaluated.'),
+      )
       .finally(onSettled);
   };
 
@@ -162,6 +165,7 @@ export function useBoardItems({
     transitionReasons,
     refetch: items.refetch,
     move,
+    refuseMove,
     remove: (id: string) => remove.mutate(id),
     handleDrop,
   };

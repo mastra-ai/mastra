@@ -71,14 +71,23 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
   };
 }
 
-export function canMoveTo(owner: BoardCardOwner, phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {
-  if (owner.kind === 'free') return true;
-  if (owner.kind === 'you') return false;
+export const BUSY_CARD_MOVE_REFUSAL = "Another run can't start while this card is busy.";
+
+export function canMoveTo(
+  ownerKind: BoardCardOwner['kind'],
+  phaseKind: InstalledPhaseInfo['kind'] | undefined,
+): boolean {
+  if (ownerKind === 'free') return true;
+  if (ownerKind === 'you') return false;
   return !phaseMayStartRun(phaseKind);
 }
 
 function phaseMayStartRun(phaseKind: InstalledPhaseInfo['kind'] | undefined): boolean {
   return phaseKind !== 'resting' && phaseKind !== 'terminal';
+}
+
+function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
+  return sessionStatus === 'initializing' || sessionStatus === 'working';
 }
 
 function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
@@ -122,10 +131,7 @@ function automationOnCard(
 }
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {
-  // A live session owns the card, so parked suggestions wait until it stops.
-  if (input.sessionStatus === 'initializing' || input.sessionStatus === 'working') {
-    return { kind: 'idle' };
-  }
+  if (sessionIsLive(input.sessionStatus)) return { kind: 'idle' };
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.heldAs !== undefined) {
@@ -208,8 +214,7 @@ function runAnnouncedByWick(
   decision: Pick<FactoryDecisionSummary, 'type' | 'status'>,
   sessionStatus: SessionRowStatus | undefined,
 ): boolean {
-  if (decision.type !== 'invokeSkill' || decision.status !== 'leased') return false;
-  return sessionStatus === 'working' || sessionStatus === 'initializing';
+  return decision.type === 'invokeSkill' && decision.status === 'leased' && sessionIsLive(sessionStatus);
 }
 
 /**
