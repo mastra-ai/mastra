@@ -49,12 +49,13 @@ import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
   commitAll,
+  enforceFactoryCommitIdentityBeforePush,
+  FACTORY_COMMIT_IDENTITY,
   isValidGitRef as isValidGitRefSandbox,
   MaterializeError,
   pushBranch,
   SetupCommandError,
 } from './sandbox.js';
-import type { GitIdentity } from './sandbox.js';
 
 const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
@@ -1053,12 +1054,6 @@ async function loadOrgProject(options: {
   return { project, orgId, userId };
 }
 
-/** Derive a commit/author identity from the authenticated host user. */
-function identityFromUser(user: unknown): GitIdentity {
-  const u = user as { name?: string; email?: string } | null | undefined;
-  return { name: u?.name ?? null, email: u?.email ?? null };
-}
-
 /** Map a sandbox/setup-command error to an actionable HTTP response. */
 function gitErrorResponse(c: Context, err: unknown) {
   if (err instanceof SetupCommandError) {
@@ -1497,12 +1492,7 @@ function buildProjectGitRoutes({
 
         try {
           return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
-            const result = await commitAll(
-              sessionSandbox,
-              workdir,
-              body.message as string,
-              identityFromUser(await auth.ensureUser(loose(c))),
-            );
+            const result = await commitAll(sessionSandbox, workdir, body.message as string, FACTORY_COMMIT_IDENTITY);
             if (result.committed) {
               await emitAudit?.({
                 context: loose(c),
@@ -1581,6 +1571,7 @@ function buildProjectGitRoutes({
               repositoryId: project.repository.id,
             });
             if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+            await enforceFactoryCommitIdentityBeforePush(sessionSandbox, workdir);
             await pushBranch(sessionSandbox, workdir, branch, access.authorization.token, project.repository.slug);
             await emitAudit?.({
               context: loose(c),

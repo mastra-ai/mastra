@@ -207,6 +207,7 @@ vi.mock('./subscriptions', () => ({
 
 const materializeRepo = vi.fn(async (_opts: any) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
+const enforceFactoryCommitIdentityBeforePush = vi.fn(async () => {});
 // pushBranch is overridable per-test so S2 can make it block on a deferred.
 let pushImpl: (...args: any[]) => Promise<void> = async () => {};
 const pushBranch = vi.fn((...args: any[]) => pushImpl(...args));
@@ -232,8 +233,10 @@ vi.mock('./sandbox', () => {
     }
   }
   return {
+    FACTORY_COMMIT_IDENTITY: { name: 'Mastra Factory', email: 'noreply@mastra.ai' },
     materializeRepo: (opts: any) => materializeRepo(opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
+    enforceFactoryCommitIdentityBeforePush: (...args: any[]) => enforceFactoryCommitIdentityBeforePush(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
     isValidGitRef: (v: unknown): v is string =>
@@ -382,6 +385,7 @@ beforeEach(() => {
   sandboxCallback.mockClear();
   materializeRepo.mockClear();
   commitAll.mockClear();
+  enforceFactoryCommitIdentityBeforePush.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
   subscribeToPullRequest.mockClear();

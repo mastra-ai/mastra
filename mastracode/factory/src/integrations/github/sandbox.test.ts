@@ -14,6 +14,7 @@ import {
   checkoutSessionBranch,
   configureGitIdentity,
   createPullRequest,
+  enforceFactoryCommitIdentityBeforePush,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
@@ -912,6 +913,77 @@ describe('pushRepositoryBranch', () => {
     expect(error).toBeInstanceOf(MaterializeError);
     expect(error.code).toBe('push-failed');
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe('enforceFactoryCommitIdentityBeforePush', () => {
+  it('reasserts the stable Factory author and verifies every unpublished commit', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 0, stdout: 'remote-sha\n', stderr: '' };
+      if (script.includes('rev-list HEAD')) return { ...OK, stdout: 'new-tip\nolder-local\n' };
+      if (script.includes('show -s')) {
+        return { ...OK, stdout: 'Mastra Factory\0noreply@mastra.ai\0Mastra Factory\0noreply@mastra.ai\n' };
+      }
+      return OK;
+    });
+
+    await enforceFactoryCommitIdentityBeforePush(sandbox, '/workspace/hello');
+
+    expect(sandbox.executions.filter(entry => entry.args[2] === 'config').map(entry => entry.args)).toEqual([
+      ['-C', '/workspace/hello', 'config', 'user.name', 'Mastra Factory'],
+      ['-C', '/workspace/hello', 'config', 'user.email', 'noreply@mastra.ai'],
+    ]);
+    expect(sandbox.executions.find(entry => entry.args[2] === 'commit')?.args).toEqual([
+      '-C',
+      '/workspace/hello',
+      'commit',
+      '--amend',
+      '--no-edit',
+      '--reset-author',
+    ]);
+    expect(sandbox.calls.filter(call => call.includes('show -s'))).toHaveLength(2);
+  });
+
+  it('refuses an earlier unpublished commit with a human identity', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'local-sha\n' };
+      if (script.includes('rev-parse --verify')) return { exitCode: 0, stdout: 'remote-sha\n', stderr: '' };
+      if (script.includes('rev-list HEAD')) return { ...OK, stdout: 'new-tip\nolder-local\n' };
+      if (script.endsWith('show -s --format=%an%x00%ae%x00%cn%x00%ce older-local')) {
+        return { ...OK, stdout: 'Host User\0host@example.test\0Host User\0host@example.test\n' };
+      }
+      if (script.includes('show -s')) {
+        return { ...OK, stdout: 'Mastra Factory\0noreply@mastra.ai\0Mastra Factory\0noreply@mastra.ai\n' };
+      }
+      return OK;
+    });
+
+    await expect(enforceFactoryCommitIdentityBeforePush(sandbox, '/workspace/hello')).rejects.toThrow(
+      'does not use the stable Factory author and committer identity',
+    );
+  });
+
+  it('does not rewrite a tip that already matches its upstream', async () => {
+    const sandbox = new FakeSandbox(script => (script.includes('rev-parse') ? { ...OK, stdout: 'same-sha\n' } : OK));
+
+    await enforceFactoryCommitIdentityBeforePush(sandbox, '/workspace/hello');
+
+    expect(sandbox.calls.some(call => call.includes('commit --amend'))).toBe(false);
+  });
+
+  it('does not rewrite a remotely published base when a new branch has no upstream or local commit', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.endsWith('rev-parse HEAD')) return { ...OK, stdout: 'published-base-sha\n' };
+      if (script.includes('rev-list HEAD')) return OK;
+      if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: 'no upstream' };
+      return OK;
+    });
+
+    await enforceFactoryCommitIdentityBeforePush(sandbox, '/workspace/hello');
+
+    expect(sandbox.calls.some(call => call.includes('commit --amend'))).toBe(false);
+    expect(sandbox.calls.some(call => call.includes('config user.'))).toBe(false);
   });
 });
 

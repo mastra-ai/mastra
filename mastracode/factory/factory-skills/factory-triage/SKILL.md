@@ -40,7 +40,7 @@ At the end of this phase, publish a small summary to the source issue as stated 
 | **Next step**  | Pending                                                                                                                                              |
 ```
 
-For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
+For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `github_update_issue_labels`. For Linear issues, skip this GitHub-only label mutation. Never use `gh issue edit`, raw provider APIs, or credentials from the environment for GitHub label writes.
 
 ## Phase 2: Related Issues & Prior Work
 
@@ -158,22 +158,14 @@ Publish the handoff only with `github_upsert_factory_triage_comment`, passing th
 
 Never use `gh issue comment`, `gh api user`, a raw comment POST/PATCH, or an `--edit-last` fallback for the Factory triage marker. If the tool reports an error, fix the underlying issue or stop; do not publish an alternate marker comment.
 
-After a GitHub comment is posted or updated, reconcile the labels before the terminal transition:
+After a GitHub comment is posted or updated, reconcile the labels with one `github_update_issue_labels` call for the issue number before the terminal transition:
 
-- Add `status: auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "status: auto-triaged"`.
-- Remove `status: needs triage` whenever it is present, including when Phase 1 added it: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
-- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
+- Add `status: auto-triaged` for every GitHub issue.
+- Remove `status: needs triage` whenever it is present, including when Phase 1 added it.
+- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
 - Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
-- Add the domain labels selected in Phase 4 in `mastra-ai/mastra`; never remove one. Create any that does not exist yet, leaving existing labels untouched. Skip when none was selected:
-
-  ```bash
-  DOMAIN_LABELS=('<one quoted label selected in Phase 4 per entry>')
-  for LABEL in "${DOMAIN_LABELS[@]}"; do
-    gh label create "$LABEL" --repo mastra-ai/mastra --color '1D76DB' --description "Issues whose primary fix belongs in $LABEL" 2>/dev/null || true
-  done
-  gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '<comma-separated labels selected in Phase 4>'
-  ```
+- Add the selected existing domain labels through the same `github_update_issue_labels` call in `mastra-ai/mastra`; never remove one. Skip labels that do not already exist rather than creating provider configuration from the agent session, and skip when none was selected.
 
 Apply only these label mutations. Do not remove `status: needs approval` merely because a later refresh has a different route. Do not add, remove, or derive any `trio-*` labels; leave all type, area, ownership, and unrelated labels untouched. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 

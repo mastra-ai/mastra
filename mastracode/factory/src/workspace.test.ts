@@ -77,6 +77,7 @@ const mocks = vi.hoisted(() => ({
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
+  configureGitIdentity: vi.fn(async () => {}),
   runSetupCommand: vi.fn(async () => {}),
   runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
@@ -110,10 +111,13 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   // Keep the real lifecycle constants and MaterializeError so workspace.ts uses production behavior.
   DEFAULT_COMMAND_TIMEOUT_MS: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
     .DEFAULT_COMMAND_TIMEOUT_MS,
+  FACTORY_COMMIT_IDENTITY: (await importOriginal<typeof import('./integrations/github/sandbox.js')>())
+    .FACTORY_COMMIT_IDENTITY,
   MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
+  configureGitIdentity: (...args: unknown[]) => (mocks.configureGitIdentity as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
   runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
@@ -169,6 +173,7 @@ afterEach(async () => {
   __clearSessionSandboxesForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
+  mocks.configureGitIdentity.mockClear();
   mocks.runSetupCommand.mockClear();
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
@@ -385,6 +390,8 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
+    expect(plan).toContain('This planning skill does not create or update a pull request');
+    expect(plan).not.toContain('`gh pr create`');
     expect(review).toContain('.artifacts/factory-review/pr-<number>-<headSha>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
@@ -392,6 +399,8 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     for (const instructions of [review, rereview]) {
+      expect(instructions).toContain('Do not add a `Co-Authored-By` trailer');
+      expect(instructions).not.toContain('ID+<login>@users.noreply.github.com');
       expect(instructions).toContain('approve adds `status:auto-approved` and removes `status:changes-requested`');
       expect(instructions).toContain(
         'request changes adds `status:changes-requested` and removes `status:auto-approved`',
@@ -405,9 +414,9 @@ describe('bundled Factory skill assets', () => {
     const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
 
     expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
-    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('using `github_update_issue_labels`');
     expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
-    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+    expect(triage).toContain('Remove `status: needs triage` whenever it is present');
   });
 
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
@@ -476,9 +485,10 @@ describe('bundled Factory skill assets', () => {
       'After a GitHub comment is posted or updated, reconcile the labels',
     );
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
+    expect(triage).toContain('one `github_update_issue_labels` call for the issue number');
+    expect(triage).toContain('Add `status: auto-triaged` for every GitHub issue.');
+    expect(triage).toContain('Remove `status: needs triage` whenever it is present');
+    expect(triage).toContain('Add `status: needs approval` when `Route: Await approval`');
     for (const label of ['effort:low', 'effort:medium', 'effort:high', 'impact:low', 'impact:medium', 'impact:high']) {
       expect(triage).toContain(label);
     }
@@ -486,13 +496,8 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
-    expect(triage).toContain(
-      'gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'<comma-separated labels selected in Phase 4>\'',
-    );
-    expect(triage.indexOf('gh label create "$LABEL"')).toBeLessThan(
-      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label'),
-    );
+    expect(triage).toContain('Add the selected existing domain labels through the same `github_update_issue_labels`');
+    expect(triage).not.toContain('gh label create "$LABEL"');
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(
       'For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.',
@@ -506,9 +511,12 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Verdict: approve');
     expect(review).toContain('Verdict: request changes');
     // The verdict must be published on the PR itself, unprompted.
-    expect(review).toContain('gh pr review <number> --approve --body-file');
-    expect(review).toContain('gh pr review <number> --request-changes --body-file');
-    expect(review).toContain('gh pr comment <number> --body-file');
+    expect(review).toContain('source_control_review_change_request');
+    expect(review).toContain('event: "approve"');
+    expect(review).toContain('event: "request-changes"');
+    expect(review).toContain('event: "comment"');
+    expect(review).not.toContain('`gh pr review <number>');
+    expect(review).not.toContain('`gh pr comment <number>');
     // A push can land mid-review; publishing must re-check the head first.
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
@@ -603,8 +611,8 @@ describe('bundled Factory skill assets', () => {
     // the final conversation message.
     inOrder(
       "Don't send either to the conversation yet",
-      'gh pr review <number> --approve --body-file',
-      'gh pr review <number> --request-changes --body-file',
+      'event: "approve"',
+      'event: "request-changes"',
       'Then make your terminal `factory_record_review_verdict` call',
       'post the **session handoff**',
       'as your final conversation message',
@@ -1670,6 +1678,24 @@ describe('GitHub session workspace preparation', () => {
       warn.mockRestore();
     }
     expect(mocks.runSetupCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a setup command failure before a fatal identity restoration failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm install' });
+    addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(
+      new SetupCommandError('Setup command failed (exit 127): pnpm not installed', 'setup-failed'),
+    );
+    const identityError = new MaterializeError('Failed to restore git identity', 'commit-failed');
+    mocks.configureGitIdentity.mockResolvedValueOnce(undefined).mockRejectedValueOnce(identityError);
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toBe(
+      identityError,
+    );
+
+    expect(hasFailedSetupCommand('session-a', 'pnpm install')).toBe(true);
+    expect(mocks.configureGitIdentity).toHaveBeenCalledTimes(2);
   });
 
   it('the recorded setup failure is keyed by the exact command and cleared on evict', () => {

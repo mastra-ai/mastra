@@ -474,6 +474,9 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toMatchObject({ side: 'RIGHT' });
     for (const call of fetchImpl.mock.calls) {
       expect((call[1] as RequestInit).headers).not.toHaveProperty('x-acting-user-id');
+      expect((call[1] as RequestInit).headers).toMatchObject({
+        'x-mastra-factory-identity': 'installation',
+      });
     }
   });
 
@@ -907,6 +910,8 @@ describe('PlatformGithubIntegration', () => {
     expect(Object.keys(integration.sessionTools({ requestContext }))).toEqual([
       'github_refresh_token',
       'github_upsert_factory_triage_comment',
+      'github_comment_issue',
+      'github_update_issue_labels',
       'github_subscribe_pr',
       'github_unsubscribe_pr',
     ]);
