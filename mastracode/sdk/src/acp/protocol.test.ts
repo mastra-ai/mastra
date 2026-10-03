@@ -10,17 +10,20 @@ import type { AgentController, AgentControllerEvent, Session } from '@mastra/cor
 import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthStorage } from '../auth/storage.js';
+import { seedProviderOMDefault } from '../onboarding/om-settings.js';
 import { openUrlInBrowser } from '../utils/open-url.js';
 import { MastraCodeAcpAgent } from './agent.js';
 import type { AcpSessionRuntime } from './agent.js';
 
 vi.mock('../utils/open-url.js', () => ({ openUrlInBrowser: vi.fn() }));
+vi.mock('../onboarding/om-settings.js', () => ({ seedProviderOMDefault: vi.fn() }));
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
   vi.restoreAllMocks();
   vi.mocked(openUrlInBrowser).mockClear();
+  vi.mocked(seedProviderOMDefault).mockClear();
 });
 
 async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
@@ -163,6 +166,7 @@ describe('ACP JSON-RPC conversation', () => {
     await client.authenticate({ methodId: 'openai-codex' });
     expect(login).toHaveBeenCalledWith('openai-codex', expect.objectContaining({ authMode: 'browser' }));
     expect(openUrlInBrowser).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize?state=abc');
+    expect(seedProviderOMDefault).toHaveBeenCalledWith('openai-codex');
   });
 
   it('fails sign-in that needs typed input and points to terminal login', async () => {
@@ -186,6 +190,7 @@ describe('ACP JSON-RPC conversation', () => {
       message: expect.stringContaining('mastracode-login'),
     });
     expect(openUrlInBrowser).not.toHaveBeenCalled();
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
   });
 
   it('accepts terminal login without running a flow and rejects unknown methods', async () => {
