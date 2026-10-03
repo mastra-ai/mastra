@@ -129,7 +129,9 @@ function isResumedRunningRecord(result: unknown): boolean {
     !!result &&
     typeof result === 'object' &&
     (result as { status?: string }).status === 'running' &&
-    'resumePayload' in result
+    // resumedAt, not resumePayload: an undefined resumePayload key is dropped
+    // by stores that serialize the record.
+    (result as { resumedAt?: unknown }).resumedAt !== undefined
   );
 }
 
@@ -1564,6 +1566,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext,
         });
       } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
+        // Foreach is excluded on purpose: its resume fans out one step.run per
+        // iteration against the shared aggregate record, each with its own
+        // resume data, and the aggregate must stay 'suspended' until step-end
+        // collects the iterations. Claiming it here would let the first
+        // iteration flip it to 'running' with a single iteration's payload.
         // Mark the resumed step running and keep its resume data next to the
         // suspendPayload, so restart() after a crash mid-resume can re-enter
         // the step with the same resume data instead of re-suspending it
@@ -1912,10 +1919,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepResults: nestedContext,
               prevResult: {
                 status: 'success',
-                output:
-                  nestedContext[suspendedNestedStepId]?.payload !== undefined
-                    ? nestedContext[suspendedNestedStepId].payload
-                    : (prevResult as any)?.output,
+                output: nestedContext[suspendedNestedStepId]?.payload ?? (prevResult as any)?.output,
               },
               resumeData: nestedResumeData,
               activeStepsPath,
