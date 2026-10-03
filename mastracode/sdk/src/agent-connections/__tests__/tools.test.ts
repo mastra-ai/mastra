@@ -386,9 +386,14 @@ describe('agent connection tools', () => {
     }
   });
 
-  it('reports unacknowledged delivery as retryable and does not record sent history', async () => {
+  it('reports a terminally failed delivery as retryable and does not record sent history', async () => {
     const sendNotificationSignal = vi.fn(async () => ({
-      record: { id: 'notification-1', lastDeliveryError: 'owner acceptance timed out' },
+      record: {
+        id: 'notification-1',
+        status: 'failed' as const,
+        deliveryAttempts: 5,
+        lastDeliveryError: 'owner acceptance timed out',
+      },
       decision: { action: 'deliver' as const },
     }));
     const tools = createAgentConnectionTools({
@@ -414,6 +419,56 @@ describe('agent connection tools', () => {
       content: 'Failed to send agent signal: owner acceptance timed out',
     });
     expect(getStored().sentSignals).toBeUndefined();
+  });
+
+  it('reports a signal queued behind an unclaimed thread owner as persisted, not failed', async () => {
+    // A high/medium signal to an idle thread routes as an immediate deliver,
+    // which wakes the thread's claimed owner. When the peer's session holds no
+    // live claim on that thread, owner discovery lapses and Core rejects the
+    // wake even though the notification is persisted in the peer's inbox. The
+    // send result must report that queue instead of claiming delivery failed.
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: {
+        id: 'notification-1',
+        status: 'pending' as const,
+        deliveryAttempts: 1,
+        deliveryReason: 'idle-high',
+        lastDeliveryError: 'No claimed thread owner responded for resource-2\u0000thread-2 within 1000ms',
+      },
+      decision: { action: 'deliver' as const, reason: 'idle-high' },
+    }));
+    const tools = createAgentConnectionTools({
+      registry: createRegistry(),
+      getAgent: () => ({ sendNotificationSignal }),
+    });
+    const { context, getStored } = createContext([savedPeer()]);
+
+    const result = await (tools.agent_signal_send as any).execute(
+      {
+        targetId: PEER_ID,
+        message: 'Reply when you are up',
+        priority: 'high',
+        expectsReply: true,
+        messageId: 'unclaimed-owner-message',
+      },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      isError: false,
+      messageId: 'unclaimed-owner-message',
+      priority: 'high',
+      expectsReply: true,
+      routingAction: 'persist',
+      // A policy-level persist is scheduled and delivers itself, so it may
+      // promise later processing. This outcome is not scheduled, so it must say
+      // where the signal actually is instead of borrowing that promise.
+      content:
+        'Queued high signal for "Peer One" in the notification inbox, where it is read on the recipient\'s next turn',
+    });
+    expect(result.content).not.toContain('No claimed thread owner responded');
+    expect(result.content).not.toContain('to process later');
+    expect(getStored().sentSignals?.map(signal => signal.messageId)).toEqual(['unclaimed-owner-message']);
   });
 
   it('does not report a summarized low-priority signal as a successful reply obligation', async () => {
