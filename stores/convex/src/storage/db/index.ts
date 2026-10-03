@@ -11,6 +11,8 @@ import type { StorageColumn, StorageResourceType, UpdateWorkflowStateOptions } f
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import { ConvexAdminClient } from '../client';
+import { fencedCaller } from '../run-fencing';
+import type { RunFenceCheck, StorageCaller } from '../run-fencing';
 import { TABLE_OBSERVATIONAL_MEMORY } from '../types';
 import type {
   ConvexStorageTable,
@@ -62,8 +64,19 @@ export function resolveConvexConfig(config: ConvexDomainConfig): ConvexAdminClie
 }
 
 export class ConvexDB extends MastraBase {
-  constructor(private readonly client: ConvexAdminClient) {
+  private readonly client: StorageCaller;
+
+  constructor(
+    readonly adminClient: ConvexAdminClient,
+    check?: RunFenceCheck,
+  ) {
     super({ name: 'convex-db' });
+    this.client = fencedCaller(adminClient, check);
+  }
+
+  /** This store with every write applied only while `check.fence` holds the run, or itself without a check. */
+  fenced(check: RunFenceCheck | undefined): ConvexDB {
+    return check ? new ConvexDB(this.adminClient, check) : this;
   }
 
   async hasColumn(_table: string, _column: string): Promise<boolean> {
