@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed ACP sessions continuing notification dispatch after shutdown and closing shared resources before workers finished.
+Improved ACP session shutdown by waiting up to two seconds for pending notification dispatch and stopping workers before closing session resources.
