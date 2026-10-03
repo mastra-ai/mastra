@@ -3,6 +3,7 @@ import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import { bindModelAttempt, getModelAttempt } from '../../loop/shared/model-attempt';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
@@ -13,6 +14,7 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
+  DataChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
@@ -23,6 +25,7 @@ import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { globalRunRegistry } from './run-registry';
 import type {
   AgentStreamEvent,
   AgentChunkEventData,
@@ -386,6 +389,25 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           const chunk = streamEvent.data as AgentChunkEventData;
           if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
+          const attempt = streamEvent.modelAttemptId
+            ? globalRunRegistry.get(runId)?.modelAttempts?.get(streamEvent.modelAttemptId)
+            : undefined;
+          if (
+            attempt?.discarded &&
+            chunk.type !== 'step-finish' &&
+            chunk.type !== 'data-signal' &&
+            chunk.type !== 'data-user-message'
+          )
+            break;
+          if (attempt) {
+            if (chunk.type === 'step-finish') {
+              const step = chunk.payload.output.steps?.[0];
+              if (step) bindModelAttempt(step, attempt);
+            } else if (chunk.type !== 'data-signal' && chunk.type !== 'data-user-message') {
+              bindModelAttempt(chunk, attempt);
+              if (!outputProcessors?.length) attempt.recordEmitted(chunk);
+            }
+          }
           // Track error chunks for onError callback
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
@@ -403,6 +425,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const chunk = streamEvent.data as ChunkType<OUTPUT>;
           if (chunk && 'type' in chunk) {
+            const attempt = streamEvent.modelAttemptId
+              ? globalRunRegistry.get(runId)?.modelAttempts?.get(streamEvent.modelAttemptId)
+              : undefined;
+            if (attempt) bindModelAttempt(chunk, attempt);
             safeEnqueue(controller, chunk);
           }
           break;
@@ -759,10 +785,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
   runId: string,
-  chunk: ChunkType<OUTPUT>,
+  chunk: ChunkType<OUTPUT> | DataChunkType,
   outputProcessed?: boolean,
 ): Promise<void> {
   const topic = AGENT_STREAM_TOPIC(runId);
+  const attempt =
+    getModelAttempt(chunk) ??
+    (chunk.type === 'step-finish' && chunk.payload.output.steps?.[0]
+      ? getModelAttempt(chunk.payload.output.steps[0])
+      : undefined);
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
@@ -770,6 +801,7 @@ export async function emitChunkEvent<OUTPUT = undefined>(
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),
+    ...(attempt ? { modelAttemptId: attempt.id } : {}),
   });
 }
 
@@ -810,6 +842,7 @@ export async function emitStepStartEvent(
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...(getModelAttempt(data) ? { modelAttemptId: getModelAttempt(data)!.id } : {}),
   });
 }
 

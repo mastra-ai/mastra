@@ -96,6 +96,77 @@ describe('model attempt output ownership', () => {
     },
   );
 
+  it('owns processor work per chunk when one transport stream spans successive attempts', async () => {
+    const entered = gate();
+    const release = gate();
+    let notify!: () => void;
+    const discarded = new ModelAttempt(undefined, listener => {
+      notify = listener;
+      return () => {};
+    });
+    discarded.arm();
+    const successor = new ModelAttempt();
+    successor.arm();
+    let retainedWriter: ProcessorStreamWriter | undefined;
+    let controller!: ReadableStreamDefaultController<ChunkType>;
+    const stream = new ReadableStream<ChunkType>({
+      start(value) {
+        controller = value;
+      },
+    });
+    const messageList = new MessageList({ threadId: 'thread' });
+    const stale = { ...reasoning };
+    bindModelAttempt(stale, discarded);
+    const states = new Map<string, ProcessorState>();
+    const output = new MastraModelOutput({
+      model: { modelId: 'test-model', provider: 'test', version: 'v2' },
+      stream,
+      messageList,
+      messageId: 'response',
+      options: {
+        runId: 'run',
+        isLLMExecutionStep: true,
+        processorStates: states,
+        outputProcessors: [
+          {
+            id: 'transport',
+            async processOutputStream({ part, writer }) {
+              if (part.type === 'reasoning-delta') {
+                retainedWriter = writer;
+                entered.resolve();
+                await release.promise;
+                await writer?.custom({ type: 'data-stale', data: 'discarded' });
+                return text;
+              }
+              return part;
+            },
+          },
+        ],
+      },
+    });
+    const emitted: ChunkType[] = [];
+    const consumption = (async () => {
+      for await (const part of output._getBaseStream()) emitted.push(part);
+    })();
+    controller.enqueue(stale);
+    await entered.promise;
+    notify();
+    const cleanup = discarded.discardOutput();
+    release.resolve();
+    await cleanup;
+    const replacement = { ...text, payload: { id: 'replacement', text: 'accepted replacement' } };
+    bindModelAttempt(replacement, successor);
+    controller.enqueue(replacement);
+    controller.close();
+    await consumption;
+    await retainedWriter?.custom({ type: 'data-late', data: 'discarded' });
+    expect(emitted).toEqual([replacement]);
+    expect(messageList.get.response.db()).toEqual([]);
+    expect(states.get('transport')?.streamParts).toEqual([replacement]);
+    discarded.dispose();
+    successor.dispose();
+  });
+
   it('waits for an in-flight processor and drops its returned text, late writes and direct controller output', async () => {
     const entered = gate();
     const release = gate();

@@ -33,6 +33,7 @@ export function getModelAttempt(stream: object): ModelAttempt | undefined {
 
 /** Private model-call cancellation; never cancels the owning run. */
 export class ModelAttempt {
+  readonly id = crypto.randomUUID();
   readonly controller = new AbortController();
   usage: LanguageModelUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
   warnings: LanguageModelV2CallWarning[] = [];

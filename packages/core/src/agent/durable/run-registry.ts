@@ -38,6 +38,8 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   updateAgeOnGet: true,
   dispose: entry => {
     entry?.cleanup?.();
+    for (const attempt of entry?.modelAttempts?.values() ?? []) attempt.dispose();
+    entry?.modelAttempts?.clear();
   },
   noDisposeOnSet: true,
 });

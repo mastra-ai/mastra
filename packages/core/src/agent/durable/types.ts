@@ -14,6 +14,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ModelAttempt } from '../../loop/shared/model-attempt';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
@@ -584,6 +585,8 @@ export interface AgentStreamEvent<T = unknown> {
    * before it was published, so the stream consumer must not run them again.
    */
   outputProcessed?: boolean;
+  /** Internal owner-registry key; not exposed on client chunks. */
+  modelAttemptId?: string;
 }
 
 /**
@@ -834,6 +837,8 @@ export interface RunRegistryEntry {
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
   subscribePendingSignals?: (listener: () => void) => () => void;
+  /** Attempt ownership retained across the internal stream transport, never serialized. */
+  modelAttempts?: Map<string, ModelAttempt>;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
