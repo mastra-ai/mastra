@@ -18,7 +18,6 @@ import {
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
-import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
 import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
@@ -29,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/logs')];

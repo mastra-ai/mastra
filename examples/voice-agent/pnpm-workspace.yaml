@@ -16,6 +16,7 @@ overrides:
   '@livekit/agents': 'link:../../integrations/livekit/node_modules/@livekit/agents'
   '@livekit/agents-plugin-livekit': 'link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit'
   '@livekit/agents-plugin-silero': 'link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero'
+  'livekit-server-sdk': 'link:../../integrations/livekit/node_modules/livekit-server-sdk'
   '@mastra/core': 'link:../../packages/core'
   '@mastra/libsql': 'link:../../stores/libsql'
   '@mastra/memory': 'link:../../packages/memory'

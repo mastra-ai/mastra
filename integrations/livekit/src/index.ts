@@ -6,6 +6,14 @@ export { liveKitConnectionRoute } from './routes';
 export type { LiveKitConnectionRouteOptions, LiveKitConnectionDetails, ConnectionRequestArgs } from './routes';
 export { dispatchVoiceSession } from './dispatch';
 export type { DispatchVoiceSessionOptions } from './dispatch';
+export type { LiveKitRecordingOptions } from './recording';
+export { liveKitRecordingRoute } from './recording-route';
+export type {
+  LiveKitRecording,
+  LiveKitRecordingResponse,
+  LiveKitRecordingResolverArgs,
+  LiveKitRecordingRouteOptions,
+} from './recording-route';
 export { serializeSessionMetadata } from './metadata';
 export type { LiveKitSessionMetadata } from './metadata';
 export { pipeAgentReplyToWriter } from './workflow-generator';
@@ -15,3 +23,19 @@ export type { ConsentGrant, ConsentToolOptions } from './consent';
 export { createEndCallTool } from './end-call';
 export type { EndCallRequest, EndCallToolOptions } from './end-call';
 export { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';
+
+export {
+  runVoiceBenchmarks,
+  summarizeVoiceBenchmarks,
+  voiceBenchmarkScenarios,
+  voiceBenchmarkScenarioSchema,
+  voiceBenchmarkObservationSchema,
+  voiceBenchmarkToExperimentResult,
+} from './benchmark';
+export type {
+  RunVoiceBenchmarksOptions,
+  VoiceBenchmarkScenario,
+  VoiceBenchmarkObservation,
+  VoiceBenchmarkResult,
+} from './benchmark';
+export type { VoiceGenerationMetrics, VoiceSpeechMetrics, VoiceTurnMetrics, VoiceSpeechResult } from './turn-metrics';

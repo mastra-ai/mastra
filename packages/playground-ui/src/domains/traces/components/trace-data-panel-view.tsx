@@ -70,6 +70,8 @@ export interface TraceDataPanelViewProps {
   depth?: DataPanelProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. inbox feedback context). */
   headerSlot?: ReactNode;
+  /** Integration-specific actions shown alongside the standard trace controls. */
+  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   placement: TraceDataPanelPlacement;
@@ -150,6 +152,7 @@ export function TraceDataPanelView({
   size = 'wide',
   depth,
   headerSlot,
+  headerActionsSlot,
   title,
   placement,
   LinkComponent,
@@ -408,7 +411,10 @@ export function TraceDataPanelView({
                   <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
                   {traceSummary}
                 </DataPanel.HeaderContent>
-                <DataPanel.HeaderActions>{traceActionsMenu}</DataPanel.HeaderActions>
+                <DataPanel.HeaderActions>
+                  {headerActionsSlot}
+                  {traceActionsMenu}
+                </DataPanel.HeaderActions>
               </>
             ) : (
               <>
@@ -421,6 +427,7 @@ export function TraceDataPanelView({
                   {traceSummary}
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
+                  {headerActionsSlot}
                   {onEvaluateTrace && (
                     <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
                       <CircleGaugeIcon />

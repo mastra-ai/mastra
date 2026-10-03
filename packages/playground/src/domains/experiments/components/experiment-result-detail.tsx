@@ -3,7 +3,6 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import { useTraceSpanScores, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useSpanFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -13,6 +12,7 @@ import { ExperimentScorePanel } from '@/domains/experiments/components/experimen
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
 export type ExperimentResultDetailProps = Omit<

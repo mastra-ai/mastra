@@ -13,7 +13,6 @@ import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -62,6 +61,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/traces')];

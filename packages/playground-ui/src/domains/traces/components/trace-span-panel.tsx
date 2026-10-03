@@ -74,6 +74,8 @@ export interface TraceSpanPanelProps {
   depth?: TraceDataPanelViewProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. feedback context). */
   headerSlot?: ReactNode;
+  /** Integration actions displayed alongside the trace controls. */
+  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
@@ -122,6 +124,7 @@ export function TraceSpanPanel({
   size,
   depth,
   headerSlot,
+  headerActionsSlot,
   title,
   showUnavailableFeaturesMsg,
   spanView,
@@ -168,6 +171,7 @@ export function TraceSpanPanel({
         size={size}
         depth={depth}
         headerSlot={headerSlot}
+        headerActionsSlot={headerActionsSlot}
         title={title}
         showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
         spanView={spanView}
