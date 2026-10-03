@@ -96,6 +96,7 @@ describe('Inngest agent stopWhen (#25851)', () => {
 
     let finishReceived = false;
     let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         (async () => {
@@ -103,14 +104,15 @@ describe('Inngest agent stopWhen (#25851)', () => {
             if ((chunk as any)?.type === 'finish') finishReceived = true;
           }
         })(),
-        new Promise<void>(resolve =>
-          setTimeout(() => {
+        new Promise<void>(resolve => {
+          timer = setTimeout(() => {
             timedOut = true;
             resolve();
-          }, STREAM_TIMEOUT_MS),
-        ),
+          }, STREAM_TIMEOUT_MS);
+        }),
       ]);
     } finally {
+      clearTimeout(timer);
       result.cleanup();
     }
 

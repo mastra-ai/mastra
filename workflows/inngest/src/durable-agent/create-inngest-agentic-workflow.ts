@@ -348,14 +348,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
         // stopWhen is a closure parked on the in-process run registry; on a
         // cross-worker resume the entry is absent and we fall back to maxSteps.
-        // Evaluated inside a memoized step so Inngest replays reuse the recorded
-        // decision instead of re-invoking (possibly stateful) user predicates.
-        const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
-        if (!stopWhen || state.accumulatedSteps.length === 0) {
-          return true;
-        }
+        // The lookup happens inside a memoized step so Inngest replays reuse the
+        // recorded decision (even on a worker without the registry entry) instead
+        // of re-invoking (possibly stateful) user predicates.
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
         const stopped: boolean = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+          const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+          if (!stopWhen || state.accumulatedSteps.length === 0) {
+            return false;
+          }
           const steps = state.accumulatedSteps as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
