@@ -899,6 +899,7 @@ export class ProcessorRunner {
     }
 
     const modelAttempt = getModelAttempt(part);
+    abortSignal ??= modelAttempt?.controller.signal;
     if (modelAttempt?.discarded) return { part: null, blocked: false };
     const trackState = (state: ProcessorState<OUTPUT>) => {
       modelAttempt?.trackParts(state.streamParts);
