@@ -22,6 +22,7 @@ import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { connectProviderAction, listProvidersAction, removeConnectionAction } from './commands/connect/connect.js';
 import { configureCreateCommand } from './commands/create/create';
 import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
@@ -353,6 +354,32 @@ scorersCommand
   .action(addScorer);
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
+
+// ---- Connect commands ----
+
+const PROJECT_OPTION_ARGS = ['--project <project>', 'Project name, slug, or ID (default: linked project)'] as const;
+
+const connectCommand = program.command('connect').description('Manage provider integrations for your Mastra project');
+
+connectCommand
+  .command('list')
+  .description('List available providers and their connection status')
+  .option(...PROJECT_OPTION_ARGS)
+  .action(wrapAction(listProvidersAction));
+
+connectCommand
+  .command('add <provider>')
+  .description('Connect a provider to the project')
+  .option(...PROJECT_OPTION_ARGS)
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .action(wrapAction(connectProviderAction));
+
+connectCommand
+  .command('remove <provider>')
+  .description('Unlink a provider connection from the project')
+  .option(...PROJECT_OPTION_ARGS)
+  .option('-y, --yes', 'Skip confirmation prompts')
+  .action(wrapAction(removeConnectionAction));
 
 // ---- Auth commands ----
 
