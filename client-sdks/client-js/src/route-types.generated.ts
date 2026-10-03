@@ -4475,7 +4475,7 @@ type Shared_Type_97 = {
   prompt: string;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -4527,7 +4527,7 @@ type Shared_Type_99 = {
   agentId?: undefined | undefined;
   cron: string;
   timezone?: string | undefined;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
@@ -21768,7 +21768,7 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
 export type GetSchedules_QueryParams = {
   agentId?: string | undefined;
   workflowId?: string | undefined;
-  status?: ('active' | 'paused') | undefined;
+  status?: ('active' | 'paused' | 'completed') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   name?: string | undefined;
