@@ -1,10 +1,20 @@
 import {
   ChannelsStorage,
+  CHANNEL_THREADS_PRIMARY_KEY,
+  CHANNEL_THREADS_TABLE_SCHEMA,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_THREADS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { CreateIndexOptions, ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import type {
+  CreateIndexOptions,
+  ChannelInstallation,
+  ChannelConfig,
+  ChannelThreadKey,
+  ChannelThreadMapping,
+  ChannelThreadMappingInput,
+} from '@mastra/core/storage';
 
 import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
@@ -38,12 +48,24 @@ export class ChannelsPG extends ChannelsStorage {
       tableName: TABLE_CHANNEL_CONFIG,
       schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
     });
+    // mastra_channel_threads lives outside TABLE_NAMES (same convention as the
+    // observational-memory table), hence the cast.
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_THREADS as any,
+      schema: CHANNEL_THREADS_TABLE_SCHEMA[TABLE_CHANNEL_THREADS],
+      compositePrimaryKey: [...CHANNEL_THREADS_PRIMARY_KEY],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
 
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
+      {
+        name: `${schemaPrefix}idx_channel_threads_thread_id`,
+        table: TABLE_CHANNEL_THREADS,
+        columns: ['threadId'],
+      },
       {
         name: `${schemaPrefix}idx_channel_installations_webhook`,
         table: TABLE_CHANNEL_INSTALLATIONS,
@@ -73,6 +95,15 @@ export class ChannelsPG extends ChannelsStorage {
         }),
       );
     }
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_CHANNEL_THREADS as any,
+        schema: CHANNEL_THREADS_TABLE_SCHEMA[TABLE_CHANNEL_THREADS],
+        schemaName,
+        compositePrimaryKey: [...CHANNEL_THREADS_PRIMARY_KEY],
+        includeAllConstraints: true,
+      }),
+    );
 
     for (const idx of ChannelsPG.getDefaultIndexDefs(schemaPrefix)) {
       statements.push(generateIndexSQL(idx, schemaName));
@@ -111,6 +142,7 @@ export class ChannelsPG extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.#db.clearTable({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.#db.clearTable({ tableName: TABLE_CHANNEL_THREADS as any });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -221,6 +253,88 @@ export class ChannelsPG extends ChannelsStorage {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_CHANNEL_CONFIG, schemaName });
     await this.#db.client.none(`DELETE FROM ${tableName} WHERE "platform" = $1`, [platform]);
+  }
+
+  async getThreadMapping(key: ChannelThreadKey): Promise<ChannelThreadMapping | null> {
+    const tableName = this.#threadsTable();
+    const row = await this.#db.readClient.oneOrNone(
+      `SELECT * FROM ${tableName} WHERE "platform" = $1 AND "ownerId" = $2 AND "externalThreadId" = $3`,
+      [key.platform, key.ownerId, key.externalThreadId],
+    );
+    return row ? this.#parseThreadMappingRow(row) : null;
+  }
+
+  async getThreadMappingByThreadId(threadId: string): Promise<ChannelThreadMapping | null> {
+    const tableName = this.#threadsTable();
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "threadId" = $1 LIMIT 1`, [
+      threadId,
+    ]);
+    return row ? this.#parseThreadMappingRow(row) : null;
+  }
+
+  async upsertThreadMapping(mapping: ChannelThreadMappingInput): Promise<ChannelThreadMapping> {
+    const tableName = this.#threadsTable();
+    const now = new Date().toISOString();
+    const subscribed = mapping.subscribed ?? null;
+    // On conflict "threadId" is never changed: the first writer owns the mapping.
+    const row = await this.#db.client.one(
+      `INSERT INTO ${tableName} ("platform", "ownerId", "externalThreadId", "threadId", "externalChannelId", "subscribed", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+       VALUES ($1, $2, $3, $4, $5, COALESCE($6::boolean, false), $7, $8, $9, $10)
+       ON CONFLICT ("platform", "ownerId", "externalThreadId") DO UPDATE SET
+         "externalChannelId" = EXCLUDED."externalChannelId",
+         "subscribed" = COALESCE($6::boolean, ${tableName}."subscribed"),
+         "updatedAt" = EXCLUDED."updatedAt",
+         "updatedAtZ" = EXCLUDED."updatedAtZ"
+       RETURNING *`,
+      [
+        mapping.platform,
+        mapping.ownerId,
+        mapping.externalThreadId,
+        mapping.threadId,
+        mapping.externalChannelId,
+        subscribed,
+        now,
+        now,
+        now,
+        now,
+      ],
+    );
+    return this.#parseThreadMappingRow(row);
+  }
+
+  async setThreadSubscribed(key: ChannelThreadKey, subscribed: boolean): Promise<void> {
+    const tableName = this.#threadsTable();
+    const now = new Date().toISOString();
+    await this.#db.client.none(
+      `UPDATE ${tableName} SET "subscribed" = $4, "updatedAt" = $5, "updatedAtZ" = $6
+       WHERE "platform" = $1 AND "ownerId" = $2 AND "externalThreadId" = $3`,
+      [key.platform, key.ownerId, key.externalThreadId, subscribed, now, now],
+    );
+  }
+
+  async deleteThreadMapping(key: ChannelThreadKey): Promise<void> {
+    const tableName = this.#threadsTable();
+    await this.#db.client.none(
+      `DELETE FROM ${tableName} WHERE "platform" = $1 AND "ownerId" = $2 AND "externalThreadId" = $3`,
+      [key.platform, key.ownerId, key.externalThreadId],
+    );
+  }
+
+  #threadsTable(): string {
+    return getTableName({ indexName: TABLE_CHANNEL_THREADS, schemaName: getSchemaName(this.#schema) });
+  }
+
+  #parseThreadMappingRow(row: Record<string, unknown>): ChannelThreadMapping {
+    return {
+      platform: row.platform as string,
+      ownerId: row.ownerId as string,
+      externalThreadId: row.externalThreadId as string,
+      threadId: row.threadId as string,
+      externalChannelId: row.externalChannelId as string,
+      subscribed: Boolean(row.subscribed),
+      createdAt: new Date((row.createdAtZ as string) || (row.createdAt as string)),
+      updatedAt: new Date((row.updatedAtZ as string) || (row.updatedAt as string)),
+    };
   }
 
   #parseInstallationRow(row: Record<string, unknown>): ChannelInstallation {

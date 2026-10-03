@@ -192,6 +192,9 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
 - `mastra_notifications`: Stores notification inbox records and delivery metadata
+- `mastra_channel_installations`: Stores channel app installations (Slack, Discord, Teams)
+- `mastra_channel_config`: Stores per-platform channel configuration
+- `mastra_channel_threads`: Maps channel conversations to Mastra threads for indexed lookups
 
 `PostgresStore` exposes notification storage through `getStore('notifications')`.
 

@@ -201,6 +201,40 @@ describe('LibSQLStore notifications domain', () => {
   });
 });
 
+describe('LibSQLStore channel thread mappings table', () => {
+  it('creates the composite primary key and dedupes upserts on the same key', async () => {
+    const client = createTestClient();
+    try {
+      const store = new LibSQLStore({ id: 'libsql-channel-threads-test', client, maxRetries: 1, initialBackoffMs: 10 });
+      await store.init();
+
+      const info = await client.execute(`PRAGMA table_info("mastra_channel_threads")`);
+      const pkColumns = info.rows
+        .filter(row => Number(row.pk) > 0)
+        .sort((a, b) => Number(a.pk) - Number(b.pk))
+        .map(row => row.name);
+      expect(pkColumns).toEqual(['platform', 'ownerId', 'externalThreadId']);
+
+      const channels = (await store.getStore('channels'))!;
+      const key = { platform: 'slack', ownerId: 'owner-1', externalThreadId: 'slack:C1:1700000000.000100' };
+      await channels.upsertThreadMapping!({ ...key, externalChannelId: 'C1', threadId: 'thread-1' });
+      await channels.upsertThreadMapping!({ ...key, externalChannelId: 'C2', threadId: 'thread-2' });
+
+      const count = await client.execute({
+        sql: `SELECT count(*) AS count FROM "mastra_channel_threads" WHERE platform = ? AND ownerId = ? AND externalThreadId = ?`,
+        args: [key.platform, key.ownerId, key.externalThreadId],
+      });
+      expect(Number(count.rows[0]!.count)).toBe(1);
+      await expect(channels.getThreadMapping!(key)).resolves.toMatchObject({
+        threadId: 'thread-1',
+        externalChannelId: 'C2',
+      });
+    } finally {
+      client.close();
+    }
+  });
+});
+
 describe('LibSQLStore harness domain', () => {
   it('exposes harness sessions through the composite store', async () => {
     const client = createTestClient();
