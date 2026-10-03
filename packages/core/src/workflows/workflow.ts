@@ -75,7 +75,7 @@ import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
-import { validateCron } from './scheduler/cron';
+import { validateScheduleTiming } from './scheduler/cron';
 import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
@@ -1886,7 +1886,9 @@ export class Workflow<
       }
     }
     for (const entry of schedules) {
-      validateCron(entry.cron, entry.timezone);
+      // Declarative schedules are re-validated on every boot, so a `runAt`
+      // or `endAt` that has already passed must not break construction.
+      validateScheduleTiming(entry, { requireFuture: false });
     }
     this.#schedules = schedules.map(cfg => ({ ...cfg }));
     this.id = id;

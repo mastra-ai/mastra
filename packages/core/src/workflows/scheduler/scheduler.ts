@@ -491,6 +491,7 @@ export class Scheduler extends MastraBase {
             claimId,
             scheduledFireAt: schedule.nextFireAt,
             target: schedule.target,
+            ...(schedule.runAt != null ? { oneOff: true } : {}),
           },
         });
         return;

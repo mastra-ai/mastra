@@ -3,7 +3,13 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, ScheduleStatus, SchedulesStorage } from '../storage/domains/schedules/base';
 import { slugify } from '../utils/slugify';
-import { computeNextFire, computeNextFireAt, validateCron } from '../workflows/scheduler/cron';
+import {
+  computeInitialFire,
+  computeNextFire,
+  toEpochMs,
+  validateCron,
+  validateScheduleTiming,
+} from '../workflows/scheduler/cron';
 import type { ScheduledWorkflowTrigger } from '../workflows/scheduler/types';
 import type { ScheduleIfActive, ScheduleIfIdle } from './types';
 import { AGENT_SCHEDULE_PREFIX, WORKFLOW_SCHEDULE_PREFIX } from './types';
@@ -30,6 +36,69 @@ function canonicalizeScheduleId(rawId: string, prefix: string): string {
   return `${prefix}${slug}`;
 }
 
+function invalidTiming(err: unknown, op: 'create' | 'update'): MastraError {
+  return new MastraError({
+    id: 'SCHEDULES_INVALID_TIMING',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    details: { status: 400 },
+    text: `schedules.${op}: ${err instanceof Error ? err.message : String(err)}`,
+  });
+}
+
+function scheduleCompleted(id: string, op: string): MastraError {
+  return new MastraError({
+    id: 'SCHEDULES_COMPLETED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    details: { status: 409 },
+    text: `schedules.${op}: schedule "${id}" is completed and can no longer be ${op === 'pause' ? 'paused' : 'resumed'}.`,
+  });
+}
+
+/**
+ * Validate the cron/runAt/endAt fields of a create input and compute the
+ * row fields plus the initial fire time. One-offs store `cron` as `''`.
+ */
+function resolveCreateTiming(input: {
+  cron?: string;
+  timezone?: string;
+  runAt?: number | Date;
+  endAt?: number | Date;
+}): {
+  fields: Pick<Schedule, 'cron' | 'runAt' | 'endAt'>;
+  nextFireAt: number;
+  completed: boolean;
+} {
+  const runAt = input.runAt !== undefined ? toEpochMs(input.runAt) : undefined;
+  const endAt = input.endAt !== undefined ? toEpochMs(input.endAt) : undefined;
+  let nextFireAt: number;
+  let completed: boolean;
+  try {
+    validateScheduleTiming(input);
+    // A cadence whose final occurrence has already passed is rejected rather
+    // than persisted: the row could never run, so nothing is gained by storing
+    // it. Editing an existing schedule is different — those rows go terminal.
+    ({ nextFireAt, completed } = computeInitialFire({
+      cron: input.cron,
+      timezone: input.timezone,
+      runAt,
+      endAt,
+    }));
+  } catch (err) {
+    throw invalidTiming(err, 'create');
+  }
+  return {
+    fields: {
+      cron: input.cron ?? '',
+      ...(runAt !== undefined ? { runAt } : {}),
+      ...(endAt !== undefined ? { endAt } : {}),
+    },
+    nextFireAt,
+    completed,
+  };
+}
+
 /**
  * Normalize a caller-supplied schedule id for `create`. Throws
  * `SCHEDULES_INVALID_ID` when the id is empty after normalization so callers
@@ -49,45 +118,6 @@ function normalizeScheduleId(rawId: string, prefix: string): string {
   return canonical;
 }
 
-function scheduleCompleted(id: string, op: string): MastraError {
-  return new MastraError({
-    id: 'SCHEDULES_COMPLETED',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    details: { status: 409 },
-    text: `schedules.${op}: schedule "${id}" is completed and can no longer be ${op === 'pause' ? 'paused' : 'resumed'}.`,
-  });
-}
-
-/**
- * Wrap a cron/timezone validation failure as a user error. Callers pass an
- * unparseable expression, an unknown timezone, or a cadence that can never
- * fire; all three are the caller's input to fix rather than a server fault.
- */
-function invalidTiming(err: unknown, op: 'create' | 'update'): MastraError {
-  return new MastraError({
-    id: 'SCHEDULES_INVALID_TIMING',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    details: { status: 400 },
-    text: `schedules.${op}: ${err instanceof Error ? err.message : String(err)}`,
-  });
-}
-
-/**
- * Next fire time for a brand-new schedule. A cadence whose final occurrence has
- * already passed is rejected rather than persisted: the row could never run, so
- * nothing is gained by storing it. Editing an existing schedule is different —
- * those rows are terminal (`completed`), never resurrected into a dead cadence.
- */
-function computeInitialFireAt(cron: string, timezone: string | undefined, now: number): number {
-  try {
-    return computeNextFireAt(cron, { timezone, after: now });
-  } catch (err) {
-    throw invalidTiming(err, 'create');
-  }
-}
-
 /**
  * Flat agent-schedule view returned by the {@link Schedules} service.
  * Projects the underlying `Schedule` row + `target.type === 'agent'` payload
@@ -104,8 +134,13 @@ export interface AgentSchedule {
   threadId?: string;
   resourceId?: string;
   prompt: string;
-  cron: string;
+  /** Cron expression. Absent on one-off schedules (see `runAt`). */
+  cron?: string;
   timezone?: string;
+  /** One-off fire time (ms epoch). */
+  runAt?: number;
+  /** Bounded cron end (ms epoch). */
+  endAt?: number;
   status: ScheduleStatus;
   nextFireAt: number;
   lastFireAt?: number;
@@ -130,8 +165,13 @@ export interface WorkflowSchedule {
   workflowId: string;
   /** Discriminant mirror — always absent on workflow schedules. Check `agentId` to narrow {@link AnySchedule}. */
   agentId?: undefined;
-  cron: string;
+  /** Cron expression. Absent on one-off schedules (see `runAt`). */
+  cron?: string;
   timezone?: string;
+  /** One-off fire time (ms epoch). */
+  runAt?: number;
+  /** Bounded cron end (ms epoch). */
+  endAt?: number;
   status: ScheduleStatus;
   nextFireAt: number;
   lastFireAt?: number;
@@ -159,7 +199,12 @@ export interface CreateAgentScheduleInput {
    */
   id?: string;
   agentId: string;
-  cron: string;
+  /** Cron expression. Exactly one of `cron` or `runAt` is required. */
+  cron?: string;
+  /** Fire once at this time (Date or ms epoch), then mark the schedule `completed`. */
+  runAt?: number | Date;
+  /** Stop a cron schedule after this time (Date or ms epoch) and mark it `completed`. */
+  endAt?: number | Date;
   prompt: string;
   /** Optional free-form label for distinguishing multiple schedules on the same agent/thread. */
   name?: string;
@@ -192,7 +237,12 @@ export interface CreateWorkflowScheduleInput {
    */
   id?: string;
   workflowId: string;
-  cron: string;
+  /** Cron expression. Exactly one of `cron` or `runAt` is required. */
+  cron?: string;
+  /** Fire once at this time (Date or ms epoch), then mark the schedule `completed`. */
+  runAt?: number | Date;
+  /** Stop a cron schedule after this time (Date or ms epoch) and mark it `completed`. */
+  endAt?: number | Date;
   timezone?: string;
   inputData?: unknown;
   initialState?: unknown;
@@ -213,6 +263,10 @@ export type CreateScheduleInput = CreateAgentScheduleInput | CreateWorkflowSched
 /** Agent variant of {@link UpdateScheduleInput}. */
 export interface UpdateAgentScheduleInput {
   cron?: string;
+  /** Reschedule a one-off schedule. Only valid on schedules created with `runAt`. */
+  runAt?: number | Date;
+  /** Change the end of a cron schedule, or `null` to remove it. Only valid on cron schedules. */
+  endAt?: number | Date | null;
   timezone?: string;
   prompt?: string;
   name?: string;
@@ -229,6 +283,10 @@ export interface UpdateAgentScheduleInput {
 /** Workflow variant of {@link UpdateScheduleInput}. */
 export interface UpdateWorkflowScheduleInput {
   cron?: string;
+  /** Reschedule a one-off schedule. Only valid on schedules created with `runAt`. */
+  runAt?: number | Date;
+  /** Change the end of a cron schedule, or `null` to remove it. Only valid on cron schedules. */
+  endAt?: number | Date | null;
   timezone?: string;
   inputData?: unknown;
   initialState?: unknown;
@@ -318,11 +376,7 @@ export class Schedules {
   }
 
   async #createAgentSchedule(input: CreateAgentScheduleInput): Promise<AgentSchedule> {
-    try {
-      validateCron(input.cron, input.timezone);
-    } catch (err) {
-      throw invalidTiming(err, 'create');
-    }
+    const timing = resolveCreateTiming(input);
 
     if (!input.agentId) {
       throw new MastraError({
@@ -368,7 +422,6 @@ export class Schedules {
         : `${AGENT_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
-    const nextFireAt = computeInitialFireAt(input.cron, input.timezone, now);
 
     const target: AgentTarget = {
       type: 'agent',
@@ -388,10 +441,10 @@ export class Schedules {
     const schedule: Schedule = {
       id,
       target,
-      cron: input.cron,
+      ...timing.fields,
       timezone: input.timezone,
-      status: input.status ?? 'active',
-      nextFireAt,
+      status: timing.completed ? 'completed' : (input.status ?? 'active'),
+      nextFireAt: timing.nextFireAt,
       createdAt: now,
       updatedAt: now,
       ownerType: 'agent',
@@ -408,11 +461,7 @@ export class Schedules {
   }
 
   async #createWorkflowSchedule(input: CreateWorkflowScheduleInput): Promise<WorkflowSchedule> {
-    try {
-      validateCron(input.cron, input.timezone);
-    } catch (err) {
-      throw invalidTiming(err, 'create');
-    }
+    const timing = resolveCreateTiming(input);
 
     const store = await this.#getStore();
 
@@ -422,7 +471,6 @@ export class Schedules {
         : `${WORKFLOW_SCHEDULE_PREFIX}${globalThis.crypto.randomUUID()}`;
     await this.#assertIdAvailable(store, id, input.id !== undefined);
     const now = Date.now();
-    const nextFireAt = computeInitialFireAt(input.cron, input.timezone, now);
 
     const target: WorkflowTarget = {
       type: 'workflow',
@@ -436,10 +484,10 @@ export class Schedules {
     const schedule: Schedule = {
       id,
       target,
-      cron: input.cron,
+      ...timing.fields,
       timezone: input.timezone,
-      status: input.status ?? 'active',
-      nextFireAt,
+      status: timing.completed ? 'completed' : (input.status ?? 'active'),
+      nextFireAt: timing.nextFireAt,
       createdAt: now,
       updatedAt: now,
       ...(input.metadata ? { metadata: input.metadata } : {}),
@@ -513,14 +561,31 @@ export class Schedules {
       });
     }
 
+    const isOneOff = existing.runAt != null;
+    if (isOneOff && (patch.cron !== undefined || patch.endAt !== undefined)) {
+      throw invalidTiming(new Error('`cron` and `endAt` cannot be set on a one-off (`runAt`) schedule.'), 'update');
+    }
+    if (!isOneOff && patch.runAt !== undefined) {
+      throw invalidTiming(new Error('`runAt` can only be set on a one-off schedule.'), 'update');
+    }
+
     const nextCron = patch.cron ?? existing.cron;
     const nextTimezone = patch.timezone !== undefined ? patch.timezone : existing.timezone;
-    if (patch.cron !== undefined || patch.timezone !== undefined) {
+    if (!isOneOff && (patch.cron !== undefined || patch.timezone !== undefined)) {
       try {
         validateCron(nextCron, nextTimezone);
       } catch (err) {
         throw invalidTiming(err, 'update');
       }
+    }
+    const nextRunAt = patch.runAt !== undefined ? toEpochMs(patch.runAt) : existing.runAt;
+    if (patch.runAt !== undefined && !Number.isFinite(nextRunAt)) {
+      throw invalidTiming(new Error('`runAt` must be a valid date or ms epoch timestamp.'), 'update');
+    }
+    const nextEndAt =
+      patch.endAt === undefined ? existing.endAt : patch.endAt === null ? undefined : toEpochMs(patch.endAt);
+    if (patch.endAt != null && (!Number.isFinite(nextEndAt) || nextEndAt! <= Date.now())) {
+      throw invalidTiming(new Error('`endAt` must be a valid timestamp in the future.'), 'update');
     }
 
     const nextTarget =
@@ -528,13 +593,18 @@ export class Schedules {
         ? this.#patchAgentTarget(existing.target, patch as UpdateAgentScheduleInput)
         : this.#patchWorkflowTarget(existing.target, patch);
 
-    // Recompute the next fire when the cadence changes OR when this patch
-    // resumes a paused schedule. A completed row whose cadence is edited comes
-    // back as `active` when the new cadence has future occurrences; otherwise
-    // it stays `completed`. Lifecycle-only patches cannot resume a completed
-    // row, and a cadence edit that leaves no future occurrence completes the
-    // row even if it was `paused`.
-    const timingChanged = patch.cron !== undefined || patch.timezone !== undefined;
+    // Recompute the next fire when the timing changes OR when this patch
+    // resumes a paused schedule. Resuming must follow the same semantics as
+    // resume(): a paused row carries a stale nextFireAt (often in the past),
+    // so flipping status back to 'active' without recomputing would trigger
+    // an immediate spurious fire instead of waiting for the next cron tick.
+    // A completed schedule can only be reactivated by changing its timing: a
+    // completed row whose cadence is edited comes back as `active` when the new
+    // cadence has future occurrences, and stays `completed` when it has none.
+    // Lifecycle-only patches cannot resume a completed row.
+    const timingChanged = isOneOff
+      ? patch.runAt !== undefined && nextRunAt !== existing.runAt
+      : patch.cron !== undefined || patch.timezone !== undefined || patch.endAt !== undefined;
     if (existing.status === 'completed' && patch.status !== undefined && !timingChanged) {
       throw scheduleCompleted(existing.id, patch.status === 'paused' ? 'pause' : 'resume');
     }
@@ -547,21 +617,27 @@ export class Schedules {
     const resuming = nextStatus === 'active' && existing.status !== 'active';
     let nextFireAt: number | undefined;
     if (timingChanged || resuming) {
-      const nextFire = computeNextFire(
-        { cron: nextCron, timezone: nextTimezone, nextFireAt: existing.nextFireAt },
-        Date.now(),
-      );
-      nextFireAt = nextFire.nextFireAt;
-      // An edit that leaves the row with no future occurrence is accepted, but
-      // the row cannot stay runnable: the cadence is exhausted, so the row is
-      // terminal regardless of its previous or requested status. `nextFireAt`
-      // is retained as the last known occurrence.
-      if (nextFire.completed) nextStatus = 'completed';
+      if (isOneOff) {
+        nextFireAt = nextRunAt!;
+      } else {
+        const next = computeNextFire(
+          { cron: nextCron, timezone: nextTimezone, endAt: nextEndAt, nextFireAt: existing.nextFireAt },
+          Date.now(),
+        );
+        nextFireAt = next.nextFireAt;
+        // An edit that leaves the row with no future occurrence is accepted, but
+        // the row cannot stay runnable: the cadence is exhausted, so the row is
+        // terminal regardless of its previous or requested status. `nextFireAt`
+        // is retained as the last known occurrence.
+        if (next.completed) nextStatus = 'completed';
+      }
     }
 
     const updated = await store.updateSchedule(existing.id, {
       ...(patch.cron !== undefined ? { cron: patch.cron } : {}),
       ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+      ...(patch.runAt !== undefined ? { runAt: nextRunAt } : {}),
+      ...(patch.endAt !== undefined ? { endAt: nextEndAt } : {}),
       target: nextTarget,
       ...(nextFireAt !== undefined ? { nextFireAt } : {}),
       ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
@@ -676,6 +752,11 @@ export class Schedules {
     }
     if (existing.status === 'active') return toScheduleView(existing)!;
     if (existing.status === 'completed') throw scheduleCompleted(existing.id, 'resume');
+    // One-offs keep their runAt (a past runAt fires on the next tick).
+    if (existing.runAt != null) {
+      const updated = await store.updateSchedule(existing.id, { status: 'active', nextFireAt: existing.runAt });
+      return toScheduleView(updated)!;
+    }
     // A paused schedule whose cadence has run out has nothing left to resume.
     // Complete it instead of failing with a server error.
     const { nextFireAt, completed: exhausted } = computeNextFire(existing, Date.now());
@@ -771,8 +852,10 @@ export function toAgentSchedule(schedule: Schedule): AgentSchedule | null {
     ...(target.threadId ? { threadId: target.threadId } : {}),
     ...(target.resourceId ? { resourceId: target.resourceId } : {}),
     prompt: target.prompt,
-    cron: schedule.cron,
+    ...(schedule.cron ? { cron: schedule.cron } : {}),
     ...(schedule.timezone ? { timezone: schedule.timezone } : {}),
+    ...(schedule.runAt != null ? { runAt: schedule.runAt } : {}),
+    ...(schedule.endAt != null ? { endAt: schedule.endAt } : {}),
     status: schedule.status,
     nextFireAt: schedule.nextFireAt,
     ...(schedule.lastFireAt !== undefined ? { lastFireAt: schedule.lastFireAt } : {}),
@@ -799,8 +882,10 @@ export function toWorkflowSchedule(schedule: Schedule): WorkflowSchedule | null 
   return {
     id: schedule.id,
     workflowId: target.workflowId,
-    cron: schedule.cron,
+    ...(schedule.cron ? { cron: schedule.cron } : {}),
     ...(schedule.timezone ? { timezone: schedule.timezone } : {}),
+    ...(schedule.runAt != null ? { runAt: schedule.runAt } : {}),
+    ...(schedule.endAt != null ? { endAt: schedule.endAt } : {}),
     status: schedule.status,
     nextFireAt: schedule.nextFireAt,
     ...(schedule.lastFireAt !== undefined ? { lastFireAt: schedule.lastFireAt } : {}),
