@@ -222,7 +222,7 @@ export const notionScenario: Scenario = {
       try {
         await call('notion_update_block', {
           block_id: firstBlockId,
-          paragraph: { rich_text: [{ type: 'text', text: { content: 'edited by smoke test' } }] },
+          content: { paragraph: { rich_text: [{ type: 'text', text: { content: 'edited by smoke test' } }] } },
         });
         steps.push(makeStep('update block', 'notion_update_block', 'pass'));
       } catch (error) {
@@ -467,7 +467,8 @@ export const notionScenario: Scenario = {
       try {
         await call('notion_update_page_markdown', {
           page_id: pageId,
-          markdown: `## Smoke run ${runId}\n\nSome paragraph.`,
+          type: 'insert_content',
+          insert_content: { content: `## Smoke run ${runId}\n\nSome paragraph.` },
         });
         steps.push(makeStep('update page markdown', 'notion_update_page_markdown', 'pass'));
       } catch (error) {
@@ -508,15 +509,18 @@ export const notionScenario: Scenario = {
       }
     }
 
-    // Cleanup: archive database, duplicate, main page. restore_page then
-    // re-archive verifies the restore path end-to-end.
+    // update_database has no archived flag — the database is a child of the
+    // smoke page, so archiving the page below cleans it up. Exercise the tool
+    // with a rename instead.
     if (databaseId) {
       try {
-        await call('notion_update_database', { database_id: databaseId, archived: true });
-        steps.push(makeStep('archive database', 'notion_update_database', 'pass'));
+        await call('notion_update_database', {
+          database_id: databaseId,
+          title: [{ type: 'text', text: { content: `${runId} smoke db (renamed)` } }],
+        });
+        steps.push(makeStep('update database', 'notion_update_database', 'pass'));
       } catch (error) {
-        log.error(`Failed to archive smoke database ${databaseId}`, errorMessage(error));
-        steps.push(makeStep('archive database', 'notion_update_database', 'fail', errorMessage(error)));
+        steps.push(makeStep('update database', 'notion_update_database', 'fail', errorMessage(error)));
       }
     }
 
@@ -540,7 +544,7 @@ export const notionScenario: Scenario = {
 
     if (tools['notion_restore_page']) {
       try {
-        await call('notion_restore_page', { page_id: pageId });
+        await call('notion_restore_page', { pageId });
         steps.push(makeStep('restore page', 'notion_restore_page', 'pass'));
         // Re-archive after restore to leave nothing active.
         try {

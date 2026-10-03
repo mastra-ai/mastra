@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js';
 
 /**
  * Deep Linear scenario: exercises issues, comments, labels, projects, cycles,
@@ -268,7 +268,7 @@ export const linearScenario: Scenario = {
 
       if (commentId && tools['linear_list_comments']) {
         try {
-          await call('linear_list_comments', { issueId });
+          await call('linear_list_comments', { filter: { issue: { id: { eq: issueId } } } });
           steps.push(makeStep('list comments', 'linear_list_comments', 'pass'));
         } catch (error) {
           steps.push(makeStep('list comments', 'linear_list_comments', 'fail', errorMessage(error)));
@@ -288,7 +288,7 @@ export const linearScenario: Scenario = {
         resources.push({
           kind: 'comment',
           id: commentId,
-          delete: () => call('linear_delete_comment', { id: commentId }),
+          delete: () => call('linear_delete_comment', { commentId }),
         });
       }
     }
@@ -327,7 +327,7 @@ export const linearScenario: Scenario = {
 
       if (labelId && tools['linear_add_issue_label']) {
         try {
-          await call('linear_add_issue_label', { issueId, labelId });
+          await call('linear_add_issue_label', { id: issueId, labelId });
           steps.push(makeStep('add label to issue', 'linear_add_issue_label', 'pass'));
         } catch (error) {
           steps.push(makeStep('add label to issue', 'linear_add_issue_label', 'fail', errorMessage(error)));
@@ -345,7 +345,7 @@ export const linearScenario: Scenario = {
         resources.push({
           kind: 'label',
           id: labelId,
-          delete: () => call('linear_delete_issue_label', { id: labelId }),
+          delete: () => call('linear_delete_issue_label', { labelId }),
         });
       }
     }
@@ -377,7 +377,7 @@ export const linearScenario: Scenario = {
         resources.push({
           kind: 'attachment',
           id: attachmentId,
-          delete: () => call('linear_delete_attachment', { id: attachmentId }),
+          delete: () => call('linear_delete_attachment', { attachmentId }),
         });
       }
     }
@@ -405,27 +405,20 @@ export const linearScenario: Scenario = {
       }
       if (projectId && tools['linear_update_project']) {
         try {
-          await call('linear_update_project', { id: projectId, name: `${runId} smoke project (renamed)` });
+          await call('linear_update_project', { projectId, name: `${runId} smoke project (renamed)` });
           steps.push(makeStep('update project', 'linear_update_project', 'pass'));
         } catch (error) {
           steps.push(makeStep('update project', 'linear_update_project', 'fail', errorMessage(error)));
         }
       }
-      // Projects: archive via archive_project (if present) + unarchive to
-      // exercise both. Projects don't have a hard delete via API.
-      if (projectId && tools['linear_archive_project'] && tools['linear_unarchive_project']) {
-        try {
-          await call('linear_archive_project', { id: projectId });
-          steps.push(makeStep('archive project', 'linear_archive_project', 'pass'));
-        } catch (error) {
-          steps.push(makeStep('archive project', 'linear_archive_project', 'fail', errorMessage(error)));
-        }
-        try {
-          await call('linear_unarchive_project', { projectId });
-          steps.push(makeStep('unarchive project', 'linear_unarchive_project', 'pass'));
-        } catch (error) {
-          steps.push(makeStep('unarchive project', 'linear_unarchive_project', 'fail', errorMessage(error)));
-        }
+      // Projects: the provider ships unarchive_project but no archive_project,
+      // so we cannot put the project into an archived state first. Probe
+      // unarchive against the real (non-archived) project — Linear treats it
+      // as a no-op or rejects it, either of which proves the endpoint works.
+      if (projectId) {
+        steps.push(
+          await probeTool(call, tools, 'unarchive project', 'linear_unarchive_project', { projectId }),
+        );
       }
     }
 

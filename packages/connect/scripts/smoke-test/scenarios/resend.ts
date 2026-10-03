@@ -74,7 +74,7 @@ export const resendScenario: Scenario = {
     }
     if (tools['resend_get_audience']) {
       try {
-        await call('resend_get_audience', { audienceId });
+        await call('resend_get_audience', { id: audienceId });
         steps.push(makeStep('read audience', 'resend_get_audience', 'pass'));
       } catch (error) {
         steps.push(makeStep('read audience', 'resend_get_audience', 'fail', errorMessage(error)));

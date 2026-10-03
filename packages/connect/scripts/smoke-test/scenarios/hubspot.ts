@@ -497,7 +497,7 @@ export const hubspotScenario: Scenario = {
 
     if (companyId && tools['hubspot_delete_company']) {
       try {
-        await call('hubspot_delete_company', { companyId });
+        await call('hubspot_delete_company', { id: companyId });
         steps.push(makeStep('delete company', 'hubspot_delete_company', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke company ${companyId}`, errorMessage(error));

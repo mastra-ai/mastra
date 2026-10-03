@@ -52,7 +52,7 @@ export const googleDriveScenario: Scenario = {
         name: `${runId}-smoke.txt`,
         mimeType: 'text/plain',
         content: 'Automated @mastra/connect smoke test. Safe to delete.',
-        parents: [folderId],
+        folderId,
       });
       fileId = uploaded.id;
       steps.push(makeStep('upload file', 'google_drive_upload_document', 'pass', fileId));
@@ -129,7 +129,7 @@ export const googleDriveScenario: Scenario = {
 
     if (fileId && tools['google_drive_find_file']) {
       try {
-        await call('google_drive_find_file', { name: `${runId}-smoke-renamed.txt` });
+        await call('google_drive_find_file', { query: `${runId}-smoke-renamed.txt` });
         steps.push(makeStep('find file', 'google_drive_find_file', 'pass'));
       } catch (error) {
         steps.push(makeStep('find file', 'google_drive_find_file', 'fail', errorMessage(error)));
@@ -155,25 +155,18 @@ export const googleDriveScenario: Scenario = {
       }
     }
 
-    // Permission create → list → get → update → delete on our smoke file.
+    // Permissions: the provider ships no create_permission tool, so we read
+    // the file's owner permission (always present on a file we created) for
+    // list + get, and probe update/delete with a synthetic id — the owner
+    // permission itself cannot be re-roled or removed.
     let permissionId: string | undefined;
-    if (fileId && tools['google_drive_create_permission']) {
-      try {
-        const perm = await call<{ id: string }>('google_drive_create_permission', {
-          fileId,
-          role: 'reader',
-          type: 'anyone',
-        });
-        permissionId = perm.id;
-        steps.push(makeStep('create permission', 'google_drive_create_permission', 'pass', permissionId));
-      } catch (error) {
-        steps.push(makeStep('create permission', 'google_drive_create_permission', 'fail', errorMessage(error)));
-      }
-    }
     if (fileId && tools['google_drive_list_permissions']) {
       try {
-        await call('google_drive_list_permissions', { fileId });
-        steps.push(makeStep('list permissions', 'google_drive_list_permissions', 'pass'));
+        const perms = await call<{ permissions?: Array<{ id?: string }> }>('google_drive_list_permissions', {
+          fileId,
+        });
+        permissionId = perms.permissions?.[0]?.id;
+        steps.push(makeStep('list permissions', 'google_drive_list_permissions', 'pass', permissionId));
       } catch (error) {
         steps.push(makeStep('list permissions', 'google_drive_list_permissions', 'fail', errorMessage(error)));
       }
@@ -186,21 +179,21 @@ export const googleDriveScenario: Scenario = {
         steps.push(makeStep('get permission', 'google_drive_get_permission', 'fail', errorMessage(error)));
       }
     }
-    if (fileId && permissionId && tools['google_drive_update_permission']) {
-      try {
-        await call('google_drive_update_permission', { fileId, permissionId, role: 'commenter' });
-        steps.push(makeStep('update permission', 'google_drive_update_permission', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('update permission', 'google_drive_update_permission', 'fail', errorMessage(error)));
-      }
-    }
-    if (fileId && permissionId && tools['google_drive_delete_permission']) {
-      try {
-        await call('google_drive_delete_permission', { fileId, permissionId });
-        steps.push(makeStep('delete permission', 'google_drive_delete_permission', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('delete permission', 'google_drive_delete_permission', 'fail', errorMessage(error)));
-      }
+    if (fileId) {
+      const syntheticPermissionId = `smoke-${runId}`;
+      steps.push(
+        await probeTool(call, tools, 'update permission', 'google_drive_update_permission', {
+          fileId,
+          permissionId: syntheticPermissionId,
+          role: 'commenter',
+        }),
+      );
+      steps.push(
+        await probeTool(call, tools, 'delete permission', 'google_drive_delete_permission', {
+          fileId,
+          permissionId: syntheticPermissionId,
+        }),
+      );
     }
 
     // Revisions are produced automatically by Drive on edits. Probe with

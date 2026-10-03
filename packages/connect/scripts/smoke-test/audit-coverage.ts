@@ -20,6 +20,7 @@ type Report = {
   total: number;
   covered: number;
   missing: string[];
+  unknown: string[];
 };
 
 const toolIdFromFile = (provider: string, file: string): string => {
@@ -33,7 +34,8 @@ const providerTools = (provider: string): string[] => {
   const dir = join(providersRoot, provider, 'tools');
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir)
-    .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts'))
+    // Underscore-prefixed files are shared helpers, not tools (e.g. discord/_bot-token.ts).
+    .filter(f => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.spec.ts') && !f.startsWith('_'))
     .map(f => join(dir, f));
   return files.map(f => toolIdFromFile(provider, f)).sort();
 };
@@ -58,7 +60,12 @@ for (const provider of providers) {
   }
 
   const missing = tools.filter(t => !covered.has(t));
-  reports.push({ provider, total: tools.length, covered: tools.length - missing.length, missing });
+  // Reverse check: ids the scenario references that no shipped tool defines.
+  // These are typos or stale references — they silently skip steps at runtime
+  // (requireTools short-circuits, gated steps never fire) instead of failing loudly.
+  const known = new Set(tools);
+  const unknown = [...covered].filter(id => !known.has(id)).sort();
+  reports.push({ provider, total: tools.length, covered: tools.length - missing.length, missing, unknown });
 }
 
 const totalTools = reports.reduce((n, r) => n + r.total, 0);
@@ -78,4 +85,11 @@ for (const r of reports) {
   } else if (r.missing.length > 60) {
     console.log(`     (${r.missing.length} tools missing — too many to list)`);
   }
+  for (const t of r.unknown) console.log(`     ⚠️ unknown tool id referenced: ${t}`);
+}
+
+const totalUnknown = reports.reduce((n, r) => n + r.unknown.length, 0);
+if (totalUnknown > 0) {
+  console.log(`\n⚠️ ${totalUnknown} unknown tool id(s) referenced by scenarios — fix or remove them.`);
+  process.exitCode = 1;
 }

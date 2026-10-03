@@ -13,7 +13,7 @@ export const googleSheetScenario: Scenario = {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, [
       'google_sheet_create_spreadsheet',
-      'google_sheet_append_values',
+      'google_sheet_append_values_to_spreadsheet',
       'google_sheet_get_values',
       'google_sheet_update_values',
       'google_sheet_clear_values',
@@ -42,14 +42,14 @@ export const googleSheetScenario: Scenario = {
     const range = 'Smoke!A1:C1';
     const expected = ['smoke', runId, new Date().toISOString()];
     try {
-      await call('google_sheet_append_values', {
+      await call('google_sheet_append_values_to_spreadsheet', {
         spreadsheetId,
         range,
         values: [expected],
       });
-      steps.push(makeStep('append row', 'google_sheet_append_values', 'pass'));
+      steps.push(makeStep('append row', 'google_sheet_append_values_to_spreadsheet', 'pass'));
     } catch (error) {
-      steps.push(makeStep('append row', 'google_sheet_append_values', 'fail', errorMessage(error)));
+      steps.push(makeStep('append row', 'google_sheet_append_values_to_spreadsheet', 'fail', errorMessage(error)));
     }
 
     try {

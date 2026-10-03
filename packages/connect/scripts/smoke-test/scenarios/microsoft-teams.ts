@@ -65,7 +65,7 @@ export const microsoftTeamsScenario: Scenario = {
       const message = await call<{ id: string }>('microsoft_teams_create_channel_message', {
         teamId: team.id,
         channelId,
-        content: `${runId} smoke message`,
+        body: { contentType: 'text', content: `${runId} smoke message` },
       });
       messageId = message.id;
       steps.push(makeStep('create message', 'microsoft_teams_create_channel_message', 'pass', messageId));
@@ -79,7 +79,8 @@ export const microsoftTeamsScenario: Scenario = {
           teamId: team.id,
           channelId,
           messageId,
-          content: `${runId} smoke reply`,
+          bodyContent: `${runId} smoke reply`,
+          bodyContentType: 'text',
         });
         steps.push(makeStep('reply to message', 'microsoft_teams_reply_to_channel_message', 'pass'));
       } catch (error) {
@@ -91,7 +92,7 @@ export const microsoftTeamsScenario: Scenario = {
 
     if (tools['microsoft_teams_list_channel_messages']) {
       try {
-        await call('microsoft_teams_list_channel_messages', { teamId: team.id, channelId, top: 5 });
+        await call('microsoft_teams_list_channel_messages', { team_id: team.id, channel_id: channelId });
         steps.push(makeStep('list channel messages', 'microsoft_teams_list_channel_messages', 'pass'));
       } catch (error) {
         steps.push(
