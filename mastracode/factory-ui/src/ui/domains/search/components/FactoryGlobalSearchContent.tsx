@@ -140,6 +140,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   decision: effectByItem.get(item.id),
                   moving:
                     movingTo === undefined ? undefined : { stage: movingTo, label: itemStageLabel(item, movingTo) },
+                  preparing: runs.preparingFor(item.id),
                 });
                 if (!canStartRun(owner.kind)) {
                   closeSearch();

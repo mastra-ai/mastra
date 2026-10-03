@@ -795,6 +795,41 @@ describe('Global search', () => {
     await waitForMutationsIdle(client);
   });
 
+  it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
+    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    stubSearchApi({ workItems: [item] });
+    const starts: unknown[] = [];
+    let releaseStart = () => {};
+    const startGate = new Promise<void>(resolve => {
+      releaseStart = resolve;
+    });
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, () =>
+        HttpResponse.json({ workItem: toWireWorkItem(item) }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        await startGate;
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderSearchRoute();
+    const search = await openFromSidebar();
+    await user.click(await within(search).findByText(item.title));
+    const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await user.click(within(picker).getByRole('button', { name: /mastra-ai\/docs/ }));
+    await waitFor(() => expect(starts).toHaveLength(1));
+
+    await user.click(within(search).getByText(item.title));
+
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    releaseStart();
+    await waitForMutationsIdle(client);
+    expect(starts).toHaveLength(1);
+  });
+
   it('scopes results to board cards with no session', async () => {
     stubSearchApi();
     const user = userEvent.setup();
