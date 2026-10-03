@@ -188,6 +188,8 @@ After the body is posted successfully (review or comment fallback), delete the b
 
 After publishing, reconcile the verdict label: approve adds `status:auto-approved` and removes `status:changes-requested`; request changes adds `status:changes-requested` and removes `status:auto-approved`.
 
+For `mastra-ai/mastra`, after publishing the review, add `status:needs human review` if a changed file matches `.mastracode/resources/CRITICAL_PATHS.md`.
+
 **Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
 1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
