@@ -496,10 +496,26 @@ describe('MastraStateAdapter', () => {
     });
 
     it('a never-engaged thread scans on every call (unchanged, by design)', async () => {
+      const getMapping = vi.spyOn(channelsStore, 'getThreadMapping');
       expect(await botA.isSubscribed('slack:C9:never')).toBe(false);
       expect(await botA.isSubscribed('slack:C9:never')).toBe(false);
       expect(listThreads).toHaveBeenCalledTimes(4);
+      // One point read per isSubscribed miss; the scan path does not re-read the row.
+      expect(getMapping).toHaveBeenCalledTimes(2);
       expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('subscribe drops a mapping whose thread is stamped by another owner and never writes to it', async () => {
+      await seedThread('t-other', { ...legacyMetadata(), channel_ownerId: 'bot-b' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 't-other' });
+
+      await botA.subscribe(externalThreadId);
+
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+      const other = await memoryStore.getThreadById({ threadId: 't-other' });
+      expect(other?.metadata?.channel_ownerId).toBe('bot-b');
+      expect(other?.metadata?.channel_subscribed).toBeUndefined();
+      expect(listThreads).toHaveBeenCalled();
     });
 
     it('a mapping row whose thread was deleted still answers with the row flag (documented)', async () => {

@@ -113,7 +113,8 @@ export class MastraStateAdapter implements StateAdapter {
       const mapping = await this.mappings!.getThreadMapping(key);
       if (mapping) return mapping.subscribed;
     }
-    const thread = await this.findThreadByExternalId(threadId);
+    // Miss: the row was just read, so the scan path must not read it again.
+    const thread = await this.findThreadByExternalId(threadId, { mappingChecked: true });
     if (!thread) return false;
     return (thread.metadata as Record<string, unknown>)?.channel_subscribed === 'true';
   }
@@ -323,7 +324,7 @@ export class MastraStateAdapter implements StateAdapter {
    * to an unclaimed thread would let a second bot adopt the same thread.
    * Unclaimed threads get their row from `AgentChannels.findThreadMapping`.
    */
-  private async findThreadByExternalId(externalThreadId: string) {
+  private async findThreadByExternalId(externalThreadId: string, options?: { mappingChecked?: boolean }) {
     const ownerId = this.getOwnerId?.() ?? null;
 
     if (ownerId === null) {
@@ -335,12 +336,16 @@ export class MastraStateAdapter implements StateAdapter {
     }
 
     const key = this.mappingKey(externalThreadId);
-    if (key) {
+    if (key && !options?.mappingChecked) {
       const mapping = await this.mappings!.getThreadMapping(key);
       if (mapping) {
         const mapped = await this.memoryStore.getThreadById({ threadId: mapping.threadId });
-        if (mapped) return mapped;
-        // Thread row is gone; drop the stale mapping and fall through to the scan.
+        // Never act on a thread another owner has claimed (#21288): drop the row
+        // and fall through to the scan, which will not adopt it either. A thread
+        // without a stamp is ours to use; AgentChannels.findThreadMapping repairs it.
+        const mappedOwner = (mapped?.metadata as Record<string, unknown> | undefined)?.channel_ownerId;
+        if (mapped && (mappedOwner === undefined || mappedOwner === ownerId)) return mapped;
+        // Thread row is gone or belongs to another owner; drop the stale mapping.
         await this.mappings!.deleteThreadMapping(key);
       }
     }
