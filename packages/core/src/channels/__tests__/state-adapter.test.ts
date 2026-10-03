@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { supportsThreadMappings } from '../../storage/domains/channels/base';
+import { InMemoryChannelsStorage } from '../../storage/domains/channels/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { MastraStateAdapter } from '../state-adapter';
@@ -363,6 +365,213 @@ describe('MastraStateAdapter', () => {
       await unboundAdapter.connect();
 
       expect(await unboundAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+  });
+
+  describe('thread mappings (capable store)', () => {
+    const externalThreadId = 'slack:C1:1700000000.000100';
+    const key = { platform: 'slack', ownerId: 'bot-a', externalThreadId };
+    let channelsStore: InMemoryChannelsStorage;
+    let botA: MastraStateAdapter;
+    let listThreads: ReturnType<typeof vi.spyOn>;
+    let upsert: ReturnType<typeof vi.spyOn>;
+
+    function legacyMetadata() {
+      return {
+        channel_platform: 'slack',
+        channel_externalThreadId: externalThreadId,
+        channel_externalChannelId: 'C1',
+      };
+    }
+
+    async function seedThread(id: string, metadata: Record<string, unknown>) {
+      await memoryStore.saveThread({
+        thread: {
+          id,
+          title: 'Test thread',
+          resourceId: `slack:user-${id}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata,
+        },
+      });
+    }
+
+    beforeEach(async () => {
+      channelsStore = new InMemoryChannelsStorage();
+      expect(supportsThreadMappings(channelsStore)).toBe(true);
+      botA = new MastraStateAdapter(memoryStore, () => 'bot-a', channelsStore);
+      await botA.connect();
+      listThreads = vi.spyOn(memoryStore, 'listThreads');
+      upsert = vi.spyOn(channelsStore, 'upsertThreadMapping');
+    });
+
+    it('isSubscribed reads the mapping row and never scans thread metadata', async () => {
+      await seedThread('t1', { ...legacyMetadata(), channel_ownerId: 'bot-a' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 't1', subscribed: true });
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(listThreads).not.toHaveBeenCalled();
+    });
+
+    it('subscribe flips the row to true and still writes channel_subscribed metadata', async () => {
+      await seedThread('t1', { ...legacyMetadata(), channel_ownerId: 'bot-a' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 't1' });
+
+      await botA.subscribe(externalThreadId);
+
+      expect((await channelsStore.getThreadMapping(key))!.subscribed).toBe(true);
+      const thread = await memoryStore.getThreadById({ threadId: 't1' });
+      expect(thread?.metadata).toMatchObject({ channel_subscribed: 'true', channel_ownerId: 'bot-a' });
+      expect(listThreads).not.toHaveBeenCalled();
+    });
+
+    it('unsubscribe flips the row to false', async () => {
+      await seedThread('t1', { ...legacyMetadata(), channel_ownerId: 'bot-a' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 't1', subscribed: true });
+
+      await botA.unsubscribe(externalThreadId);
+
+      expect((await channelsStore.getThreadMapping(key))!.subscribed).toBe(false);
+      expect(await botA.isSubscribed(externalThreadId)).toBe(false);
+      const thread = await memoryStore.getThreadById({ threadId: 't1' });
+      expect((thread?.metadata as Record<string, unknown>).channel_subscribed).toBe('false');
+    });
+
+    it('adopts a legacy thread already stamped with our owner id on the first scan, then never scans again', async () => {
+      await seedThread('stamped', { ...legacyMetadata(), channel_ownerId: 'bot-a', channel_subscribed: 'true' });
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(await channelsStore.getThreadMapping(key)).toMatchObject({ threadId: 'stamped', subscribed: true });
+
+      listThreads.mockClear();
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(listThreads).not.toHaveBeenCalled();
+    });
+
+    it('does not adopt a stamped thread that lacks channel_externalChannelId metadata', async () => {
+      await seedThread('no-channel', {
+        channel_platform: 'slack',
+        channel_externalThreadId: externalThreadId,
+        channel_ownerId: 'bot-a',
+        channel_subscribed: 'true',
+      });
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(upsert).not.toHaveBeenCalled();
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+    });
+
+    it('never writes a mapping row for an unclaimed legacy thread from a read (reads never claim)', async () => {
+      await seedThread('unclaimed', { ...legacyMetadata(), channel_subscribed: 'true' });
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(upsert).not.toHaveBeenCalled();
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+    });
+
+    it('subscribe on an unclaimed legacy thread stamps the owner but still creates no row', async () => {
+      await seedThread('unclaimed', legacyMetadata());
+
+      await botA.subscribe(externalThreadId);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'unclaimed' });
+      expect(thread?.metadata).toMatchObject({ channel_subscribed: 'true', channel_ownerId: 'bot-a' });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+    });
+
+    it('a read by bot A does not stop bot B from claiming the unclaimed thread (#17037)', async () => {
+      await seedThread('unclaimed', { ...legacyMetadata(), channel_subscribed: 'true' });
+      const botB = new MastraStateAdapter(memoryStore, () => 'bot-b', channelsStore);
+      await botB.connect();
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      await botB.subscribe(externalThreadId);
+
+      expect(await botB.isSubscribed(externalThreadId)).toBe(true);
+      expect(await botA.isSubscribed(externalThreadId)).toBe(false);
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+    });
+
+    it('a never-engaged thread scans on every call (unchanged, by design)', async () => {
+      expect(await botA.isSubscribed('slack:C9:never')).toBe(false);
+      expect(await botA.isSubscribed('slack:C9:never')).toBe(false);
+      expect(listThreads).toHaveBeenCalledTimes(4);
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('a mapping row whose thread was deleted still answers with the row flag (documented)', async () => {
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 'gone', subscribed: true });
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(listThreads).not.toHaveBeenCalled();
+    });
+
+    it('subscribe drops a stale mapping whose thread is gone and falls back to the scan', async () => {
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'C1', threadId: 'gone' });
+
+      await botA.subscribe(externalThreadId);
+
+      expect(await channelsStore.getThreadMapping(key)).toBeNull();
+      expect(listThreads).toHaveBeenCalled();
+    });
+
+    it('falls back to the scan when the thread-id prefix differs from the mapping platform', async () => {
+      const fooThreadId = 'foo:C1:1';
+      await seedThread('bar-thread', {
+        channel_platform: 'bar',
+        channel_externalThreadId: fooThreadId,
+        channel_externalChannelId: 'C1',
+        channel_ownerId: 'bot-a',
+        channel_subscribed: 'true',
+      });
+      await channelsStore.upsertThreadMapping({
+        platform: 'bar',
+        ownerId: 'bot-a',
+        externalThreadId: fooThreadId,
+        externalChannelId: 'C1',
+        threadId: 'bar-thread',
+      });
+
+      expect(await botA.isSubscribed(fooThreadId)).toBe(true);
+      expect(listThreads).toHaveBeenCalled();
+
+      await botA.unsubscribe(fooThreadId);
+      const barRow = await channelsStore.getThreadMapping({
+        platform: 'bar',
+        ownerId: 'bot-a',
+        externalThreadId: fooThreadId,
+      });
+      expect(barRow!.subscribed).toBe(false);
+      expect(
+        await channelsStore.getThreadMapping({ platform: 'foo', ownerId: 'bot-a', externalThreadId: fooThreadId }),
+      ).toBeNull();
+    });
+
+    it('never touches the mapping store when the owner id is null', async () => {
+      await seedThread('t1', { ...legacyMetadata(), channel_subscribed: 'true' });
+      const getMapping = vi.spyOn(channelsStore, 'getThreadMapping');
+      const unbound = new MastraStateAdapter(memoryStore, () => null, channelsStore);
+      await unbound.connect();
+
+      expect(await unbound.isSubscribed(externalThreadId)).toBe(true);
+      await unbound.subscribe(externalThreadId);
+
+      expect(getMapping).not.toHaveBeenCalled();
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('does not leak a subscription between bots sharing the capable store (#17037)', async () => {
+      await seedThread('shared-legacy', legacyMetadata());
+      const botB = new MastraStateAdapter(memoryStore, () => 'bot-b', channelsStore);
+      await botB.connect();
+
+      await botA.subscribe(externalThreadId);
+
+      expect(await botA.isSubscribed(externalThreadId)).toBe(true);
+      expect(await botB.isSubscribed(externalThreadId)).toBe(false);
     });
   });
 });

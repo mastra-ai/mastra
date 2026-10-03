@@ -20,6 +20,7 @@ import type {
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
+import { supportsThreadMappings } from '../storage/domains/channels/base';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
@@ -445,7 +446,8 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
+        const channelsStore = storage ? await storage.getStore('channels') : undefined;
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId(), channelsStore);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -2050,7 +2052,7 @@ export class AgentChannels {
     const ownerId = this.getOwnerId();
     if (ownerId === null) {
       // No owner bound yet - scoping is impossible; behave exactly as before
-      // and never stamp a null owner id.
+      // and never stamp a null owner id. No mapping row is read or written.
       const { threads } = await memoryStore.listThreads({
         filter: { metadata: legacyMetadata },
         perPage: 1,
@@ -2059,13 +2061,67 @@ export class AgentChannels {
     }
 
     const metadata = { ...legacyMetadata, channel_ownerId: ownerId };
+    const logFields = { platform, threadId: externalThreadId };
+
+    // Mapping table: an indexed point read replaces the metadata scans below
+    // once a row exists. Resolved per call so a custom `state` adapter does not
+    // affect thread resolution.
+    const channelsStore = await storage.getStore('channels');
+    const mappings = channelsStore && supportsThreadMappings(channelsStore) ? channelsStore : undefined;
+    const mappingKey = { platform, ownerId, externalThreadId };
+    if (mappings) {
+      const mapping = await mappings.getThreadMapping(mappingKey);
+      if (mapping) {
+        const mapped = await memoryStore.getThreadById({ threadId: mapping.threadId });
+        const mappedOwner = ((mapped?.metadata ?? {}) as Record<string, unknown>).channel_ownerId;
+        if (!mapped) {
+          // Thread row is gone: drop the stale mapping, fall through to the scans.
+          await mappings.deleteThreadMapping(mappingKey);
+          this.log('debug', 'Dropped channel thread mapping whose thread no longer exists', {
+            ...logFields,
+            mastraThreadId: mapping.threadId,
+          });
+        } else if (mappedOwner === undefined) {
+          // Thread lacks the owner stamp (crash between stamp and mapping write, or
+          // an older build): repair it so another bot's legacy fallback cannot adopt it.
+          const claimed = await memoryStore.patchThread({
+            id: mapped.id,
+            metadata: { ...((mapped.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
+          });
+          return { thread: claimed, memoryStore, metadata };
+        } else if (mappedOwner !== ownerId) {
+          // Never return another owner's thread (#21288). Treat the mapping as stale.
+          await mappings.deleteThreadMapping(mappingKey);
+          this.log('warn', 'Dropped channel thread mapping that pointed at a thread claimed by another owner', {
+            ...logFields,
+            mastraThreadId: mapping.threadId,
+          });
+        } else {
+          return { thread: mapped, memoryStore, metadata };
+        }
+      }
+    }
+
+    const adopt = async (thread: StorageThreadType) => {
+      if (!mappings) return;
+      await mappings.upsertThreadMapping({
+        ...mappingKey,
+        externalChannelId: channelId,
+        threadId: thread.id,
+        subscribed: ((thread.metadata ?? {}) as Record<string, unknown>).channel_subscribed === 'true',
+      });
+      this.log('debug', 'Adopted channel thread into mapping table', { ...logFields, mastraThreadId: thread.id });
+    };
 
     // Primary lookup: threads already scoped to this agent.
     const { threads: scoped } = await memoryStore.listThreads({
       filter: { metadata },
       perPage: 1,
     });
-    if (scoped[0]) return { thread: scoped[0], memoryStore, metadata };
+    if (scoped[0]) {
+      await adopt(scoped[0]);
+      return { thread: scoped[0], memoryStore, metadata };
+    }
 
     // Legacy fallback: pre-upgrade threads carry no channel_ownerId. Metadata
     // filters match subsets, so this query also returns threads claimed by
@@ -2090,6 +2146,7 @@ export class AgentChannels {
         id: unclaimed.id,
         metadata: { ...((unclaimed.metadata ?? {}) as Record<string, unknown>), channel_ownerId: ownerId },
       });
+      await adopt(claimed);
       return { thread: claimed, memoryStore, metadata };
     }
 
@@ -2153,7 +2210,7 @@ export class AgentChannels {
       }
     }
 
-    return memoryStore.saveThread({
+    const thread = await memoryStore.saveThread({
       thread: {
         id: resolvedThreadId || defaultThreadId,
         title: `${platform} conversation`,
@@ -2163,6 +2220,32 @@ export class AgentChannels {
         metadata,
       },
     });
+
+    const ownerId = this.getOwnerId();
+    if (ownerId === null) return thread;
+    const channelsStore = await mastra.getStorage()?.getStore('channels');
+    if (!channelsStore || !supportsThreadMappings(channelsStore)) return thread;
+
+    // Two writes, not atomic: a crash between them leaves a thread without a
+    // mapping, which the fallback scan repairs on the next message. The upsert
+    // never repoints an existing row, so a concurrent first-contact dispatch
+    // that won the race keeps its thread and this one is abandoned (no messages yet).
+    const row = await channelsStore.upsertThreadMapping({
+      platform,
+      ownerId,
+      externalThreadId,
+      externalChannelId: channelId,
+      threadId: thread.id,
+    });
+    if (row.threadId === thread.id) return thread;
+
+    this.log('warn', 'Channel thread mapping already existed; using the mapped thread', {
+      platform,
+      threadId: externalThreadId,
+      mastraThreadId: row.threadId,
+    });
+    const mapped = await memoryStore.getThreadById({ threadId: row.threadId });
+    return mapped ?? thread;
   }
 
   /**

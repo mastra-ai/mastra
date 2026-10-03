@@ -1,5 +1,7 @@
 import type { Lock, QueueEntry, StateAdapter } from 'chat';
 
+import type { ChannelsStorage, ChannelThreadKey } from '../storage/domains/channels/base';
+import { supportsThreadMappings } from '../storage/domains/channels/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 
 interface CachedValue<T = unknown> {
@@ -7,11 +9,28 @@ interface CachedValue<T = unknown> {
   expiresAt: number | null; // null = no expiry
 }
 
+type ThreadMappingStore = ChannelsStorage &
+  Required<
+    Pick<
+      ChannelsStorage,
+      | 'getThreadMapping'
+      | 'getThreadMappingByThreadId'
+      | 'upsertThreadMapping'
+      | 'setThreadSubscribed'
+      | 'deleteThreadMapping'
+    >
+  >;
+
 /**
  * Chat SDK StateAdapter backed by Mastra storage.
  *
  * Thread subscriptions are persisted to the Mastra `MemoryStorage` domain
  * using thread metadata (`channel_subscribed`), so they survive restarts.
+ * When the channels store supports thread mappings and an owner id is bound,
+ * the `mastra_channel_threads` row is consulted first: `isSubscribed` reads
+ * its `subscribed` flag without touching thread metadata, and `subscribe`/
+ * `unsubscribe` flip that flag after writing the metadata. Threads without a
+ * mapping row fall back to the metadata scan.
  *
  * Cache, locks, and dedup keys remain in-memory — they are inherently
  * short-lived (seconds to minutes) and don't need persistence.
@@ -19,6 +38,7 @@ interface CachedValue<T = unknown> {
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
   private getOwnerId?: () => string | null;
+  private mappings?: ThreadMappingStore;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
@@ -28,9 +48,10 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null) {
+  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null, channelsStore?: ChannelsStorage) {
     this.memoryStore = memoryStore;
     this.getOwnerId = getOwnerId;
+    this.mappings = channelsStore && supportsThreadMappings(channelsStore) ? channelsStore : undefined;
   }
 
   async connect(): Promise<void> {
@@ -68,6 +89,7 @@ export class MastraStateAdapter implements StateAdapter {
         ...this.ownerStamp(thread.metadata),
       },
     });
+    await this.setMappingSubscribed(threadId, true);
   }
 
   async unsubscribe(threadId: string): Promise<void> {
@@ -81,12 +103,47 @@ export class MastraStateAdapter implements StateAdapter {
         ...this.ownerStamp(thread.metadata),
       },
     });
+    await this.setMappingSubscribed(threadId, false);
   }
 
   async isSubscribed(threadId: string): Promise<boolean> {
+    // Mapping hit: the row's flag is authoritative; the thread row is not read.
+    const key = this.mappingKey(threadId);
+    if (key) {
+      const mapping = await this.mappings!.getThreadMapping(key);
+      if (mapping) return mapping.subscribed;
+    }
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return false;
     return (thread.metadata as Record<string, unknown>)?.channel_subscribed === 'true';
+  }
+
+  /**
+   * Mapping key for an SDK thread id, or null when mappings are unavailable
+   * (no capable store, no owner id, or no platform prefix).
+   *
+   * The Chat SDK does not pass the platform to `isSubscribed(threadId)`, but
+   * its thread ids are adapter-prefixed and the SDK itself resolves the
+   * adapter from `threadId.split(':')[0]`, so the prefix is the SDK's own
+   * contract. `AgentChannels` writes mapping rows under `adapter.name`; an
+   * adapter whose name differs from its thread-id prefix never hits its row
+   * here and falls back to the metadata scan (and `setThreadSubscribed`
+   * under the prefix key is a no-op, so no second row is created).
+   */
+  private mappingKey(externalThreadId: string): ChannelThreadKey | null {
+    if (!this.mappings) return null;
+    const ownerId = this.getOwnerId?.() ?? null;
+    if (ownerId === null) return null;
+    const platform = externalThreadId.split(':')[0];
+    if (!platform) return null;
+    return { platform, ownerId, externalThreadId };
+  }
+
+  /** Flip the mapping row's flag. No-op when no row exists (never creates rows). */
+  private async setMappingSubscribed(externalThreadId: string, subscribed: boolean): Promise<void> {
+    const key = this.mappingKey(externalThreadId);
+    if (!key) return;
+    await this.mappings!.setThreadSubscribed(key, subscribed);
   }
 
   // ---------------------------------------------------------------------------
@@ -259,6 +316,12 @@ export class MastraStateAdapter implements StateAdapter {
    * threads no agent has claimed yet. Threads claimed by a different agent
    * are never returned. Without an owner id the old unscoped behavior is
    * preserved.
+   *
+   * With a capable channels store the mapping row is consulted first. A thread
+   * found by the scan is recorded in the mapping table only when it is already
+   * stamped with this owner id (reads never claim, #21288): a durable mapping
+   * to an unclaimed thread would let a second bot adopt the same thread.
+   * Unclaimed threads get their row from `AgentChannels.findThreadMapping`.
    */
   private async findThreadByExternalId(externalThreadId: string) {
     const ownerId = this.getOwnerId?.() ?? null;
@@ -271,12 +334,42 @@ export class MastraStateAdapter implements StateAdapter {
       return threads[0] ?? null;
     }
 
+    const key = this.mappingKey(externalThreadId);
+    if (key) {
+      const mapping = await this.mappings!.getThreadMapping(key);
+      if (mapping) {
+        const mapped = await this.memoryStore.getThreadById({ threadId: mapping.threadId });
+        if (mapped) return mapped;
+        // Thread row is gone; drop the stale mapping and fall through to the scan.
+        await this.mappings!.deleteThreadMapping(key);
+      }
+    }
+
     // Primary lookup: the thread scoped to this agent.
     const { threads: scoped } = await this.memoryStore.listThreads({
       filter: { metadata: { channel_externalThreadId: externalThreadId, channel_ownerId: ownerId } },
       perPage: 1,
     });
-    if (scoped[0]) return scoped[0];
+    if (scoped[0]) {
+      const metadata = (scoped[0].metadata ?? {}) as Record<string, unknown>;
+      const externalChannelId = metadata.channel_externalChannelId;
+      // Only write the row AgentChannels would write: same platform as the thread
+      // id prefix, so a mismatched adapter name never yields a second row.
+      if (
+        key &&
+        metadata.channel_platform === key.platform &&
+        typeof externalChannelId === 'string' &&
+        externalChannelId
+      ) {
+        await this.mappings!.upsertThreadMapping({
+          ...key,
+          externalChannelId,
+          threadId: scoped[0].id,
+          subscribed: metadata.channel_subscribed === 'true',
+        });
+      }
+      return scoped[0];
+    }
 
     // Legacy fallback: metadata filters match subsets, so this also returns
     // threads claimed by other agents - only unclaimed rows are usable.

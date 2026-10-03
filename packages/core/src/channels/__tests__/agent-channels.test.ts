@@ -10,6 +10,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { ConsoleLogger } from '../../logger';
 import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
+import { InMemoryChannelsStorage } from '../../storage/domains/channels/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
@@ -1864,6 +1865,295 @@ describe('AgentChannels', () => {
       expect(threads).toHaveLength(2);
       const agentIds = threads.map(t => (t.metadata as any).channel_ownerId).sort();
       expect(agentIds).toEqual(['agent-a', 'agent-b']);
+    });
+  });
+
+  describe('channel thread mappings (capable store)', () => {
+    const externalThreadId = 'channel-1:thread-1';
+    const key = { platform: 'discord', ownerId: 'test-agent', externalThreadId };
+
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: externalThreadId,
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: undefined as any,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra(opts: { channels?: boolean } = {}) {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const channelsStore = opts.channels === false ? undefined : new InMemoryChannelsStorage();
+      const stores: Record<string, unknown> = { memory: memoryStore, channels: channelsStore };
+      const mastra = {
+        getStorage: () => ({ getStore: (name: string) => stores[name] }),
+        getServer: () => null,
+      } as any;
+      return { mastra, memoryStore, channelsStore: channelsStore! };
+    }
+
+    const legacyFilter = {
+      channel_platform: 'discord',
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: 'channel-1',
+    };
+
+    function metadataScans(spy: ReturnType<typeof vi.spyOn>) {
+      return spy.mock.calls.filter(([args]: any[]) => args?.filter?.metadata !== undefined).length;
+    }
+
+    async function seedThread(memoryStore: InMemoryMemory, id: string, metadata: Record<string, unknown>) {
+      await memoryStore.saveThread({
+        thread: {
+          id,
+          title: 'discord conversation',
+          resourceId: 'owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata,
+        },
+      });
+    }
+
+    async function dispatch(channels: AgentChannels, mastra: any) {
+      await (channels as any).processChatMessage(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        message,
+        mastra,
+        new RequestContext(),
+      );
+    }
+
+    it('first mention scans once (today fallback count), writes one row; the next message is a point read', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+      const upsert = vi.spyOn(channelsStore, 'upsertThreadMapping');
+      const getMapping = vi.spyOn(channelsStore, 'getThreadMapping');
+
+      await dispatch(agentChannels, mastra);
+
+      // Base behavior for a brand-new thread with a bound owner: scoped scan + legacy scan.
+      expect(metadataScans(listThreads)).toBe(2);
+      expect(getMapping).toHaveBeenCalledTimes(1);
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const row = await channelsStore.getThreadMapping(key);
+      expect(row).toMatchObject({ externalChannelId: 'channel-1', subscribed: false });
+      const thread = await memoryStore.getThreadById({ threadId: row!.threadId });
+      expect(thread?.metadata).toMatchObject({ ...legacyFilter, channel_ownerId: 'test-agent' });
+
+      listThreads.mockClear();
+      upsert.mockClear();
+      await dispatch(agentChannels, mastra);
+      expect(metadataScans(listThreads)).toBe(0);
+      expect(upsert).not.toHaveBeenCalled();
+    });
+
+    it('two concurrent first-contact dispatches end with one row and the same thread id', async () => {
+      const { mastra, channelsStore, memoryStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      const args = { externalThreadId, channelId: 'channel-1', platform: 'discord', resourceId: 'user-1', mastra };
+
+      const [a, b] = await Promise.all([
+        (agentChannels as any).getOrCreateThread(args),
+        (agentChannels as any).getOrCreateThread(args),
+      ]);
+
+      expect(a.id).toBe(b.id);
+      const row = await channelsStore.getThreadMapping(key);
+      expect(row?.threadId).toBe(a.id);
+      expect(await channelsStore.getThreadMappingByThreadId(a.id)).not.toBeNull();
+      expect(await memoryStore.getThreadById({ threadId: a.id })).not.toBeNull();
+    });
+
+    it('adopts a metadata-only legacy thread, mirroring channel_subscribed, then point-reads', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      await seedThread(memoryStore, 'legacy-thread', { ...legacyFilter, channel_subscribed: 'true' });
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+
+      await dispatch(agentChannels, mastra);
+
+      expect(await channelsStore.getThreadMapping(key)).toMatchObject({ threadId: 'legacy-thread', subscribed: true });
+      const thread = await memoryStore.getThreadById({ threadId: 'legacy-thread' });
+      expect(thread?.metadata).toMatchObject({ ...legacyFilter, channel_ownerId: 'test-agent' });
+
+      listThreads.mockClear();
+      await dispatch(agentChannels, mastra);
+      expect(metadataScans(listThreads)).toBe(0);
+    });
+
+    it('never adopts a thread claimed by another owner; creates its own thread and row', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      await seedThread(memoryStore, 'other-agents-thread', { ...legacyFilter, channel_ownerId: 'other' });
+
+      await dispatch(agentChannels, mastra);
+
+      const row = await channelsStore.getThreadMapping(key);
+      expect(row).not.toBeNull();
+      expect(row!.threadId).not.toBe('other-agents-thread');
+      const own = await memoryStore.getThreadById({ threadId: row!.threadId });
+      expect(own?.metadata).toMatchObject({ channel_ownerId: 'test-agent' });
+      const other = await memoryStore.getThreadById({ threadId: 'other-agents-thread' });
+      expect(other?.metadata).toMatchObject({ channel_ownerId: 'other' });
+    });
+
+    it('deletes a mapping whose thread no longer exists and falls back to the scans', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'channel-1', threadId: 'gone' });
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+      const del = vi.spyOn(channelsStore, 'deleteThreadMapping');
+
+      await dispatch(agentChannels, mastra);
+
+      expect(del).toHaveBeenCalledWith(key);
+      expect(metadataScans(listThreads)).toBe(2);
+      const row = await channelsStore.getThreadMapping(key);
+      expect(row).not.toBeNull();
+      expect(row!.threadId).not.toBe('gone');
+    });
+
+    it('repairs the owner stamp on a mapped thread that lacks it; a second bot then creates its own thread', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      await seedThread(memoryStore, 'unstamped', legacyFilter);
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'channel-1', threadId: 'unstamped' });
+      const patch = vi.spyOn(memoryStore, 'patchThread');
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+
+      await dispatch(agentChannels, mastra);
+
+      expect(patch).toHaveBeenCalledTimes(1);
+      expect(patch.mock.calls[0]![0]).toMatchObject({ id: 'unstamped', metadata: { channel_ownerId: 'test-agent' } });
+      expect(metadataScans(listThreads)).toBe(0);
+
+      const channelsB = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channelsB.__setAgent(createMockAgent('agent-b'));
+      await channelsB.initialize(mastra);
+      await dispatch(channelsB, mastra);
+
+      const rowB = await channelsStore.getThreadMapping({ ...key, ownerId: 'agent-b' });
+      expect(rowB).not.toBeNull();
+      expect(rowB!.threadId).not.toBe('unstamped');
+      expect((await channelsStore.getThreadMapping(key))!.threadId).toBe('unstamped');
+    });
+
+    it('deletes a mapping whose thread is stamped by another owner and creates a new thread', async () => {
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await agentChannels.initialize(mastra);
+      await seedThread(memoryStore, 'theirs', { ...legacyFilter, channel_ownerId: 'other' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'channel-1', threadId: 'theirs' });
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      agentChannels.__setLogger(logger as any);
+
+      await dispatch(agentChannels, mastra);
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('claimed by another owner'), expect.anything());
+      const row = await channelsStore.getThreadMapping(key);
+      expect(row!.threadId).not.toBe('theirs');
+      expect(mockAgent.sendMessage).toHaveBeenCalled();
+      expect(mockAgent.sendMessage.mock.calls[0]![1].threadId).toBe(row!.threadId);
+    });
+
+    it('keeps today scan counts when the channels domain is disabled', async () => {
+      const { mastra, memoryStore } = makeMastra({ channels: false });
+      await agentChannels.initialize(mastra);
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+
+      await dispatch(agentChannels, mastra);
+      expect(metadataScans(listThreads)).toBe(2);
+
+      listThreads.mockClear();
+      const unbound = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      await unbound.initialize(makeMastra({ channels: false }).mastra);
+      const { mastra: m2, memoryStore: ms2 } = makeMastra({ channels: false });
+      const lt2 = vi.spyOn(ms2, 'listThreads');
+      await (unbound as any).findThreadMapping({
+        externalThreadId,
+        channelId: 'channel-1',
+        platform: 'discord',
+        mastra: m2,
+      });
+      expect(metadataScans(lt2)).toBe(1);
+    });
+
+    it('uses the mapping table even when a custom state adapter handles subscriptions', async () => {
+      const state = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        isSubscribed: vi.fn().mockResolvedValue(false),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        unsubscribe: vi.fn().mockResolvedValue(undefined),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+        getList: vi.fn().mockResolvedValue([]),
+        append: vi.fn().mockResolvedValue(undefined),
+        acquireLock: vi.fn().mockResolvedValue(true),
+        releaseLock: vi.fn().mockResolvedValue(undefined),
+        getLockOwner: vi.fn().mockResolvedValue(null),
+        enqueue: vi.fn().mockResolvedValue(undefined),
+        dequeue: vi.fn().mockResolvedValue(null),
+        queueDepth: vi.fn().mockResolvedValue(0),
+      } as any;
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') }, state });
+      channels.__setAgent(mockAgent);
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await channels.initialize(mastra);
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+
+      await dispatch(channels, mastra);
+      expect(await channelsStore.getThreadMapping(key)).not.toBeNull();
+
+      listThreads.mockClear();
+      await dispatch(channels, mastra);
+      expect(metadataScans(listThreads)).toBe(0);
+      // Subscription state never went near the mapping store or thread metadata here.
+      expect((channels as any).sdk).toBeDefined();
+    });
+
+    it('resolves the tool-approval action thread through the mapping row with zero scans', async () => {
+      const adapter = createMockAdapter('discord');
+      const channels = new AgentChannels({ adapters: { discord: adapter } });
+      channels.__setAgent(mockAgent);
+      channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+      const { mastra, memoryStore, channelsStore } = makeMastra();
+      await channels.initialize(mastra);
+      await seedThread(memoryStore, 'mastra-thread-1', { ...legacyFilter, channel_ownerId: 'test-agent' });
+      await channelsStore.upsertThreadMapping({ ...key, externalChannelId: 'channel-1', threadId: 'mastra-thread-1' });
+      (channels as any).pendingApprovalCards.set('tool-call-1', { runId: 'run-1', toolName: 'lookup', args: {} });
+      const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+      (channels as any).dispatchApproval = dispatchApproval;
+      const listThreads = vi.spyOn(memoryStore, 'listThreads');
+
+      await (channels.sdk as any).processAction({
+        actionId: 'tool_approve:tool-call-1',
+        adapter,
+        messageId: 'card-1',
+        threadId: externalThreadId,
+        user: { userId: 'clicker-1', userName: 'clicker', fullName: 'Clicker' },
+        raw: {},
+        thread: { id: externalThreadId, channelId: 'channel-1', isDM: false },
+      });
+
+      expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      expect(dispatchApproval.mock.calls[0]![0].memory.thread).toBe('mastra-thread-1');
+      expect(metadataScans(listThreads)).toBe(0);
     });
   });
 
