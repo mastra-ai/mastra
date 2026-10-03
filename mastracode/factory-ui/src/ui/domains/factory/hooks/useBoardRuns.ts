@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
-import { useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
+import { useCardRepositorySlug } from './useCardRepositorySlug';
 import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -11,7 +11,6 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
-/** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
   factoryProjectId,
   refetchItems,
@@ -20,7 +19,7 @@ export function useBoardRuns({
   refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
-  const intakeConfig = useIntakeConfigQuery();
+  const repositorySlugFor = useCardRepositorySlug();
   const navigate = useNavigate();
   const [repositorySelection, setRepositorySelection] = useState<{
     item: WorkItem;
@@ -28,14 +27,8 @@ export function useBoardRuns({
     threadTitle: string;
   }>();
 
-  // A card click refetches items before it can decide whether to open an
-  // existing thread or mint a new session. That wait is a round trip long and
-  // the mutation isn't pending yet, so without this the card sits completely
-  // silent after the click.
   const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
-  // Guarded by a ref, not by preparingItems: two clicks landing in the same
-  // render both read the pre-click state, so the state value can't reject the
-  // second one.
+  // Two clicks before the next render must share the same in-flight guard.
   const preparingRef = useRef<Set<string>>(new Set());
   const beginPreparingItem = (itemId: string, label: string) => {
     if (preparingRef.current.has(itemId)) return false;
@@ -56,8 +49,6 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
     const refreshedItems = await refetchItems();
     if (!refreshedItems.isSuccess) {
@@ -84,15 +75,8 @@ export function useBoardRuns({
         return;
       }
       const spec = itemSessionSpec(refreshed);
-      const linearProjectId =
-        refreshed.source === 'linear-issue' && typeof refreshed.metadata.linearProjectId === 'string'
-          ? refreshed.metadata.linearProjectId
-          : undefined;
-      const config = linearProjectId && !intakeConfig.data ? (await intakeConfig.refetch()).data : intakeConfig.data;
-      const mappedSlug = linearProjectId ? config?.linear.repositoryByLinearProject?.[linearProjectId] : undefined;
-      const targetSlug =
-        (typeof refreshed.metadata.repository === 'string' ? refreshed.metadata.repository : undefined) ?? mappedSlug;
-      const hasLinkedTarget = targetSlug ? repositories.some(repository => repository.slug === targetSlug) : false;
+      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
+      const hasLinkedTarget = repositories.some(repository => repository.slug === targetSlug);
       if (!targetSlug && repositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
         return 'repository-selection-required' as const;

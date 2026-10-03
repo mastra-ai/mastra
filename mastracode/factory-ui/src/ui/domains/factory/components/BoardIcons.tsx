@@ -1,9 +1,11 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   CheckCircle2,
+  CircleDashed,
   CircleDot,
   CircleX,
   ClipboardCheck,
@@ -16,10 +18,11 @@ import {
 import type { ComponentType, SVGProps } from 'react';
 
 import type { WorkItemSource } from '../services/workItems';
+import { boardStage, stageTone } from '../stages';
+import type { BuiltinStageId, StageTone } from '../stages';
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { IntakeIcon } from './IntakeIcon';
 
-// GitHub keeps issue vs PR distinct — card meta shows #N for both
 const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVGElement>>; className: string }> = {
   'github-issue': { icon: GithubIcon, className: 'text-foreground' },
   'github-pr': { icon: GitPullRequest, className: 'text-badge-green-indicator' },
@@ -37,7 +40,6 @@ export function SourceIcon({ source, className }: { source: WorkItemSource; clas
   return <Icon data-source={source} className={cn('size-4 shrink-0', sourceClassName, className)} aria-hidden />;
 }
 
-/** Icon for each known run-action label; `Play` is the fallback for anything else. */
 const ACTION_ICONS: Record<string, ComponentType> = {
   Investigate: Search,
   Build: Hammer,
@@ -50,35 +52,104 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-const STAGE_ICON_SOURCES: Partial<Record<string, string>> = {
-  triage: '/factory-stage-icons/triage.svg',
-  planning: '/factory-stage-icons/in-progress.svg',
-  execute: '/factory-stage-icons/in-progress.svg',
+const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
+  resting: 'neutral',
+  working: 'info',
+  terminal: 'success',
 };
+
+const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
+  neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
+  orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-indicator/5' },
+  cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-indicator/5' },
+  info: { icon: 'text-info-indicator', tint: 'bg-info-indicator/5' },
+  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-indicator/5' },
+  success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-indicator/5' },
+  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-indicator/5' },
+};
+
+function MaskedArt({ source, className }: { source: string; className: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{ maskImage: `url(${source})` }}
+      className={cn('size-4 shrink-0 bg-current mask-center mask-no-repeat mask-contain', className)}
+    />
+  );
+}
+
+const PROGRESS_PIE_RADIUS = 2.25;
+const PROGRESS_PIE_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_PIE_RADIUS;
+
+function ProgressPieIcon({ progress, className }: { progress: number; className: string }) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" aria-hidden className={cn('shrink-0', className)}>
+      <circle cx={8} cy={8} r={6} stroke="currentColor" strokeWidth={1.5} />
+      <circle
+        cx={8}
+        cy={8}
+        r={PROGRESS_PIE_RADIUS}
+        stroke="currentColor"
+        strokeWidth={PROGRESS_PIE_RADIUS * 2}
+        strokeDasharray={`${progress * PROGRESS_PIE_CIRCUMFERENCE} ${PROGRESS_PIE_CIRCUMFERENCE}`}
+        transform="rotate(-90 8 8)"
+      />
+    </svg>
+  );
+}
+
+// Custom boards pass `kind` and may reuse a built-in id with another meaning, so `kind` wins over the id.
+function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId | undefined {
+  return kind ? undefined : boardStage(stage);
+}
+
+function stageToneFor(stage: string, kind?: BoardPhaseKind): StageTone {
+  const builtin = builtinStageFor(stage, kind);
+  return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
+}
+
+function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhaseKind; className: string }) {
+  const lucideClassName = cn('shrink-0', className);
+  switch (builtinStageFor(stage, kind) ?? kind ?? 'resting') {
+    case 'intake':
+      return <IntakeIcon className={lucideClassName} />;
+    case 'triage':
+      return <MaskedArt source="/factory-stage-icons/triage.svg" className={className} />;
+    case 'planning':
+      return <ProgressPieIcon progress={0.25} className={className} />;
+    case 'execute':
+    case 'working':
+      return <ProgressPieIcon progress={0.5} className={className} />;
+    case 'review':
+      return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
+    case 'done':
+    case 'terminal':
+      return <CheckCircle2 width={16} height={16} aria-hidden className={lucideClassName} />;
+    case 'canceled':
+      return <CircleX width={16} height={16} aria-hidden className={lucideClassName} />;
+    case 'resting':
+      return <CircleDashed width={16} height={16} aria-hidden className={lucideClassName} />;
+  }
+}
+
+export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].tint;
+}
 
 export function BoardStageIcon({
   stage,
   kind,
   decorative = false,
 }: {
-  /** Built-in phases get bespoke art; any other (custom-board) id falls back to `kind`. */
   stage: string;
-  kind?: 'resting' | 'working' | 'terminal';
-  /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
+  kind?: BoardPhaseKind;
   decorative?: boolean;
 }) {
-  if (kind) {
-    const Icon = kind === 'terminal' ? CheckCircle2 : kind === 'working' ? Play : CircleDot;
-    return decorative ? (
-      <Icon size={16} className="text-muted-foreground shrink-0" aria-hidden />
-    ) : (
-      <Icon size={16} className="text-muted-foreground shrink-0" aria-label={`${kind} phase`} />
-    );
-  }
-  if (stage === 'intake') return <IntakeIcon className="text-muted-foreground shrink-0" />;
-  if (stage === 'review') return <GitPullRequest size={16} className="text-muted-foreground shrink-0" aria-hidden />;
-  const source = STAGE_ICON_SOURCES[stage];
-  if (source) return <img src={source} alt="" aria-hidden className="size-4 shrink-0" />;
-  const Icon = stage === 'done' ? CheckCircle2 : CircleX;
-  return <Icon size={16} className="text-muted-foreground shrink-0" aria-hidden />;
+  const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;
+  if (decorative || !kind) return icon;
+  return (
+    <span role="img" aria-label={`${kind} phase`} className="inline-flex shrink-0">
+      {icon}
+    </span>
+  );
 }

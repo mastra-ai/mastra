@@ -1,14 +1,16 @@
 /**
- * Board view persistence: the filters and sort last used on each board, so reopening a board from
- * the sidebar brings them back. The URL stays the source of truth; this only refills it.
+ * Board view persistence: the filters, sort and saved view last used on each board, so
+ * reopening a board from the sidebar brings them back. The URL stays the source of truth; this
+ * only refills it.
  */
 
 import { BOARD_FILTER_QUERY } from '../boardFilters';
+import { BOARD_VIEW_QUERY } from '../boardSavedViews';
 import { BOARD_SORT_QUERY } from '../boardSort';
 
 const BOARD_VIEWS_KEY = 'mastracode.boardViews';
 const MAX_BOARDS = 50;
-const BOARD_VIEW_PARAMS: readonly string[] = [...Object.values(BOARD_FILTER_QUERY), BOARD_SORT_QUERY];
+const BOARD_VIEW_PARAMS: readonly string[] = [...Object.values(BOARD_FILTER_QUERY), BOARD_SORT_QUERY, BOARD_VIEW_QUERY];
 
 const boardScope = (factoryId: string, boardId: string) => `${factoryId}:${boardId}`;
 
