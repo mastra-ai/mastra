@@ -30,6 +30,10 @@ import { prepareMemoryStepOutputSchema } from './schema';
  * prompt (and busting prompt caches) after e.g. a tool approval. Run them on a
  * throwaway list holding only the current system messages, ignore tripwires and
  * non-system output, and copy over any system messages they added.
+ *
+ * This is not a full restore: no conversation messages are available during
+ * replay, so system messages a processor derives from user/conversation content
+ * are not reproduced. processInput side effects also run again on each resume.
  */
 async function replayInputProcessorSystemMessages({
   capabilities,
