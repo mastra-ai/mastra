@@ -1,3 +1,4 @@
+import { confirm, select, text } from '@clack/prompts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../auth/credentials.js', () => ({
@@ -30,8 +31,6 @@ vi.mock('@clack/prompts', () => ({
   isCancel: (value: unknown) => value === CANCEL,
   spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
 }));
-
-import { confirm, select, text } from '@clack/prompts';
 
 import {
   addConnectionToProject,
