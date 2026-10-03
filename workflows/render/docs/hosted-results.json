@@ -1,0 +1,226 @@
+{
+  "validatedAt": "2026-09-24T01:39:56.101Z",
+  "deployedCommit": "d1e31106f37626076ce9e70805948742491f7cb0",
+  "workspace": "samples",
+  "workflowId": "wfl-daq7jmh42hec738ka3c0",
+  "workflowVersionId": "wfv-daq7s3p42hec738lcmn0",
+  "serviceId": "srv-daq7jrh7lnhs73bvkco0",
+  "deployId": "dep-daq7s3tg1s2s73fflkb0",
+  "serviceUrl": "https://mastra-render-integration-test-web.onrender.com",
+  "tests": {
+    "unitTestsPassed": 39,
+    "typecheck": "passed",
+    "packagedBuild": "passed"
+  },
+  "native": [
+    {
+      "check": "parallel task overlap",
+      "milliseconds": 4830
+    },
+    {
+      "scenario": "success",
+      "mastraRunId": "be38ef29-76d5-43ff-a764-6c5cd6d112d7",
+      "rootTaskRunId": "trn-08l4gdaq7t75g1s2s73ffp8i0",
+      "status": "completed",
+      "children": [
+        {
+          "id": "trn-08l4gdaq7t9ada7k000a7bk10",
+          "task": "mastra-editorial-review-revise-f80a8a9c8b366e48",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7t75g1s2s73ffp8i0"
+        },
+        {
+          "id": "trn-08l4gdaq7t82da7k000a7bjug",
+          "task": "mastra-editorial-review-consistency-f36cc246e8520d33",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7t75g1s2s73ffp8i0"
+        },
+        {
+          "id": "trn-08l4gdaq7t82da7k000a7bju0",
+          "task": "mastra-editorial-review-structure-a7b2cf6c7d19b737",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7t75g1s2s73ffp8i0"
+        },
+        {
+          "id": "trn-08l4gdaq7t82da7k000a7bjtg",
+          "task": "mastra-editorial-review-clarity-a39fda532c78b343",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7t75g1s2s73ffp8i0"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "scenario": "failure",
+      "mastraRunId": "7806765c-a4a9-4e4d-9e65-6bcadd10f0b7",
+      "rootTaskRunId": "trn-08l4gdaq7tb142hec738lhme0",
+      "status": "failed",
+      "children": [
+        {
+          "id": "trn-08l4gdaq7tc2da7k000a7bk4g",
+          "task": "mastra-editorial-review-consistency-f36cc246e8520d33",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7tb142hec738lhme0"
+        },
+        {
+          "id": "trn-08l4gdaq7tc2da7k000a7bk40",
+          "task": "mastra-editorial-review-structure-a7b2cf6c7d19b737",
+          "status": "completed",
+          "attempts": 1,
+          "parent": "trn-08l4gdaq7tb142hec738lhme0"
+        },
+        {
+          "id": "trn-08l4gdaq7tc2da7k000a7bk3g",
+          "task": "mastra-editorial-review-clarity-a39fda532c78b343",
+          "status": "failed",
+          "attempts": 2,
+          "parent": "trn-08l4gdaq7tb142hec738lhme0"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "scenario": "canceled",
+      "mastraRunId": "da6b3033-fbb5-4e9b-aa86-197576d287bf",
+      "rootTaskRunId": "trn-08l4gdaq7teh7lnhs73c0ptjg",
+      "status": "canceled",
+      "children": [],
+      "passed": true
+    }
+  ],
+  "activeCancellation": {
+    "check": "cancel while waiting on children",
+    "runId": "c3980916-2713-47a7-86ec-ba14c41436c3",
+    "rootTaskRunId": "trn-08l4gdaq7tlp7lnhs73c0qnig",
+    "pausedLookupStatus": "running",
+    "status": "canceled",
+    "children": [
+      {
+        "id": "trn-08l4gdaq7tmqda7k000a7bk90",
+        "status": "canceled",
+        "parent": "trn-08l4gdaq7tlp7lnhs73c0qnig"
+      },
+      {
+        "id": "trn-08l4gdaq7tmqda7k000a7bk8g",
+        "status": "canceled",
+        "parent": "trn-08l4gdaq7tlp7lnhs73c0qnig"
+      },
+      {
+        "id": "trn-08l4gdaq7tmqda7k000a7bk80",
+        "status": "canceled",
+        "parent": "trn-08l4gdaq7tlp7lnhs73c0qnig"
+      }
+    ],
+    "passed": true
+  },
+  "backendRestart": {
+    "check": "hosted backend restart and reconnect",
+    "passed": true,
+    "runId": "f7dd6599-3926-4c1a-ba03-48b6acc2b447",
+    "rootTaskRunId": "trn-08l4gdaq7uap7lnhs73c0stdg",
+    "instancesBefore": [
+      "srv-daq7jrh7lnhs73bvkco0-n78x8"
+    ],
+    "instancesAfter": [
+      "srv-daq7jrh7lnhs73bvkco0-mzvxd"
+    ],
+    "status": "success",
+    "event": {
+      "id": "trn-08l4gdaq7uap7lnhs73c0stdg",
+      "status": "completed",
+      "received": true
+    }
+  },
+  "completionEventReplay": {
+    "subscribedAfterCompletion": true,
+    "eventReceivedWithin30Seconds": false
+  },
+  "agent": {
+    "verifiedAt": "2026-09-24T14:26:01.166Z",
+    "codeCommit": "d1e31106f37626076ce9e70805948742491f7cb0",
+    "buildId": "d1e31106-agent-gpt-4.1-mini-v2",
+    "model": "openai/gpt-4.1-mini",
+    "workflowVersionId": "wfv-daqj3k2d0e5s73ap1hfg",
+    "deployId": "dep-daqj3k8473hc738bikgg",
+    "mastraRunId": "5d0f192c-c446-4b8b-bb3f-1145bbe5039a",
+    "rootTaskRunId": "trn-08l4gdaqj5gojo6nc73ekttd0",
+    "status": "completed",
+    "rootAttempts": 1,
+    "children": [
+      {
+        "id": "trn-08l4gdaqj5jb8s92000e6ngig",
+        "task": "mastra-editorial-review-revise-f80a8a9c8b366e48",
+        "status": "completed",
+        "parent": "trn-08l4gdaqj5gojo6nc73ekttd0",
+        "attempts": 1,
+        "startedAt": "2026-09-24T14:25:17.96Z",
+        "completedAt": "2026-09-24T14:25:25.302358Z"
+      },
+      {
+        "id": "trn-08l4gdaqj5hr8s92000e6nggg",
+        "task": "mastra-editorial-review-consistency-f36cc246e8520d33",
+        "status": "completed",
+        "parent": "trn-08l4gdaqj5gojo6nc73ekttd0",
+        "attempts": 1,
+        "startedAt": "2026-09-24T14:25:11.689Z",
+        "completedAt": "2026-09-24T14:25:17.686682Z"
+      },
+      {
+        "id": "trn-08l4gdaqj5hr8s92000e6ngg0",
+        "task": "mastra-editorial-review-structure-a7b2cf6c7d19b737",
+        "status": "completed",
+        "parent": "trn-08l4gdaqj5gojo6nc73ekttd0",
+        "attempts": 1,
+        "startedAt": "2026-09-24T14:25:11.687Z",
+        "completedAt": "2026-09-24T14:25:17.325785Z"
+      },
+      {
+        "id": "trn-08l4gdaqj5hr8s92000e6ngfg",
+        "task": "mastra-editorial-review-clarity-a39fda532c78b343",
+        "status": "completed",
+        "parent": "trn-08l4gdaqj5gojo6nc73ekttd0",
+        "attempts": 1,
+        "startedAt": "2026-09-24T14:25:11.606Z",
+        "completedAt": "2026-09-24T14:25:17.140669Z"
+      }
+    ],
+    "input": {
+      "draft": "Our museum was opened in 1998. Every Friday at 3 p.m., our museum has a free repair clinic. The clinic is free. Tickets are not required. People who want to visit can just come. This paragraph has a lot of words that are not needed.",
+      "criteria": "Make a concise visitor announcement. Preserve the opening year 1998, Friday at 3 p.m., the free repair clinic and no-ticket requirement. Remove repetition and commentary about the writing. Each review should give one or two sentences of actionable feedback."
+    },
+    "result": {
+      "mode": "agent",
+      "revisedDraft": "Our museum, opened in 1998, offers a free repair clinic every Friday at 3 p.m. No tickets are required to attend.",
+      "findings": [
+        {
+          "focus": "Concise visitor announcement",
+          "feedback": "Combine redundant phrases to improve clarity and conciseness; for example, \"Every Friday at 3 p.m., our museum offers a free repair clinic with no tickets required. Opened in 1998, visitors can simply come by.\""
+        },
+        {
+          "focus": "Structure of the visitor announcement",
+          "feedback": "Combine related information into a single, concise sentence to eliminate redundancy, for example: 'Since opening in 1998, our museum offers a free repair clinic every Friday at 3 p.m., with no tickets required.'"
+        },
+        {
+          "focus": "Conciseness and clarity in visitor announcement",
+          "feedback": "Combine sentences to avoid repetition and improve flow, e.g., 'Our museum, opened in 1998, offers a free repair clinic every Friday at 3 p.m. No tickets are required to attend.'"
+        }
+      ]
+    },
+    "passed": true,
+    "priorCredentialFailure": {
+      "runId": "d804dad8-b75a-4b08-9f5d-db720a97331e",
+      "rootTaskRunId": "trn-08l4gdaq84egjo6nc73dfnhlg",
+      "workflowVersionId": "wfv-daq82j0jo6nc73dfhgt0",
+      "deployId": "dep-daq82j49v7es73c68fkg",
+      "status": "failed",
+      "reason": "The initial shared OpenAI credential had no credits remaining.",
+      "applicationStatus": "failed"
+    },
+    "scope": "Real Mastra structured generation in three parallel review steps and a final editor; no agent tools, memory or streaming."
+  }
+}

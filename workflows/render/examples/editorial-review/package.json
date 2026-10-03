@@ -1,0 +1,21 @@
+{
+  "name": "mastra-render-editorial-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx --env-file=.env server.ts",
+    "worker": "tsx worker.ts",
+    "typecheck": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module NodeNext --moduleResolution NodeNext *.ts"
+  },
+  "dependencies": {
+    "@renderinc/mastra": "file:../..",
+    "@mastra/core": "1.67.0",
+    "@mastra/pg": "1.25.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "24.5.2",
+    "tsx": "4.20.5",
+    "typescript": "5.9.3"
+  }
+}

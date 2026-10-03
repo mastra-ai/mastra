@@ -1,0 +1,778 @@
+import { randomUUID } from 'node:crypto';
+import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
+import { createStep as coreCreateStep, type AnyWorkflow } from '@mastra/core/workflows';
+import { task } from '@renderinc/sdk/workflows';
+import type { TaskContext, TaskDefinition } from '@renderinc/sdk/workflows';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { init, createMemoryPersistence } from './index.js';
+import type { ProviderRun, RenderOptions, RenderTransport } from './index.js';
+import { registerRenderTasks } from './worker.js';
+import { json } from './protocol.js';
+import { RenderRun } from './run.js';
+import { getRenderTaskContext } from './runtime.js';
+
+function harness(options: Partial<RenderOptions> = {}) {
+  let tasks: ReadonlyMap<string, TaskDefinition<[unknown], unknown>>;
+  const runs = new Map<string, ProviderRun>();
+  const dispatched: string[] = [];
+  const executions: unknown[] = [];
+  const makeContext = (id: string, parent?: string, root = id): TaskContext => ({
+    metadata: { taskRunId: id, parentTaskRunId: parent, rootTaskRunId: root },
+    async run(definition, ...args) {
+      dispatched.push(definition.name);
+      executions.push(structuredClone(args[0]));
+      return structuredClone(await definition.func(makeContext(randomUUID(), id, root), ...structuredClone(args)));
+    },
+  });
+  const transport: RenderTransport = {
+    async start(slug, input) {
+      const id = randomUUID();
+      runs.set(id, { id, status: 'pending' });
+      const definition = tasks.get(slug.split('/').at(-1)!);
+      if (!definition) throw new Error('No registered root');
+      void Promise.resolve().then(async () => {
+        runs.set(id, { id, status: 'running' });
+        try {
+          const result = await definition.func(makeContext(id), structuredClone(input));
+          if (runs.get(id)?.status !== 'canceled')
+            runs.set(id, { id, status: 'completed', results: [structuredClone(result)] });
+        } catch (error) {
+          runs.set(id, { id, status: 'failed', error });
+        }
+      });
+      return id;
+    },
+    async get(id) {
+      return runs.get(id)!;
+    },
+    async cancel(id) {
+      runs.set(id, { id, status: 'canceled' });
+    },
+  };
+  const factories = init({
+    workflowSlug: 'tests',
+    buildId: 'test-build',
+    persistence: createMemoryPersistence(),
+    transport,
+    requestContextKeys: ['locale'],
+    pollIntervalMs: 10,
+    ...options,
+  });
+  return {
+    ...factories,
+    transport,
+    dispatched,
+    executions,
+    runs,
+    register(workflow: AnyWorkflow) {
+      const mastra = new Mastra({ workflows: { workflow }, logger: false });
+      tasks = registerRenderTasks({ mastra });
+      return tasks;
+    },
+  };
+}
+
+describe('provider feasibility and graph behavior', () => {
+  it.each(['dowhile', 'dountil'] as const)(
+    'executes %s iterations as distinct children with updated state',
+    async kind => {
+      const h = harness();
+      const stateSchema = z.object({ rounds: z.number() });
+      const observed: unknown[] = [];
+      const step = h.createStep({
+        id: 'revise',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        stateSchema,
+        execute: async ({ inputData, state, setState, requestContext, getInitData }) => {
+          expect(getInitData()).toBe(0);
+          expect(state.rounds).toBe(inputData);
+          expect(requestContext.get('locale')).toBe(String(inputData));
+          await setState({ rounds: state.rounds + 1 });
+          requestContext.set('locale', String(inputData + 1));
+          return inputData + 1;
+        },
+      });
+      const workflow = h
+        .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number(), stateSchema })
+        [kind](step, async ({ inputData, iterationCount, state, requestContext, getStepResult }) => {
+          observed.push([inputData, iterationCount, state.rounds, requestContext.get('locale'), getStepResult(step)]);
+          return kind === 'dowhile' ? inputData < 3 : inputData >= 3;
+        })
+        .commit();
+      const tasks = h.register(workflow);
+      const result = await (
+        await workflow.createRun()
+      ).start({
+        inputData: 0,
+        initialState: { rounds: 0 },
+        requestContext: new RequestContext<unknown>([['locale', '0']]),
+      });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') expect(result.result).toBe(3);
+      expect(observed).toEqual([
+        [1, 1, 1, '1', 1],
+        [2, 2, 2, '2', 2],
+        [3, 3, 3, '3', 3],
+      ]);
+      expect(tasks.size).toBe(2);
+      expect(h.dispatched).toHaveLength(3);
+      expect(new Set(h.dispatched).size).toBe(1);
+      expect(new Set(h.executions.map(value => (value as { executionKey: string }).executionKey)).size).toBe(3);
+    },
+  );
+
+  it.each(['dowhile', 'dountil'] as const)('runs %s at least once when its condition stops immediately', async kind => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'increment',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData + 1,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      [kind](step, async () => kind === 'dountil')
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 0 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe(1);
+    expect(h.dispatched).toHaveLength(1);
+  });
+
+  it('stops the loop and subsequent steps after a child fails', async () => {
+    const h = harness();
+    let conditions = 0;
+    const step = h.createStep({
+      id: 'fails-second-round',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => {
+        if (inputData === 1) throw new Error('second round failed');
+        return inputData + 1;
+      },
+    });
+    const after = h.createStep({
+      id: 'after-loop',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async () => {
+        throw new Error('must not run');
+      },
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .dountil(step, async ({ inputData }) => {
+        conditions++;
+        return inputData >= 3;
+      })
+      .then(after)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 0 });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') expect(result.error.message).toContain('second round failed');
+    expect(conditions).toBe(1);
+    expect(h.dispatched).toHaveLength(2);
+  });
+
+  it('guards request-context mutation in loop conditions', async () => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'identity',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .dountil(step, async ({ requestContext }) => {
+        requestContext.set('locale', 'fr');
+        return true;
+      })
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 0 });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') expect(result.error.message).toContain('mutation');
+    expect(h.dispatched).toHaveLength(1);
+  });
+
+  it('executes the root locally and business steps through the child context', async () => {
+    const h = harness();
+    const first = h.createStep({
+      id: 'first',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData + 1,
+    });
+    const second = h.createStep({
+      id: 'second',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData, getStepResult, getInitData }) => {
+        expect(getStepResult(first)).toBe(7);
+        expect(getInitData()).toBe(6);
+        expect(getRenderTaskContext()).toBeDefined();
+        return inputData * 2;
+      },
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(first)
+      .then(second)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 6 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe(14);
+    expect(h.dispatched).toHaveLength(2);
+    expect(workflow.runs.size).toBe(0);
+  });
+
+  it('preserves sequential state and request-context updates', async () => {
+    const h = harness();
+    const stateSchema = z.object({ prepared: z.boolean() });
+    const first = h.createStep({
+      id: 'prepare',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      stateSchema,
+      execute: async ({ inputData, setState, requestContext }) => {
+        await setState({ prepared: true });
+        requestContext.set('locale', 'fr');
+        return inputData + 1;
+      },
+    });
+    const last = h.createStep({
+      id: 'read',
+      inputSchema: z.number(),
+      outputSchema: z.string(),
+      stateSchema,
+      execute: async ({ state, requestContext, inputData }) =>
+        `${state.prepared}:${requestContext.get('locale')}:${inputData}`,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.string(), stateSchema })
+      .then(first)
+      .then(last)
+      .commit();
+    h.register(workflow);
+    const result = await (
+      await workflow.createRun()
+    ).start({
+      inputData: 3,
+      initialState: { prepared: false },
+      requestContext: new RequestContext<unknown>([['locale', 'en']]),
+    });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe('true:fr:4');
+  });
+
+  it('keeps mappings local and preserves parallel graph output', async () => {
+    const h = harness();
+    const a = h.createStep({
+      id: 'double',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData * 2,
+    });
+    const b = h.createStep({
+      id: 'triple',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData * 3,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .parallel([a, b])
+      .map(async ({ inputData }) => inputData.double + inputData.triple)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 7 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe(35);
+    expect(h.dispatched).toHaveLength(2);
+  });
+
+  it('rejects invalid input before submission and prevents duplicate run submission', async () => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'identity',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const run = await workflow.createRun();
+    await expect(run.start({ inputData: 'bad' as unknown as number })).rejects.toThrow();
+    expect(h.dispatched).toHaveLength(0);
+    await run.start({ inputData: 2 });
+    await expect(run.start({ inputData: 2 })).rejects.toThrow('already exists');
+  });
+
+  it('executes only matching branches', async () => {
+    const h = harness();
+    const a = h.createStep({
+      id: 'positive',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData * 2,
+    });
+    const b = h.createStep({
+      id: 'negative',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => -inputData,
+    });
+    const workflow = h
+      .createWorkflow({
+        id: randomUUID(),
+        inputSchema: z.number(),
+        outputSchema: z.object({ positive: z.number().optional(), negative: z.number().optional() }),
+      })
+      .branch([
+        [async ({ inputData }) => inputData > 0, a],
+        [async ({ inputData }) => inputData < 0, b],
+      ])
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 3 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toEqual({ positive: 6 });
+    expect(h.dispatched).toHaveLength(1);
+  });
+
+  it.each([{ input: [] }, { input: [4, 1, 3, 2] }])(
+    'preserves foreach ordering and bounds remote fan-out for $input',
+    async ({ input }) => {
+      const h = harness({ maxConcurrentSteps: 2 });
+      let active = 0;
+      let peak = 0;
+      const step = h.createStep({
+        id: 'double',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          active++;
+          peak = Math.max(peak, active);
+          await new Promise(resolve => setTimeout(resolve, inputData * 4));
+          active--;
+          return inputData * 2;
+        },
+      });
+      const workflow = h
+        .createWorkflow({ id: randomUUID(), inputSchema: z.array(z.number()), outputSchema: z.array(z.number()) })
+        .foreach(step, { concurrency: 4 })
+        .commit();
+      h.register(workflow);
+      const result = await (await workflow.createRun()).start({ inputData: input });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') expect(result.result).toEqual(input.map(value => value * 2));
+      expect(peak).toBeLessThanOrEqual(2);
+      expect(h.dispatched).toHaveLength(input.length);
+    },
+  );
+
+  it.each(['state', 'context'] as const)('rejects shared %s writes inside parallel steps', async mode => {
+    const h = harness();
+    const stateSchema = z.object({ count: z.number() });
+    const step = h.createStep({
+      id: 'write',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      stateSchema,
+      execute: async ({ inputData, setState, requestContext }) => {
+        if (mode === 'state') await setState({ count: 1 });
+        else requestContext.set('locale', 'fr');
+        return inputData;
+      },
+    });
+    const workflow = h
+      .createWorkflow({
+        id: randomUUID(),
+        inputSchema: z.number(),
+        outputSchema: z.object({ write: z.number() }),
+        stateSchema,
+      })
+      .parallel([step])
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 1, initialState: { count: 0 } });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') {
+      expect(result.error.message).toContain('mutation');
+      const failed = result.steps.write;
+      expect(failed?.status).toBe('failed');
+      if (failed?.status === 'failed') expect(failed.error).toBeInstanceOf(Error);
+    }
+  });
+
+  it('rejects mutation in local mapping functions', async () => {
+    const h = harness();
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .map(async ({ inputData, requestContext }) => {
+        requestContext.set('locale', 'fr');
+        return inputData;
+      })
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') expect(result.error.message).toContain('mutation');
+    expect(h.dispatched).toHaveLength(0);
+  });
+
+  it('guards unsupported controls on steps made with the core factory', async () => {
+    const h = harness();
+    const step = coreCreateStep({
+      id: 'suspend',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData, suspend }) => {
+        await suspend({});
+        return inputData;
+      },
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') expect(result.error.message).toContain('suspend');
+  });
+
+  it('allows a remote Mastra step to chain a native Render task', async () => {
+    const h = harness();
+    const native = task({ name: `native-${randomUUID()}` }, async (_context, value: number) => value + 10);
+    const step = h.createStep({
+      id: 'native-call',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => getRenderTaskContext().run(native, inputData),
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe(11);
+    expect(h.dispatched).toHaveLength(2);
+  });
+
+  it('does not return buffered success after the provider cancels the root', async () => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'identity',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const originalGet = h.transport.get;
+    h.transport.get = async id => {
+      const record = await originalGet(id);
+      return record.status === 'completed' ? { id, status: 'canceled' } : record;
+    };
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') expect(result.error.name).toBe('AbortError');
+  });
+});
+
+describe('JSON transport', () => {
+  it.each([undefined, NaN, Infinity, new Date(), () => 1, [undefined], { x: undefined }])(
+    'rejects lossy input %s',
+    value => {
+      expect(() => json(value)).toThrow();
+    },
+  );
+  it('rejects cycles and oversized UTF-8 arguments', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(() => json(cyclic)).toThrow('cycle');
+    expect(() => json('☃'.repeat(100), 'input', 200)).toThrow('byte');
+  });
+  it('does not leak a task context to callers', () => {
+    expect(() => getRenderTaskContext()).toThrow('outside');
+  });
+});
+
+describe('worker recovery of a lost caller binding', () => {
+  it.each(['before-claim', 'after-claim', 'binding-write'] as const)(
+    'finishes an accepted root after a %s submission failure without resubmitting',
+    async failure => {
+      const h = harness();
+      let release!: () => void;
+      let entered!: () => void;
+      const running = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let effects = 0;
+      const step = h.createStep({
+        id: 'work',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        execute: async ({ inputData }) => {
+          effects++;
+          entered();
+          await gate;
+          return inputData + 1;
+        },
+      });
+      const workflow = h
+        .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+        .then(step)
+        .commit();
+      h.register(workflow);
+      const start = h.transport.start.bind(h.transport);
+      const starts = vi.spyOn(h.transport, 'start').mockImplementation(async (slug, input) => {
+        const id = await start(slug, input);
+        if (failure === 'after-claim') await running;
+        if (failure !== 'binding-write') throw new Error('response lost after acceptance');
+        return id;
+      });
+      const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+      vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+        const current = await h.provider.store.get(record.workflowId, record.runId);
+        if (
+          failure === 'binding-write' &&
+          record.providerId &&
+          record.workerClaim === current?.workerClaim &&
+          !record.dispatchClosed &&
+          record.result === undefined
+        )
+          throw new Error('caller binding write failed');
+        return swap(record, revision);
+      });
+      const run = await workflow.createRun();
+      try {
+        await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({ name: 'RenderSubmissionUnknownError' });
+        await running;
+        const active = await h.provider.store.get(workflow.id, run.runId);
+        expect(active?.status).toBe('running');
+        expect(active?.providerId).toBe([...h.runs.keys()][0]);
+        expect(active?.rootProviderId).toBe(active?.providerId);
+        release();
+        await vi.waitFor(async () => expect((await h.provider.getRun(workflow.id, run.runId))?.status).toBe('success'));
+        const terminal = await h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000));
+        expect(terminal.result).toMatchObject({ status: 'success', result: 2 });
+        expect(terminal.dispatchClosed).toBe(true);
+        expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('success');
+        await expect(run.startAsync({ inputData: 1 })).rejects.toThrow('already exists');
+        expect(starts).toHaveBeenCalledTimes(1);
+        expect(effects).toBe(1);
+      } finally {
+        release();
+        vi.restoreAllMocks();
+      }
+    },
+  );
+
+  it('recovers a failed root outcome after a lost caller response instead of polling it forever', async () => {
+    const h = harness();
+    const step = h.createStep({
+      id: 'fail',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async () => {
+        throw new Error('business failure');
+      },
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const start = h.transport.start.bind(h.transport);
+    h.transport.start = async (slug, input) => {
+      await start(slug, input);
+      throw new Error('response lost');
+    };
+    const run = await workflow.createRun();
+    await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({ name: 'RenderSubmissionUnknownError' });
+    await vi.waitFor(async () => expect((await h.provider.getRun(workflow.id, run.runId))?.status).toBe('failed'));
+    const result = await h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000));
+    expect(result.dispatchClosed).toBe(true);
+    expect(result.error?.message).toContain('business failure');
+  });
+});
+
+it('keeps the native binding when the worker finishes before the submission response arrives', async () => {
+  const h = harness();
+  const step = h.createStep({
+    id: 'fast',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const start = h.transport.start.bind(h.transport);
+  h.transport.start = async (slug, input) => {
+    const id = await start(slug, input);
+    await vi.waitFor(() => expect(h.runs.get(id)?.status).toBe('completed'));
+    return id;
+  };
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: 3 });
+  expect(result.status).toBe('success');
+  const record = await h.provider.store.get(workflow.id, run.runId);
+  expect(record?.providerId).toBe([...h.runs.keys()][0]);
+  expect(record?.dispatchClosed).toBe(true);
+  expect(record?.result).toMatchObject({ status: 'success', result: 3 });
+});
+
+it.each(['success', 'failure'] as const)('preserves native %s when final bookkeeping reads fail', async outcome => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const h = harness();
+  const step = h.createStep({
+    id: 'work',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => {
+      if (outcome === 'failure') throw new Error('business failure');
+      return inputData;
+    },
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const get = h.provider.store.get.bind(h.provider.store);
+  let injected = false;
+  vi.spyOn(h.provider.store, 'get').mockImplementation(async (workflowId, runId) => {
+    const current = await get(workflowId, runId);
+    // Closure writes are now no-ops after the primary outcome closes dispatch.
+    // Fail the required cleanup read to retain coverage of secondary storage errors.
+    if (!injected && current?.dispatchClosed && current.status === 'running') {
+      injected = true;
+      throw new Error('secondary bookkeeping failure');
+    }
+    return current;
+  });
+  try {
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: 1 });
+    expect(result.status).toBe(outcome === 'success' ? 'success' : 'failed');
+    const native = [...h.runs.values()][0]!;
+    if (outcome === 'success') expect(native.status).toBe('completed');
+    else expect((native.error as Error).message).toBe('business failure');
+    expect((await h.provider.store.get(workflow.id, run.runId))?.dispatchClosed).toBe(true);
+    expect(injected).toBe(true);
+    expect(log).toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it('preserves the original worker exception when both error and closure writes fail', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const original = new Error('original worker failure');
+  vi.spyOn(RenderRun.prototype, 'executeLocal').mockRejectedValue(original);
+  const h = harness();
+  const step = h.createStep({
+    id: 'unused',
+    inputSchema: z.number(),
+    outputSchema: z.number(),
+    execute: async ({ inputData }) => inputData,
+  });
+  const workflow = h
+    .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+    .then(step)
+    .commit();
+  h.register(workflow);
+  const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+  vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+    if (record.status === 'running' && record.dispatchClosed) throw new Error('secondary write failed');
+    return swap(record, revision);
+  });
+  try {
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('failed');
+    expect([...h.runs.values()][0]?.error).toBe(original);
+    expect(h.dispatched).toHaveLength(0);
+    expect(log).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it.each(['binding-throw', 'binding-contention', 'binding-and-state-write', 'start-and-state-write'] as const)(
+  'preserves submission uncertainty without a worker after %s',
+  async failure => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = new Error('accepted response or binding write lost');
+    const start = vi.fn(async () => {
+      if (failure === 'start-and-state-write') throw original;
+      return 'accepted-native-root';
+    });
+    const get = vi.fn(async () => {
+      throw new Error('An unbound record cannot query native status');
+    });
+    const h = harness({ transport: { start, get, cancel: async () => {} } });
+    const step = h.createStep({
+      id: 'never-started',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: randomUUID(), inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const swap = h.provider.store.compareAndSwap.bind(h.provider.store);
+    vi.spyOn(h.provider.store, 'compareAndSwap').mockImplementation(async (record, revision) => {
+      if (failure.endsWith('and-state-write') || record.providerId) {
+        if (failure === 'binding-contention') return false;
+        throw original;
+      }
+      return swap(record, revision);
+    });
+    try {
+      const run = await workflow.createRun();
+      await expect(run.startAsync({ inputData: 1 })).rejects.toMatchObject({
+        name: 'RenderSubmissionUnknownError',
+        runId: run.runId,
+      });
+      const stored = await h.provider.store.get(workflow.id, run.runId);
+      expect(stored?.providerId).toBeUndefined();
+      expect(stored?.workerClaim).toBeUndefined();
+      if (!failure.endsWith('and-state-write')) {
+        expect(stored?.status).toBe('submission-unknown');
+        await expect(h.provider.wait(workflow.id, run.runId, AbortSignal.timeout(1000))).rejects.toMatchObject({
+          name: 'RenderSubmissionUnknownError',
+        });
+      }
+      await expect(run.startAsync({ inputData: 1 })).rejects.toThrow('already exists');
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(get).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  },
+);
