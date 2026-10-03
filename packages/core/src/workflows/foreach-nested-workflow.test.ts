@@ -119,4 +119,91 @@ describe('foreach nested workflow runs', () => {
       }
     },
   );
+  it('continues the parent when a nested child is resumed directly', async () => {
+    const childStep = createStep({
+      id: 'approval-step',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+      suspendSchema: z.object({ item: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) {
+          await suspend({ item: inputData.item });
+        }
+        return inputData.item;
+      },
+    });
+
+    const childWorkflow = createWorkflow({
+      id: 'approval-child-workflow',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.string(),
+    })
+      .then(childStep)
+      .commit();
+
+    const parentWorkflow = createWorkflow({
+      id: 'approval-parent-workflow',
+      inputSchema: z.array(z.object({ item: z.string() })),
+      outputSchema: z.array(z.string()),
+    })
+      .foreach(childWorkflow)
+      .commit();
+
+    const storage = new MockStore();
+    new Mastra({ workflows: { parentWorkflow }, storage, logger: false });
+
+    const parentRun = await parentWorkflow.createRun();
+    const parentEvents: Array<{ type: string; payload: Record<string, unknown> }> = [];
+    const unwatch = parentRun.watch(event => {
+      parentEvents.push(event);
+    });
+    const suspended = await parentRun.start({ inputData: [{ item: 'alpha' }] });
+    expect(suspended.status).toBe('suspended');
+
+    const workflowsStore = await storage.getStore('workflows');
+    const parentSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: parentWorkflow.id,
+      runId: parentRun.runId,
+    });
+    const nestedRunId =
+      parentSnapshot?.context?.[childWorkflow.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[0]?.metadata
+        ?.nestedRunId;
+    expect(nestedRunId).toEqual(expect.any(String));
+
+    const eventsBeforeChildResume = parentEvents.length;
+    const childRun = await childWorkflow.createRun({ runId: nestedRunId });
+    const childResult = await childRun.resume({ resumeData: { approved: true } });
+    expect(childResult.status).toBe('success');
+
+    await expect
+      .poll(async () => {
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: parentWorkflow.id,
+          runId: parentRun.runId,
+        });
+        return snapshot?.status;
+      })
+      .toBe('success');
+
+    await expect
+      .poll(() =>
+        parentEvents
+          .slice(eventsBeforeChildResume)
+          .some(
+            event =>
+              event.type === 'workflow-step-result' &&
+              event.payload.id === childWorkflow.id &&
+              event.payload.status === 'success',
+          ),
+      )
+      .toBe(true);
+    unwatch();
+
+    const completedParent = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: parentWorkflow.id,
+      runId: parentRun.runId,
+    });
+    expect(completedParent?.result).toEqual(['alpha']);
+  });
 });
