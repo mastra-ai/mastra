@@ -19,10 +19,14 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import type { CreatedAgentSignal } from '../../signals';
 import { createSignal } from '../../signals';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 
 // ----------------------------------------------------------------------------
@@ -366,9 +370,9 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
             const originalDrain = entry.drainPendingSignals;
             entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
               // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
-              if ((scope ?? 'pending') === 'pending') {
+              if ((scope ?? 'pending') === 'pending' && callNum > 0) {
                 pendingDrainCount++;
-                // Return signal on the first pending drain only
+                // Return the signal after the first model response, not at step entry.
                 if (pendingDrainCount === 1) {
                   return pendingSignals;
                 }
@@ -400,4 +404,95 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
       },
     );
   });
+});
+
+describe.each(['durable', 'evented', 'evented-split'] as const)('%s pending queue notifications', engine => {
+  it('notifies after real admission and tears down subscriptions with the owning run', async () => {
+    let releaseRequest!: () => void;
+    let requestStarted = false;
+    let requestGate = new Promise<void>(resolve => {
+      releaseRequest = resolve;
+    });
+    const baseAgent = new Agent({
+      id: crypto.randomUUID(),
+      name: 'Pending queue owner',
+      instructions: 'Test',
+      memory: new MockMemory(),
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          requestStarted = true;
+          await requestGate;
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'answer' },
+              { type: 'text-delta', id: 'answer', delta: 'Done' },
+              { type: 'text-end', id: 'answer' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const customPubsub = engine === 'evented-split' ? new EventEmitterPubSub() : undefined;
+    const agent =
+      engine === 'durable'
+        ? createDurableAgent({ agent: baseAgent })
+        : createEventedAgent({ agent: baseAgent, pubsub: customPubsub });
+    const mastra = new Mastra({ agents: { owner: agent }, storage: new InMemoryStore(), logger: false });
+    const workflowEvents: string[] = [];
+    await mastra.pubsub.subscribe('workflows', event => workflowEvents.push(event.type));
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const options = { memory: { thread: scope.threadId, resource: scope.resourceId }, maxSteps: 4 };
+    const stream = await agent.stream('Hello', options);
+    const consumption = stream.output.consumeStream();
+    try {
+      await vi.waitFor(() => expect(requestStarted).toBe(true));
+      const entry = globalRunRegistry.get(stream.runId)!;
+      expect(entry.subscribePendingSignals).toBeTypeOf('function');
+      const notifications = vi.fn();
+      const unsubscribe = entry.subscribePendingSignals!(notifications);
+      const retained = vi.fn();
+      entry.subscribePendingSignals!(retained);
+      const first = await agent.sendSignal({ type: 'user', contents: 'QUEUED_FIRST' }, scope);
+      await expect(first.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      expect(notifications).toHaveBeenCalledTimes(1);
+      expect(retained).toHaveBeenCalledTimes(1);
+      unsubscribe();
+      unsubscribe();
+      const second = await agent.sendSignal({ type: 'user', contents: 'QUEUED_SECOND' }, scope);
+      await expect(second.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      expect(notifications).toHaveBeenCalledTimes(1);
+      expect(retained).toHaveBeenCalledTimes(2);
+      releaseRequest();
+      await consumption;
+      await entry.workflowExecution;
+      stream.cleanup();
+      expect(globalRunRegistry.get(stream.runId)).toBeUndefined();
+
+      requestGate = new Promise<void>(resolve => {
+        releaseRequest = resolve;
+      });
+      const next = await agent.stream('Next run', options);
+      const nextConsumption = next.output.consumeStream();
+      const nextSignal = await agent.sendSignal({ type: 'user', contents: 'QUEUED_NEXT_RUN' }, scope);
+      await expect(nextSignal.accepted).resolves.toMatchObject({ action: 'deliver', runId: next.runId });
+      expect(retained).toHaveBeenCalledTimes(2);
+      expect(notifications).toHaveBeenCalledTimes(1);
+      releaseRequest();
+      await nextConsumption;
+      await globalRunRegistry.get(next.runId)?.workflowExecution;
+      next.cleanup();
+      if (engine !== 'durable') {
+        expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe('evented');
+        expect(workflowEvents).toContain('workflow.start');
+        expect(workflowEvents.some(type => type.startsWith('workflow.step'))).toBe(true);
+      }
+    } finally {
+      releaseRequest();
+      stream.cleanup();
+      await customPubsub?.close();
+    }
+  }, 30_000);
 });

@@ -480,11 +480,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       processedStream = processedStream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, rawController) {
+            // Durable transports bind each chunk, since this stream spans several attempts.
+            const modelAttempt = getModelAttempt(chunk) ?? getModelAttempt(stream);
             if (modelAttempt?.discarded) return;
             const controller = modelAttempt
               ? {
                   enqueue(part: ChunkType<OUTPUT>) {
-                    if (modelAttempt.observeWriter(part)) rawController.enqueue(part);
+                    if (!modelAttempt.observeWriter(part)) return;
+                    if (part.type !== 'data-signal' && part.type !== 'data-user-message')
+                      bindModelAttempt(part, modelAttempt);
+                    if (!getModelAttempt(stream)) modelAttempt.recordEmitted(part);
+                    rawController.enqueue(part);
                   },
                   error: (reason: unknown) => rawController.error(reason),
                   terminate: () => rawController.terminate(),
@@ -553,7 +559,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   writerOptions?: { messageId?: string },
                 ) => {
                   if (modelAttempt && !modelAttempt.observeWriter(data)) return;
-                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  persistProcessorDataChunk(
+                    self.messageList,
+                    writerOptions?.messageId ?? modelAttempt?.messageId ?? self.messageId,
+                    data,
+                  );
                   controller.enqueue(data as ChunkType<OUTPUT>);
                 },
               };
