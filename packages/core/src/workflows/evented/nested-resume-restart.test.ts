@@ -154,6 +154,21 @@ describe('evented nested workflow restart after crash during resume (issue #2536
     expect(nestedAfter?.status).toBe('success');
   });
 
+  it('routes a data-less resume to the parked nested run after its resumePayload key was dropped', async () => {
+    const { runId, nestedRunId, parentSnapshot, suspendedNested } = await crashMidResume();
+    // A resume without resumeData stores `resumePayload: undefined`, which JSON-serializing stores drop.
+    delete parentSnapshot.context.nested.resumePayload;
+    expect(parentSnapshot.context.nested).toMatchObject({ status: 'running' });
+    expect(parentSnapshot.context.nested.resumedAt).toBeDefined();
+
+    const { result, seen, nestedAfter } = await restartOnFreshHost(runId, nestedRunId, parentSnapshot, suspendedNested);
+
+    // The gate re-suspends on undefined data; the point is restart reaches the nested resume instead of failing.
+    expect(result.status).toBe('suspended');
+    expect(seen).toEqual([]);
+    expect(nestedAfter?.status).toBe('suspended');
+  });
+
   it('resumes the step the caller resumed when parallel nested steps are suspended', async () => {
     const buildParallel = (onResume: (id: string, data: any) => Promise<void>) => {
       const mk = (id: string) =>
