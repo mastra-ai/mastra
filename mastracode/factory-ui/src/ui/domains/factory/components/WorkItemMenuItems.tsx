@@ -74,12 +74,8 @@ export function WorkItemMenuItems({
         .filter(phase => targets.some(target => target.to === phase.id))
         .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item).map(stage => ({ ...stage, kind: undefined }));
-  // On a custom board a proposal the card could not label belongs to another board; hide it entirely.
-  const suggestion = custom && proposedRunLabel === undefined ? undefined : proposal;
-  // A held card leads with the maintainer's decision. Nothing that starts,
-  // restarts, or releases a run is offered until the card is accepted: every
-  // one of those would advance it as a side effect. Dismissing a stale
-  // suggestion stays, since that starts nothing.
+  const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
+  // Every run-starting action would accept a held card as a side effect, so triage choices replace them.
   const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
   const runsBlocked = !canStartRun(owner.kind);
   const yourRequestInFlight = owner.kind === 'you';
@@ -98,14 +94,14 @@ export function WorkItemMenuItems({
           </DropdownMenu.Item>
         ))}
       {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
-      {suggestion !== undefined && !awaitsTriage && (
-        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestion.id)}>
+      {suggestionForThisBoard !== undefined && !awaitsTriage && (
+        <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
-          <span>{approvingDecisionId === suggestion.id ? 'Starting…' : 'Start suggested run'}</span>
+          <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
         </DropdownMenu.Item>
       )}
-      {suggestion !== undefined && (
-        <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestion.id)}>
+      {suggestionForThisBoard !== undefined && (
+        <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestionForThisBoard.id)}>
           <CircleSlash aria-hidden />
           <span>Dismiss suggested run</span>
         </DropdownMenu.Item>

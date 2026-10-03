@@ -1,8 +1,3 @@
-/**
- * Stage moves are multi-second server evaluations. While one is in flight the
- * card must announce where it is going ("Moving to Planning…") instead of
- * silently waiting, and drop the status once the server answers.
- */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

@@ -700,16 +700,15 @@ describe('Global search', () => {
     expect(await screen.findByText('Reviewing is paused for this repository.')).toBeInTheDocument();
   });
 
-  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
-    const requests = stubSearchApi();
+  function stubAutomationStartingRunOn(workItemId: string) {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/decisions`, () =>
         HttpResponse.json({
           decisions: [
             {
-              id: 'decision-queued-review',
-              evaluationId: 'evaluation-queued-review',
-              workItemId: 'work-item-unstarted-review',
+              id: 'decision-queued-run',
+              evaluationId: 'evaluation-queued-run',
+              workItemId,
               type: 'invokeSkill',
               status: 'pending',
               attempts: 0,
@@ -726,6 +725,11 @@ describe('Global search', () => {
         }),
       ),
     );
+  }
+
+  it('refuses to move a card into its lane while automation is already starting a run on it', async () => {
+    const requests = stubSearchApi();
+    stubAutomationStartingRunOn('work-item-unstarted-review');
     const user = userEvent.setup();
     const { client } = renderSearchRoute();
     await openFromSidebar();
@@ -736,6 +740,24 @@ describe('Global search', () => {
     await user.click(await screen.findByText('Bump the command palette dependencies'));
 
     expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+    expect(requests.transitions).toEqual([]);
+  });
+
+  it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
+    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const requests = stubSearchApi({ workItems: [item] });
+    stubAutomationStartingRunOn(item.id);
+    const user = userEvent.setup();
+    const { client } = renderSearchRoute();
+    const search = await openFromSidebar();
+    const card = await within(search).findByText(item.title);
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    await user.click(card);
+
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
     expect(requests.transitions).toEqual([]);
   });
 

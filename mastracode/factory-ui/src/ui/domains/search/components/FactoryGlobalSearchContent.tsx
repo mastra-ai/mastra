@@ -46,21 +46,20 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessions = useGlobalSearchSessions(repositoryIds);
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
-  // Both boards read `repositories[0]`, so that is the repository whose intake feeds are searchable.
-  const projectRepositoryId = activeFactory?.repositories[0]?.projectRepositoryId;
-  const intake = useGlobalSearchIntake(factoryId, projectRepositoryId, activeFactory?.repositories[0]?.provider);
-  // The palette closes on select, so a failed move has no card left to carry its reason.
+  const boardRepository = activeFactory?.repositories[0];
+  const intake = useGlobalSearchIntake(factoryId, boardRepository?.projectRepositoryId, boardRepository?.provider);
+  const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'work',
     currentUserId,
-    onFailure: message => toast.error(message),
+    onFailure: toastFailureAfterPaletteCloses,
   });
   const reviewBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'review',
     currentUserId,
-    onFailure: message => toast.error(message),
+    onFailure: toastFailureAfterPaletteCloses,
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
@@ -133,14 +132,15 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
                   if (move) board.handleDrop(candidatePayload(target.candidate), move.stage, 'card_action');
                   return;
                 }
+                const { owner } = boardCardState({ decision: effectByItem.get(target.item.id) });
+                if (!canStartRun(owner.kind)) {
+                  closeSearch();
+                  toast.error(BUSY_CARD_MOVE_REFUSAL);
+                  return;
+                }
                 const [move] = cardMoves(target.item, 'intake');
                 if (move) {
                   closeSearch();
-                  const { owner } = boardCardState({ decision: effectByItem.get(target.item.id) });
-                  if (!canStartRun(owner.kind)) {
-                    toast.error(BUSY_CARD_MOVE_REFUSAL);
-                    return;
-                  }
                   const board = target.item.board === 'review' ? reviewBoard : workBoard;
                   board.move(target.item.id, move.stage);
                   return;
