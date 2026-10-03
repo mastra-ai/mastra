@@ -305,8 +305,10 @@ export function parseReflectorOutput(
   sourceObservations?: string,
   extractors: readonly Extractor<any>[] = [],
 ): ReflectorResult {
-  // Check for degenerate repetition before parsing
-  if (detectDegenerateRepetition(output)) {
+  // Check for degenerate repetition before parsing. Like the observer, giant
+  // lines are truncated rather than rejected, so repetition is judged on the
+  // line-length-sanitized output.
+  if (detectDegenerateRepetition(sanitizeObservationLines(output))) {
     return {
       observations: '',
       degenerate: true,
