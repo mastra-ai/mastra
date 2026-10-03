@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentProps } from 'react';
 import type { SidebarState } from './main-sidebar-context';
@@ -17,6 +18,7 @@ export type NavLink = {
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
+  opensView?: boolean;
   /** @deprecated Prefer nested `children`; accepted for callers still rendering manual sublinks. */
   indent?: boolean;
 };
@@ -78,7 +80,7 @@ export function MainSidebarNavLink({
 
   const itemClassName = rowAction
     ? cn(navItemLayoutClasses({ level, size }), 'flex-1 pr-1')
-    : navItemClasses({ isActive, isCollapsed, isFeatured, level, size });
+    : cn(navItemClasses({ isActive, isCollapsed, isFeatured, level, size }), link?.opensView && !isCollapsed && 'pr-1');
 
   return (
     <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
@@ -140,6 +142,7 @@ function navInteractiveRow({
       {link.icon}
       <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
       {children}
+      {link.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null}
     </Link>
   );
 }

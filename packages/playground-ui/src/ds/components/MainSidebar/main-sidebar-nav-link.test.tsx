@@ -218,6 +218,17 @@ describe('MainSidebarNavLink — what it renders a row as', () => {
     expect(anchor.rel).toBe(target === '_blank' ? 'noreferrer' : '');
   });
 
+  it.each([
+    ['default', 1],
+    ['collapsed', 0],
+  ] as const)('shows a caret on a row that opens a view when %s', (state, carets) => {
+    const { container } = renderLink(
+      <MainSidebarNavLink state={state} link={{ name: 'Gateway', url: '/gateway', opensView: true }} />,
+    );
+
+    expect(container.querySelectorAll('a svg.lucide-chevron-right')).toHaveLength(carets);
+  });
+
   it('marks a featured row so it reads apart from the rest', () => {
     const plain = renderLink(<MainSidebarNavLink link={{ name: 'Agents', url: '/agents' }} />);
     const plainClass = plain.container.querySelector('a')?.className ?? '';
