@@ -40,9 +40,9 @@ After initialization, the client calls `session/new` with an absolute `cwd` and 
 | `openai-codex` | Agent | Opens the browser to sign in with a ChatGPT Plus or Pro subscription. |
 | `kimi-for-coding` | Agent | Opens the browser to approve a Kimi For Coding device sign-in. |
 | `xai` | Agent | Opens the browser to approve an xAI device sign-in. |
-| `mastracode-login` | Terminal | Runs `mastracode` without `--acp` in a terminal, where you can sign in to any provider or add an API key. |
+| `mastracode-login` | Terminal | Runs `mastracode login` in a terminal to sign in to any provider or save an API key. Offered only to clients that advertise terminal authentication. |
 
-For agent methods, `authenticate` runs the sign-in inside the server process and returns after the credentials are saved. If a provider needs typed input, such as a code to paste, the request fails and points to `mastracode-login`.
+For agent methods, `authenticate` runs the sign-in inside the server process and returns after the credentials are saved. If a provider needs typed input, such as a code to paste, the request fails and asks you to run `mastracode login` in a terminal.
 
 API keys in the server process's environment also count as a configured provider. ACP sessions don't load project `.env` files into the shared process environment. New sessions pick up saved credentials without restarting the server.
 

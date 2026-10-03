@@ -183,7 +183,7 @@ describe('ACP Agent - Turn failures and cancellation', () => {
 });
 
 describe('ACP Agent - Provider authentication', () => {
-  function newSession(models: { id: string; hasApiKey: boolean }[], currentModelId: string) {
+  function newSession(models: { id: string; hasApiKey: boolean }[] | Error, currentModelId: string) {
     const createThread = vi.fn(async () => ({ id: 'thread-1' }));
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const session = {
@@ -195,7 +195,12 @@ describe('ACP Agent - Provider authentication', () => {
     const agent = new MastraCodeAcpAgent(
       { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection,
       async () => ({
-        controller: { listAvailableModels: async () => models } as unknown as AgentController,
+        controller: {
+          listAvailableModels: async () => {
+            if (models instanceof Error) throw models;
+            return models;
+          },
+        } as unknown as AgentController,
         session,
         modes: [],
         cleanup,
@@ -224,5 +229,12 @@ describe('ACP Agent - Provider authentication', () => {
   ])('starts the session when %s', async (_case, models, currentModelId) => {
     const { created } = newSession(models, currentModelId);
     await expect(created).resolves.toMatchObject({ sessionId: 'thread-1' });
+  });
+
+  it('fails session creation when model discovery fails instead of hiding the catalog', async () => {
+    const { created, createThread, cleanup } = newSession(new Error('catalog unavailable'), 'openai/gpt-5');
+    await expect(created).rejects.toThrow('catalog unavailable');
+    expect(createThread).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

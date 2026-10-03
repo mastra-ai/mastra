@@ -406,6 +406,11 @@ async function main() {
     return process.exit(await runPruneCommand(process.argv.slice(3)));
   }
 
+  if (process.argv[2] === 'login') {
+    const { runLoginCommand } = await import('./login-command.js');
+    return process.exit(await runLoginCommand());
+  }
+
   const initialPrompt = takeInitialPrompt(process.argv, process.env);
   if (initialPrompt.error) {
     process.stderr.write(`${initialPrompt.error}\n`);

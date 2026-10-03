@@ -133,17 +133,37 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
-  it('offers browser sign-in for each OAuth provider that needs no typed input, plus terminal login', async () => {
+  it.each([
+    ['without terminal support', {}, []],
+    ['when terminal auth is turned off', { auth: { terminal: false } }, []],
+    ['with terminal auth', { auth: { terminal: true } }, ['mastracode-login']],
+    ['with the legacy terminal-auth flag', { _meta: { 'terminal-auth': true } }, ['mastracode-login']],
+  ])(
+    'offers browser sign-in, and terminal login only to clients that can run it, %s',
+    async (_case, clientCapabilities, terminal) => {
+      const { client } = await connect();
+      const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities });
+      expect(authMethods?.map(method => method.id)).toEqual(['openai-codex', 'kimi-for-coding', 'xai', ...terminal]);
+      expect(authMethods?.filter(method => !('type' in method)).length).toBe(3);
+    },
+  );
+
+  it('launches the login command for terminal login', async () => {
     const { client } = await connect();
-    const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
-    expect(authMethods?.map(method => [method.id, 'type' in method ? method.type : 'agent'])).toEqual([
-      ['openai-codex', 'agent'],
-      ['kimi-for-coding', 'agent'],
-      ['xai', 'agent'],
-      ['mastracode-login', 'terminal'],
-    ]);
-    expect(authMethods?.at(-1)?._meta).toEqual({
-      'terminal-auth': { command: process.execPath, args: process.argv.slice(1, 2), label: 'Mastra Code Login' },
+    const { authMethods } = await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: { auth: { terminal: true } },
+    });
+    expect(authMethods?.at(-1)).toMatchObject({
+      type: 'terminal',
+      args: ['login'],
+      _meta: {
+        'terminal-auth': {
+          command: process.execPath,
+          args: [...process.argv.slice(1, 2), 'login'],
+          label: 'Mastra Code Login',
+        },
+      },
     });
   });
 
@@ -176,7 +196,7 @@ describe('ACP JSON-RPC conversation', () => {
     });
     const { client } = await connect();
     await expect(client.authenticate({ methodId: 'openai-codex' })).rejects.toMatchObject({
-      message: expect.stringContaining('mastracode-login'),
+      message: expect.stringContaining('mastracode login'),
     });
   });
 
@@ -187,7 +207,7 @@ describe('ACP JSON-RPC conversation', () => {
     });
     const { client } = await connect();
     await expect(client.authenticate({ methodId: 'xai' })).rejects.toMatchObject({
-      message: expect.stringContaining('mastracode-login'),
+      message: expect.stringContaining('mastracode login'),
     });
     expect(openUrlInBrowser).not.toHaveBeenCalled();
     expect(seedProviderOMDefault).not.toHaveBeenCalled();
