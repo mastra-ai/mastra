@@ -460,7 +460,7 @@ export class ObservationStep {
   /**
    * Run the full threshold observation pipeline:
    * waitForBuffering → re-check → activate buffered chunks → reflect → observe
-   * (sync fallback when pending tokens are still at or above the threshold)
+   * (sync fallback at blockAfter when async buffering is enabled)
    */
   private async runThresholdObservation(inAsyncObservationBand?: boolean): Promise<{
     succeeded: boolean;
@@ -503,11 +503,8 @@ export class ObservationStep {
       return { succeeded: false, record: status.record, cleanupMessageIds: [] };
     }
 
-    // Activate buffered chunks first. Buffering stops once pending tokens reach the
-    // threshold, so the content that crossed it is never in a chunk and activation
-    // alone may not bring the context back under the threshold. Keep activating while
-    // chunks remain — every message a chunk owns must be activated before the sync
-    // observer runs, or it would observe them a second time.
+    // A large batch may leave an uncovered tail after activation. Drain buffered
+    // chunks before sync observation so their messages are not observed twice.
     let pendingMessages = observableMessages;
     const activatedMessageIds: string[] = [];
     let activated = false;
@@ -523,7 +520,16 @@ export class ObservationStep {
         messageList,
       });
       this.turn.setRecord(activation.record);
-      if (!activation.activated) break;
+      if (!activation.activated) {
+        await this.turn.refreshRecord();
+        status = await om.getStatus({
+          threadId,
+          resourceId,
+          record: this.turn.record,
+          messages: pendingMessages,
+        });
+        break;
+      }
 
       activated = true;
       const ids = new Set(activation.activatedMessageIds ?? []);
@@ -537,14 +543,28 @@ export class ObservationStep {
       });
     }
 
+    // A bounded activation wait can leave older chunks (or a late write) pending.
+    // Defer rather than sync-observe newer messages and later roll the cursor back.
+    // Keep prior activation cleanup, and don't reflect onto a new generation while
+    // the stalled write still targets this one.
+    const observationBufferKey = om.buffering.getObservationBufferKey(om.buffering.getLockKey(threadId, resourceId));
+    if ((status.shouldObserve && status.canActivate) || om.buffering.isChunkWriteInProgress(observationBufferKey)) {
+      return {
+        succeeded: activated,
+        record: this.turn.record,
+        activatedMessageIds: activated ? activatedMessageIds : undefined,
+        cleanupMessageIds: activatedMessageIds,
+      };
+    }
+
     if (activated) {
       // Check reflection after activation — use maybeReflect so that a
       // completed buffered reflection is activated instantly instead of
       // running a redundant sync reflection from scratch.
-      const postActivationRecord = this.turn.record;
+      const preReflectionRecord = this.turn.record;
       await om.reflector.maybeReflect({
-        record: postActivationRecord,
-        observationTokens: postActivationRecord.observationTokenCount ?? 0,
+        record: preReflectionRecord,
+        observationTokens: preReflectionRecord.observationTokenCount ?? 0,
         threadId,
         writer: this.turn.writer,
         messageList,
@@ -554,6 +574,14 @@ export class ObservationStep {
         lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
         reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
         trigger: 'turn-sync',
+      });
+      await this.turn.refreshRecord();
+      const postActivationRecord = this.turn.record;
+      status = await om.getStatus({
+        threadId,
+        resourceId,
+        record: postActivationRecord,
+        messages: pendingMessages,
       });
 
       if (!status.shouldObserve) {
@@ -566,7 +594,11 @@ export class ObservationStep {
       }
     }
 
-    if (status.inAsyncObservationBand) {
+    if (
+      status.inAsyncObservationBand ||
+      status.canActivate ||
+      om.buffering.isChunkWriteInProgress(observationBufferKey)
+    ) {
       return {
         succeeded: activated,
         record: this.turn.record,
