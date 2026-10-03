@@ -205,13 +205,14 @@ export const microsoftTeamsScenario: Scenario = {
         membershipId: '00000000-0000-0000-0000-000000000000',
       }),
     );
-    // create_team is an admin-tier operation that provisions an entire team;
-    // probe with a reserved template so the request lands in Graph but is
-    // rejected before any resource is created.
+    // create_team provisions an entire team and nothing here could delete it.
+    // Probe with a nonexistent template binding so the request lands in Graph
+    // but is rejected (400) before any resource is created — 'standard' would
+    // really provision a team on tenants where the app has Team.Create.
     steps.push(
-      await probeTool(call, tools, 'create team', 'microsoft_teams_create_team', {
+      await probeTool(call, tools, 'create team (probe)', 'microsoft_teams_create_team', {
         display_name: `smoke-${runId}`,
-        template: 'standard',
+        template: `smoke-invalid-template-${runId}`,
       }),
     );
 

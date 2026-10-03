@@ -54,16 +54,27 @@ for (const provider of readdirSync(providersRoot)) {
 
 // ---- parse scenario call sites ----
 let findings = 0;
+let checked = 0;
+let skippedNonLiteral = 0; // call('id', variable) / call('id', [...]) — not an object literal
+let skippedNoSchema = 0; // tool whose InputSchema the parser couldn't extract
 for (const f of readdirSync(scenariosRoot)) {
   if (!f.endsWith('.ts') || f === 'index.ts') continue;
   const src = readFileSync(join(scenariosRoot, f), 'utf8');
+  // All call sites, regardless of second-arg shape, so skips are countable.
+  for (const m of src.matchAll(/call(?:<[^>]*>)?\(\s*['"]([a-z0-9_]+)['"]\s*,\s*([^\s{])/g)) {
+    if (schemas.get(m[1]) !== undefined) skippedNonLiteral++;
+  }
   const re = /call(?:<[^>]*>)?\(\s*['"]([a-z0-9_]+)['"]\s*,\s*\{/g;
   let m;
   while ((m = re.exec(src))) {
     const toolId = m[1];
     const schema = schemas.get(toolId);
-    if (schema === undefined) continue; // unknown id — covered by audit
-    if (schema === null) continue; // couldn't parse schema
+    if (schema === undefined) continue; // unknown id — covered by audit-coverage
+    if (schema === null) {
+      skippedNoSchema++;
+      continue; // couldn't parse schema
+    }
+    checked++;
     const start = re.lastIndex - 1;
     let depth = 0, end = start;
     for (let i = start; i < src.length; i++) {
@@ -106,5 +117,12 @@ for (const f of readdirSync(scenariosRoot)) {
     }
   }
 }
-console.log(`\n${findings} finding(s)`);
+console.log(`\nchecked ${checked} object-literal call site(s)`);
+if (skippedNonLiteral > 0) {
+  console.log(`⚠️ skipped ${skippedNonLiteral} call site(s) whose input is not an object literal (variable/array) — not shape-checked`);
+}
+if (skippedNoSchema > 0) {
+  console.log(`⚠️ skipped ${skippedNoSchema} call site(s) whose tool InputSchema could not be parsed — not shape-checked`);
+}
+console.log(`${findings} finding(s)`);
 process.exit(findings > 0 ? 1 : 0);

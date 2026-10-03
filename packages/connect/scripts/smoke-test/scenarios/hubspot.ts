@@ -259,27 +259,47 @@ export const hubspotScenario: Scenario = {
       }
     }
 
-    // Note creation (associates with the smoke contact so it cleans up with it).
-    if (contactId && tools['hubspot_create_note']) {
-      try {
-        await call('hubspot_create_note', {
+    // Note creation: there is no delete-note tool, so a successful create
+    // would leak an engagement. Probe with a synthetic association target —
+    // HubSpot rejects the unknown object id, proving routing + validation.
+    if (tools['hubspot_create_note']) {
+      steps.push(
+        await probeTool(call, tools, 'create note (probe)', 'hubspot_create_note', {
           body: `${runId} smoke note`,
           timestamp: new Date().toISOString(),
-          association: { objectType: 'contact', objectId: contactId },
-        });
-        steps.push(makeStep('create note', 'hubspot_create_note', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('create note', 'hubspot_create_note', 'fail', errorMessage(error)));
-      }
-    }
-
-    // Batch company CRUD using the smoke company id when available.
-    if (tools['hubspot_batch_create_companies']) {
-      steps.push(
-        await probeTool(call, tools, 'batch create companies (probe)', 'hubspot_batch_create_companies', {
-          companies: [{ name: `${runId} batch co`, domain: `batch-${runId}.mastra-smoke.invalid` }],
+          association: { objectType: 'contact', objectId: '999999999999999' },
         }),
       );
+    }
+
+    // Batch company create: real create, then delete the created record so
+    // nothing leaks.
+    if (tools['hubspot_batch_create_companies']) {
+      let batchCompanyId: string | undefined;
+      try {
+        const batch = await call<{ companies?: Array<{ id: string }> }>('hubspot_batch_create_companies', {
+          companies: [{ name: `${runId} batch co`, domain: `batch-${runId}.mastra-smoke.invalid` }],
+        });
+        batchCompanyId = batch.companies?.[0]?.id;
+        steps.push(makeStep('batch create companies', 'hubspot_batch_create_companies', 'pass', batchCompanyId));
+      } catch (error) {
+        steps.push(makeStep('batch create companies', 'hubspot_batch_create_companies', 'fail', errorMessage(error)));
+      }
+      if (batchCompanyId && tools['hubspot_delete_company']) {
+        try {
+          await call('hubspot_delete_company', { id: batchCompanyId });
+        } catch (error) {
+          log.error(`Failed to delete smoke batch company ${batchCompanyId} — clean up manually.`, {
+            error: errorMessage(error),
+          });
+          steps.push(makeStep('delete batch company', 'hubspot_delete_company', 'fail', errorMessage(error)));
+        }
+      } else if (batchCompanyId) {
+        log.error(`Leaked smoke batch company ${batchCompanyId}: hubspot_delete_company unavailable.`);
+        steps.push(
+          makeStep('delete batch company', 'hubspot_delete_company', 'fail', `leaked company ${batchCompanyId}`),
+        );
+      }
     }
     if (companyId && tools['hubspot_batch_update_companies']) {
       try {
@@ -296,6 +316,9 @@ export const hubspotScenario: Scenario = {
     // target reserved domains / synthetic ids and either succeed or surface
     // the HubSpot 4xx that proves the endpoint is wired.
     if (tools['hubspot_create_property']) {
+      // There is no delete-property tool, so the probe input must be one the
+      // API rejects: a nonexistent property group → HubSpot 400, no property
+      // is created.
       steps.push(
         await probeTool(call, tools, 'create property (probe)', 'hubspot_create_property', {
           objectType: 'contacts',
@@ -303,35 +326,59 @@ export const hubspotScenario: Scenario = {
           label: `Mastra smoke ${runId}`,
           type: 'string',
           fieldType: 'text',
-          groupName: 'contactinformation',
+          groupName: `nonexistent_group_${runId.replace(/-/g, '_')}`,
         }),
       );
     }
     if (tools['hubspot_create_user']) {
+      // User provisioning is scope/tier gated on many portals (403) — opt in.
+      // If create actually succeeds, the delete_user probe below removes the
+      // same email, so nothing leaks.
       steps.push(
-        await probeTool(call, tools, 'create user (probe)', 'hubspot_create_user', {
-          email: `mastra-smoke+${runId}@mastra-smoke.invalid`,
-          firstName: 'Mastra',
-          lastName: `Smoke-${runId}`,
-          sendWelcomeEmail: false,
-        }),
+        await probeTool(
+          call,
+          tools,
+          'create user (probe)',
+          'hubspot_create_user',
+          {
+            email: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+            firstName: 'Mastra',
+            lastName: `Smoke-${runId}`,
+            sendWelcomeEmail: false,
+          },
+          /status=(400|403|404|409|422)|not found/i,
+        ),
       );
     }
     if (tools['hubspot_change_user_role']) {
       steps.push(
-        await probeTool(call, tools, 'change user role (probe)', 'hubspot_change_user_role', {
-          userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
-          idProperty: 'EMAIL',
-          roleId: '0',
-        }),
+        await probeTool(
+          call,
+          tools,
+          'change user role (probe)',
+          'hubspot_change_user_role',
+          {
+            userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+            idProperty: 'EMAIL',
+            roleId: '0',
+          },
+          /status=(400|403|404|409|422)|not found/i,
+        ),
       );
     }
     if (tools['hubspot_delete_user']) {
       steps.push(
-        await probeTool(call, tools, 'delete user (probe)', 'hubspot_delete_user', {
-          userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
-          idProperty: 'EMAIL',
-        }),
+        await probeTool(
+          call,
+          tools,
+          'delete user (probe)',
+          'hubspot_delete_user',
+          {
+            userId: `mastra-smoke+${runId}@mastra-smoke.invalid`,
+            idProperty: 'EMAIL',
+          },
+          /status=(400|403|404|409|422)|not found/i,
+        ),
       );
     }
     if (tools['hubspot_get_owner']) {
@@ -355,6 +402,9 @@ export const hubspotScenario: Scenario = {
       'list marketing emails (probe)',
       'hubspot_list_marketing_emails',
       {},
+      // Marketing Hub product tier: 403 is the expected proof on portals
+      // without it (opt-in — the default probe regex excludes 403).
+      /status=(400|403|404|409|422)|not found|scopes are required/i,
     );
     if (tools['hubspot_list_marketing_emails']) {
       steps.push(marketingListStep);

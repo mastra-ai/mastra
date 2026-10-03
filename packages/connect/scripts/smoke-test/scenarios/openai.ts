@@ -187,14 +187,14 @@ export const openaiScenario: Scenario = {
       }
     }
 
-    // Image generation: smallest, cheapest size so the smoke run doesn't
-    // burn credit. Still bills — kept behind the probeTool guard so a
-    // disabled image endpoint won't fail the run.
+    // Image generation bills real credit, so never let it succeed: probe with
+    // a dimension gpt-image-1 does not support. The 400 proves routing +
+    // serialization without generating (and paying for) an image.
     steps.push(
-      await probeTool(call, tools, 'create image', 'openai_create_image', {
+      await probeTool(call, tools, 'create image (probe)', 'openai_create_image', {
         prompt: `tiny smoke test tile ${runId}`,
         model: 'gpt-image-1',
-        size: '1024x1024',
+        size: '13x7',
         n: 1,
       }),
     );

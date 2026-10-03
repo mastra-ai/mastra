@@ -574,13 +574,14 @@ export const githubScenario: Scenario = {
       }
     }
     if (tools['github_rerun_workflow_run']) {
-      // Always a probe: re-running a real workflow consumes Actions minutes
-      // and would be a surprising side effect for a smoke test.
+      // Always a synthetic run id: re-running a real workflow consumes
+      // Actions minutes. run_id 1 never exists in this repo, so GitHub
+      // answers 404 and nothing is re-run.
       steps.push(
         await probeTool(call, tools, 'rerun workflow run (probe)', 'github_rerun_workflow_run', {
           owner,
           repo,
-          run_id: realRunId ?? 1,
+          run_id: 1,
         }),
       );
     }
