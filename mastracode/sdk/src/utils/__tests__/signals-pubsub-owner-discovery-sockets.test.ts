@@ -136,4 +136,41 @@ describe.runIf(process.platform !== 'win32')('owner discovery sockets', () => {
 
     expect(seenByLegacy).toEqual([]);
   }, 30_000);
+
+  it('leaves an instance in each discovery scope blind to the other', async () => {
+    // Same resource id, same root, two live layouts: `<resourceId>/` (every
+    // build before shared peer discovery, and any instance whose resource id
+    // cannot be a directory name) and `_shared/` (builds with shared peer
+    // discovery on). Peer discovery is routed by scope, so each instance only
+    // ever hears its own camp: two processes that both look healthy and
+    // sendable can each be missing from the other's `agent_connections_list`.
+    // Both listen sockets coexisting is what the machine showed during the
+    // reports below, so we assert them alongside the missed traffic.
+    const rootDir = createRoot();
+    const resourceId = 'sentinel-camps';
+    const PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
+
+    const legacy = new UnixSocketPubSub(join(rootDir, resourceId, 'agent_thread-peer-discovery.sock'));
+    const current = createSignalsPubSub(resourceId, { rootDir, sharedAgentDiscovery: true });
+    cleanups.push(async () => {
+      await legacy.close().catch(() => {});
+      await current.close().catch(() => {});
+    });
+
+    const heardByLegacy: unknown[] = [];
+    await legacy.subscribe(PEER_DISCOVERY_TOPIC, event => {
+      heardByLegacy.push(event);
+    });
+    const request = {
+      type: 'thread-peer-request',
+      runId: 'presence-request',
+      data: { type: 'thread-peer-request', requestId: 'presence-request', replyTopic: 'presence-reply' },
+    };
+    await current.publish(PEER_DISCOVERY_TOPIC, request);
+    await sleep(200);
+
+    expect(heardByLegacy).toEqual([]);
+    expect(readdirSync(join(rootDir, '_shared'))).toContain('agent_thread-peer-discovery.sock');
+    expect(readdirSync(join(rootDir, resourceId))).toContain('agent_thread-peer-discovery.sock');
+  }, 30_000);
 });
