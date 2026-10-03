@@ -8,6 +8,7 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
+import { useToolDrawerHref } from '@/domains/tools/hooks/use-tool-drawer-param';
 
 const metadataLinkClassName =
   'pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center pointer-coarse:justify-center';
@@ -38,11 +39,12 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
 
 export interface AgentMetadataToolListProps {
   tools: GetToolResponse[];
-  agentId: string;
 }
 
-export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListProps) => {
-  const { Link, paths } = useLinkComponent();
+export const AgentMetadataToolList = ({ tools }: AgentMetadataToolListProps) => {
+  const { Link } = useLinkComponent();
+  // Tools open in a drawer over the agent page you're on (see ToolDrawer in the agent layout).
+  const toolDrawerHref = useToolDrawerHref();
 
   if (tools.length === 0) {
     return <AgentMetadataListEmpty>No tools</AgentMetadataListEmpty>;
@@ -53,7 +55,7 @@ export const AgentMetadataToolList = ({ tools, agentId }: AgentMetadataToolListP
       items={tools}
       getKey={tool => tool.id}
       renderItem={tool => (
-        <Link href={paths.agentToolLink(agentId, tool.id)} data-testid="tool-badge" className={metadataLinkClassName}>
+        <Link href={toolDrawerHref(tool.id)} data-testid="tool-badge" className={metadataLinkClassName}>
           <Badge>{tool.id}</Badge>
         </Link>
       )}

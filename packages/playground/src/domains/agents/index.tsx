@@ -12,7 +12,6 @@ export * from './hooks/use-agent';
 export * from './hooks/use-execute-agent-tool';
 export * from './hooks/use-stored-agents';
 export * from './hooks/use-agent-versions';
-export * from './components/AgentToolPanel';
 export * from './components/agent-entity-header';
 export * from './components/memory-sidebar/agent-memory';
 export * from './components/agent-layout';

@@ -134,7 +134,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
+        <AgentMetadataToolList tools={tools} />
       </AgentMetadataSection>
 
       <AgentMetadataSection

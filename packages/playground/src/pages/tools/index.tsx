@@ -9,10 +9,13 @@ import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
+import { ToolsPageDrawerBody } from '@/domains/tools/components/tool-drawer/tools-page-tool-drawer-body';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
 import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
 import type { ToolsSort } from '@/domains/tools/components/tools-list/tools-list';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useToolDrawerParam } from '@/domains/tools/hooks/use-tool-drawer-param';
 
 const crumbs = [navCrumb('/tools')];
 
@@ -21,6 +24,7 @@ export default function Tools() {
   const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ToolsSort>();
+  const { toolId: openToolId } = useToolDrawerParam();
 
   const isLoading = isLoadingAgents || isLoadingTools;
   const error = toolsError || agentsError;
@@ -82,7 +86,9 @@ export default function Tools() {
         search={search}
         sort={sort}
         onSortChange={(direction, key) => setSort({ key, direction })}
+        selectedToolId={openToolId}
       />
+      <ToolDrawer>{toolId => <ToolsPageDrawerBody toolId={toolId} />}</ToolDrawer>
     </PageLayout>
   );
 }

@@ -61,4 +61,39 @@ describe('DynamicForm numeric fields', () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
   });
+
+  describe('when an entered number is cleared again', () => {
+    function enterThenClearAndSubmit() {
+      const input = screen.getByRole('spinbutton', { name: /^Amount/ });
+      fireEvent.change(input, { target: { value: '25' } });
+      fireEvent.change(input, { target: { value: '' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    }
+
+    it('submits an optional field without the old number', async () => {
+      const onSubmit = vi.fn<(values: { amount?: number }) => void>();
+      render(
+        <DynamicForm
+          schema={z.object({ amount: z.number().optional() })}
+          onSubmit={onSubmit}
+          submitButtonLabel="Run"
+        />,
+      );
+
+      enterThenClearAndSubmit();
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0]?.[0].amount).toBeUndefined();
+    });
+
+    it('blocks submission when the field is required', async () => {
+      const onSubmit = vi.fn<(values: { amount: number }) => void>();
+      render(<DynamicForm schema={z.object({ amount: z.number() })} onSubmit={onSubmit} submitButtonLabel="Run" />);
+
+      enterThenClearAndSubmit();
+
+      await waitFor(() => expect(screen.getByRole('alert')).not.toBeNull());
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
 });
