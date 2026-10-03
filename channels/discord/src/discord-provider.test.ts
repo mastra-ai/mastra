@@ -83,19 +83,22 @@ async function readMockBody(body: unknown): Promise<string> {
   if (body == null) return '';
   if (typeof body === 'string') return body;
   if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+
+  const chunks: Uint8Array[] = [];
+  const collect = (chunk: unknown) => {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk as Uint8Array));
+  };
+
   if (Array.isArray(body)) {
-    return body
-      .map(chunk => (typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')))
-      .join('');
+    for (const chunk of body) collect(chunk);
+  } else if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<unknown>) collect(chunk);
+  } else {
+    return String(body);
   }
-  if (typeof body === 'object' && Symbol.asyncIterator in body) {
-    const chunks: string[] = [];
-    for await (const chunk of body as AsyncIterable<unknown>) {
-      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8'));
-    }
-    return chunks.join('');
-  }
-  return String(body);
+  // Join the raw bytes before decoding: a multibyte character split across two
+  // chunks would otherwise decode into two replacement characters.
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** Stub `GET /applications/@me` — the bot-token validation call. */
