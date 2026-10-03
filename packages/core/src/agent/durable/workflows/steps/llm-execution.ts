@@ -1474,6 +1474,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     data: { type: string; data?: unknown; transient?: boolean },
                     writerOptions?: { messageId?: string },
                   ) => {
+                    if (!modelAttempt.observeWriter(data)) return;
+                    if (data.type !== 'data-signal' && data.type !== 'data-user-message') {
+                      bindModelAttempt(data, modelAttempt);
+                    }
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                     try {
                       await emitChunkEvent(pubsub, runId, data as any, true);
@@ -1738,6 +1742,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // matching the regular agent's ordering (tool-result → step-finish).
                 // For final steps (no tool calls) we emit it after the assistant message
                 // is added to messageList.
+                bindModelAttempt(clientChunk, modelAttempt);
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
@@ -1753,6 +1758,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         messageList,
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
+                          if (!modelAttempt.observeWriter(chunk)) return;
+                          if (chunk.type !== 'data-signal' && chunk.type !== 'data-user-message') {
+                            bindModelAttempt(chunk, modelAttempt);
+                          }
                           // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
                           if (chunk.type === 'tripwire') {
                             outputStreamBlocked = true;
@@ -1764,6 +1773,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                         },
                         onProcessorError: error => {
+                          modelAttempt.throwIfDiscarded();
                           if (error instanceof DurableChunkPublishError) {
                             throw error.cause;
                           }
@@ -1771,6 +1781,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                       });
                     } catch (error) {
+                      modelAttempt.throwIfDiscarded();
                       if (error instanceof DurableOutputProcessorError) {
                         const processorError = error.cause instanceof Error ? error.cause : error;
                         // Keep already-published output and the error record; the failing chunk was never collected.
@@ -1779,6 +1790,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       }
                       throw error;
                     }
+                    modelAttempt.throwIfDiscarded();
                     // A blocked chunk ends the stream: it is never collected, and later chunks are never published.
                     if (outputStreamBlocked) {
                       break;

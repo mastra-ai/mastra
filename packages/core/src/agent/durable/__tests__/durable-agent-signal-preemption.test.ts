@@ -594,91 +594,98 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     }
   });
 
-  it('waits for an in-flight processor and drops its late writer and transformed output', async () => {
-    const held = barrier();
-    let processing = false;
-    let providerAborted = false;
-    const prompts: unknown[] = [];
-    const memory = new MockMemory();
-    const { agent, customPubsub } = createOwner(engine, {
-      id: crypto.randomUUID(),
-      name: 'Processor barrier',
-      instructions: 'Test',
-      memory,
-      model: new MockLanguageModelV2({
-        doStream: async ({ prompt, abortSignal }) => {
-          prompts.push(prompt);
-          if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
-          return {
-            warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
-              start(controller) {
-                controller.enqueue({ type: 'stream-start', warnings: [] });
-                controller.enqueue({ type: 'reasoning-start', id: 'held' });
-                controller.enqueue({ type: 'reasoning-delta', id: 'held', delta: 'STALE_PROCESSOR_REASONING' });
-                abortSignal?.addEventListener(
-                  'abort',
-                  () => {
-                    providerAborted = true;
-                    controller.error(abortSignal.reason);
-                  },
-                  { once: true },
-                );
-              },
-            }),
-          };
-        },
-      }),
-      outputProcessors: [
-        {
-          id: 'held-processor',
-          async processOutputStream({ part, writer }) {
-            if (part.type !== 'reasoning-delta') return part;
-            processing = true;
-            await held.promise;
-            await writer?.custom({ type: 'data-late', data: 'STALE_WRITER_DATA' });
-            return { ...part, type: 'text-delta', payload: { id: 'late-text', text: 'STALE_TRANSFORMED_TEXT' } };
+  it.each(['return', 'error', 'tripwire'] as const)(
+    'waits for an in-flight processor and drops its late writer and %s output',
+    async disposition => {
+      const held = barrier();
+      let processing = false;
+      let providerAborted = false;
+      const prompts: unknown[] = [];
+      const memory = new MockMemory();
+      const { agent, customPubsub } = createOwner(engine, {
+        id: crypto.randomUUID(),
+        name: 'Processor barrier',
+        instructions: 'Test',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async ({ prompt, abortSignal }) => {
+            prompts.push(prompt);
+            if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
+            return {
+              warnings: [],
+              stream: new ReadableStream<LanguageModelV2StreamPart>({
+                start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({ type: 'reasoning-start', id: 'held' });
+                  controller.enqueue({ type: 'reasoning-delta', id: 'held', delta: 'STALE_PROCESSOR_REASONING' });
+                  abortSignal?.addEventListener(
+                    'abort',
+                    () => {
+                      providerAborted = true;
+                      controller.error(abortSignal.reason);
+                    },
+                    { once: true },
+                  );
+                },
+              }),
+            };
           },
-        },
-      ],
-    });
-    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
-    const stream = await agent.stream('initial question', {
-      memory: { thread: scope.threadId, resource: scope.resourceId },
-      maxSteps: 3,
-    });
-    const entry = globalRunRegistry.get(stream.runId)!;
-    const chunks: ChunkType[] = [];
-    const consumption = collect(stream.fullStream, chunks);
-    try {
-      await vi.waitFor(() => expect(processing).toBe(true));
-      await (
-        await agent.sendSignal({ type: 'user', contents: 'PROCESSOR_REPLACEMENT' }, scope)
-      ).accepted;
-      await vi.waitFor(() => expect(providerAborted).toBe(true));
-      expect(prompts).toHaveLength(1);
-      held.release();
-      await consumption;
-      await entry.workflowExecution;
-      expect(prompts).toHaveLength(2);
-      expect(JSON.stringify(prompts[1])).toContain('PROCESSOR_REPLACEMENT');
-      for (const marker of ['STALE_PROCESSOR_REASONING', 'STALE_WRITER_DATA', 'STALE_TRANSFORMED_TEXT']) {
-        expect(JSON.stringify(prompts[1])).not.toContain(marker);
-        expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain(marker);
+        }),
+        outputProcessors: [
+          {
+            id: 'held-processor',
+            async processOutputStream({ part, writer, abortSignal, abort }) {
+              if (part.type !== 'reasoning-delta') return part;
+              expect(abortSignal?.aborted).toBe(false);
+              processing = true;
+              await held.promise;
+              expect(abortSignal?.aborted).toBe(true);
+              await writer?.custom({ type: 'data-late', data: 'STALE_WRITER_DATA' });
+              if (disposition === 'error') throw new Error('stale processor error');
+              if (disposition === 'tripwire') abort('stale processor violation');
+              return { ...part, type: 'text-delta', payload: { id: 'late-text', text: 'STALE_TRANSFORMED_TEXT' } };
+            },
+          },
+        ],
+      });
+      const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+      const stream = await agent.stream('initial question', {
+        memory: { thread: scope.threadId, resource: scope.resourceId },
+        maxSteps: 3,
+      });
+      const entry = globalRunRegistry.get(stream.runId)!;
+      const chunks: ChunkType[] = [];
+      const consumption = collect(stream.fullStream, chunks);
+      try {
+        await vi.waitFor(() => expect(processing).toBe(true));
+        await (
+          await agent.sendSignal({ type: 'user', contents: 'PROCESSOR_REPLACEMENT' }, scope)
+        ).accepted;
+        await vi.waitFor(() => expect(providerAborted).toBe(true));
+        expect(prompts).toHaveLength(1);
+        held.release();
+        await consumption;
+        await entry.workflowExecution;
+        expect(prompts).toHaveLength(2);
+        expect(JSON.stringify(prompts[1])).toContain('PROCESSOR_REPLACEMENT');
+        for (const marker of ['STALE_PROCESSOR_REASONING', 'STALE_WRITER_DATA', 'STALE_TRANSFORMED_TEXT']) {
+          expect(JSON.stringify(prompts[1])).not.toContain(marker);
+          expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain(marker);
+        }
+        expect(chunks.some(chunk => ['data-late', 'tripwire', 'error', 'abort'].includes(chunk.type))).toBe(false);
+        expect(await stream.output.text).toBe('replacement answer');
+        expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(2);
+        expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+      } finally {
+        held.release();
+        stream.abort();
+        await consumption.catch(() => {});
+        await entry.workflowExecution;
+        stream.cleanup();
+        await customPubsub?.close();
       }
-      expect(chunks.some(chunk => chunk.type === 'data-late')).toBe(false);
-      expect(await stream.output.text).toBe('replacement answer');
-      expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(2);
-      expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
-    } finally {
-      held.release();
-      stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
-      stream.cleanup();
-      await customPubsub?.close();
-    }
-  });
+    },
+  );
 
   it('preempts during input processing without resetting state or dropping processor signals', async () => {
     const held = barrier();
@@ -1050,7 +1057,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(history).not.toContain('HELD_DISCARDED');
         expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(2);
         expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
-        expect(onFinish).toHaveBeenCalledTimes(1);
+        expect(onFinish).not.toHaveBeenCalled();
+        expect(chunks.filter(chunk => chunk.type === 'abort')).toHaveLength(cancellation === 'caller' ? 1 : 0);
         expect(onAbort).toHaveBeenCalledTimes(cancellation === 'caller' ? 1 : 0);
         expect(onError).toHaveBeenCalledTimes(cancellation === 'timeout' ? 1 : 0);
         const finish = chunks.find(chunk => chunk.type === 'finish');
