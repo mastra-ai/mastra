@@ -1,13 +1,13 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
+import type { DragPayload } from '../boardDrag';
 import { sourceCreatedAt, workItemKey } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
-import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import { CardActions, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
@@ -15,12 +15,12 @@ import { WorkItemActivity } from './WorkItemActivity';
 
 export function WorkItemListRow({
   item,
-  columnStage,
   morph,
   deepLinkRef,
   highlighted,
-  moving,
+  locked,
   busy,
+  dragPayload,
   activity,
   actors,
   status,
@@ -28,12 +28,12 @@ export function WorkItemListRow({
   menu,
 }: {
   item: WorkItem;
-  columnStage: BoardStageId;
   morph: CardMorph;
   deepLinkRef: (element: HTMLElement | null) => void;
   highlighted: boolean;
-  moving: boolean;
+  locked: boolean;
   busy: boolean;
+  dragPayload: DragPayload | undefined;
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
@@ -48,8 +48,8 @@ export function WorkItemListRow({
       detailsRef={deepLinkRef}
       expanded={morph.open}
       onOpen={morph.openDetails}
-      dragPayload={moving ? undefined : { kind: 'work-item', id: item.id, fromStage: columnStage }}
-      moving={moving}
+      dragPayload={dragPayload}
+      locked={locked}
       busy={busy}
       highlighted={highlighted}
       menu={menu}

@@ -61,6 +61,8 @@ peerDependencyRules:
     'madge>typescript': ^7.0.2
 
 patchedDependencies:
+  'body-parser@2.3.0': patches/body-parser@2.3.0.patch
+  'co-body@6.2.0': patches/co-body@6.2.0.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0': patches/@joshwooding__vite-plugin-react-docgen-typescript@0.7.0.patch
@@ -332,8 +334,6 @@ overrides:
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.20.0: 1.20.0
-  protobufjs@>=7.0.0 <7.6.6: 7.6.6
-  protobufjs@>=8.0.0 <8.8.0: 8.8.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.3: 8.21.3
@@ -352,13 +352,6 @@ overrides:
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.8: 17.13.8
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  # undici 5.x has no patched release; the only 5.x consumer is
-  # @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is compatible with
-  # the undici 6 Client/Pool APIs.
-  undici@<6.0.0: 6.29.0
-  undici@>=6.0.0 <6.29.0: 6.29.0
-  undici@>=7.0.0 <7.30.0: 7.30.0
-  undici@>=8.0.0 <8.11.2: 8.11.2
   e2b>undici8: npm:undici@8.11.2
   multer@<2.3.0: 2.3.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
@@ -380,8 +373,6 @@ overrides:
   dompurify@>=3.0.0 <3.4.16: 3.4.16
   hono@<4.13.8: 4.13.8
   '@hono/node-server@<1.19.15': 1.19.15
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
-  nanoid@>=5.0.0 <5.1.16: 5.1.16
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.2
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
@@ -394,11 +385,8 @@ overrides:
   '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
   vitest@>=2.1.0 <4.1.11: 4.1.11
   jose@>=4.14.0 <6.2.12: 6.2.12
-  raw-body@>=2.0.0 <2.5.3: 2.5.3
-  raw-body@>=3.0.0 <3.0.2: 3.0.2
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  yargs@>=17.0.0 <17.7.3: 17.7.3
   katex@<0.16.47: 0.16.47
   colord@<2.9.4: 2.9.4
   fflate@>=0.4.5 <0.4.9: 0.4.9
@@ -525,6 +513,19 @@ overrides:
   'which-collection': 'npm:@socketregistry/which-collection@^1'
   'which-typed-array': 'npm:@socketregistry/which-typed-array@^1'
   'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1'
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'undici@<8.11.2': 8.11.2
+  # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
+  # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
+  # bundles for global fetch (7.x), and undici 8 rejects that handler with
+  # UND_ERR_INVALID_ARG ("invalid onRequestStart method"). Leave this one consumer on the
+  # 6.x line it declares (^6.24.0), which is already the patched release for that line.
+  '@qdrant/js-client-rest>undici': 6.29.0
+  'yargs@<18.1.0': 18.2.0
+  'raw-body@<4.0.0': 4.0.0
+  'protobufjs@<8.8.0': 8.8.0
+  'nanoid@<5.1.16': 5.1.16
+  'basic-ftp@<6.2.1': 6.2.1
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

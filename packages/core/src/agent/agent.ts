@@ -43,6 +43,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -8990,11 +8991,19 @@ export class Agent<
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
+    const scopeKey = `${options.threadId ?? ''}|${options.resourceId ?? ''}`;
+    const wrapperClose = getScopeStreamSlot(this.#activeStreamUntilIdle, scopeKey, options.expectedRunId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
 
   abortRunStream(runId: string): boolean {
-    return agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    wrapperClose?.();
+    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
   }
 
   /**
@@ -10723,6 +10732,14 @@ export class Agent<
   async observe(
     runId: string,
     options?: {
+      /**
+       * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
+       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
+       * and may make structured output fail to parse; beyond retained history, an offset also skips
+       * lower-index live events on numeric-offset transports. See
+       * https://mastra.ai/reference/agents/durable-agent#observerunid-options.
+       */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;

@@ -33,7 +33,7 @@ export function BoardListRow({
   onOpen,
   dragPayload,
   busy = false,
-  moving = false,
+  locked = false,
   highlighted = false,
   menu,
   createdAt,
@@ -47,7 +47,7 @@ export function BoardListRow({
   onOpen: () => void;
   dragPayload?: DragPayload;
   busy?: boolean;
-  moving?: boolean;
+  locked?: boolean;
   highlighted?: boolean;
   menu: ReactNode;
   createdAt?: string;
@@ -120,7 +120,7 @@ export function BoardListRow({
                   variant="ghost"
                   size="icon-sm"
                   draggable={false}
-                  disabled={moving}
+                  disabled={locked}
                   aria-label={`Actions for ${title}`}
                   className={REVEAL_ON_CARD_HOVER}
                 >
@@ -142,7 +142,7 @@ export function BoardListRow({
       ref={cardRef}
       data-testid={testId}
       data-featured={expanded || undefined}
-      aria-busy={busy || moving || undefined}
+      aria-busy={busy || locked || undefined}
       tabIndex={-1}
       draggable={dragPayload !== undefined}
       onDragStart={event => {
@@ -151,8 +151,7 @@ export function BoardListRow({
       onSelectRow={onOpen}
       className={cn(
         'group min-h-10 items-center gap-x-3 px-3 py-1 max-sm:gap-y-1 max-sm:py-2',
-        moving && 'cursor-wait',
-        busy && 'opacity-70',
+        locked && 'cursor-wait opacity-70',
         highlighted && 'before:bg-warning-subtle',
       )}
     >
@@ -163,7 +162,7 @@ export function BoardListRow({
   return (
     <ContextMenu>
       <ContextMenu.Trigger render={row} />
-      {!moving && <ContextMenu.Content className="min-w-44">{menu}</ContextMenu.Content>}
+      {!locked && <ContextMenu.Content className="min-w-44">{menu}</ContextMenu.Content>}
     </ContextMenu>
   );
 }

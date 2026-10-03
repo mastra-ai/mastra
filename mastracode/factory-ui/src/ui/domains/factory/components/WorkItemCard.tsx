@@ -6,9 +6,10 @@ import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useParams } from 'react-router';
 
-import { boardCardStatus } from '../boardCardStatus';
+import { boardCardState } from '../boardCardState';
 import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
+import type { DragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard } from '../boardStages';
@@ -19,7 +20,6 @@ import {
   cardPrimaryAction,
   resumeStage,
   retryButton,
-  runButton,
   sessionLink,
 } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
@@ -96,14 +96,12 @@ export function WorkItemCard({
   const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
 
-  const evaluating = evaluatingStage !== undefined;
-  const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
+  const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   const primaryMove = primaryCardMove(moves, columnStage, sessions);
   const threadSession = itemThreadSession(sessions);
   const nextPhase = nextBoardPhase(definition, columnStage);
-  const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =
     threadSession === undefined
       ? undefined
@@ -112,15 +110,22 @@ export function WorkItemCard({
   const proposedRunLabel = proposedRun?.label;
 
   const activity = workItemActivity(item, activityPage);
-  const status = boardCardStatus({
+  const state = boardCardState({
     proposal: proposedRun,
     moving: movingCardStatus(evaluatingStage, definition, item),
-    preparing: busyLabel,
+    preparing: startingLabel,
+    retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
     transitionReason,
     sessionStatus,
     heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
+  const { status, owner, wick } = state;
+  const lockedByYou = owner.kind === 'you';
+  const busy = lockedByYou || owner.kind === 'automation';
+  const dragPayload: DragPayload | undefined = lockedByYou
+    ? undefined
+    : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: owner.kind };
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
@@ -142,6 +147,7 @@ export function WorkItemCard({
     proposal,
     proposedRunLabel,
     approvingDecisionId,
+    owner,
     onApproveProposal,
     onDismissProposal,
     onMove,
@@ -186,15 +192,10 @@ export function WorkItemCard({
     );
   };
   const actions = cardActions({
-    running: wickStatus !== undefined,
-    waiting: status.kind === 'waiting' || status.kind === 'held',
+    state,
     session: sessionLink(sessionHref),
-    retry: retryButton({ decisionId: retryDecisionId, retryingDecisionId, onRetry: onRetryDecision }),
-    run: runButton({
-      action: primaryAction,
-      pending: busyLabel !== undefined,
-      suggestion: status.kind === 'waiting' ? status.label : undefined,
-    }),
+    retry: retryButton({ decisionId: retryDecisionId, onRetry: onRetryDecision }),
+    run: primaryAction,
   });
 
   const detailsPanel = (
@@ -216,12 +217,12 @@ export function WorkItemCard({
       <>
         <WorkItemListRow
           item={item}
-          columnStage={columnStage}
           morph={morph}
           deepLinkRef={deepLinkRef}
           highlighted={highlighted}
-          moving={evaluating}
-          busy={busyLabel !== undefined}
+          locked={lockedByYou}
+          busy={busy}
+          dragPayload={dragPayload}
           activity={activity}
           actors={activityPage?.actors ?? {}}
           status={status}
@@ -237,24 +238,23 @@ export function WorkItemCard({
     <>
       <article
         ref={morph.cardRef}
-        draggable={!evaluating}
+        draggable={dragPayload !== undefined}
         aria-label={item.title}
-        aria-busy={evaluating || busyLabel !== undefined || undefined}
+        aria-busy={busy || undefined}
         data-testid="work-item-card"
         data-related={relatedItems.length > 0 ? 'true' : undefined}
         data-highlighted={highlighted || undefined}
         onDragStart={event => {
-          if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+          if (dragPayload) setDragPayload(event, dragPayload);
         }}
         className={cn(
           'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors hover:bg-fill-hover',
-          wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
-          evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-          busyLabel !== undefined && 'opacity-70',
+          wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
+          lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
           highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
         )}
       >
-        {wickStatus && <ActivityWick status={wickStatus} />}
+        {wick && <ActivityWick status={wick} />}
         <button
           ref={deepLinkRef}
           type="button"
@@ -283,7 +283,7 @@ export function WorkItemCard({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      disabled={evaluating}
+                      disabled={lockedByYou}
                       aria-label={`Actions for ${item.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >

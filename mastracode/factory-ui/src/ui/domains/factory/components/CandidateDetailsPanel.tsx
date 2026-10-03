@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import type { CardMove } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import { CardSourceDescription } from './BoardCardDetails';

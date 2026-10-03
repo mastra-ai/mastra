@@ -951,3 +951,8 @@ export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQuer
     },
   });
 }
+
+/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  return compileScalarPredicate(predicate, SPAN_FIELDS);
+}

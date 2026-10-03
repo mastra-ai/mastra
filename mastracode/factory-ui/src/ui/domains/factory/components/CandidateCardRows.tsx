@@ -3,7 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import { externalLinkLabel } from '../boardItems';
 import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';

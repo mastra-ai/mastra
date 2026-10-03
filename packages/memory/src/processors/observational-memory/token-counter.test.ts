@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { MastraToolInvocation } from '@mastra/core/agent/message-list';
 import probeImageSize from 'probe-image-size';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -119,6 +120,79 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
 
       expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate.source).toContain('tokenx');
+    });
+  });
+
+  describe('runWithModelContext', () => {
+    it('reuses one AsyncLocalStorage across instances so per-request counters do not register new ones', async () => {
+      const runSpy = vi.spyOn(AsyncLocalStorage.prototype, 'run');
+      try {
+        for (let i = 0; i < 25; i++) {
+          await new TokenCounter().runWithModelContext('openai/gpt-4o', async () => {});
+        }
+
+        expect(runSpy).toHaveBeenCalledTimes(25);
+        expect(new Set(runSpy.mock.contexts).size).toBe(1);
+      } finally {
+        runSpy.mockRestore();
+      }
+    });
+
+    it('scopes model context per instance across awaits and nesting', async () => {
+      const a = new TokenCounter({ model: 'anthropic/claude-sonnet-4-5' });
+      const b = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+
+      await a.runWithModelContext('openai/gpt-4o', async () => {
+        await Promise.resolve();
+        expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+        expect(contextOf(b)).toBeUndefined();
+
+        await b.runWithModelContext({ provider: 'google', modelId: 'gemini-2.5-flash' }, async () => {
+          await Promise.resolve();
+          expect(contextOf(a)).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+          expect(contextOf(b)).toEqual({ provider: 'google', modelId: 'gemini-2.5-flash' });
+        });
+
+        expect(contextOf(b)).toBeUndefined();
+      });
+
+      expect(contextOf(a)).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4-5' });
+    });
+
+    it('isolates concurrent runs on shared and per-request counters', async () => {
+      const shared = new TokenCounter();
+      const contextOf = (counter: TokenCounter) => counter['getModelContext']();
+      const models = ['openai/gpt-4o', 'anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash'];
+      const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      const runs = Array.from({ length: 30 }, async (_, i) => {
+        const [provider, modelId] = models[i % models.length]!.split('/');
+        const perRequest = new TokenCounter();
+        const sharedSeen: unknown[] = [];
+        const perRequestSeen: unknown[] = [];
+
+        await Promise.all([
+          shared.runWithModelContext({ provider, modelId }, async () => {
+            for (let step = 0; step < 3; step++) {
+              await tick((i * 7 + step * 3) % 5);
+              sharedSeen.push(contextOf(shared));
+            }
+          }),
+          perRequest.runWithModelContext({ provider, modelId }, async () => {
+            await tick(i % 4);
+            perRequestSeen.push(contextOf(perRequest), contextOf(shared));
+          }),
+        ]);
+
+        return { expected: { provider, modelId }, sharedSeen, perRequestSeen };
+      });
+
+      for (const { expected, sharedSeen, perRequestSeen } of await Promise.all(runs)) {
+        expect(sharedSeen).toEqual([expected, expected, expected]);
+        // Sibling scopes don't leak into each other: the shared counter is unset inside perRequest's scope.
+        expect(perRequestSeen).toEqual([expected, undefined]);
+      }
     });
   });
 

@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
+import type { BoardCardStatus } from '../boardCardState';
 import { candidatePayload } from '../boardDrag';
 import { externalLinkLabel, sourceCreatedAt, workItemKey } from '../boardItems';
 import type { CardMorph } from '../hooks/useCardMorph';

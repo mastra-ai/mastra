@@ -1,4 +1,5 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { InstalledBoardInfo } from '../../../api/types';
 
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
@@ -31,6 +32,7 @@ import {
 } from '../../domains/factory/boardRelevance';
 import { boardFiltersActive, clearOpenCard } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
+import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
 import type { DragPayload } from '../../domains/factory/boardDrag';
 import { cardMatchesSearch } from '../../domains/factory/boardItems';
@@ -80,7 +82,14 @@ export function BoardContent({
     stage: Parameters<typeof items.handleDrop>[1],
     cause = 'board_drag',
   ) => {
-    if (payload.kind === 'work-item' && payload.fromStage === stage) return;
+    if (payload.kind === 'work-item') {
+      if (payload.fromStage === stage) return;
+      const toPhaseKind = definition.phases.find(phase => phase.id === stage)?.kind;
+      if (!canMoveTo(payload.ownerKind, toPhaseKind)) {
+        toast.error(BUSY_CARD_MOVE_REFUSAL);
+        return;
+      }
+    }
     const card = cardForDrop(payload);
     if (!card) return;
     repositoryChoice.choose(
@@ -244,7 +253,6 @@ export function BoardContent({
           kind={kind}
           loading={loading}
           taskCount={taskCount}
-
           feed={columnFeed}
           intakeSource={intake.active}
           filtersExcludeAll={filtersExcludeAll}

@@ -1,6 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 
+import { isRecord } from '../lib/isRecord';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
@@ -41,7 +42,9 @@ export function useStartFactoryRun() {
   const queryClient = useQueryClient();
   const repositories = factoryQuery.data?.repositories ?? [];
 
+  const startMutationKey = ['factory', 'start-run', factoryId] as const;
   const mutation = useMutation({
+    mutationKey: startMutationKey,
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
       const linearProjectId =
@@ -100,5 +103,20 @@ export function useStartFactoryRun() {
     },
   });
 
-  return { start: mutation, enabled: Boolean(factoryId && repositories.length > 0), repositories };
+  const startingItemIds = useMutationState({
+    filters: { mutationKey: startMutationKey, status: 'pending' },
+    select: pending => startingWorkItemId(pending.state.variables),
+  }).filter(itemId => itemId !== undefined);
+
+  return {
+    start: mutation,
+    startingItemIds,
+    enabled: Boolean(factoryId && repositories.length > 0),
+    repositories,
+  };
+}
+
+function startingWorkItemId(variables: unknown): string | undefined {
+  if (!isRecord(variables) || !isRecord(variables.workItem)) return undefined;
+  return typeof variables.workItem.id === 'string' ? variables.workItem.id : undefined;
 }
