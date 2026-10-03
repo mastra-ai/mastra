@@ -243,6 +243,43 @@ describe.each([
   });
 });
 
+describe.each([
+  ['workflow', createStep],
+  ['evented workflow', createEventedStep],
+] as const)('%s toolResult systemMessages', (_executor, makeStep) => {
+  it('returns the same system messages the MessageList holds', async () => {
+    const processor: Processor = {
+      id: 'tool-result-system',
+      processToolResult: async ({ messages }) => ({
+        messages: messages as MastraDBMessage[],
+        systemMessages: [
+          { role: 'system' as const, content: 'kept' },
+          { role: 'user' as const, content: 'not a system message' },
+        ],
+      }),
+    };
+    const messageList = new MessageList({ threadId: 't1', resourceId: 'r1' });
+
+    const result = await makeStep(processor).execute({
+      inputData: {
+        phase: 'toolResult',
+        messages: [],
+        messageList,
+        stepNumber: 0,
+        toolName: 'tool',
+        toolCallId: 'call-1',
+        args: {},
+        toolResultValue: {},
+        systemMessages: [],
+        steps: [],
+      },
+    } as any);
+
+    expect(messageList.getSystemMessages().map(m => m.content)).toEqual(['kept']);
+    expect(result?.systemMessages).toEqual(messageList.getSystemMessages());
+  });
+});
+
 describe('isProcessor', () => {
   it('should return true for object with processInput method', () => {
     const processor: Processor = {

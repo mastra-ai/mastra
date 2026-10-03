@@ -1691,7 +1691,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
