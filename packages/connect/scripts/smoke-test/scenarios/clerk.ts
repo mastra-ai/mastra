@@ -7,8 +7,8 @@ import { makeStep, errorMessage, requireTools, runReadBatch, probeTool } from '.
  *
  * All Clerk tools accept snake_case parameter keys (user_id, email_address,
  * first_name, etc.) because the generator preserves Clerk's own API shape.
- * clerk_list_sessions requires at least one of {status, client_id, user_id};
- * we pass status: 'active' so the batch read doesn't 422 on an empty filter.
+ * clerk_list_sessions requires client_id or user_id (status alone is not
+ * accepted); we pass the smoke user's user_id.
  */
 export const clerkScenario: Scenario = {
   integrationId: 'clerk',
