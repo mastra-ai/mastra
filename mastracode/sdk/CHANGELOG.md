@@ -1,5 +1,11 @@
 # @mastra/code-sdk
 
+## 1.11.0-alpha.4
+
+### Patch Changes
+
+- Fixed Unix socket path handling so a thread ID can no longer place a socket outside its resource directory, whether or not cross-project agent discovery is enabled. Thread IDs that would reuse the lease or discovery socket names are rejected as well. ([#25876](https://github.com/mastra-ai/mastra/pull/25876))
+
 ## 1.11.0-alpha.3
 
 ### Patch Changes
