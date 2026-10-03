@@ -4356,6 +4356,63 @@ describe('Agent signals', () => {
       }
     });
 
+    it('queues a retained signal this runtime only forwarded when it later owns the run', async () => {
+      const scope = { resourceId: 'forwarded-replay', threadId: 'forwarded-replay' };
+      const pubsub = new ControlledLeasePubSub();
+      const topic = `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`;
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'forwarded-replay', name: 'Forwarded', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        const ownSourceId = pubsub.publishedData.find(data => typeof data.sourceId === 'string')?.sourceId;
+        expect(ownSourceId).toBeTypeOf('string');
+        // Retained replay of a signal this runtime forwarded to a previous owner (lease-lost path)
+        // and therefore never queued locally.
+        const signal = createSignal({ id: 'forwarded-n2', type: 'user-message', contents: 'forwarded notification' });
+        await pubsub.publish(topic, {
+          type: 'signal-enqueued',
+          data: {
+            type: 'signal-enqueued',
+            runId: first.runId,
+            sourceId: ownSourceId,
+            signal: signal.toDataPart().data,
+          },
+        });
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('forwarded notification')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+      }
+    });
+
+    it('does not re-queue the echo of a signal this runtime queued locally', async () => {
+      const scope = { resourceId: 'local-echo', threadId: 'local-echo' };
+      const pubsub = new ControlledLeasePubSub();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'local-echo', name: 'Echo', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'local follow-up' }, scope).accepted;
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(getStreamCount()).toBe(2);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('local follow-up')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+      }
+    });
+
     it.each([false, true])(
       'keeps cancellation ahead of delayed enqueue retries with initial delivery=%s',
       async delivered => {
