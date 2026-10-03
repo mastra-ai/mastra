@@ -106,8 +106,8 @@ import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
-import * as traceAggregateOps from './trace-aggregate';
 import * as spanQueryOps from './span-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
