@@ -659,7 +659,8 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
       };
 
       // No `tools` and no `prepareStep` wiring — just `browser`. The Agent
-      // pulls `browser.getTools()` and `browser.getPrepareStep()` on its own.
+      // pulls `browser.getTools()` and `browser.getInputProcessors()` (which
+      // carries the WebMCP prepare-step processor) on its own.
       const agent = new Agent({
         id: 'webmcp-prepare-step-test-agent',
         name: 'WebMCP prepareStep test agent',

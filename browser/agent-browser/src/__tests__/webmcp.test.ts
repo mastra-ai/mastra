@@ -35,6 +35,7 @@ vi.mock('agent-browser', () => ({
 
 import { AgentBrowser } from '../agent-browser';
 import { BROWSER_TOOLS } from '../tools/constants';
+import { WEBMCP_PREPARE_STEP_PROCESSOR_ID } from '../webmcp-prepare-step';
 
 describe('WebMCP: tool registration gating', () => {
   it('hides browser_webmcp_discover by default (no webmcp config)', () => {
@@ -72,33 +73,62 @@ describe('WebMCP: tool registration gating', () => {
   });
 });
 
-describe('WebMCP: getPrepareStep (Agent auto-wiring)', () => {
-  it('returns undefined when WebMCP is disabled', () => {
+describe('WebMCP: getInputProcessors (Agent auto-wiring)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const processorIds = (browser: AgentBrowser) => browser.getInputProcessors().map(p => p.id);
+
+  it('omits the prepare-step processor when WebMCP is disabled', () => {
     const browser = new AgentBrowser({ scope: 'shared' });
-    expect(browser.getPrepareStep()).toBeUndefined();
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
   });
 
-  it('returns undefined when webmcp is an empty object', () => {
+  it('omits the prepare-step processor when webmcp is an empty object', () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: {} });
-    expect(browser.getPrepareStep()).toBeUndefined();
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
   });
 
-  it('returns undefined when webmcp.enabled is false', () => {
+  it('omits the prepare-step processor when webmcp.enabled is false', () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: false } });
-    expect(browser.getPrepareStep()).toBeUndefined();
+    expect(processorIds(browser)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
   });
 
-  it('returns the same prepareStep as browser.prepareStep when WebMCP is enabled', () => {
+  it('includes the prepare-step processor when WebMCP is enabled, delegating to browser.prepareStep', async () => {
     const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
-    expect(browser.getPrepareStep()).toBe(browser.prepareStep);
+    await browser.launch();
+    const processors = browser.getInputProcessors();
+    const processor = processors.find(p => p.id === WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+    expect(processor).toBeDefined();
+    // Keeps the base browser-context processor alongside.
+    expect(processors.some(p => p.id === 'browser-context')).toBe(true);
+    // processInputStep runs the same hook as browser.prepareStep: page tools
+    // discovered by the bridge surface in the returned toolset.
+    mockPage.evaluate.mockResolvedValueOnce([
+      { name: 'add_to_cart', source: 'mcpb', description: 'adds', inputSchema: { type: 'object', properties: {} } },
+    ]);
+    const result = (await (processor as { processInputStep: (args: unknown) => Promise<unknown> }).processInputStep({
+      stepNumber: 0,
+      tools: { browser_goto: {} },
+    })) as { tools: Record<string, unknown> };
+    expect(Object.keys(result.tools)).toEqual(expect.arrayContaining(['browser_goto', 'page_add_to_cart']));
+    await browser.close();
   });
 
-  it('returns the prepareStep in manual mode too', () => {
+  it('includes the prepare-step processor in manual mode too', () => {
     const browser = new AgentBrowser({
       scope: 'shared',
       webmcp: { enabled: true, toolDiscovery: 'manual' },
     });
-    expect(browser.getPrepareStep()).toBe(browser.prepareStep);
+    expect(processorIds(browser)).toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
+  });
+
+  it('skips the prepare-step processor when the user already configured one with the same id', () => {
+    const browser = new AgentBrowser({ scope: 'shared', webmcp: { enabled: true } });
+    const userProcessor = { id: WEBMCP_PREPARE_STEP_PROCESSOR_ID, name: 'user-supplied', processInputStep: () => {} };
+    const processors = browser.getInputProcessors([userProcessor as never]);
+    expect(processors.map(p => p.id)).not.toContain(WEBMCP_PREPARE_STEP_PROCESSOR_ID);
   });
 });
 

@@ -20,8 +20,8 @@
  * page emit the same tool bytes.
  */
 
-import type { PrepareStepFunction } from '@mastra/core/agent';
 import { DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '@mastra/core/processors';
 import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { AgentBrowser } from './agent-browser';
@@ -29,11 +29,34 @@ import type { AgentBrowser } from './agent-browser';
 type MastraTool = ReturnType<typeof createTool>;
 
 /**
- * Alias for Mastra's `prepareStep` function type. Re-exported so consumers of
- * `@mastra/agent-browser` don't have to reach into `@mastra/core` just to
- * reference the type.
+ * The per-step hook that surfaces page WebMCP tools. Structurally identical
+ * to core's `PrepareStepFunction`, so `browser.prepareStep` can also be
+ * passed directly as a `prepareStep` option when composing manually.
  */
-export type WebMcpPrepareStepFn = PrepareStepFunction;
+export type WebMcpPrepareStepFn = (args: ProcessInputStepArgs) => Promise<ProcessInputStepResult | undefined | void>;
+
+/** Processor id for the WebMCP per-step hook, used for deduplication. */
+export const WEBMCP_PREPARE_STEP_PROCESSOR_ID = 'browser-webmcp-prepare-step';
+
+/**
+ * Input processor that runs the WebMCP prepare-step hook on every step of a
+ * `generate`/`stream` loop. AgentBrowser returns it from
+ * `getInputProcessors()`, which the Agent already auto-wires for
+ * `new Agent({ browser })` — so page tools surface with zero extra core
+ * surface. It runs before the user's own `prepareStep` (core appends that as
+ * the final input-step processor), so a user hook sees the merged toolset
+ * and can override anything.
+ */
+export class WebMcpPrepareStepProcessor implements Processor<typeof WEBMCP_PREPARE_STEP_PROCESSOR_ID> {
+  readonly id = WEBMCP_PREPARE_STEP_PROCESSOR_ID;
+  readonly name = 'WebMCP Prepare Step Processor';
+
+  constructor(private readonly prepareStep: WebMcpPrepareStepFn) {}
+
+  async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined | void> {
+    return this.prepareStep(args);
+  }
+}
 
 export interface WebMcpPrepareStepConfig {
   mode: 'auto' | 'manual';

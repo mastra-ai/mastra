@@ -139,11 +139,11 @@ const agent = new Agent({
 await agent.generate(input)
 ```
 
-`new Agent({ browser })` calls `browser.getTools()` to pull in the browser's deterministic tools (already wired before this change) and `browser.getPrepareStep()` to pull in the step hook that merges page tools each step.
+`new Agent({ browser })` calls `browser.getTools()` to pull in the browser's deterministic tools and `browser.getInputProcessors()` to pull in the browser's input processors. When WebMCP is enabled, the processors include a `browser-webmcp-prepare-step` processor that merges page tools into the toolset each step. A user-supplied `prepareStep` runs after it, sees the merged toolset, and can override anything.
 
 ### `browser.prepareStep`
 
-A stable property on the browser instance (not a factory). The Agent wires it automatically via `getPrepareStep()`. Touch it directly only to compose with other step logic, or to wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is turned off, it's a no-op that returns `undefined`.
+A stable property on the browser instance (not a factory). The Agent runs it automatically through the `browser-webmcp-prepare-step` input processor. Touch it directly only to compose with other step logic, or to wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is turned off, it's a no-op that returns `undefined`.
 
 The tool list is memoized by the current page URL inside the function, so repeat steps on the same page produce the same tool bytes. Base `browser_*` tools win on name collision.
 

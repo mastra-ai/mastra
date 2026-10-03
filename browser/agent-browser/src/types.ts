@@ -122,10 +122,11 @@ export interface WebmcpOptions {
   allowedOrigins?: string[];
   /**
    * How page WebMCP tools become visible to the agent during a run. The
-   * Agent applies the browser's `prepareStep` automatically (via
-   * {@link AgentBrowser.getPrepareStep}) when the browser is passed to
-   * `new Agent({ browser })`, unless a user-supplied `prepareStep` overrides
-   * it. Defaults to `'auto'`.
+   * browser contributes its step hook as an input processor (via
+   * {@link AgentBrowser.getInputProcessors}) when the browser is passed to
+   * `new Agent({ browser })`, so it runs automatically each step; a
+   * user-supplied `prepareStep` runs after it and can override the merged
+   * toolset. Defaults to `'auto'`.
    */
   toolDiscovery?: WebmcpToolDiscovery;
   /**

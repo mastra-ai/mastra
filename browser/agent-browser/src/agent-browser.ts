@@ -46,7 +46,12 @@ import { createWebmcpDiscoverTool } from './tools/webmcp-discover';
 import type { BrowserConfig, WebmcpOptions, WebmcpProtocol, WebmcpToolDiscovery } from './types';
 import { getBrowserPid } from './utils';
 import { buildWebMcpInitScript } from './webmcp-bridge';
-import { buildWebMcpPrepareStep, toolIdFor } from './webmcp-prepare-step';
+import {
+  buildWebMcpPrepareStep,
+  toolIdFor,
+  WebMcpPrepareStepProcessor,
+  WEBMCP_PREPARE_STEP_PROCESSOR_ID,
+} from './webmcp-prepare-step';
 import type { AttachedPageTool, PerThreadCache, WebMcpPrepareStepFn } from './webmcp-prepare-step';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
@@ -100,9 +105,10 @@ export class AgentBrowser extends MastraBrowser {
    * the agent attached via `browser_webmcp_discover`. When WebMCP is disabled
    * it's a no-op.
    *
-   * You rarely need this directly: `new Agent({ browser })` auto-wires it via
-   * {@link getPrepareStep}. Pass it to `agent.generate(..., { prepareStep })`
-   * only if you want to compose it with other logic yourself.
+   * You rarely need this directly: `new Agent({ browser })` auto-wires it as
+   * an input processor via {@link getInputProcessors}. Pass it to
+   * `agent.generate(..., { prepareStep })` only if you want to compose it
+   * with other logic yourself.
    */
   readonly prepareStep: WebMcpPrepareStepFn;
 
@@ -443,12 +449,23 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   /**
-   * Called by `new Agent({ browser })` so page WebMCP tools surface each step
-   * without the user wiring `prepareStep` themselves. Returns `undefined` when
-   * WebMCP is disabled so no step hook is attached.
+   * Browser input processors. Extends the base set (browser context) with the
+   * WebMCP prepare-step processor when WebMCP is enabled, so page tools
+   * surface each step for `new Agent({ browser })` without the user wiring
+   * `prepareStep` themselves. Skipped when the user already configured a
+   * processor with the same id.
    */
-  getPrepareStep(): WebMcpPrepareStepFn | undefined {
-    return this.webMcpSettings ? this.prepareStep : undefined;
+  getInputProcessors(
+    configuredProcessors: Parameters<MastraBrowser['getInputProcessors']>[0] = [],
+    options: Parameters<MastraBrowser['getInputProcessors']>[1] = {},
+  ): ReturnType<MastraBrowser['getInputProcessors']> {
+    const processors = super.getInputProcessors(configuredProcessors, options);
+    if (!this.webMcpSettings) return processors;
+    const hasProcessor = configuredProcessors.some(
+      p => typeof p === 'object' && p != null && 'id' in p && p.id === WEBMCP_PREPARE_STEP_PROCESSOR_ID,
+    );
+    if (hasProcessor) return processors;
+    return [...processors, new WebMcpPrepareStepProcessor(this.prepareStep)];
   }
 
   // ---------------------------------------------------------------------------
@@ -2165,7 +2182,7 @@ function resolveWebMcpSettings(opts: WebmcpOptions | undefined): {
 }
 
 /** No-op prepareStep used when WebMCP is disabled, so `browser.prepareStep` is always safe to wire. */
-const noopPrepareStep: WebMcpPrepareStepFn = () => undefined;
+const noopPrepareStep: WebMcpPrepareStepFn = async () => undefined;
 
 /**
  * Structural equality for JSON-ish values. Used to detect whether a tool's

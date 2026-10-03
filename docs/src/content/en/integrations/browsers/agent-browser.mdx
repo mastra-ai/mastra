@@ -102,7 +102,7 @@ await agent.generate('Add 2 of sku-9 to the cart')
 
 Page tools surface as first-class agent tools named `page_<tool_name>`. The wrapper calls through the host-side `callWebMcpTool`, so page execution, origin checks, and TOCTOU protection stay in place. Base `browser_*` tools win on name collision.
 
-If you prefer to compose things yourself, `browser.prepareStep` is a stable property you can pass to `agent.generate` / `agent.stream` or set in `defaultOptions.prepareStep`. A user-supplied `prepareStep` always wins over the browser's auto-injected one.
+The browser contributes this step hook as an input processor, so it composes with your own options. A user-supplied `prepareStep` runs after the browser's processor, sees the merged toolset, and can override anything. If you prefer to compose things yourself, `browser.prepareStep` is also a stable property you can pass to `agent.generate` / `agent.stream` or set in `defaultOptions.prepareStep`.
 
 ### Discovery modes
 

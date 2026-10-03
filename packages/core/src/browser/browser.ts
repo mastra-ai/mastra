@@ -26,7 +26,6 @@ import { join } from 'node:path';
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
-import type { PrepareStepFunction } from '../loop/types';
 import { isProcessorWorkflow } from '../processors/index';
 import type { InputProcessor, InputProcessorOrWorkflow } from '../processors/index';
 import type { Tool } from '../tools/tool';
@@ -1573,18 +1572,6 @@ export abstract class MastraBrowser extends MastraBase {
   // ---------------------------------------------------------------------------
   // Abstract Methods - Must be implemented by providers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Optionally returns a `prepareStep` hook for this browser. When provided,
-   * the Agent auto-registers it via `Agent.registerPrepareStep` so it composes
-   * with any other registered hook and with the user's own
-   * `defaultOptions.prepareStep` on every `generate` / `stream` call. The
-   * user's hook runs last so it can override any field a member hook produced.
-   *
-   * @returns A `prepareStep` function, or `undefined` if the browser does not
-   *   need per-step preparation.
-   */
-  getPrepareStep?(): PrepareStepFunction | undefined;
 
   /**
    * Get the browser tools for this provider.
