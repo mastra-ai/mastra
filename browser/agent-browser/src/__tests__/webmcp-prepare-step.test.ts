@@ -260,6 +260,33 @@ describe('browser.prepareStep (manual mode)', () => {
     expect(afterNav).toBeUndefined();
     expect(browser.getAttachedWebMcpTools()).toEqual([]);
   });
+
+  it('preserves tools attached between navigation and the next prepareStep', async () => {
+    // Attach on page A, surface its tools once.
+    mockPage.url.mockReturnValue('https://shop.test/a');
+    mockPage.evaluate.mockResolvedValueOnce(SHOP_TOOLS);
+    await browser.attachWebMcpTools();
+    await browser.prepareStep({ stepNumber: 1, tools: {} });
+
+    // Caller navigates to page B and re-attaches *before* the next
+    // prepareStep. The next step must see the new tools — the URL-change
+    // check compares the attach-time URL, not the previous step's URL, so
+    // the fresh attachments are not wiped.
+    mockPage.url.mockReturnValue('https://shop.test/b');
+    const B_TOOLS = [
+      { name: 'checkout', source: 'mcpb' as const, description: 'Check out', inputSchema: { type: 'object' } },
+    ];
+    mockPage.evaluate.mockResolvedValueOnce(B_TOOLS);
+    await browser.attachWebMcpTools();
+
+    const afterReattach = (await browser.prepareStep({ stepNumber: 2, tools: {} })) as {
+      tools: Record<string, unknown>;
+    };
+    expect(Object.keys(afterReattach.tools)).toEqual(['page_checkout']);
+    // The page-A tools must not survive onto page B.
+    expect(afterReattach.tools.page_add_to_cart).toBeUndefined();
+    expect(afterReattach.tools.page_get_price).toBeUndefined();
+  });
 });
 
 describe('browser.prepareStep thread isolation', () => {
@@ -360,6 +387,35 @@ describe('browser.prepareStep thread isolation', () => {
     const forB = await manual.prepareStep(stepArgsForThread('thread-B'));
     expect(Object.keys(forA.tools)).toEqual(['page_get_price']);
     expect(forB).toBeUndefined();
+    await manual.close();
+  });
+
+  it('evicts per-thread WebMCP state on closeThreadSession so a long-lived server does not retain tool closures per thread', async () => {
+    const manual = new AgentBrowser({
+      scope: 'shared',
+      webmcp: { enabled: true, toolDiscovery: 'manual' },
+    });
+    await manual.launch();
+    vi.spyOn(manual, 'getCurrentUrl').mockResolvedValue('https://shop.test/');
+    vi.spyOn(manual, 'listWebMcpTools').mockResolvedValue({
+      success: true,
+      origin: 'https://shop.test',
+      hint: '',
+      tools: SHOP_TOOLS,
+    });
+    await manual.attachWebMcpTools({ names: ['get_price'] }, 'thread-A');
+    const populated = (await manual.prepareStep(stepArgsForThread('thread-A'))) as { tools: Record<string, unknown> };
+    expect(Object.keys(populated.tools)).toEqual(['page_get_price']);
+    expect(manual.getAttachedWebMcpTools('thread-A')).not.toEqual([]);
+
+    await manual.closeThreadSession('thread-A');
+
+    // After the thread's session closes, both the attached-tool record and
+    // the prepare-step memo for that thread are gone. The next step for a
+    // thread that comes along has to fetch fresh — no retained closures.
+    expect(manual.getAttachedWebMcpTools('thread-A')).toEqual([]);
+    const afterEvict = await manual.prepareStep(stepArgsForThread('thread-A'));
+    expect(afterEvict).toBeUndefined();
     await manual.close();
   });
 });

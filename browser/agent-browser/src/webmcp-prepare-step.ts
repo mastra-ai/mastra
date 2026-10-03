@@ -58,7 +58,7 @@ export interface AttachedPageTool {
   inputSchema: unknown;
 }
 
-interface PerThreadCache {
+export interface PerThreadCache {
   url: string | null;
   tools: Record<string, MastraTool> | null;
   attachedKey: string | null;
@@ -66,12 +66,18 @@ interface PerThreadCache {
 
 /**
  * Build the single `prepareStep` function that AgentBrowser hands users.
- * The function is stateful: it owns a per-thread memo (URL and attached-set)
- * so repeat steps on the same page produce the same tool bytes, and so
- * concurrent runs on different threads don't share each other's tool lists.
+ * The function is stateful: it reads from an externally-owned per-thread
+ * memo (URL and attached-set) so repeat steps on the same page produce the
+ * same tool bytes, concurrent runs on different threads don't share tool
+ * lists, and AgentBrowser can evict a thread's entry on
+ * `closeThreadSession` (otherwise the map would grow for the process
+ * lifetime).
  */
-export function buildWebMcpPrepareStep(browser: AgentBrowser, config: WebMcpPrepareStepConfig): WebMcpPrepareStepFn {
-  const caches = new Map<string, PerThreadCache>();
+export function buildWebMcpPrepareStep(
+  browser: AgentBrowser,
+  config: WebMcpPrepareStepConfig,
+  caches: Map<string, PerThreadCache>,
+): WebMcpPrepareStepFn {
   const cacheKeyFor = (threadId: string | undefined) => threadId ?? '__default__';
 
   return async function webMcpPrepareStep(args) {
@@ -101,11 +107,15 @@ export function buildWebMcpPrepareStep(browser: AgentBrowser, config: WebMcpPrep
       pageTools = cache.tools;
     } else {
       // manual mode — only the tools the agent attached via the discover tool.
-      // On navigation, drop the attached set for this thread so stale tools
-      // from the previous page don't survive onto a new one (symmetric with
-      // auto mode, where the fresh page.list() replaces the toolset). The
-      // agent re-attaches by calling `browser_webmcp_discover` on the new page.
-      if (cache.url != null && cache.url !== url) {
+      // If the attached set was recorded against a different URL, drop it so
+      // stale tools from the previous page don't survive onto a new one
+      // (symmetric with auto mode, where the fresh page.list() replaces the
+      // toolset). We compare the attach-time URL — not the previous step's
+      // URL — so an attach that lands between navigation and the next step
+      // is preserved. The agent re-attaches by calling
+      // `browser_webmcp_discover` on the new page.
+      const attachOrigin = browser.getAttachedWebMcpToolsOrigin(threadId);
+      if (attachOrigin != null && attachOrigin !== url) {
         browser.clearAttachedWebMcpTools(threadId);
       }
       const attached = browser.getAttachedWebMcpTools(threadId);

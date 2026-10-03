@@ -47,7 +47,7 @@ import type { BrowserConfig, WebmcpOptions, WebmcpProtocol, WebmcpToolDiscovery 
 import { getBrowserPid } from './utils';
 import { buildWebMcpInitScript } from './webmcp-bridge';
 import { buildWebMcpPrepareStep, toolIdFor } from './webmcp-prepare-step';
-import type { AttachedPageTool, WebMcpPrepareStepFn } from './webmcp-prepare-step';
+import type { AttachedPageTool, PerThreadCache, WebMcpPrepareStepFn } from './webmcp-prepare-step';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
@@ -80,8 +80,20 @@ export class AgentBrowser extends MastraBrowser {
     toolDiscovery: WebmcpToolDiscovery;
     toolPrefix: string;
   } | null;
-  /** Per-thread set of manually-attached WebMCP tools (`toolDiscovery: 'manual'`). */
-  private readonly manualAttached = new Map<string, Map<string, AttachedPageTool>>();
+  /**
+   * Per-thread set of manually-attached WebMCP tools (`toolDiscovery: 'manual'`).
+   * Each entry records the page URL the tools were attached from, so a prepare
+   * step can tell "attached for the current page" apart from "stale from a
+   * previous page" without wiping fresh attachments.
+   */
+  private readonly manualAttached = new Map<string, { url: string | null; tools: Map<string, AttachedPageTool> }>();
+  /**
+   * Per-thread memo for the WebMCP prepare-step (tool list memoized by URL
+   * and attached-set). Owned here so `closeThreadSession` can evict a
+   * thread's entry when its session ends. The map stays empty when WebMCP
+   * is disabled.
+   */
+  private readonly webMcpPrepareStepCache = new Map<string, PerThreadCache>();
   /**
    * The step hook that makes page WebMCP tools visible to the agent. In `auto`
    * mode it merges all page tools; in `manual` mode it merges only the tools
@@ -103,10 +115,14 @@ export class AgentBrowser extends MastraBrowser {
     this.browserConfig = config;
     this.webMcpSettings = resolveWebMcpSettings(config.webmcp);
     this.prepareStep = this.webMcpSettings
-      ? buildWebMcpPrepareStep(this, {
-          mode: this.webMcpSettings.toolDiscovery,
-          prefix: this.webMcpSettings.toolPrefix,
-        })
+      ? buildWebMcpPrepareStep(
+          this,
+          {
+            mode: this.webMcpSettings.toolDiscovery,
+            prefix: this.webMcpSettings.toolPrefix,
+          },
+          this.webMcpPrepareStepCache,
+        )
       : noopPrepareStep;
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
@@ -340,6 +356,11 @@ export class AgentBrowser extends MastraBrowser {
       const state = this.getBrowserStateForManager(manager, threadId);
       if (state) this.threadManager.updateBrowserState(threadId, state);
     }
+    // Evict per-thread WebMCP state so a long-lived server doesn't retain
+    // one PerThreadCache (plus its generated tool closures) and one
+    // attached-tool record for every thread it ever saw.
+    this.webMcpPrepareStepCache.delete(threadId);
+    this.manualAttached.delete(threadId);
     await super.closeThreadSession(threadId);
   }
 
@@ -1751,16 +1772,28 @@ export class AgentBrowser extends MastraBrowser {
    */
   getAttachedWebMcpTools(threadId?: string): AttachedPageTool[] {
     const key = threadId ?? DEFAULT_THREAD_ID;
-    const map = this.manualAttached.get(key);
-    return map ? [...map.values()] : [];
+    const record = this.manualAttached.get(key);
+    return record ? [...record.tools.values()] : [];
+  }
+
+  /**
+   * The page URL the tools in {@link getAttachedWebMcpTools} were attached
+   * from, or `null` if the thread has no attached tools. {@link prepareStep}
+   * compares this against the current URL to tell "attached on this page"
+   * apart from "stale from a previous page".
+   */
+  getAttachedWebMcpToolsOrigin(threadId?: string): string | null {
+    const key = threadId ?? DEFAULT_THREAD_ID;
+    return this.manualAttached.get(key)?.url ?? null;
   }
 
   /**
    * Drop every manually attached WebMCP tool for the given thread. Called
    * automatically by {@link prepareStep} in `toolDiscovery: 'manual'` mode
-   * on navigation so stale tools from a prior page don't survive onto a new
-   * one. Public so callers driving the browser outside an agent run can
-   * reset the attached set themselves.
+   * when the attached set is stale (the page URL has changed since attach),
+   * so tools from a prior page don't survive onto a new one. Public so
+   * callers driving the browser outside an agent run can reset the attached
+   * set themselves.
    */
   clearAttachedWebMcpTools(threadId?: string): void {
     const key = threadId ?? DEFAULT_THREAD_ID;
@@ -1801,7 +1834,11 @@ export class AgentBrowser extends MastraBrowser {
     }
     const prefix = this.webMcpSettings.toolPrefix;
     const key = threadId ?? DEFAULT_THREAD_ID;
-    const existing = this.manualAttached.get(key) ?? new Map<string, AttachedPageTool>();
+    // Record the page URL the tools came from so prepareStep can distinguish
+    // "attached for the current page" from "stale from a previous page".
+    const url = await this.getCurrentUrl(threadId);
+    const existing = this.manualAttached.get(key);
+    const record = existing && existing.url === url ? existing : { url, tools: new Map<string, AttachedPageTool>() };
 
     const wanted = input.names && input.names.length > 0 ? new Set(input.names) : null;
     const notFound: string[] = [];
@@ -1819,7 +1856,7 @@ export class AgentBrowser extends MastraBrowser {
       if (!id) continue;
       const description =
         pageTool.description ?? `WebMCP tool "${pageTool.name}" from ${listed.origin} (source: ${pageTool.source}).`;
-      existing.set(pageTool.name, {
+      record.tools.set(pageTool.name, {
         rawName: pageTool.name,
         id,
         description,
@@ -1827,7 +1864,7 @@ export class AgentBrowser extends MastraBrowser {
       });
       attached.push({ rawName: pageTool.name, id, description });
     }
-    this.manualAttached.set(key, existing);
+    this.manualAttached.set(key, record);
 
     return {
       success: true,
