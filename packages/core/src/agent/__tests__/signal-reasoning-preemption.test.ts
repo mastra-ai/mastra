@@ -315,6 +315,106 @@ describe('queued signals preempt default-loop reasoning', () => {
     },
   );
 
+  it('drops a direct writer tripwire when a signal arrives during its violation callback', async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const pending: ReturnType<typeof createSignal>[] = [];
+    const messageList = createMessageListWithUserMessage();
+    const settings = defaultSettings();
+    const onStepFinish = vi.fn();
+    const onAbort = vi.fn();
+    const onError = vi.fn();
+    const prompts: unknown[] = [];
+    let notify!: () => void;
+    let blockedPart: ChunkType | undefined;
+    let first = true;
+    const onViolation = vi.fn(async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    const doStream = vi.fn(async ({ prompt }: LanguageModelV2CallOptions) => {
+      prompts.push(prompt);
+      return { warnings: [], stream: convertArrayToReadableStream(answer()) };
+    });
+    const stream = loop({
+      ...settings,
+      methodType: 'stream',
+      messageList,
+      models: [{ id: 'writer-race', model: new AISDKV5LanguageModel(new MockLanguageModelV2({ doStream })) }],
+      maxSteps: 2,
+      options: { onStepFinish, onAbort, onError },
+      inputProcessors: [
+        {
+          id: 'write-before-request',
+          async processLLMRequest({ prompt, writer }) {
+            if (first) {
+              first = false;
+              await writer?.custom({
+                type: 'reasoning-start',
+                runId: 'writer-race',
+                from: ChunkFrom.AGENT,
+                payload: { id: 'blocked-writer-reasoning' },
+              });
+            }
+            return { prompt };
+          },
+        },
+      ],
+      outputProcessors: [
+        {
+          id: 'direct-blocker',
+          processOutputStream({ part, abort }) {
+            if (part.type === 'reasoning-start' && part.payload.id === 'blocked-writer-reasoning') {
+              blockedPart = part;
+              abort('Block speculative writer reasoning');
+            }
+            return part;
+          },
+          onViolation,
+        },
+      ],
+      _internal: {
+        ...settings._internal,
+        drainPendingSignals: () => pending.splice(0),
+        subscribePendingSignals: (_runId, listener) => {
+          notify = listener;
+          return () => {};
+        },
+      },
+    });
+    const chunks: string[] = [];
+    const consumption = (async () => {
+      for await (const chunk of stream.fullStream) chunks.push(chunk.type);
+    })();
+    try {
+      await entered.promise;
+      expect(doStream).not.toHaveBeenCalled();
+      pending.push(createSignal({ type: 'user-message', contents: 'VIOLATION_RACE_SIGNAL' }));
+      notify();
+      expect(getModelAttempt(blockedPart)?.discarded).toBe(true);
+      release.resolve();
+      await consumption;
+      await stream._waitUntilFinished();
+      expect(onViolation).toHaveBeenCalledTimes(1);
+      expect(chunks).not.toContain('tripwire');
+      expect(chunks).not.toContain('abort');
+      expect(chunks).not.toContain('error');
+      expect(chunks.filter(type => type === 'finish')).toHaveLength(1);
+      expect(chunks.filter(type => type === 'step-finish')).toHaveLength(2);
+      expect(onStepFinish).toHaveBeenCalledTimes(2);
+      expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({ content: [], text: '' });
+      expect(await stream.steps).toHaveLength(2);
+      expect(await stream.text).toBe('replacement answer');
+      expect(doStream).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(prompts[0])).toContain('VIOLATION_RACE_SIGNAL');
+      expect(JSON.stringify(messageList.get.all.db())).not.toContain('blocked-writer-reasoning');
+      expect(onAbort).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+    }
+  });
+
   it('keeps processor signals and emits their echoes exactly once after external preemption', async () => {
     const entered = deferred<void>();
     const release = deferred<void>();
