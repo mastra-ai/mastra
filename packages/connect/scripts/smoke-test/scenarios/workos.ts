@@ -106,16 +106,6 @@ export const workosScenario: Scenario = {
       }
     }
 
-    if (membershipId && tools['workos_delete_organization_membership']) {
-      try {
-        await call('workos_delete_organization_membership', { membership_id: membershipId });
-        steps.push(makeStep('delete membership', 'workos_delete_organization_membership', 'pass'));
-      } catch (error) {
-        log.error(`Failed to delete smoke membership ${membershipId}`, errorMessage(error));
-        steps.push(makeStep('delete membership', 'workos_delete_organization_membership', 'fail', errorMessage(error)));
-      }
-    }
-
     // User read/update + get_user via snake_case schemas.
     if (userId && tools['workos_get_user']) {
       try {
@@ -350,6 +340,16 @@ export const workosScenario: Scenario = {
           group_id: `directory_group_smoke_${runId}`,
         }),
       );
+    }
+
+    if (membershipId && tools['workos_delete_organization_membership']) {
+      try {
+        await call('workos_delete_organization_membership', { membership_id: membershipId });
+        steps.push(makeStep('delete membership', 'workos_delete_organization_membership', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke membership ${membershipId}`, errorMessage(error));
+        steps.push(makeStep('delete membership', 'workos_delete_organization_membership', 'fail', errorMessage(error)));
+      }
     }
 
     if (userId && tools['workos_delete_user']) {

@@ -5,7 +5,12 @@ import { z } from 'zod';
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const listOrganizationsInputSchema = z.object({
-  cursor: z.string().optional(),
+  cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a non-negative integer.')
+    .refine(value => Number.isSafeInteger(Number(value)), 'Cursor must be a non-negative integer.')
+    .optional()
+    .describe('Pagination cursor returned by a previous request. Omit for the first page.'),
   limit: z.number().int().min(1).max(500).optional(),
   query: z.string().optional(),
   order_by: z.string().optional().describe('Sort by name, created_at, or members_count, prefixed with + or -.'),
@@ -48,12 +53,7 @@ export function listOrganizationsTool(proxy: PlatformProxy) {
     outputSchema: listOrganizationsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const offset = input.cursor === undefined ? 0 : /^\d+$/.test(input.cursor) ? Number(input.cursor) : Number.NaN;
-      if (!Number.isSafeInteger(offset) || offset < 0)
-        throw new platformProxy.ActionError({
-          type: 'invalid_cursor',
-          message: 'Cursor must be a non-negative integer.',
-        });
+      const offset = input.cursor === undefined ? 0 : Number(input.cursor);
       const response = await platformProxy.get({
         // https://clerk.com/docs/reference/backend-api/tag/Organizations#operation/GetOrganizationList
         endpoint: '/v1/organizations',
