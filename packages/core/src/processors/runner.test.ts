@@ -746,7 +746,7 @@ describe('ProcessorRunner', () => {
       expect(result.reason).toBe('Content blocked');
     });
 
-    it('should handle processor errors gracefully', async () => {
+    it('should fail when a processor throws', async () => {
       const outputProcessors: Processor[] = [
         {
           id: 'processor1',
@@ -765,12 +765,17 @@ describe('ProcessorRunner', () => {
       });
 
       const processorStates = new Map();
-      const result = await runner.processPart(
-        { type: 'text-delta', payload: { text: 'test content', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-      );
-      expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('test content'); // Should return original text on error
-      expect(result.blocked).toBe(false);
+      await expect(
+        runner.processPart(
+          {
+            type: 'text-delta',
+            payload: { text: 'test content', id: 'text-1' },
+            runId: '1',
+            from: ChunkFrom.AGENT,
+          },
+          processorStates,
+        ),
+      ).rejects.toThrow('Processor error');
     });
 
     it('should skip processors that do not implement processOutputStream', async () => {

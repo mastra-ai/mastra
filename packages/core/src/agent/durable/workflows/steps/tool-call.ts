@@ -195,6 +195,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+class DurableOutputProcessorError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableOutputProcessorError';
+  }
+}
+
+class DurableChunkPublishError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : String(error), { cause: error });
+    this.name = 'DurableChunkPublishError';
+  }
+}
+
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
@@ -243,7 +257,11 @@ async function processChunkThroughOutputProcessors(
             if (data.type.startsWith('data-') && !data.transient) {
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
-            await emitChunkEvent(pubsub, runId, data as ChunkType);
+            try {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            } catch (error) {
+              throw new DurableChunkPublishError(error);
+            }
           },
         }
       : undefined,
@@ -252,17 +270,19 @@ async function processChunkThroughOutputProcessors(
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
-        await emitChunkEvent(pubsub, runId, c, !!runner);
+        try {
+          await emitChunkEvent(pubsub, runId, c, !!runner);
+        } catch (error) {
+          throw new DurableChunkPublishError(error);
+        }
       }
     },
     onProcessorError: error => {
-      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-      // Fail closed: drop the chunk instead of emitting the unprocessed
-      // original — a throwing redaction processor must not leak the raw
-      // value. The regular loop registers no fallback at all (processor
-      // failures propagate and fail the request); this engine keeps the
-      // run alive but suppresses the chunk.
-      return null;
+      // Publication failures keep the callers' non-fatal emission path.
+      if (error instanceof DurableChunkPublishError) {
+        throw error.cause;
+      }
+      throw new DurableOutputProcessorError(error);
     },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
@@ -925,6 +945,9 @@ export function createDurableToolCallStep() {
                 collectProcessorDataPart,
               );
             } catch (emitError) {
+              if (emitError instanceof DurableOutputProcessorError) {
+                throw emitError;
+              }
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
           }
@@ -1822,6 +1845,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
         }
@@ -1843,9 +1869,12 @@ export function createDurableToolCallStep() {
             mappingError: serializeError(error),
           };
         }
-        // An authorization denial must fail the run instead of being serialized
-        // as a recoverable tool error for the LLM to retry.
-        if (error instanceof Error && error.name === 'FGADeniedError') {
+        // Output processor failures and authorization denials must fail the run
+        // instead of being serialized as recoverable tool errors.
+        if (
+          error instanceof DurableOutputProcessorError ||
+          (error instanceof Error && error.name === 'FGADeniedError')
+        ) {
           throw error;
         }
         const toolError = serializeError(error);
@@ -1885,6 +1914,9 @@ export function createDurableToolCallStep() {
               collectProcessorDataPart,
             );
           } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
         }
