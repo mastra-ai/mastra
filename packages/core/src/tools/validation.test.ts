@@ -2512,3 +2512,46 @@ describe('validateRequestContext', () => {
     expect(result.error?.message).toContain('tenantId');
   });
 });
+
+describe('validateToolInput - combined fallback corrections (GitHub #25825)', () => {
+  it('combines stringified JSON coercion with null stripping', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'] });
+  });
+
+  it('combines prompt alias normalization with null stripping', () => {
+    const schema = z.object({ prompt: z.string(), threadId: z.string().optional() });
+    const result = validateToolInput(schema, { query: 'hi', threadId: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({ prompt: 'hi' });
+  });
+
+  it('strips nulls inside stringified JSON objects', () => {
+    const schema = z.object({ meta: z.object({ a: z.string().optional() }) });
+    const result = validateToolInput(schema, { meta: '{"a":null}' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ meta: {} });
+  });
+
+  it('preserves nullable fields while combining corrections', () => {
+    const schema = z.object({
+      args: z.array(z.string()),
+      note: z.string().optional(),
+      parent: z.string().nullable(),
+    });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'], parent: null });
+  });
+
+  it('reports only remaining issues when corrections are not enough', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('count');
+    expect(result.error?.message).not.toContain('- args');
+    expect(result.error?.message).not.toContain('- note');
+  });
+});

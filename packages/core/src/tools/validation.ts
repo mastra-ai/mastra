@@ -538,12 +538,21 @@ export function validateToolInput<T = unknown>(
   // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
   // LLMs like GLM4.7 send stringified JSON for array/object parameters, e.g.
   // { "args": "[\"file.py\"]" } instead of { "args": ["file.py"] }.
+  //
+  // Each fallback builds on the previous one's output so inputs needing several
+  // corrections (e.g. stringified JSON plus null optional fields) still validate
+  // (GitHub #25825).
+  let currentInput = normalizedInput;
+  let currentIssues = validation.issues;
+
   const coercedInput = coerceStringifiedJsonValues(schema, normalizedInput);
   if (coercedInput !== normalizedInput) {
     const coercedValidation = safeValidate(schema, coercedInput);
     if ('value' in coercedValidation) {
       return { data: coercedValidation.value };
     }
+    currentInput = coercedInput;
+    currentIssues = coercedValidation.issues;
   }
 
   // Step 5: Retry with null values stripped only for failing fields (GitHub #12362)
@@ -556,22 +565,27 @@ export function validateToolInput<T = unknown>(
   // This ensures we catch null values regardless of the validator's error message
   // format (e.g., "must be string", "must be object", etc.).
   const failingNullPaths = new Set(
-    validation.issues
+    currentIssues
       .filter(issue => {
         if (!issue.path || issue.path.length === 0) return false;
-        const value = getValueAtPath(normalizedInput, issue.path);
+        const value = getValueAtPath(currentInput, issue.path);
         return value === null || value === undefined;
       })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
   const strippedInput =
-    failingNullPaths.size > 0 ? stripNullishValuesAtPaths(input, failingNullPaths) : stripNullishValues(input);
+    failingNullPaths.size > 0
+      ? stripNullishValuesAtPaths(currentInput, failingNullPaths)
+      : stripNullishValues(coercedInput !== normalizedInput ? coercedInput : input);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
   const retryValidation = safeValidate(schema, normalizedStripped);
 
   if ('value' in retryValidation) {
     return { data: retryValidation.value };
+  }
+  if (failingNullPaths.size > 0) {
+    currentInput = normalizedStripped;
   }
 
   // Step 6: Retry with common prompt alias normalization (GitHub #14154)
@@ -585,13 +599,8 @@ export function validateToolInput<T = unknown>(
     promptJsonSchema.properties != null &&
     'prompt' in promptJsonSchema.properties;
 
-  if (
-    schemaExpectsPrompt &&
-    normalizedInput != null &&
-    typeof normalizedInput === 'object' &&
-    !Array.isArray(normalizedInput)
-  ) {
-    const obj = normalizedInput as Record<string, unknown>;
+  if (schemaExpectsPrompt && currentInput != null && typeof currentInput === 'object' && !Array.isArray(currentInput)) {
+    const obj = currentInput as Record<string, unknown>;
     if (obj.prompt == null) {
       const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
       if (alias !== undefined) {
