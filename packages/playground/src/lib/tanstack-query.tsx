@@ -1,6 +1,7 @@
 import { shouldRetryQuery } from '@mastra/playground-ui/utils/query-utils';
 import type { QueryClientConfig } from '@tanstack/react-query';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState } from 'react';
 
 export interface PlaygroundQueryClientProps {
   children: React.ReactNode;
@@ -8,16 +9,19 @@ export interface PlaygroundQueryClientProps {
 }
 
 export const PlaygroundQueryClient = ({ children, options }: PlaygroundQueryClientProps) => {
-  const queryClient = new QueryClient({
-    ...options,
-    defaultOptions: {
-      ...options?.defaultOptions,
-      queries: {
-        retry: shouldRetryQuery,
-        ...options?.defaultOptions?.queries,
-      },
-    },
-  });
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        ...options,
+        defaultOptions: {
+          ...options?.defaultOptions,
+          queries: {
+            retry: shouldRetryQuery,
+            ...options?.defaultOptions?.queries,
+          },
+        },
+      }),
+  );
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 };
