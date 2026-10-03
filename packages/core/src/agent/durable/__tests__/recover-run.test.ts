@@ -1194,20 +1194,17 @@ describe('DurableAgent.recover(runId) tracing', () => {
     }
     stubWorkflow(agent, 'success');
 
-    const observabilityUtils = await import('../../../observability/utils');
-    const spy = vi.spyOn(observabilityUtils, 'getOrCreateSpan').mockReturnValue(undefined);
-    try {
-      const { cleanup } = await agent.recover(runId);
-      await globalRunRegistry.get(runId)?.workflowExecution;
-      cleanup();
+    const { cleanup } = await agent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    cleanup();
 
-      const recoveredCall = spy.mock.calls.map(([opts]) => opts).find(opts => opts.name?.includes('(recovered)'));
-      expect(recoveredCall).toBeDefined();
-      expect(recoveredCall?.resumedFromSpanId).toBe('span-orig');
-      expect(recoveredCall?.tracingOptions?.traceId).toBe('trace-orig');
-      expect(recoveredCall?.metadata?.recoveredFromSpanId).toBe('span-orig');
-    } finally {
-      spy.mockRestore();
-    }
+    const recoveredCall = vi
+      .mocked(instance.startSpan)
+      .mock.calls.map(([opts]) => opts as any)
+      .find(opts => opts.name?.includes('(recovered)'));
+    expect(recoveredCall).toBeDefined();
+    expect(recoveredCall.parentSpanId).toBe('span-orig');
+    expect(recoveredCall.traceId).toBe('trace-orig');
+    expect(recoveredCall.metadata?.recoveredFromSpanId).toBe('span-orig');
   });
 });
