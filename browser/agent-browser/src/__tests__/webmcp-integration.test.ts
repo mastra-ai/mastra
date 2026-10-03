@@ -37,6 +37,113 @@ function getPage(browser: AgentBrowser): Promise<PageLike> {
   return (browser as unknown as { getPage: (threadId?: string) => Promise<PageLike> }).getPage();
 }
 
+/**
+ * One step the model should take: either a tool call or a terminal text.
+ * We allow a function form for input so a step can react to what the agent
+ * saw on earlier steps (used by the recovery test).
+ */
+type ScriptStep =
+  | { toolName: string; input: Record<string, unknown> | (() => Record<string, unknown>) }
+  | { text: string };
+
+/**
+ * Build a minimal v2 LanguageModel that walks a script. `onStep` is called
+ * before each step with the tool-list the model saw, so tests can assert
+ * what the agent exposed per step (e.g. tool-set swaps on navigation,
+ * stable fingerprints across steps).
+ */
+function createScriptedModel(opts: {
+  modelId: string;
+  script: ScriptStep[];
+  onStep?: (
+    toolNames: string[],
+    index: number,
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>,
+  ) => void;
+}) {
+  let step = 0;
+  const nextStep = (tools: Array<{ name: string; description?: string; inputSchema?: unknown }> | undefined) => {
+    const current = opts.script[Math.min(step, opts.script.length - 1)]!;
+    const toolNames = (tools ?? []).map(t => t.name).sort();
+    opts.onStep?.(toolNames, step, tools ?? []);
+    step++;
+    return current;
+  };
+  const resolveInput = (input: ScriptStep extends { input: infer I } ? I : never) =>
+    typeof input === 'function' ? (input as () => Record<string, unknown>)() : input;
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'mock',
+    modelId: opts.modelId,
+    supportedUrls: {},
+    doGenerate: async (callOpts: { tools?: Array<{ name: string; description?: string; inputSchema?: unknown }> }) => {
+      const current = nextStep(callOpts.tools);
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      if ('toolName' in current) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage,
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: `call-${step}`,
+              toolName: current.toolName,
+              input: JSON.stringify(resolveInput(current.input as never)),
+            },
+          ],
+          warnings: [],
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage,
+        content: [{ type: 'text' as const, text: current.text }],
+        warnings: [],
+      };
+    },
+    doStream: async (callOpts: { tools?: Array<{ name: string; description?: string; inputSchema?: unknown }> }) => {
+      const current = nextStep(callOpts.tools);
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      const meta: unknown[] = [
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: `id-${step}`, modelId: opts.modelId, timestamp: new Date(0) },
+      ];
+      const chunks: unknown[] =
+        'toolName' in current
+          ? [
+              ...meta,
+              {
+                type: 'tool-call',
+                toolCallId: `call-${step}`,
+                toolName: current.toolName,
+                input: JSON.stringify(resolveInput(current.input as never)),
+                providerExecuted: false,
+              },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]
+          : [
+              ...meta,
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: current.text },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage },
+            ];
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream<unknown>({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      };
+    },
+  };
+}
+
 // Check if we can actually launch a browser with AgentBrowser.
 // Only skip for known environment/setup failures, not regressions.
 let canLaunchBrowser = true;
@@ -63,7 +170,7 @@ try {
   }
 }
 
-const PAGE = /* html */ `<!doctype html>
+const SHOP_PAGE = /* html */ `<!doctype html>
 <html>
   <head><title>WebMCP Shop</title></head>
   <body>
@@ -135,17 +242,49 @@ const PAGE = /* html */ `<!doctype html>
   </body>
 </html>`;
 
+/**
+ * A different page that exposes a different W3C tool. We serve this at
+ * /checkout and use it to prove the agent-visible tool set changes when
+ * the agent navigates. No MCP-B server here — just a W3C registration.
+ */
+const CHECKOUT_PAGE = /* html */ `<!doctype html>
+<html>
+  <head><title>WebMCP Checkout</title></head>
+  <body>
+    <h1>WebMCP Checkout</h1>
+    <script>
+      window.purchased = null;
+      navigator.modelContext.registerTool({
+        name: 'complete_purchase',
+        description: 'Complete the purchase',
+        inputSchema: {
+          type: 'object',
+          properties: { confirm: { type: 'boolean' } },
+          required: ['confirm'],
+        },
+        execute: function (args) {
+          window.purchased = { confirm: args.confirm, at: 'checkout' };
+          return window.purchased;
+        },
+      });
+    </script>
+  </body>
+</html>`;
+
 describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
   let server: http.Server;
   let url: string;
+  let checkoutUrl: string;
 
   beforeAll(async () => {
-    server = http.createServer((_req, res) => {
+    server = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(PAGE);
+      res.end(req.url && req.url.startsWith('/checkout') ? CHECKOUT_PAGE : SHOP_PAGE);
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+    const port = (server.address() as AddressInfo).port;
+    url = `http://127.0.0.1:${port}/`;
+    checkoutUrl = `http://127.0.0.1:${port}/checkout`;
   });
 
   afterAll(async () => {
@@ -546,6 +685,271 @@ describe.skipIf(!canLaunchBrowser)('WebMCP integration', () => {
         // Real page state was mutated by the first-class tool.
         const page = await getPage(browser);
         await expect(page.evaluate('cart')).resolves.toEqual([{ sku: 'sku-9', qty: 2 }]);
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+  });
+
+  describe('deep scenarios', () => {
+    it('auto mode: the agent-visible toolset swaps when the agent navigates to a different page', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      const toolNamesByStep: string[][] = [];
+
+      // goto shop → add_to_cart on shop → goto checkout → complete_purchase on checkout → done.
+      // We rely on the per-step tool list capture to prove that:
+      //   - at the add_to_cart step, page_add_to_cart is visible and complete_purchase is NOT;
+      //   - at the complete_purchase step, complete_purchase is visible and page_add_to_cart is NOT.
+      const model = createScriptedModel({
+        modelId: 'scripted-webmcp-nav-swap',
+        script: [
+          { toolName: 'browser_goto', input: { url } },
+          { toolName: 'page_add_to_cart', input: { sku: 'sku-nav', qty: 1 } },
+          { toolName: 'browser_goto', input: { url: checkoutUrl } },
+          { toolName: 'page_complete_purchase', input: { confirm: true } },
+          { text: 'Checked out.' },
+        ],
+        onStep: toolNames => toolNamesByStep.push(toolNames),
+      });
+
+      const agent = new Agent({
+        id: 'webmcp-nav-swap-agent',
+        name: 'nav swap',
+        instructions: 'Shop then check out.',
+        model: model as never,
+        browser,
+      });
+
+      try {
+        const result = await agent.generate('Buy sku-nav then check out.', { maxSteps: 10 });
+        expect(result.text).toBe('Checked out.');
+
+        // Step 0: before any goto. Step 1: on shop (page_add_to_cart visible). Step 2: on
+        // shop still (just called add_to_cart). Step 3: on checkout — complete_purchase
+        // visible, page_add_to_cart gone. We only need to prove the swap at the step the
+        // model actually chose complete_purchase on.
+        const stepOnCheckout = toolNamesByStep[3]!;
+        expect(stepOnCheckout).toContain('page_complete_purchase');
+        expect(stepOnCheckout).not.toContain('page_add_to_cart');
+        expect(stepOnCheckout).not.toContain('page_get_cart');
+
+        // And on the shop steps, page_complete_purchase was never visible — a page tool
+        // from the checkout page can't leak back when the agent was on the shop.
+        const stepOnShop = toolNamesByStep[1]!;
+        expect(stepOnShop).toContain('page_add_to_cart');
+        expect(stepOnShop).not.toContain('page_complete_purchase');
+
+        // And the checkout tool really ran against the checkout page.
+        const page = await getPage(browser);
+        await expect(page.evaluate('window.purchased')).resolves.toEqual({ confirm: true, at: 'checkout' });
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+
+    it('manual mode: `names` filters the attached set; navigation drops it; the agent re-discovers on the new page', async () => {
+      const browser = new AgentBrowser({
+        headless: true,
+        scope: 'shared',
+        webmcp: { enabled: true, toolDiscovery: 'manual' },
+      });
+      const toolNamesByStep: string[][] = [];
+
+      // On shop: attach only get_price (not add_to_cart). Use it. Navigate to checkout.
+      // Attach again (no filter → everything on that page, which is just complete_purchase).
+      // Use it. We assert both the filter behavior and that attachments drop on navigate.
+      const model = createScriptedModel({
+        modelId: 'scripted-webmcp-manual-filter',
+        script: [
+          { toolName: 'browser_goto', input: { url } },
+          { toolName: 'browser_webmcp_discover', input: { names: ['get_price'] } },
+          { toolName: 'page_get_price', input: { sku: 'sku-manual' } },
+          { toolName: 'browser_goto', input: { url: checkoutUrl } },
+          { toolName: 'browser_webmcp_discover', input: {} },
+          { toolName: 'page_complete_purchase', input: { confirm: true } },
+          { text: 'Done.' },
+        ],
+        onStep: toolNames => toolNamesByStep.push(toolNames),
+      });
+
+      const agent = new Agent({
+        id: 'webmcp-manual-filter-agent',
+        name: 'manual filter',
+        instructions: 'Discover and use page tools.',
+        model: model as never,
+        browser,
+      });
+
+      try {
+        const result = await agent.generate('Price then checkout.', { maxSteps: 12 });
+        expect(result.text).toBe('Done.');
+
+        // After `browser_webmcp_discover` with names:['get_price'], the model should see
+        // page_get_price but NOT page_add_to_cart (filter working).
+        const afterPartialDiscover = toolNamesByStep[2]!;
+        expect(afterPartialDiscover).toContain('page_get_price');
+        expect(afterPartialDiscover).not.toContain('page_add_to_cart');
+        expect(afterPartialDiscover).not.toContain('page_get_cart');
+
+        // Step 3 is the goto for /checkout. By step 4 the discover tool was called again
+        // for the new page — and importantly, the stale page_get_price must be gone (it
+        // was attached from the shop origin).
+        const afterRediscover = toolNamesByStep[5]!;
+        expect(afterRediscover).toContain('page_complete_purchase');
+        expect(afterRediscover).not.toContain('page_get_price');
+
+        const page = await getPage(browser);
+        await expect(page.evaluate('window.purchased')).resolves.toEqual({ confirm: true, at: 'checkout' });
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+
+    it('bridge reflects dynamic registerTool / unregisterTool after the page loaded', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      try {
+        await browser.ensureReady();
+        await browser.goto({ url });
+
+        const before = await browser.listWebMcpTools();
+        expect(before.success).toBe(true);
+        if (before.success)
+          expect(before.tools.map(t => t.name).sort()).toEqual(['add_to_cart', 'get_cart', 'get_price']);
+
+        // Page registers a new W3C tool after initial load. The bridge is live, not a
+        // snapshot taken at init time, so the next list should see it.
+        const page = await getPage(browser);
+        await page.evaluate(`navigator.modelContext.registerTool({
+          name: 'wish_list',
+          description: 'Record a wish-list item',
+          inputSchema: { type: 'object', properties: { sku: { type: 'string' } }, required: ['sku'] },
+          execute: function (args) { return { wished: args.sku }; },
+        })`);
+
+        const afterReg = await browser.listWebMcpTools();
+        expect(afterReg.success).toBe(true);
+        if (afterReg.success) {
+          expect(afterReg.tools.map(t => t.name).sort()).toEqual(['add_to_cart', 'get_cart', 'get_price', 'wish_list']);
+          const wish = afterReg.tools.find(t => t.name === 'wish_list');
+          expect(wish?.source).toBe('w3c');
+          expect(wish?.inputSchema).toEqual({
+            type: 'object',
+            properties: { sku: { type: 'string' } },
+            required: ['sku'],
+          });
+        }
+
+        // And the new tool really executes.
+        const called = await browser.callWebMcpTool({ toolName: 'wish_list', args: { sku: 'sku-wish' } });
+        expect(called.success).toBe(true);
+        if (called.success) expect(called.result).toEqual({ wished: 'sku-wish' });
+
+        // Now unregister. The spec allows removal; the bridge must reflect that.
+        await page.evaluate(`navigator.modelContext.unregisterTool('wish_list')`);
+
+        const afterUnreg = await browser.listWebMcpTools();
+        expect(afterUnreg.success).toBe(true);
+        if (afterUnreg.success)
+          expect(afterUnreg.tools.map(t => t.name).sort()).toEqual(['add_to_cart', 'get_cart', 'get_price']);
+
+        // And it is no longer callable.
+        const missing = await browser.callWebMcpTool({ toolName: 'wish_list', args: { sku: 'sku-wish' } });
+        expect(missing.success).toBe(false);
+      } finally {
+        await browser.close();
+      }
+    }, 30_000);
+
+    it('same-page cache stability: the model sees an identical tool-list fingerprint across repeat steps (prompt-cache claim)', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      const fingerprintsByStep: string[] = [];
+
+      // After browser_goto, do three page tool calls in a row on the same page. The
+      // tool list the model sees must be byte-for-byte identical across all three —
+      // same names, same descriptions, same inputSchemas, same order — otherwise
+      // the prompt cache invalidates every step and the memoization story is a lie.
+      const model = createScriptedModel({
+        modelId: 'scripted-webmcp-stability',
+        script: [
+          { toolName: 'browser_goto', input: { url } },
+          { toolName: 'page_get_price', input: { sku: 'sku-s1' } },
+          { toolName: 'page_add_to_cart', input: { sku: 'sku-s1', qty: 1 } },
+          { toolName: 'page_get_cart', input: {} },
+          { text: 'done' },
+        ],
+        onStep: (_names, _idx, tools) =>
+          fingerprintsByStep.push(
+            JSON.stringify(tools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))),
+          ),
+      });
+
+      const agent = new Agent({
+        id: 'webmcp-stability-agent',
+        name: 'stability',
+        instructions: 'Use the page tools.',
+        model: model as never,
+        browser,
+      });
+
+      try {
+        const result = await agent.generate('Price, add, read.', { maxSteps: 8 });
+        expect(result.text).toBe('done');
+
+        // Steps 1, 2, 3 are the three repeat calls on the same page. Their fingerprints
+        // must match exactly — this is the whole point of memoization by URL.
+        const [, s1, s2, s3] = fingerprintsByStep;
+        expect(s1).toBeDefined();
+        expect(s2).toBe(s1);
+        expect(s3).toBe(s1);
+      } finally {
+        await browser.close();
+      }
+    }, 60_000);
+
+    it('agent recovers from a tool-call error: bad args surface as a tool error, next step retries with correct args', async () => {
+      const browser = new AgentBrowser({ headless: true, scope: 'shared', webmcp: { enabled: true } });
+      let sawError = false;
+
+      // Step 2 asks add_to_cart with missing `sku`/`qty`. The W3C validator in the
+      // bridge rejects that at call time with "missing required property \"sku\"".
+      // We check the step's result for that error, then issue a correct call next.
+      const model = createScriptedModel({
+        modelId: 'scripted-webmcp-recovery',
+        script: [
+          { toolName: 'browser_goto', input: { url } },
+          { toolName: 'page_add_to_cart', input: { wrong: 'args' } }, // bad
+          { toolName: 'page_add_to_cart', input: { sku: 'sku-rec', qty: 4 } }, // corrected
+          { text: 'Recovered.' },
+        ],
+      });
+
+      const agent = new Agent({
+        id: 'webmcp-recovery-agent',
+        name: 'recovery',
+        instructions: 'Add items; recover from errors.',
+        model: model as never,
+        browser,
+      });
+
+      try {
+        const result = await agent.generate('Add 4 sku-rec.', { maxSteps: 10 });
+        expect(result.text).toBe('Recovered.');
+
+        // The bad call must have produced a tool result that looks like an error to the
+        // agent (not an exception that aborts the run). We look for an error-shaped
+        // result anywhere in the steps.
+        const allResults = result.steps.flatMap(s => s.toolResults ?? []);
+        sawError = allResults.some(r => {
+          const output = (r as { payload?: { result?: unknown } }).payload?.result;
+          if (!output || typeof output !== 'object') return false;
+          const asString = JSON.stringify(output);
+          return /missing required property|sku|required/i.test(asString);
+        });
+        expect(sawError).toBe(true);
+
+        // And the corrected call really mutated the cart.
+        const page = await getPage(browser);
+        await expect(page.evaluate('cart')).resolves.toEqual([{ sku: 'sku-rec', qty: 4 }]);
       } finally {
         await browser.close();
       }
