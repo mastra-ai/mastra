@@ -9,12 +9,18 @@ import type { RequestPermissionResponse, SessionNotification } from '@agentclien
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AuthStorage } from '../auth/storage.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
 import { MastraCodeAcpAgent } from './agent.js';
 import type { AcpSessionRuntime } from './agent.js';
+
+vi.mock('../utils/open-url.js', () => ({ openUrlInBrowser: vi.fn() }));
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
+  vi.restoreAllMocks();
+  vi.mocked(openUrlInBrowser).mockClear();
 });
 
 async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
@@ -124,11 +130,72 @@ function assistant(text: string): AgentControllerEvent[] {
 }
 
 describe('ACP JSON-RPC conversation', () => {
-  it('offers terminal login and accepts authentication after it', async () => {
+  it('offers browser sign-in for each OAuth provider that needs no typed input, plus terminal login', async () => {
     const { client } = await connect();
     const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
-    expect(authMethods).toEqual([expect.objectContaining({ id: 'mastracode-login', type: 'terminal', args: [] })]);
-    await expect(client.authenticate({ methodId: 'mastracode-login' })).resolves.toBeDefined();
+    expect(authMethods?.map(method => [method.id, 'type' in method ? method.type : 'agent'])).toEqual([
+      ['openai-codex', 'agent'],
+      ['kimi-for-coding', 'agent'],
+      ['xai', 'agent'],
+      ['mastracode-login', 'terminal'],
+    ]);
+    expect(authMethods?.at(-1)?._meta).toEqual({
+      'terminal-auth': { command: process.execPath, args: process.argv.slice(1, 2), label: 'Mastra Code Login' },
+    });
+  });
+
+  it('signs in by opening the provider login page in the browser', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.openai.com/oauth/authorize?state=abc' });
+      return {
+        type: 'oauth-account',
+        id: 'openai-codex:1',
+        label: 'ChatGPT',
+        addedAt: '2026-10-03T00:00:00.000Z',
+        active: true,
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: 0,
+      };
+    });
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'openai-codex' });
+    expect(login).toHaveBeenCalledWith('openai-codex', expect.objectContaining({ authMode: 'browser' }));
+    expect(openUrlInBrowser).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize?state=abc');
+  });
+
+  it('fails sign-in that needs typed input and points to terminal login', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      await callbacks.onPrompt({ message: 'Paste the authorization code:' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'openai-codex' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode-login'),
+    });
+  });
+
+  it('fails device sign-in whose page would ask for a code it cannot show', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.x.ai/activate', userCode: 'ABCD-1234' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'xai' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode-login'),
+    });
+    expect(openUrlInBrowser).not.toHaveBeenCalled();
+  });
+
+  it('accepts terminal login without running a flow and rejects unknown methods', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login');
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'mastracode-login' });
+    expect(login).not.toHaveBeenCalled();
+    await expect(client.authenticate({ methodId: 'anthropic' })).rejects.toMatchObject({
+      message: expect.stringContaining('Unknown authentication method'),
+    });
   });
 
   it('keeps the original creation error on the wire when cleanup also fails', async () => {

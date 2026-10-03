@@ -3,6 +3,8 @@ import { PROTOCOL_VERSION, RequestError } from '@agentclientprotocol/sdk';
 import type {
   Agent,
   AgentSideConnection,
+  AuthenticateRequest,
+  AuthMethod,
   InitializeRequest,
   InitializeResponse,
   NewSessionRequest,
@@ -17,8 +19,10 @@ import type {
   AvailableCommand,
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
+import { AuthStorage, getOAuthProviders } from '../auth/storage.js';
 import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
 import { getCurrentVersion } from '../utils/update-check.js';
 import { withCleanupFailure } from './errors.js';
 import { handleAgentControllerEvent } from './event-mapper.js';
@@ -44,6 +48,41 @@ interface SessionEntry extends AcpSessionRuntime {
   turns: Set<{ cancelled: boolean }>;
   unsubscribe: () => void;
   commands?: AvailableCommand[];
+}
+
+const TERMINAL_LOGIN_METHOD_ID = 'mastracode-login';
+const BROWSER_LOGIN_PROVIDER_IDS = ['openai-codex', 'kimi-for-coding', 'xai'];
+
+function listAuthMethods(): AuthMethod[] {
+  const browserLogins = getOAuthProviders()
+    .filter(provider => BROWSER_LOGIN_PROVIDER_IDS.includes(provider.id))
+    .map(provider => ({
+      id: provider.id,
+      name: `Log in with ${provider.name}`,
+      description: 'Opens your browser to sign in',
+    }));
+  return [
+    ...browserLogins,
+    {
+      id: TERMINAL_LOGIN_METHOD_ID,
+      name: 'Log in with Mastra Code',
+      description: 'Open Mastra Code to sign in to another provider or add an API key',
+      type: 'terminal',
+      args: [],
+      _meta: {
+        'terminal-auth': {
+          command: process.execPath,
+          args: process.argv.slice(1, 2),
+          label: 'Mastra Code Login',
+        },
+      },
+    },
+  ];
+}
+
+function hasUsableModel(available: { id: string; hasApiKey: boolean }[], currentModelId: string): boolean {
+  if (available.some(model => model.hasApiKey)) return true;
+  return currentModelId !== '' && !available.some(model => model.id === currentModelId);
 }
 
 /** One ACP connection, with an independent Mastra Code runtime for each conversation. */
@@ -111,19 +150,32 @@ export class MastraCodeAcpAgent implements Agent {
       protocolVersion: PROTOCOL_VERSION,
       agentInfo: { name: 'mastracode', title: 'Mastra Code', version: getCurrentVersion() },
       agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: false } },
-      authMethods: [
-        {
-          id: 'mastracode-login',
-          name: 'Log in with Mastra Code',
-          description: 'Open Mastra Code to sign in to a provider or add an API key',
-          type: 'terminal',
-          args: [],
-        },
-      ],
+      authMethods: listAuthMethods(),
     };
   }
 
-  async authenticate(): Promise<void> {}
+  async authenticate({ methodId }: AuthenticateRequest): Promise<void> {
+    if (methodId === TERMINAL_LOGIN_METHOD_ID) return;
+    if (!BROWSER_LOGIN_PROVIDER_IDS.includes(methodId)) {
+      throw RequestError.invalidParams(undefined, `Unknown authentication method: ${methodId}`);
+    }
+    const needsTerminal = () =>
+      RequestError.internalError(
+        undefined,
+        `Browser sign-in can't finish on its own. Use the ${TERMINAL_LOGIN_METHOD_ID} method to sign in from a terminal.`,
+      );
+    await new AuthStorage().login(methodId, {
+      authMode: 'browser',
+      onAuth: ({ url, userCode }) => {
+        if (userCode && !url.includes(userCode)) throw needsTerminal();
+        process.stderr.write(`Open ${url} to sign in\n`);
+        openUrlInBrowser(url);
+      },
+      onPrompt: async () => {
+        throw needsTerminal();
+      },
+    });
+  }
 
   newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
     const creating = Promise.resolve().then(() => this.createNewSession(request));
@@ -141,11 +193,19 @@ export class MastraCodeAcpAgent implements Agent {
     const runtime = await this.createSession(request);
     try {
       if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+      let available: Awaited<ReturnType<AgentController['listAvailableModels']>> | undefined;
+      try {
+        available = await runtime.controller.listAvailableModels();
+      } catch {
+        // Discovery may be unavailable before provider authentication.
+      }
+      if (available && !hasUsableModel(available, runtime.session.model.get() ?? '')) {
+        throw RequestError.authRequired(undefined, 'Sign in to a model provider or add an API key to use Mastra Code');
+      }
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
       let models: NewSessionResponse['models'];
-      try {
-        const available = await runtime.controller.listAvailableModels();
+      if (available) {
         models = {
           currentModelId: runtime.session.model.get() ?? '',
           availableModels: includeCurrentModel(
@@ -168,8 +228,6 @@ export class MastraCodeAcpAgent implements Agent {
             runtime.session.model.get() ?? '',
           ),
         };
-      } catch {
-        // Discovery may be unavailable before provider authentication.
       }
       if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
       const entry: SessionEntry = {

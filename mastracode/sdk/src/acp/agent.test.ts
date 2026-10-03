@@ -181,3 +181,48 @@ describe('ACP Agent - Turn failures and cancellation', () => {
     expect(abort).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ACP Agent - Provider authentication', () => {
+  function newSession(models: { id: string; hasApiKey: boolean }[], currentModelId: string) {
+    const createThread = vi.fn(async () => ({ id: 'thread-1' }));
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      subscribe: () => () => {},
+      thread: { create: createThread, switch: async () => {} },
+      mode: { get: () => 'default' },
+      model: { get: () => currentModelId },
+    } as unknown as Session;
+    const agent = new MastraCodeAcpAgent(
+      { sessionUpdate: vi.fn().mockResolvedValue(undefined) } as unknown as AgentSideConnection,
+      async () => ({
+        controller: { listAvailableModels: async () => models } as unknown as AgentController,
+        session,
+        modes: [],
+        cleanup,
+      }),
+    );
+    return { created: agent.newSession({ cwd: '/tmp', mcpServers: [] }), createThread, cleanup };
+  }
+
+  it.each([
+    ['no model is selected', ''],
+    ['the selected model has no credentials', 'openai/gpt-5'],
+  ])('requires authentication when no provider is configured and %s', async (_case, currentModelId) => {
+    const { created, createThread, cleanup } = newSession([{ id: 'openai/gpt-5', hasApiKey: false }], currentModelId);
+    await expect(created).rejects.toMatchObject({ code: -32000 });
+    expect(createThread).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['a provider has credentials', [{ id: 'openai/gpt-5', hasApiKey: true }], ''],
+    [
+      'the selected model is a custom model outside the catalog',
+      [{ id: 'openai/gpt-5', hasApiKey: false }],
+      'local/llama',
+    ],
+  ])('starts the session when %s', async (_case, models, currentModelId) => {
+    const { created } = newSession(models, currentModelId);
+    await expect(created).resolves.toMatchObject({ sessionId: 'thread-1' });
+  });
+});

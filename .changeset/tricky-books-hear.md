@@ -2,4 +2,8 @@
 '@mastra/code-sdk': patch
 ---
 
-Mastra Code now offers a terminal login when an editor connects over ACP (Agent Client Protocol). Editors such as Zed and JetBrains IDEs can open Mastra Code to sign in to a provider or add an API key, which lets Mastra Code be listed in the ACP agent registry.
+Editors that connect to Mastra Code over ACP (Agent Client Protocol), such as Zed and JetBrains IDEs, can now sign you in without leaving the editor.
+
+- Sign in with a ChatGPT subscription, Kimi For Coding, or xAI in the browser, started from the editor.
+- Use the `mastracode-login` terminal method for other providers or API keys.
+- Starting a session with no configured provider returns an `auth_required` error, so editors show these sign-in options instead of a session with no usable model.

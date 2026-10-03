@@ -29,11 +29,22 @@ A client that accepts command and argument fields can use:
 }
 ```
 
-Configure provider authentication in Mastra Code before starting the client, or supply API keys in the server process's environment. ACP sessions don't load project `.env` files into the shared process environment.
-
-The `initialize` response advertises one terminal authentication method, `mastracode-login`. A client that supports terminal authentication runs `mastracode` without `--acp` in a terminal, where you can sign in to a provider or add an API key. New sessions pick up the saved credentials.
-
 After initialization, the client calls `session/new` with an absolute `cwd` and an `mcpServers` array. The response includes the session ID and configuration choices. Send that ID with subsequent prompts and configuration requests.
+
+## Authentication
+
+`session/new` returns an `auth_required` error when no model provider is configured, so clients can offer the methods from the `initialize` response:
+
+| Method ID | Type | Behavior |
+| - | - | - |
+| `openai-codex` | Agent | Opens the browser to sign in with a ChatGPT Plus or Pro subscription. |
+| `kimi-for-coding` | Agent | Opens the browser to approve a Kimi For Coding device sign-in. |
+| `xai` | Agent | Opens the browser to approve an xAI device sign-in. |
+| `mastracode-login` | Terminal | Runs `mastracode` without `--acp` in a terminal, where you can sign in to any provider or add an API key. |
+
+For agent methods, `authenticate` runs the sign-in inside the server process and returns after the credentials are saved. If a provider needs typed input, such as a code to paste, the request fails and points to `mastracode-login`.
+
+API keys in the server process's environment also count as a configured provider. ACP sessions don't load project `.env` files into the shared process environment. New sessions pick up saved credentials without restarting the server.
 
 ## `acpMain(options?)`
 
