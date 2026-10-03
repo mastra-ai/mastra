@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
+import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
 import { InMemoryStore } from '../../../storage';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
@@ -1147,5 +1148,66 @@ describe('DurableAgent.recover(runId)', () => {
 
     await entry?.workflowExecution;
     recovered.cleanup();
+  });
+});
+
+describe('DurableAgent.recover(runId) tracing', () => {
+  it('nests the recovered AGENT_RUN span under the original span instead of opening a second root (#25718)', async () => {
+    const instance = {
+      getConfig: vi.fn().mockReturnValue({ serviceName: 'test' }),
+      getExporters: vi.fn().mockReturnValue([]),
+      getSpanOutputProcessors: vi.fn().mockReturnValue([]),
+      getLogger: vi.fn().mockReturnValue(undefined),
+      getBridge: vi.fn().mockReturnValue(undefined),
+      startSpan: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      __setLogger: vi.fn(),
+      __setMastraEnvironment: vi.fn(),
+    } as unknown as ObservabilityInstance;
+    const observability: ObservabilityEntrypoint = {
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      setMastraContext: vi.fn(),
+      setLogger: vi.fn(),
+      getSelectedInstance: vi.fn(() => instance),
+      registerInstance: vi.fn(),
+      getInstance: vi.fn(() => instance),
+      getDefaultInstance: vi.fn(() => instance),
+      listInstances: vi.fn(() => new Map([['default', instance]])),
+      unregisterInstance: vi.fn().mockReturnValue(false),
+      hasInstance: vi.fn().mockReturnValue(true),
+      setConfigSelector: vi.fn(),
+      clear: vi.fn(),
+    };
+    const store = new InMemoryStore();
+    const agent = createDurableAgent({
+      agent: new Agent({ id: 'agent-traced', name: 'agent-traced', instructions: 'x', model: makeMockModel() }),
+    });
+    void new Mastra({ agents: { 'agent-traced': agent as any }, storage: store, observability, logger: false });
+
+    const runId = 'run-traced';
+    const workflows = (await store.getStore('workflows'))!;
+    for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+      const snapshot = makeSnapshot(runId, 'running', 'agent-traced');
+      (snapshot.context.input as any).agentSpanData = { traceId: 'trace-orig', id: 'span-orig' };
+      await workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId: 'r', snapshot });
+    }
+    stubWorkflow(agent, 'success');
+
+    const observabilityUtils = await import('../../../observability/utils');
+    const spy = vi.spyOn(observabilityUtils, 'getOrCreateSpan').mockReturnValue(undefined);
+    try {
+      const { cleanup } = await agent.recover(runId);
+      await globalRunRegistry.get(runId)?.workflowExecution;
+      cleanup();
+
+      const recoveredCall = spy.mock.calls.map(([opts]) => opts).find(opts => opts.name?.includes('(recovered)'));
+      expect(recoveredCall).toBeDefined();
+      expect(recoveredCall?.resumedFromSpanId).toBe('span-orig');
+      expect(recoveredCall?.tracingOptions?.traceId).toBe('trace-orig');
+      expect(recoveredCall?.metadata?.recoveredFromSpanId).toBe('span-orig');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
