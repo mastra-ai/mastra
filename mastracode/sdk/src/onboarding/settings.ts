@@ -1144,16 +1144,19 @@ export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
   return true;
 }
 
-export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
-  // One-time migration: move model data from auth.json into settings.json
-  migrateFromAuth(filePath);
+export function loadSettings(filePath?: string): GlobalSettings {
+  const resolvedPath = filePath ?? getSettingsPath();
+  // One-time migration belongs only to the global settings file. An explicit
+  // settings path is an isolation boundary (for example, a hosted Factory
+  // controller) and must not import or mutate the host user's auth.json.
+  if (resolvedPath === getSettingsPath()) migrateFromAuth(resolvedPath);
 
-  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
+  if (!existsSync(resolvedPath)) return rememberLoadedSettings(getNewInstallDefaults());
   try {
-    const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const raw = JSON.parse(readFileSync(resolvedPath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
-    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, filePath);
+    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, resolvedPath);
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -1211,7 +1214,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     }
 
     if (settingsChanged) {
-      saveSettings(settings, filePath);
+      saveSettings(settings, resolvedPath);
     }
 
     return rememberLoadedSettings(settings);
