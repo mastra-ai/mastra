@@ -791,6 +791,10 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 
 The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
 
+### Authorize recording access
+
+Before upgrading an application that registers `liveKitRecordingRoute()`, add an `authorize({ traceId, context })` callback that checks the authenticated user's access to the requested trace. The callback is required even when `requiresAuth: false`; omitting it throws during route registration. Return `true` only to allow access, before trace lookup or playback URL resolution. See [Review recordings in Studio](#review-recordings-in-studio) for the setup example.
+
 ### Install compatible packages
 
 Use the same exact release for Agents and its plugins. The tested baseline is:
