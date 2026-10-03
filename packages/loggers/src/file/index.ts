@@ -1,5 +1,6 @@
 import type { WriteStream } from 'node:fs';
-import { createWriteStream, existsSync, readFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
@@ -84,52 +85,51 @@ export class FileTransport extends LoggerTransport {
       const perPage = perPageInput ?? 100;
       const returnPaginationResults = returnPaginationResultsInput ?? true;
 
-      const logs = readFileSync(this.path, 'utf8')
-        .split('\n')
-        .filter(Boolean)
-        .flatMap(line => {
-          try {
-            return [JSON.parse(line)];
-          } catch {
-            return [];
-          }
-        });
+      const resolvedPerPage = perPage || 100;
+      const start = (page - 1) * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedLogs: BaseLogMessage[] = [];
+      let total = 0;
 
-      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
+      const lines = createInterface({
+        input: createReadStream(this.path, { encoding: 'utf8' }),
+        crlfDelay: Infinity,
+      });
 
-      if (filters) {
-        filteredLogs = filteredLogs.filter(log =>
-          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
-        );
-      }
+      for await (const line of lines) {
+        if (!line) continue;
 
-      if (logLevel) {
-        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
-      }
+        let log: BaseLogMessage;
+        try {
+          log = JSON.parse(line);
+        } catch {
+          continue;
+        }
 
-      if (fromDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
-      }
+        if (log === null || typeof log !== 'object') continue;
+        if (filters && !Object.entries(filters).every(([key, value]) => log[key as keyof BaseLogMessage] === value)) {
+          continue;
+        }
+        if (logLevel && log.level !== logLevel) continue;
+        if (fromDate && new Date(log.time).getTime() < fromDate.getTime()) continue;
+        if (toDate && new Date(log.time).getTime() > toDate.getTime()) continue;
 
-      if (toDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
+        if (!returnPaginationResults || (total >= start && total < end)) {
+          paginatedLogs.push(log);
+        }
+        total++;
       }
 
       if (!returnPaginationResults) {
         return {
-          logs: filteredLogs,
-          total: filteredLogs.length,
+          logs: paginatedLogs,
+          total,
           page,
-          perPage: filteredLogs.length,
+          perPage: total,
           hasMore: false,
         };
       }
 
-      const total = filteredLogs.length;
-      const resolvedPerPage = perPage || 100;
-      const start = (page - 1) * resolvedPerPage;
-      const end = start + resolvedPerPage;
-      const paginatedLogs = filteredLogs.slice(start, end);
       const hasMore = end < total;
 
       return {

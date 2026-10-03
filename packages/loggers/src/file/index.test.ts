@@ -149,5 +149,23 @@ describe('FileTransport', () => {
       expect(paged.logs).toHaveLength(1);
       expect(paged.hasMore).toBe(true);
     });
+
+    it('should stream paginated queries without synchronously reading the whole file', async () => {
+      const entries = Array.from({ length: 250 }, (_, index) => JSON.stringify({ msg: `message-${index}`, time: index }));
+      fs.writeFileSync(testPath, `${entries.join('\n')}\n`);
+      const readFileSyncSpy = vi.spyOn(fs, 'readFileSync');
+
+      const result = await fileLogger.listLogs({ page: 2, perPage: 1 });
+
+      expect(readFileSyncSpy).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        logs: [{ msg: 'message-1', time: 1 }],
+        total: 250,
+        page: 2,
+        perPage: 1,
+        hasMore: true,
+      });
+      readFileSyncSpy.mockRestore();
+    });
   });
 });
