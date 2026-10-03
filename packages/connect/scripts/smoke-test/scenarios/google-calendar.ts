@@ -458,14 +458,14 @@ export const googleCalendarScenario: Scenario = {
       );
     }
 
-    // Clear calendar: wipes all events. Only safe on the fresh ephemeral
-    // calendar we just created — Google rejects clearCalendar on anything
-    // other than the primary calendar, so the call almost certainly 403s
-    // with a message proving we hit the endpoint. Keep it to exercise.
+    // Clear calendar: Google's calendars.clear works ONLY on the primary
+    // calendar and wipes every event on it — never send 'primary' here.
+    // Probing with the ephemeral smoke calendar id is safe: Google rejects
+    // clear on secondary calendars with a 400 that proves we hit the endpoint.
     if (tools['google_calendar_clear_calendar']) {
       steps.push(
         await probeTool(call, tools, 'clear calendar (probe)', 'google_calendar_clear_calendar', {
-          calendarId: 'primary',
+          calendarId: calendarId ?? `smoke-${runId}@group.calendar.google.com`,
         }),
       );
     }

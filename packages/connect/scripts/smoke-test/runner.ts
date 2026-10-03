@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
+import { isValidationError } from '@mastra/core/tools';
+
 import { tools as createToolsResolver } from '../../src/tools.js';
 import { TOOLS as REGISTERED_PROVIDERS } from '../../src/registry.js';
 import type { Scenario, ScenarioStep, ResolvedToolset } from './scenario.js';
@@ -144,6 +146,12 @@ async function executeScenario(
     // context is fine for a smoke run.
     try {
       const result = await (tool.execute as (input: unknown, context?: unknown) => Promise<unknown>)(input);
+      // Tool.execute resolves (not throws) with a ValidationError when the
+      // input fails the tool's Zod schema. Surface that as a failure — a
+      // scenario step that never reached the provider must not count as pass.
+      if (isValidationError(result)) {
+        throw new Error(`input validation failed for ${toolId}: ${result.message ?? 'invalid input'}`);
+      }
       return result as T;
     } catch (error) {
       // Re-throw with provider detail and HTTP status appended so scenario

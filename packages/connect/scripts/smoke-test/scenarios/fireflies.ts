@@ -84,9 +84,11 @@ export const firefliesScenario: Scenario = {
         action: 'pause_recording',
       }),
     );
+    // Malformed meeting URL: Fireflies must reject it, so the bot never
+    // actually joins a meeting. A valid URL would start a real recording.
     steps.push(
       await probeTool(call, tools, 'add to live', 'fireflies_add_to_live', {
-        url: `https://meet.jit.si/mastra-smoke-${runId}`,
+        url: `not-a-meeting-url-${runId}`,
         title: `smoke ${runId}`,
       }),
     );
@@ -102,9 +104,11 @@ export const firefliesScenario: Scenario = {
         prompt: 'Capture a soundbite for smoke test.',
       }),
     );
+    // Malformed audio URL: a fetchable MP3 would kick off a real (billable)
+    // transcription that nothing cleans up.
     steps.push(
       await probeTool(call, tools, 'upload audio', 'fireflies_upload_audio', {
-        url: 'https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3',
+        url: `https://invalid.invalid/mastra-smoke-${runId}.mp3`,
         title: `smoke ${runId}`,
       }),
     );

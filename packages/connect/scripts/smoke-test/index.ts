@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 
 import { printReport } from './report.js';
 import { runSmokeTests } from './runner.js';
+import { scenarios } from './scenarios/index.js';
 
 interface CliOptions {
   providers: string[];
@@ -66,6 +67,14 @@ function printHelp(): void {
 
 async function main(): Promise<void> {
   const options = parse(process.argv.slice(2));
+  // A typo'd --provider must not silently become a passing no-op run.
+  const known = new Set(scenarios.map(s => s.integrationId));
+  const unknown = options.providers.filter(p => !known.has(p));
+  if (unknown.length > 0) {
+    console.error(`Unknown provider id(s): ${unknown.join(', ')}`);
+    console.error(`Registered scenarios: ${[...known].sort().join(', ')}`);
+    process.exit(1);
+  }
   const result = await runSmokeTests({
     providers: options.providers,
     projectId: options.projectId,

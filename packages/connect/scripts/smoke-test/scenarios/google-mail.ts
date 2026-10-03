@@ -365,12 +365,31 @@ export const googleMailScenario: Scenario = {
       );
     }
 
-    // Settings updates: pass current-safe values so the mailbox state does
-    // not change meaningfully; Gmail replies with the merged state.
+    // Settings updates: read the current value first, then write that same
+    // value back. The round-trip exercises the update endpoint while leaving
+    // the user's real mailbox state untouched. If the read fails we skip the
+    // update rather than mutate blind.
     if (tools['google_mail_update_vacation_settings']) {
       try {
-        await call('google_mail_update_vacation_settings', { enableAutoReply: false });
-        steps.push(makeStep('update vacation settings', 'google_mail_update_vacation_settings', 'pass'));
+        const current = tools['google_mail_get_vacation_settings']
+          ? await call<{ enableAutoReply?: boolean; responseSubject?: string }>('google_mail_get_vacation_settings', {})
+          : undefined;
+        if (!current) {
+          steps.push(
+            makeStep(
+              'update vacation settings',
+              'google_mail_update_vacation_settings',
+              'skip',
+              'current vacation settings unavailable — not mutating blind',
+            ),
+          );
+        } else {
+          await call('google_mail_update_vacation_settings', {
+            enableAutoReply: current.enableAutoReply ?? false,
+            ...(current.responseSubject !== undefined && { responseSubject: current.responseSubject }),
+          });
+          steps.push(makeStep('update vacation settings', 'google_mail_update_vacation_settings', 'pass'));
+        }
       } catch (error) {
         steps.push(
           makeStep('update vacation settings', 'google_mail_update_vacation_settings', 'fail', errorMessage(error)),
@@ -384,14 +403,27 @@ export const googleMailScenario: Scenario = {
     // on Workspace connections with domain-wide delegation.
     if (tools['google_mail_update_auto_forwarding_settings']) {
       steps.push(
-        await probeTool(call, tools, 'update auto-forwarding (probe)', 'google_mail_update_auto_forwarding_settings', {
-          enabled: false,
-        }),
+        await probeTool(
+          call,
+          tools,
+          'update auto-forwarding (probe)',
+          'google_mail_update_auto_forwarding_settings',
+          { enabled: false },
+          // Workspace-only endpoint: consumer Gmail answers 403, which is the
+          // expected proof here. (Opt-in — the default probe regex excludes 403.)
+          /status=(400|403|404|409|422)|not found|restricted to service accounts/i,
+        ),
       );
     }
     if (tools['google_mail_update_imap_settings']) {
       try {
-        await call('google_mail_update_imap_settings', {});
+        const current = tools['google_mail_get_imap_settings']
+          ? await call<{ enabled?: boolean; autoExpunge?: boolean }>('google_mail_get_imap_settings', {})
+          : undefined;
+        await call('google_mail_update_imap_settings', {
+          ...(current?.enabled !== undefined && { imap_enabled: current.enabled }),
+          ...(current?.autoExpunge !== undefined && { auto_expunge: current.autoExpunge }),
+        });
         steps.push(makeStep('update imap settings', 'google_mail_update_imap_settings', 'pass'));
       } catch (error) {
         steps.push(makeStep('update imap settings', 'google_mail_update_imap_settings', 'fail', errorMessage(error)));
@@ -399,7 +431,13 @@ export const googleMailScenario: Scenario = {
     }
     if (tools['google_mail_update_pop_settings']) {
       try {
-        await call('google_mail_update_pop_settings', {});
+        const current = tools['google_mail_get_pop_settings']
+          ? await call<{ accessWindow?: string; disposition?: string }>('google_mail_get_pop_settings', {})
+          : undefined;
+        await call('google_mail_update_pop_settings', {
+          ...(current?.accessWindow !== undefined && { accessWindow: current.accessWindow }),
+          ...(current?.disposition !== undefined && { disposition: current.disposition }),
+        });
         steps.push(makeStep('update pop settings', 'google_mail_update_pop_settings', 'pass'));
       } catch (error) {
         steps.push(makeStep('update pop settings', 'google_mail_update_pop_settings', 'fail', errorMessage(error)));
@@ -407,7 +445,12 @@ export const googleMailScenario: Scenario = {
     }
     if (tools['google_mail_update_language_settings']) {
       try {
-        await call('google_mail_update_language_settings', { displayLanguage: 'en' });
+        const current = tools['google_mail_get_language_settings']
+          ? await call<{ displayLanguage?: string }>('google_mail_get_language_settings', {})
+          : undefined;
+        await call('google_mail_update_language_settings', {
+          displayLanguage: current?.displayLanguage ?? 'en',
+        });
         steps.push(makeStep('update language settings', 'google_mail_update_language_settings', 'pass'));
       } catch (error) {
         steps.push(

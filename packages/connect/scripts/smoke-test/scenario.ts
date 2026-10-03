@@ -1,4 +1,5 @@
 import type { Tool } from '@mastra/core/tools';
+import { isValidationError } from '@mastra/core/tools';
 
 /**
  * Runtime shape of a resolved tool returned from `tools()`. We don't bind to
@@ -153,6 +154,28 @@ export async function runReadBatch(
   return steps;
 }
 
+/**
+ * Invoke a tool from the full project toolset (another provider's tool, e.g.
+ * cleanup through `google_drive_delete_file`). Mirrors the runner's `call`:
+ * throws on a missing tool and surfaces a resolved ValidationError as a
+ * thrown error instead of a silent pass.
+ */
+export async function callForeignTool<T = unknown>(
+  allTools: ResolvedToolset,
+  toolId: string,
+  input: unknown,
+): Promise<T> {
+  const tool = allTools[toolId];
+  if (!tool || typeof tool.execute !== 'function') {
+    throw new Error(`Tool ${toolId} not available in project toolset`);
+  }
+  const result = await (tool.execute as (input: unknown) => Promise<unknown>)(input);
+  if (isValidationError(result)) {
+    throw new Error(`input validation failed for ${toolId}: ${result.message}`);
+  }
+  return result as T;
+}
+
 function stripPrefix(toolId: string): string {
   // Human-readable step name: drop the provider prefix so the report doesn't
   // repeat it on every line.
@@ -163,9 +186,16 @@ function stripPrefix(toolId: string): string {
 /**
  * Invoke a mutating tool against a synthetic / nonexistent id to exercise the
  * endpoint wiring without touching real customer data. The provider is
- * expected to return a 4xx (not-found, forbidden, invalid) response — that
- * still proves routing, auth, serialization, and the tool's response-schema
- * handling. Pass a custom regex when the provider's error wording differs.
+ * expected to reject the request with a not-found / conflict / validation
+ * status — that still proves routing, auth, serialization, and the tool's
+ * response-schema handling.
+ *
+ * The default `acceptable` regex is deliberately narrow: it matches only
+ * errors the live API returns for a nonexistent resource or invalid payload
+ * (400/404/409/422). It does NOT match 401/403 or bare words like "invalid" —
+ * an expired connection token or a proxy rejection must surface as a failure,
+ * not a pass. Call sites where a product tier genuinely gates the endpoint
+ * behind 401/403 must opt in with an explicit regex.
  *
  * Used by scenarios where the write-side API requires a resource the toolset
  * can't bootstrap (e.g. a Stripe refund requires a captured charge, a Google
@@ -177,7 +207,7 @@ export async function probeTool(
   name: string,
   toolId: string,
   input: unknown,
-  acceptable: RegExp = /status=(400|401|403|404|409|422)|not found|does not exist|unauthoriz|forbidden|invalid|unknown/i,
+  acceptable: RegExp = /status=(400|404|409|422)|not found|does not exist/i,
 ): Promise<ScenarioStep> {
   if (!availableTools[toolId]) {
     return makeStep(name, toolId, 'skip', 'tool not in project toolset');

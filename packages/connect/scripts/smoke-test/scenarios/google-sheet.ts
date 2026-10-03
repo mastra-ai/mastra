@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, callForeignTool } from '../scenario.js';
 
 /**
  * Deep google-sheet scenario: creates a spreadsheet, round-trips values via
@@ -345,7 +345,7 @@ export const googleSheetScenario: Scenario = {
     const driveDelete = allTools['google_drive_delete_file'];
     if (driveDelete && typeof driveDelete.execute === 'function') {
       try {
-        await (driveDelete.execute as (input: unknown) => Promise<unknown>)({ fileId: spreadsheetId });
+        await callForeignTool(allTools, 'google_drive_delete_file', { fileId: spreadsheetId });
         steps.push(makeStep('delete file (via drive)', 'google_drive_delete_file', 'pass'));
       } catch (error) {
         log.error(

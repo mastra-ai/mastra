@@ -342,16 +342,17 @@ export const googleDriveScenario: Scenario = {
       }
     }
 
-    // Finally, empty trash — safely removes items this run deleted and no
-    // one else's. This is idempotent and non-destructive to live files.
-    if (tools['google_drive_empty_trash']) {
-      try {
-        await call('google_drive_empty_trash', {});
-        steps.push(makeStep('empty trash', 'google_drive_empty_trash', 'pass'));
-      } catch (error) {
-        steps.push(makeStep('empty trash', 'google_drive_empty_trash', 'fail', errorMessage(error)));
-      }
-    }
+    // Never invoke google_drive_empty_trash: files.emptyTrash permanently
+    // deletes EVERY item in the connected user's trash, not just this run's
+    // files, and it takes no parameters so there is no safe probe input.
+    steps.push(
+      makeStep(
+        'empty trash (not invoked)',
+        'google_drive_empty_trash',
+        'skip',
+        'destructive account-wide operation: permanently deletes all trashed files',
+      ),
+    );
 
     if (copiedId) {
       try {

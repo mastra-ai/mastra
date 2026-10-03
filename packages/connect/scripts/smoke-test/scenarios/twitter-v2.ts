@@ -77,9 +77,15 @@ export const twitterScenario: Scenario = {
       )),
     );
 
-    // Tweet lifecycle: create → read → like → bookmark → unbookmark → unlike → delete.
+    // Tweet lifecycle: create → read → like → bookmark → unbookmark → unlike
+    // → delete. Publishing to the connected account's PUBLIC timeline is
+    // opt-in: set MASTRA_SMOKE_TWITTER_ALLOW_POST=1 to run the real
+    // lifecycle (the tweet is deleted at the end of the run). Without the
+    // opt-in, create_tweet is probed with an over-limit payload X rejects,
+    // and every tweet-scoped step is probed against a synthetic id.
+    const allowPost = process.env.MASTRA_SMOKE_TWITTER_ALLOW_POST === '1';
     let tweetId: string | undefined;
-    if (tools['twitter_v2_create_tweet']) {
+    if (allowPost && tools['twitter_v2_create_tweet']) {
       try {
         const tweet = await call<{ id?: string; data?: { id?: string } }>('twitter_v2_create_tweet', {
           text: `mastra connect smoke ${runId} (auto-deleted)`,
@@ -89,7 +95,17 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('create tweet', 'twitter_v2_create_tweet', 'fail', errorMessage(error)));
       }
+    } else if (tools['twitter_v2_create_tweet']) {
+      steps.push(
+        await probeTool(call, tools, 'create tweet (probe)', 'twitter_v2_create_tweet', {
+          // > 280 characters — X rejects the payload, nothing is published.
+          text: `mastra connect smoke ${runId} `.repeat(20),
+        }),
+      );
     }
+
+    // Synthetic id used when no real tweet exists (no opt-in or create failed).
+    const lifecycleTweetId = tweetId ?? `1${runId.replace(/[^0-9]/g, '')}000000000`.slice(0, 19);
 
     if (tweetId && tools['twitter_v2_get_tweet']) {
       try {
@@ -98,6 +114,8 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('get tweet', 'twitter_v2_get_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(await probeTool(call, tools, 'get tweet (probe)', 'twitter_v2_get_tweet', { id: lifecycleTweetId }));
     }
 
     if (tweetId && tools['twitter_v2_like_tweet']) {
@@ -107,6 +125,10 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('like tweet', 'twitter_v2_like_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'like tweet (probe)', 'twitter_v2_like_tweet', { tweetId: lifecycleTweetId }),
+      );
     }
 
     // create_liked_tweet is the explicit POST /users/:id/likes variant; the
@@ -119,11 +141,11 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('create liked tweet', 'twitter_v2_create_liked_tweet', 'fail', errorMessage(error)));
       }
-    } else if (tweetId) {
+    } else {
       steps.push(
-        await probeTool(call, tools, 'create liked tweet', 'twitter_v2_create_liked_tweet', {
+        await probeTool(call, tools, 'create liked tweet (probe)', 'twitter_v2_create_liked_tweet', {
           userId: '0',
-          tweetId,
+          tweetId: lifecycleTweetId,
         }),
       );
     }
@@ -135,6 +157,12 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('get liked tweet', 'twitter_v2_get_liked_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'get liked tweet (probe)', 'twitter_v2_get_liked_tweet', {
+          tweet_id: lifecycleTweetId,
+        }),
+      );
     }
 
     if (tweetId && authUserId && tools['twitter_v2_bookmark_tweet']) {
@@ -144,9 +172,12 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('bookmark tweet', 'twitter_v2_bookmark_tweet', 'fail', errorMessage(error)));
       }
-    } else if (tweetId) {
+    } else {
       steps.push(
-        await probeTool(call, tools, 'bookmark tweet', 'twitter_v2_bookmark_tweet', { userId: '0', tweetId }),
+        await probeTool(call, tools, 'bookmark tweet (probe)', 'twitter_v2_bookmark_tweet', {
+          userId: '0',
+          tweetId: lifecycleTweetId,
+        }),
       );
     }
 
@@ -157,6 +188,12 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('remove bookmark', 'twitter_v2_remove_bookmark', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'remove bookmark (probe)', 'twitter_v2_remove_bookmark', {
+          tweet_id: lifecycleTweetId,
+        }),
+      );
     }
 
     if (tweetId && tools['twitter_v2_delete_liked_tweet']) {
@@ -166,6 +203,12 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('delete liked tweet', 'twitter_v2_delete_liked_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'delete liked tweet (probe)', 'twitter_v2_delete_liked_tweet', {
+          tweet_id: lifecycleTweetId,
+        }),
+      );
     }
 
     if (tweetId && tools['twitter_v2_unlike_tweet']) {
@@ -175,6 +218,12 @@ export const twitterScenario: Scenario = {
       } catch (error) {
         steps.push(makeStep('unlike tweet', 'twitter_v2_unlike_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'unlike tweet (probe)', 'twitter_v2_unlike_tweet', {
+          tweet_id: lifecycleTweetId,
+        }),
+      );
     }
 
     if (tweetId && tools['twitter_v2_delete_tweet']) {
@@ -185,6 +234,10 @@ export const twitterScenario: Scenario = {
         log.error(`Failed to delete smoke tweet ${tweetId}`, errorMessage(error));
         steps.push(makeStep('delete tweet', 'twitter_v2_delete_tweet', 'fail', errorMessage(error)));
       }
+    } else {
+      steps.push(
+        await probeTool(call, tools, 'delete tweet (probe)', 'twitter_v2_delete_tweet', { id: lifecycleTweetId }),
+      );
     }
 
     // Follow / unfollow are destructive on real accounts; probe with a

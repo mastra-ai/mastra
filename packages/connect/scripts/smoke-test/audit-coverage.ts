@@ -2,10 +2,13 @@
 /**
  * Audit tool coverage per scenario. For every checked-in provider:
  *   - count tools shipped by the provider
- *   - extract tool ids referenced by its scenario (scenario file + requireTools list)
- *   - print missing tool ids so we know what to add to each scenario
+ *   - extract tool ids the scenario actually exercises (call/probeTool/
+ *     runReadBatch invocations, or an explicit makeStep record for tools
+ *     that are deliberately never invoked, e.g. destructive account-wide ops)
+ *   - fail (exit 1) on coverage gaps and on referenced ids no tool defines
  *
- * This is a static scan — it doesn't need the API to run.
+ * A tool id that appears only in a comment or a `tools['x']` guard does NOT
+ * count as covered. This is a static scan — it doesn't need the API to run.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -40,6 +43,37 @@ const providerTools = (provider: string): string[] => {
   return files.map(f => toolIdFromFile(f)).sort();
 };
 
+/**
+ * Returns the argument text of every `<fnName>(...)` call in `src`, using a
+ * balanced-paren scan (string-aware enough for our scenario files, which
+ * never nest unbalanced parens inside the id strings we extract).
+ */
+const argumentSpans = (src: string, fnName: string): string[] => {
+  const spans: string[] = [];
+  let from = 0;
+  for (;;) {
+    const at = src.indexOf(`${fnName}(`, from);
+    if (at === -1) break;
+    let depth = 0;
+    let end = -1;
+    for (let i = at + fnName.length; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end === -1) break;
+    spans.push(src.slice(at + fnName.length + 1, end));
+    from = end + 1;
+  }
+  return spans;
+};
+
 const providers = readdirSync(providersRoot)
   .filter(d => statSync(join(providersRoot, d)).isDirectory())
   .sort();
@@ -52,11 +86,34 @@ for (const provider of providers) {
 
   const scenarioFile = join(scenariosRoot, `${provider}.ts`);
   const covered = new Set<string>();
+  const referenced = new Set<string>();
   if (existsSync(scenarioFile)) {
     const src = readFileSync(scenarioFile, 'utf8');
     const prefix = provider.replace(/-/g, '_');
-    const re = new RegExp(`['"\`](${prefix}_[a-z0-9_]+)['"\`]`, 'g');
-    for (const m of src.matchAll(re)) {
+    const idPattern = `${prefix}_[a-z0-9_]+`;
+
+    // Every quoted id anywhere in the file (guards, requireTools, comments in
+    // string form) — used only for the unknown-id reverse check below.
+    for (const m of src.matchAll(new RegExp(`['"\`](${idPattern})['"\`]`, 'g'))) {
+      if (m[1]) referenced.add(m[1]);
+    }
+
+    // Coverage counts only exercise sites. Sanitize the source first:
+    //   - strip comments, so an id mentioned in prose doesn't count
+    //   - blank requireTools(...) spans, so preflight guard lists don't count
+    // then count ids used as arguments / tuple elements (quote followed by
+    // `,` or `)`), which covers call(), probeTool(), makeStep() records,
+    // runReadBatch tuples, and local read-loop arrays. A bare `tools['id']`
+    // presence guard is followed by `]` and therefore never counts; direct
+    // `allTools['id'].execute` invocation is counted explicitly.
+    let sanitized = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
+    for (const span of argumentSpans(sanitized, 'requireTools')) {
+      sanitized = sanitized.replace(span, ' '.repeat(span.length));
+    }
+    for (const m of sanitized.matchAll(new RegExp(`['"\`](${idPattern})['"\`]\\s*[,)]`, 'g'))) {
+      if (m[1]) covered.add(m[1]);
+    }
+    for (const m of sanitized.matchAll(new RegExp(`\\[['"\`](${idPattern})['"\`]\\]\\s*\\.execute`, 'g'))) {
       if (m[1]) covered.add(m[1]);
     }
   }
@@ -66,7 +123,7 @@ for (const provider of providers) {
   // These are typos or stale references — they silently skip steps at runtime
   // (requireTools short-circuits, gated steps never fire) instead of failing loudly.
   const known = new Set(tools);
-  const unknown = [...covered].filter(id => !known.has(id)).sort();
+  const unknown = [...referenced].filter(id => !known.has(id)).sort();
   reports.push({ provider, total: tools.length, covered: tools.length - missing.length, missing, unknown });
 }
 
@@ -91,7 +148,12 @@ for (const r of reports) {
 }
 
 const totalUnknown = reports.reduce((n, r) => n + r.unknown.length, 0);
+const totalMissing = totalTools - totalCovered;
 if (totalUnknown > 0) {
   console.log(`\n⚠️ ${totalUnknown} unknown tool id(s) referenced by scenarios — fix or remove them.`);
+  process.exitCode = 1;
+}
+if (totalMissing > 0) {
+  console.log(`\n⚠️ ${totalMissing} tool(s) not exercised by any scenario — 100% coverage is required.`);
   process.exitCode = 1;
 }

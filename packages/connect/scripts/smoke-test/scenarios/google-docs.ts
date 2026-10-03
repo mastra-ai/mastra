@@ -1,5 +1,5 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js';
+import { makeStep, errorMessage, requireTools, probeTool, callForeignTool } from '../scenario.js';
 
 /**
  * Deep Google Docs scenario: creates a doc, exercises the structural edit
@@ -376,7 +376,7 @@ export const googleDocsScenario: Scenario = {
     const driveDelete = allTools['google_drive_delete_file'];
     if (driveDelete && typeof driveDelete.execute === 'function') {
       try {
-        await (driveDelete.execute as (input: unknown) => Promise<unknown>)({ fileId: documentId });
+        await callForeignTool(allTools, 'google_drive_delete_file', { fileId: documentId });
         steps.push(makeStep('delete document (via drive)', 'google_drive_delete_file', 'pass'));
       } catch (error) {
         log.error(`Failed to delete smoke doc ${documentId}`, errorMessage(error));

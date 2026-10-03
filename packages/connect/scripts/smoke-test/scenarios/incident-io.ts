@@ -15,7 +15,11 @@ export const incidentIoScenario: Scenario = {
   summary: 'follow-up + action CRUD + full catalog/incident/schedule/alert surface',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
-    const missing = requireTools(tools, ['incident_io_create_follow_up', 'incident_io_delete_follow_up']);
+    const missing = requireTools(tools, [
+      'incident_io_list_incidents',
+      'incident_io_create_follow_up',
+      'incident_io_delete_follow_up',
+    ]);
     if (missing) {
       steps.push({ name: 'preflight', status: 'skip', detail: missing });
       return steps;
@@ -307,7 +311,12 @@ export const incidentIoScenario: Scenario = {
       );
     }
 
-    // ---- destructive mutators probed with synthetic IDs ----
+    // ---- destructive mutators probed with synthetic IDs only ----
+    // Never pass real incident or alert ids here: these endpoints rename
+    // incidents, post updates that page responders, and resolve live alerts.
+    // Synthetic ids make the API reject the request after routing.
+    const syntheticIncidentId = `incident-smoke-${runId}`;
+    const syntheticAlertId = `alert-smoke-${runId}`;
     if (tools['incident_io_create_incident']) {
       steps.push(
         await probeTool(call, tools, 'create incident', 'incident_io_create_incident', {
@@ -315,6 +324,8 @@ export const incidentIoScenario: Scenario = {
             idempotency_key: `smoke-${runId}`,
             visibility: 'public',
             name: `${runId} smoke incident`,
+            // Invalid severity id guarantees a 4xx before any incident is declared.
+            severity_id: `severity-smoke-${runId}`,
           },
         }),
       );
@@ -322,7 +333,7 @@ export const incidentIoScenario: Scenario = {
     if (tools['incident_io_update_incident']) {
       steps.push(
         await probeTool(call, tools, 'update incident', 'incident_io_update_incident', {
-          id: incidentId,
+          id: syntheticIncidentId,
           body: {
             incident: { name: `${runId} smoke update (probe)` },
             notify_incident_channel: false,
@@ -335,7 +346,7 @@ export const incidentIoScenario: Scenario = {
         await probeTool(call, tools, 'create incident update', 'incident_io_create_incident_update', {
           body: {
             idempotency_key: `smoke-update-${runId}`,
-            incident_id: incidentId,
+            incident_id: syntheticIncidentId,
             message: `${runId} smoke update (probe)`,
           },
         }),
@@ -346,7 +357,7 @@ export const incidentIoScenario: Scenario = {
         await probeTool(call, tools, 'create timeline item', 'incident_io_create_incident_timeline_item', {
           body: {
             idempotency_key: `smoke-timeline-${runId}`,
-            incident_id: incidentId,
+            incident_id: syntheticIncidentId,
             timestamp: new Date().toISOString(),
             title: `${runId} smoke timeline item`,
             description: 'Probe only — safe to delete.',
@@ -366,8 +377,8 @@ export const incidentIoScenario: Scenario = {
       steps.push(
         await probeTool(call, tools, 'create incident alert', 'incident_io_create_incident_alert', {
           body: {
-            alert_id: probeId(alertId, `alert-smoke-${runId}`),
-            incident_id: incidentId,
+            alert_id: syntheticAlertId,
+            incident_id: syntheticIncidentId,
           },
         }),
       );
@@ -383,7 +394,7 @@ export const incidentIoScenario: Scenario = {
     if (tools['incident_io_add_alert_tags']) {
       steps.push(
         await probeTool(call, tools, 'add alert tags', 'incident_io_add_alert_tags', {
-          id: probeId(alertId, `alert-smoke-${runId}`),
+          id: syntheticAlertId,
           body: { tags: [`smoke-${runId}`] },
         }),
       );
@@ -391,7 +402,7 @@ export const incidentIoScenario: Scenario = {
     if (tools['incident_io_set_alert_tags']) {
       steps.push(
         await probeTool(call, tools, 'set alert tags', 'incident_io_set_alert_tags', {
-          id: probeId(alertId, `alert-smoke-${runId}`),
+          id: syntheticAlertId,
           body: { tags: [`smoke-set-${runId}`] },
         }),
       );
@@ -399,7 +410,7 @@ export const incidentIoScenario: Scenario = {
     if (tools['incident_io_remove_alert_tags']) {
       steps.push(
         await probeTool(call, tools, 'remove alert tags', 'incident_io_remove_alert_tags', {
-          id: probeId(alertId, `alert-smoke-${runId}`),
+          id: syntheticAlertId,
           body: { tags: [`smoke-${runId}`] },
         }),
       );
@@ -407,7 +418,7 @@ export const incidentIoScenario: Scenario = {
     if (tools['incident_io_resolve_alert']) {
       steps.push(
         await probeTool(call, tools, 'resolve alert', 'incident_io_resolve_alert', {
-          id: probeId(alertId, `alert-smoke-${runId}`),
+          id: syntheticAlertId,
         }),
       );
     }
