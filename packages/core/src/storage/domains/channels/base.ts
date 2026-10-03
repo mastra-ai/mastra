@@ -42,6 +42,35 @@ export interface ChannelConfig {
 }
 
 /**
+ * Mapping from a channel thread (per platform and owning agent) to a Mastra thread.
+ * Replaces metadata scans on `mastra_threads` with an indexed point read.
+ */
+export interface ChannelThreadMapping {
+  /** Platform identifier (e.g., 'slack', 'discord') */
+  platform: string;
+  /** Owner (agent or controller id) that this mapping belongs to */
+  ownerId: string;
+  /** Platform thread id as seen by the Chat SDK (e.g., 'slack:C123:1700000000.000100') */
+  externalThreadId: string;
+  /** Platform channel id the thread lives in */
+  externalChannelId: string;
+  /** Mastra thread id. Immutable once the row exists. */
+  threadId: string;
+  /** Whether the owner is subscribed to the thread */
+  subscribed: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Composite key of a channel thread mapping. */
+export type ChannelThreadKey = Pick<ChannelThreadMapping, 'platform' | 'ownerId' | 'externalThreadId'>;
+
+/** Input for upserting a channel thread mapping. `subscribed` defaults to false on insert. */
+export type ChannelThreadMappingInput = Omit<ChannelThreadMapping, 'createdAt' | 'updatedAt' | 'subscribed'> & {
+  subscribed?: boolean;
+};
+
+/**
  * Storage domain for channel installations and configuration.
  * Provides persistence for multi-platform channel integrations.
  */
@@ -97,4 +126,61 @@ export abstract class ChannelsStorage extends StorageDomain {
    * Delete platform configuration.
    */
   abstract deleteConfig(platform: string): Promise<void>;
+
+  /**
+   * Get the thread mapping for a channel thread, or null when none exists.
+   * Optional: stores that do not implement thread mappings fall back to thread metadata scans.
+   */
+  getThreadMapping?(key: ChannelThreadKey): Promise<ChannelThreadMapping | null>;
+
+  /**
+   * Reverse lookup: get the mapping that points at a Mastra thread id.
+   * Optional. Not called by core today; provided for consumers that resolve a channel
+   * thread from a Mastra thread id and would otherwise scan thread metadata.
+   */
+  getThreadMappingByThreadId?(threadId: string): Promise<ChannelThreadMapping | null>;
+
+  /**
+   * Insert a thread mapping, or update an existing one for the same key.
+   * On insert `subscribed` defaults to false when omitted. On conflict `threadId` is never
+   * changed, `externalChannelId` is replaced, `subscribed` is set only when provided,
+   * `updatedAt` is bumped and `createdAt` is kept. Returns the row as stored, so a caller
+   * that passed a different `threadId` sees the existing one.
+   * Optional.
+   */
+  upsertThreadMapping?(mapping: ChannelThreadMappingInput): Promise<ChannelThreadMapping>;
+
+  /**
+   * Flip the subscription flag on an existing mapping. No-op when no row exists.
+   * Optional.
+   */
+  setThreadSubscribed?(key: ChannelThreadKey, subscribed: boolean): Promise<void>;
+
+  /**
+   * Delete a thread mapping. No-op when no row exists.
+   * Optional.
+   */
+  deleteThreadMapping?(key: ChannelThreadKey): Promise<void>;
+}
+
+type ThreadMappingMethods =
+  | 'getThreadMapping'
+  | 'getThreadMappingByThreadId'
+  | 'upsertThreadMapping'
+  | 'setThreadSubscribed'
+  | 'deleteThreadMapping';
+
+/**
+ * Type guard: true when the store implements all five optional thread mapping methods.
+ */
+export function supportsThreadMappings(
+  store: ChannelsStorage,
+): store is ChannelsStorage & Required<Pick<ChannelsStorage, ThreadMappingMethods>> {
+  return (
+    typeof store.getThreadMapping === 'function' &&
+    typeof store.getThreadMappingByThreadId === 'function' &&
+    typeof store.upsertThreadMapping === 'function' &&
+    typeof store.setThreadSubscribed === 'function' &&
+    typeof store.deleteThreadMapping === 'function'
+  );
 }

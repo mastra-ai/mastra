@@ -47,6 +47,8 @@ export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
+/** Channel thread mapping table. Not part of TABLE_NAMES (see CHANNEL_THREADS_TABLE_SCHEMA). */
+export const TABLE_CHANNEL_THREADS = 'mastra_channel_threads';
 
 // Tool provider connections
 export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
@@ -930,3 +932,24 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
 export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
   [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };
+
+/**
+ * Schema for the channel thread mapping table, keyed by (platform, ownerId, externalThreadId).
+ * Exported separately: not part of TABLE_NAMES (see OBSERVATIONAL_MEMORY_TABLE_SCHEMA), because
+ * stores with exhaustive `Record<TABLE_NAMES, ...>` types do not implement it.
+ */
+export const CHANNEL_THREADS_TABLE_SCHEMA: Record<typeof TABLE_CHANNEL_THREADS, Record<string, StorageColumn>> = {
+  [TABLE_CHANNEL_THREADS]: {
+    platform: { type: 'text', nullable: false },
+    ownerId: { type: 'text', nullable: false },
+    externalThreadId: { type: 'text', nullable: false },
+    threadId: { type: 'text', nullable: false },
+    externalChannelId: { type: 'text', nullable: false },
+    subscribed: { type: 'boolean', nullable: false },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
+  },
+};
+
+/** Composite primary key of the channel thread mapping table. */
+export const CHANNEL_THREADS_PRIMARY_KEY = ['platform', 'ownerId', 'externalThreadId'] as const;

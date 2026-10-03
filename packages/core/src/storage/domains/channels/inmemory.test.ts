@@ -1,7 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import type { ChannelInstallation, ChannelConfig } from './base';
+import type { ChannelInstallation, ChannelConfig, ChannelThreadMappingInput } from './base';
+import { ChannelsStorage, supportsThreadMappings } from './base';
 import { InMemoryChannelsStorage } from './inmemory';
+
+function makeMapping(overrides: Partial<ChannelThreadMappingInput> = {}): ChannelThreadMappingInput {
+  return {
+    platform: 'slack',
+    ownerId: 'owner-1',
+    externalThreadId: 'slack:C1:1700000000.000100',
+    externalChannelId: 'C1',
+    threadId: 'thread-1',
+    ...overrides,
+  };
+}
 
 function makeInstallation(overrides: Partial<ChannelInstallation> = {}): ChannelInstallation {
   return {
@@ -205,5 +217,135 @@ describe('InMemoryChannelsStorage', () => {
       expect(await storage.getInstallation('inst-1')).toBeNull();
       expect(await storage.getConfig('slack')).toBeNull();
     });
+
+    it('clears thread mappings', async () => {
+      const input = makeMapping();
+      await storage.upsertThreadMapping(input);
+
+      await storage.dangerouslyClearAll();
+
+      expect(await storage.getThreadMapping(input)).toBeNull();
+    });
+  });
+
+  describe('thread mappings', () => {
+    it('returns null for a missing key', async () => {
+      expect(await storage.getThreadMapping(makeMapping())).toBeNull();
+    });
+
+    it('upserts and reads back all fields with subscribed false by default', async () => {
+      const input = makeMapping();
+      const stored = await storage.upsertThreadMapping(input);
+
+      expect(stored).toMatchObject({ ...input, subscribed: false });
+      expect(stored.createdAt).toBeInstanceOf(Date);
+      expect(stored.updatedAt).toBeInstanceOf(Date);
+      expect(await storage.getThreadMapping(input)).toEqual(stored);
+    });
+
+    it('returns copies, not the stored object', async () => {
+      const input = makeMapping();
+      const stored = await storage.upsertThreadMapping(input);
+      stored.threadId = 'mutated';
+
+      expect((await storage.getThreadMapping(input))!.threadId).toBe('thread-1');
+    });
+
+    it('keeps threadId and createdAt on conflict, replaces externalChannelId', async () => {
+      const input = makeMapping({ externalChannelId: 'C-old' });
+      const first = await storage.upsertThreadMapping(input);
+
+      const second = await storage.upsertThreadMapping({
+        ...input,
+        threadId: 'another-thread',
+        externalChannelId: 'C-new',
+      });
+
+      expect(second.threadId).toBe('thread-1');
+      expect(second.externalChannelId).toBe('C-new');
+      expect(second.createdAt.getTime()).toBe(first.createdAt.getTime());
+      expect((await storage.getThreadMapping(input))!.threadId).toBe('thread-1');
+    });
+
+    it('keeps subscribed when omitted and sets it when provided on conflict', async () => {
+      const input = makeMapping();
+      await storage.upsertThreadMapping({ ...input, subscribed: true });
+
+      expect((await storage.upsertThreadMapping(input)).subscribed).toBe(true);
+      expect((await storage.upsertThreadMapping({ ...input, subscribed: false })).subscribed).toBe(false);
+    });
+
+    it('stores the same externalThreadId under two owners as two rows', async () => {
+      await storage.upsertThreadMapping(makeMapping({ ownerId: 'owner-a', threadId: 'thread-a' }));
+      await storage.upsertThreadMapping(makeMapping({ ownerId: 'owner-b', threadId: 'thread-b' }));
+
+      expect((await storage.getThreadMapping(makeMapping({ ownerId: 'owner-a' })))!.threadId).toBe('thread-a');
+      expect((await storage.getThreadMapping(makeMapping({ ownerId: 'owner-b' })))!.threadId).toBe('thread-b');
+    });
+
+    it('setThreadSubscribed flips the flag and is a no-op on a missing key', async () => {
+      const input = makeMapping();
+      await storage.upsertThreadMapping(input);
+
+      await storage.setThreadSubscribed(input, true);
+      expect((await storage.getThreadMapping(input))!.subscribed).toBe(true);
+      await storage.setThreadSubscribed(input, false);
+      expect((await storage.getThreadMapping(input))!.subscribed).toBe(false);
+
+      const missing = makeMapping({ externalThreadId: 'slack:C1:none' });
+      await storage.setThreadSubscribed(missing, true);
+      expect(await storage.getThreadMapping(missing)).toBeNull();
+    });
+
+    it('getThreadMappingByThreadId finds the row', async () => {
+      const input = makeMapping();
+      await storage.upsertThreadMapping(input);
+
+      const fetched = await storage.getThreadMappingByThreadId('thread-1');
+      expect(fetched!.externalThreadId).toBe(input.externalThreadId);
+      expect(await storage.getThreadMappingByThreadId('no-such-thread')).toBeNull();
+    });
+
+    it('deleteThreadMapping removes the row and is idempotent', async () => {
+      const input = makeMapping();
+      await storage.upsertThreadMapping(input);
+
+      await storage.deleteThreadMapping(input);
+      expect(await storage.getThreadMapping(input)).toBeNull();
+      await expect(storage.deleteThreadMapping(input)).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('supportsThreadMappings', () => {
+  it('is true for InMemoryChannelsStorage', () => {
+    expect(supportsThreadMappings(new InMemoryChannelsStorage())).toBe(true);
+  });
+
+  it('is false for a store implementing only the abstract methods', () => {
+    class LegacyChannelsStorage extends ChannelsStorage {
+      async saveInstallation(): Promise<void> {}
+      async getInstallation(): Promise<ChannelInstallation | null> {
+        return null;
+      }
+      async getInstallationByAgent(): Promise<ChannelInstallation | null> {
+        return null;
+      }
+      async getInstallationByWebhookId(): Promise<ChannelInstallation | null> {
+        return null;
+      }
+      async listInstallations(): Promise<ChannelInstallation[]> {
+        return [];
+      }
+      async deleteInstallation(): Promise<void> {}
+      async saveConfig(): Promise<void> {}
+      async getConfig(): Promise<ChannelConfig | null> {
+        return null;
+      }
+      async deleteConfig(): Promise<void> {}
+      async dangerouslyClearAll(): Promise<void> {}
+    }
+
+    expect(supportsThreadMappings(new LegacyChannelsStorage())).toBe(false);
   });
 });

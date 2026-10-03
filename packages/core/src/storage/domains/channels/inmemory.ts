@@ -1,5 +1,15 @@
-import type { ChannelInstallation, ChannelConfig } from './base';
+import type {
+  ChannelInstallation,
+  ChannelConfig,
+  ChannelThreadKey,
+  ChannelThreadMapping,
+  ChannelThreadMappingInput,
+} from './base';
 import { ChannelsStorage } from './base';
+
+function mappingKey({ platform, ownerId, externalThreadId }: ChannelThreadKey): string {
+  return `${platform}\u0000${ownerId}\u0000${externalThreadId}`;
+}
 
 /**
  * In-memory implementation of ChannelsStorage.
@@ -8,6 +18,7 @@ import { ChannelsStorage } from './base';
 export class InMemoryChannelsStorage extends ChannelsStorage {
   #installations = new Map<string, ChannelInstallation>();
   #configs = new Map<string, ChannelConfig>();
+  #threadMappings = new Map<string, ChannelThreadMapping>();
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
     this.#installations.set(installation.id, { ...installation });
@@ -67,8 +78,58 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
     this.#configs.delete(platform);
   }
 
+  async getThreadMapping(key: ChannelThreadKey): Promise<ChannelThreadMapping | null> {
+    const mapping = this.#threadMappings.get(mappingKey(key));
+    return mapping ? { ...mapping } : null;
+  }
+
+  async getThreadMappingByThreadId(threadId: string): Promise<ChannelThreadMapping | null> {
+    for (const mapping of this.#threadMappings.values()) {
+      if (mapping.threadId === threadId) {
+        return { ...mapping };
+      }
+    }
+    return null;
+  }
+
+  async upsertThreadMapping(mapping: ChannelThreadMappingInput): Promise<ChannelThreadMapping> {
+    const key = mappingKey(mapping);
+    const now = new Date();
+    const existing = this.#threadMappings.get(key);
+    const stored: ChannelThreadMapping = existing
+      ? {
+          ...existing,
+          externalChannelId: mapping.externalChannelId,
+          subscribed: mapping.subscribed ?? existing.subscribed,
+          updatedAt: now,
+        }
+      : {
+          platform: mapping.platform,
+          ownerId: mapping.ownerId,
+          externalThreadId: mapping.externalThreadId,
+          externalChannelId: mapping.externalChannelId,
+          threadId: mapping.threadId,
+          subscribed: mapping.subscribed ?? false,
+          createdAt: now,
+          updatedAt: now,
+        };
+    this.#threadMappings.set(key, stored);
+    return { ...stored };
+  }
+
+  async setThreadSubscribed(key: ChannelThreadKey, subscribed: boolean): Promise<void> {
+    const existing = this.#threadMappings.get(mappingKey(key));
+    if (!existing) return;
+    this.#threadMappings.set(mappingKey(key), { ...existing, subscribed, updatedAt: new Date() });
+  }
+
+  async deleteThreadMapping(key: ChannelThreadKey): Promise<void> {
+    this.#threadMappings.delete(mappingKey(key));
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.#installations.clear();
     this.#configs.clear();
+    this.#threadMappings.clear();
   }
 }
