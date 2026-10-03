@@ -11,6 +11,7 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_AGENT_AVATARS = 'mastra_agent_avatars';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 export const TABLE_PROMPT_BLOCKS = 'mastra_prompt_blocks';
 export const TABLE_PROMPT_BLOCK_VERSIONS = 'mastra_prompt_block_versions';
@@ -79,6 +80,7 @@ export type TABLE_NAMES =
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_AGENT_AVATARS
   | typeof TABLE_PROMPT_BLOCKS
   | typeof TABLE_PROMPT_BLOCK_VERSIONS
   | typeof TABLE_SCORER_DEFINITIONS
@@ -197,6 +199,15 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   visibility: { type: 'text', nullable: true }, // 'private' | 'public' | null (legacy)
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
   favoriteCount: { type: 'integer', nullable: true }, // Denormalised count of favorites for this agent
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const AGENT_AVATARS_SCHEMA: Record<string, StorageColumn> = {
+  agentId: { type: 'text', nullable: false, primaryKey: true },
+  data: { type: 'text', nullable: false }, // base64-encoded image bytes
+  mime: { type: 'text', nullable: false },
+  sizeBytes: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -801,6 +812,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_AGENT_AVATARS]: AGENT_AVATARS_SCHEMA,
   [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
   [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
   [TABLE_SCORER_DEFINITIONS]: SCORER_DEFINITIONS_SCHEMA,

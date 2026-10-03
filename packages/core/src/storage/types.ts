@@ -2254,6 +2254,25 @@ export interface StorageBlobEntry {
 }
 
 /**
+ * A stored agent avatar row. Bytes are stored base64-encoded for portability
+ * across SQL adapters (no BLOB column type in the shared schema vocabulary).
+ */
+export interface StorageAgentAvatarType {
+  /** ID of the agent this avatar belongs to (primary key) */
+  agentId: string;
+  /** base64-encoded image bytes */
+  data: string;
+  /** MIME type of the image (e.g. 'image/png') */
+  mime: string;
+  /** Decoded size in bytes */
+  sizeBytes: number;
+  /** When the avatar was first stored */
+  createdAt: Date;
+  /** When the avatar was last replaced */
+  updatedAt: Date;
+}
+
+/**
  * Workspace reference configuration stored in agent snapshots.
  * Can reference a stored workspace by ID, provide inline workspace config,
  * or name a registered workspace provider to build the entire workspace.

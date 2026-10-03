@@ -1,4 +1,6 @@
 import type { Agent } from '../agent';
+import { StorageAvatarStore } from '../agent/avatar-store';
+import type { AvatarStore } from '../agent/avatar-store';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
@@ -499,6 +501,19 @@ export interface Config<
   workspace?: AnyWorkspace;
 
   /**
+   * Persistent store for agent avatars set via `agent.setAvatar(bytes, mime)`.
+   *
+   * When omitted, avatars are stored in the configured `storage` adapter via
+   * `StorageAvatarStore` (the `agentAvatars` storage domain), so they are as
+   * durable as the rest of your Mastra data with zero extra configuration.
+   *
+   * Pass an explicit store to override — e.g. `WorkspaceAvatarStore` to keep
+   * avatars in a workspace filesystem, or a custom S3/CDN-backed
+   * implementation of the `AvatarStore` interface.
+   */
+  avatarStore?: AvatarStore;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -842,6 +857,7 @@ export class Mastra<
   #memory?: TMemory;
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
+  #avatarStore?: AvatarStore;
   #server?: ServerConfig;
   #serverExplicit = false;
   #studio?: StudioConfig;
@@ -1831,6 +1847,13 @@ export class Mastra<
       // Also register in the workspaces registry for direct lookup by ID
       this.addWorkspace(config.workspace, undefined, { source: 'mastra' });
     }
+
+    // Avatar store: user-provided > storage-backed default. Avatars follow the
+    // configured storage adapter (durable, replicated, lifecycle alongside the
+    // agent record). WorkspaceAvatarStore / LocalAvatarStore remain opt-in via
+    // `config.avatarStore`. The existing in-memory-storage fallback warning
+    // already covers the non-durable zero-config case.
+    this.#avatarStore = config?.avatarStore ?? new StorageAvatarStore(storage);
 
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
@@ -3551,6 +3574,15 @@ export class Mastra<
    */
   public getWorkspace(): Workspace | undefined {
     return this.#workspace;
+  }
+
+  /**
+   * Get the configured avatar store. Used by `agent.setAvatar` and by the
+   * server's `GET /agents/:agentId/avatar` route to persist and stream
+   * agent avatars set at runtime.
+   */
+  public getAvatarStore(): AvatarStore | undefined {
+    return this.#avatarStore;
   }
 
   /**

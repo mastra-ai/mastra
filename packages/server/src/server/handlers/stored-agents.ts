@@ -36,6 +36,7 @@ import {
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
 import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { normalizeIncomingAvatarMetadata, rewriteStoredAgentAvatar } from './rewrite-avatar-url';
 import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
@@ -235,19 +236,21 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({
-    mastra,
-    requestContext,
-    page,
-    perPage,
-    orderBy,
-    status,
-    authorId,
-    visibility,
-    metadata,
-    favoritedOnly,
-    pinFavoritedFor,
-  }) => {
+  handler: async ctx => {
+    const routePrefix = (ctx as { routePrefix?: string }).routePrefix;
+    const {
+      mastra,
+      requestContext,
+      page,
+      perPage,
+      orderBy,
+      status,
+      authorId,
+      visibility,
+      metadata,
+      favoritedOnly,
+      pinFavoritedFor,
+    } = ctx;
     try {
       const storage = mastra.getStorage();
 
@@ -312,8 +315,9 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
           annotated.map(a => a.authorId),
         );
         const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
+        const rewritten = withAuthors.map(record => rewriteStoredAgentAvatar(record, routePrefix));
         const hasMore = effectivePerPage > 0 && endIdx < total;
-        return { agents: withAuthors, total, page, perPage: effectivePerPage, hasMore };
+        return { agents: rewritten, total, page, perPage: effectivePerPage, hasMore };
       }
 
       const result = await agentsStore.listResolved({
@@ -343,7 +347,8 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       if (!favoritesEnabled) {
         const stripped = visibleAgents.map(stripFavoriteFields);
         const withAuthors = authors ? stripped.map(record => attachAuthor(record, authors)) : stripped;
-        return { ...result, agents: withAuthors };
+        const rewritten = withAuthors.map(record => rewriteStoredAgentAvatar(record, routePrefix));
+        return { ...result, agents: rewritten };
       }
 
       const enrichment = await prepareFavoritesEnrichment(
@@ -356,8 +361,9 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleAgents.map(stripFavoriteFields);
       const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
+      const rewritten = withAuthors.map(record => rewriteStoredAgentAvatar(record, routePrefix));
 
-      return { ...result, agents: withAuthors };
+      return { ...result, agents: rewritten };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -499,7 +505,9 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, storedAgentId, status }) => {
+  handler: async ctx => {
+    const routePrefix = (ctx as { routePrefix?: string }).routePrefix;
+    const { mastra, requestContext, storedAgentId, status } = ctx;
     try {
       const storage = mastra.getStorage();
 
@@ -525,7 +533,10 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 
       const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
       const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
-      return attachAuthor(withFavorite, authors);
+      const withAuthor = attachAuthor(withFavorite, authors);
+      // Rewrite `mastra-avatar:<agentId>` metadata URLs to the server-relative
+      // avatar route so consumers can render them via <img src> directly.
+      return rewriteStoredAgentAvatar(withAuthor, routePrefix);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -552,34 +563,36 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({
-    mastra,
-    requestContext,
-    id: providedId,
-    metadata,
-    visibility: bodyVisibility,
-    autoPublish,
-    name,
-    description,
-    instructions,
-    model,
-    tools,
-    defaultOptions,
-    workflows,
-    agents,
-    integrationTools,
-    toolProviders,
-    mcpClients,
-    inputProcessors,
-    outputProcessors,
-    memory,
-    scorers,
-    skills,
-    workspace,
-    browser,
-    durable,
-    requestContextSchema,
-  }) => {
+  handler: async ctx => {
+    const routePrefix = (ctx as { routePrefix?: string }).routePrefix;
+    const {
+      mastra,
+      requestContext,
+      id: providedId,
+      visibility: bodyVisibility,
+      autoPublish,
+      name,
+      description,
+      instructions,
+      model,
+      tools,
+      defaultOptions,
+      workflows,
+      agents,
+      integrationTools,
+      toolProviders,
+      mcpClients,
+      inputProcessors,
+      outputProcessors,
+      memory,
+      scorers,
+      skills,
+      workspace,
+      browser,
+      durable,
+      requestContextSchema,
+    } = ctx;
+    let { metadata } = ctx;
     try {
       const storage = mastra.getStorage();
 
@@ -613,8 +626,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
       const visibility = authorId ? (bodyVisibility ?? 'private') : 'public';
 
+      // Round-trip support: GET/LIST responses rewrite `mastra-avatar:<id>` to
+      // a server-relative URL. If a client POSTs that URL back, normalize it
+      // to the canonical scheme before validation and persistence.
+      metadata = normalizeIncomingAvatarMetadata(metadata, id, routePrefix);
+
       // Reject oversized avatar images before writing to storage.
-      validateMetadataAvatarUrl(metadata);
+      validateMetadataAvatarUrl(metadata, id);
 
       // Model policy enforcement is intentionally not done on save: each UI
       // surface gates its own model picker via ModelPolicyProvider, and the
@@ -758,39 +776,37 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({
-    mastra,
-    requestContext,
-    storedAgentId,
-    // Metadata-level fields
-    authorId,
-    metadata,
-    visibility,
-    // Config fields (snapshot-level)
-    name,
-    description,
-    instructions,
-    model,
-    tools,
-    defaultOptions,
-    workflows,
-    agents,
-    integrationTools,
-    toolProviders,
-    mcpClients,
-    inputProcessors,
-    outputProcessors,
-    memory,
-    scorers,
-    skills,
-    workspace,
-    browser,
-    durable,
-    requestContextSchema,
-    // Version options
-    changeMessage,
-    autoPublish = false,
-  }) => {
+  handler: async ctx => {
+    const routePrefix = (ctx as { routePrefix?: string }).routePrefix;
+    const {
+      mastra,
+      requestContext,
+      storedAgentId,
+      // Metadata-level fields
+      authorId,
+      visibility,
+      // Config fields (snapshot-level)
+      name,
+      description,
+      model,
+      defaultOptions,
+      workflows,
+      agents,
+      toolProviders,
+      inputProcessors,
+      outputProcessors,
+      memory,
+      scorers,
+      skills,
+      workspace,
+      browser,
+      durable,
+      requestContextSchema,
+      // Version options
+      changeMessage,
+      autoPublish = false,
+    } = ctx;
+    let { metadata, instructions, tools, integrationTools, mcpClients } = ctx;
     try {
       const storage = mastra.getStorage();
 
@@ -820,8 +836,13 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         record: existing,
       });
 
+      // Round-trip support: GET/LIST responses rewrite `mastra-avatar:<id>` to
+      // a server-relative URL. If a client PATCHes that URL back, normalize it
+      // to the canonical scheme before validation and persistence.
+      metadata = normalizeIncomingAvatarMetadata(metadata, storedAgentId, routePrefix);
+
       // Reject oversized avatar images before writing to storage.
-      validateMetadataAvatarUrl(metadata);
+      validateMetadataAvatarUrl(metadata, storedAgentId);
 
       // No owner = always public, regardless of what the client sent.
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
@@ -1049,6 +1070,16 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
         mastra
           .getLogger?.()
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
+      }
+
+      // Cascade: drop the agent's stored avatar so the bytes don't linger (or
+      // resurrect under a reused id). Failure must not abort the delete.
+      try {
+        await mastra.getAvatarStore()?.delete(storedAgentId);
+      } catch (cascadeError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to cascade-delete avatar for agent', { storedAgentId, error: cascadeError });
       }
 
       // Clear the cached agent instance

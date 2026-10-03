@@ -12,7 +12,9 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
+import { applyPlatformAvatarSync } from '../channels/compat/avatar-sync';
 import type { ChannelConfig } from '../channels/types';
+import { isAvatarSyncCapable } from '../channels/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -168,6 +170,7 @@ import type {
   DelegationCompleteContext,
   DelegationHookError,
 } from './agent.types';
+import { DEFAULT_AVATAR_MAX_BYTES, isSupportedAvatarMime, SUPPORTED_AVATAR_MIME_TYPES } from './avatar-store';
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
 // agent/durable → agent`.
@@ -1421,6 +1424,109 @@ export class Agent<
     if (this.logger) {
       agentChannels.__setLogger(this.logger);
     }
+  }
+
+  /**
+   * Persist a new avatar for this agent.
+   *
+   * Writes `bytes` to Mastra's configured `AvatarStore`, updates
+   * `metadata.avatarUrl` on the stored-agent record (when one exists), and
+   * fans out to every channel adapter that implements
+   * {@link AvatarSyncCapableAdapter} so Discord/Slack/etc. show the new
+   * avatar. Per-channel failures are reported in `syncedChannels` but do not
+   * fail the store write.
+   *
+   * @throws when no AvatarStore is configured, mime is unsupported, or bytes
+   *   exceed `DEFAULT_AVATAR_MAX_BYTES` (2 MB).
+   */
+  async setAvatar(
+    bytes: Buffer,
+    mime: string,
+  ): Promise<{ url: string; syncedChannels: Array<{ platform: string; ok: boolean; error?: string }> }> {
+    if (!isSupportedAvatarMime(mime)) {
+      throw new MastraError({
+        id: 'AGENT_SET_AVATAR_UNSUPPORTED_MIME',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Unsupported avatar mime '${mime}'. Supported: ${SUPPORTED_AVATAR_MIME_TYPES.join(', ')}.`,
+      });
+    }
+    if (bytes.byteLength === 0) {
+      throw new MastraError({
+        id: 'AGENT_SET_AVATAR_EMPTY',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Avatar bytes are empty.',
+      });
+    }
+    if (bytes.byteLength > DEFAULT_AVATAR_MAX_BYTES) {
+      throw new MastraError({
+        id: 'AGENT_SET_AVATAR_TOO_LARGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Avatar exceeds ${DEFAULT_AVATAR_MAX_BYTES}-byte limit (got ${bytes.byteLength}).`,
+      });
+    }
+
+    const store = this.#mastra?.getAvatarStore?.();
+    if (!store) {
+      throw new MastraError({
+        id: 'AGENT_SET_AVATAR_NO_STORE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'agent.setAvatar requires a Mastra instance with an avatar store configured.',
+      });
+    }
+
+    const { url } = await store.put(this.id, bytes, mime);
+
+    // Best-effort: patch metadata.avatarUrl on the stored-agent record (if any).
+    try {
+      const storage = this.#mastra?.getStorage?.();
+      const agentsStore = storage ? await storage.getStore('agents') : undefined;
+      if (agentsStore && typeof (agentsStore as { getById?: unknown }).getById === 'function') {
+        const existing = await (agentsStore as any).getById(this.id);
+        if (existing) {
+          const nextMetadata = { ...(existing.metadata ?? {}), avatarUrl: url };
+          await (agentsStore as any).update({ id: this.id, metadata: nextMetadata });
+        }
+      }
+    } catch (err) {
+      this.logger?.warn(`agent.setAvatar: failed to update stored-agent metadata`, {
+        agent: this.name,
+        error: err,
+      });
+    }
+
+    // Fan out to channel adapters. Prefer an adapter that opts in via
+    // AvatarSyncCapableAdapter; fall back to a built-in per-platform sync
+    // (e.g. Discord bot avatar) for adapters that don't implement it.
+    const syncedChannels: Array<{ platform: string; ok: boolean; error?: string }> = [];
+    const adapters = this.#agentChannels?.adapters ?? {};
+    for (const [platform, adapter] of Object.entries(adapters)) {
+      try {
+        if (isAvatarSyncCapable(adapter)) {
+          await adapter.setAvatar(bytes, mime);
+          syncedChannels.push({ platform, ok: true });
+          continue;
+        }
+        const compat = await applyPlatformAvatarSync(platform, adapter, bytes, mime);
+        if (compat.handled) {
+          syncedChannels.push({ platform, ok: true });
+        } else {
+          this.logger?.debug?.(`agent.setAvatar: skipping channel '${platform}': ${compat.reason}`);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger?.warn(`agent.setAvatar: channel '${platform}' failed to sync avatar`, {
+          agent: this.name,
+          error: err,
+        });
+        syncedChannels.push({ platform, ok: false, error: message });
+      }
+    }
+
+    return { url, syncedChannels };
   }
 
   /**

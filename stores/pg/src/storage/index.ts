@@ -19,6 +19,7 @@ import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { loadSchemaSnapshot } from './db/schema-snapshot';
+import { AgentAvatarsPG } from './domains/agent-avatars';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
@@ -118,6 +119,7 @@ const ALL_DOMAINS = [
   ChannelsPG,
   SchedulesPG,
   ThreadStatePG,
+  AgentAvatarsPG,
 ] as const;
 
 /**
@@ -142,6 +144,7 @@ export function exportSchemas(schemaName?: string): string {
 }
 // Export domain classes for direct use with MastraStorage composition
 export {
+  AgentAvatarsPG,
   AgentsPG,
   BackgroundTasksPG,
   BlobsPG,
@@ -269,6 +272,7 @@ export class PostgresStore extends MastraCompositeStore {
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),
         threadState: new ThreadStatePG(domainConfig),
+        agentAvatars: new AgentAvatarsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

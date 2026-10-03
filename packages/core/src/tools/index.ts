@@ -10,6 +10,8 @@ export { askUserTool, formatQuestionAnswer } from './builtin/ask-user';
 export type { AskUserAnswer, AskUserOption, AskUserSelectionMode, AskUserSuspendPayload } from './builtin/ask-user';
 export { webFetchTool } from './builtin/web-fetch';
 export { webSearchTool } from './builtin/web-search';
+export { createSetOwnAvatarTool } from './builtin/set-own-avatar';
+export type { AvatarImageGenerator, CreateSetOwnAvatarToolOptions } from './builtin/set-own-avatar';
 export { submitPlanTool } from './builtin/submit-plan';
 export type { SubmitPlanResumeData, SubmitPlanSuspendPayload } from './builtin/submit-plan';
 export {
