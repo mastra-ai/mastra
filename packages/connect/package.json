@@ -32,6 +32,7 @@
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "list-providers": "tsx scripts/list-providers.ts",
     "remove-provider": "tsx scripts/remove-provider.ts",
+    "smoke-test": "tsx scripts/smoke-test/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
     "test": "vitest run && tsc --noEmit"
   },
