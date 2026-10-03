@@ -346,7 +346,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           options: { readOnly: true, retainFullInput: true },
         },
         providerOptions: this.providerOptions,
-        abortSignal,
         ...observabilityContext,
       });
     }
@@ -358,7 +357,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         abortSignal,
         structuredOutput,
         providerOptions: this.providerOptions,
-        abortSignal,
         ...observabilityContext,
       },
     );

@@ -7,7 +7,7 @@ import { bindModelAttempt, ModelAttempt } from '../../loop/shared/model-attempt'
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { BatchPartsProcessor } from '../../processors/processors/batch-parts';
 import { StructuredOutputProcessor } from '../../processors/processors/structured-output';
-import { ProcessorState } from '../../processors/runner';
+import { ProcessorRunner, ProcessorState } from '../../processors/runner';
 import { REPROCESS_PART_KEY } from '../../processors/stream-reprocess';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
@@ -64,6 +64,38 @@ function createOutput(processors: Processor[], chunks: ChunkType[], states = new
 }
 
 describe('model attempt output ownership', () => {
+  it.each([false, true])(
+    'forwards attempt cancellation while respecting an explicit processor signal (%s)',
+    async explicit => {
+      const attempt = new ModelAttempt();
+      const part = { ...reasoning };
+      bindModelAttempt(part, attempt);
+      const signal = new AbortController().signal;
+      const processOutputStream = vi.fn(({ part }) => part);
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [{ id: 'observe-signal', processOutputStream }],
+      });
+      try {
+        await runner.processPart(
+          part,
+          new Map(),
+          undefined,
+          undefined,
+          undefined,
+          0,
+          undefined,
+          explicit ? signal : undefined,
+        );
+        expect(processOutputStream).toHaveBeenCalledWith(
+          expect.objectContaining({ abortSignal: explicit ? signal : attempt.controller.signal }),
+        );
+      } finally {
+        attempt.dispose();
+      }
+    },
+  );
+
   it('waits for an in-flight processor and drops its returned text, late writes and direct controller output', async () => {
     const entered = gate();
     const release = gate();
