@@ -284,7 +284,7 @@ Durable agents can checkpoint each run's state to storage while it executes. If 
 
 Under the default persistence policy, these `running` checkpoints are only written when crash recovery is enabled. With `recovery.durableAgents: 'off'` (the default), durable agents persist snapshots only for `pending`, `paused`, and `suspended` runs (the artifacts human-in-the-loop resume depends on) and skip the per-step `running` writes entirely. A custom `shouldPersistSnapshot` predicate can keep `running` checkpoints even with recovery off. See [snapshot persistence](#snapshot-persistence) for the full policy and how to override it.
 
-Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
+Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which claims each orphaned run and registers its thread runtimes before re-driving it. See [run ownership](#run-ownership).
 
 :::warning
 
@@ -327,27 +327,70 @@ export const mastra = new Mastra({
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
 
+Recovery doesn't take over a run that another execution still drives. It skips the run and checks it again once that execution's claim could have lapsed. A run whose process crashed shortly before the restart is still recovered, without another call.
+
 ### Manual recovery
 
-If you need finer control, such as gating recovery behind a leader election or running it on a schedule, call the methods directly:
+If you need finer control, such as running recovery on a schedule, call the methods directly:
 
 ```typescript
 // Recover all durable agents
 const result = await mastra.recoverAllDurableAgents()
-console.log(`Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed)`)
+console.log(
+  `Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed, ${result.skipped} still live)`,
+)
 
 // Recover a specific agent
-const agentResult = await durableAgent.recoverActiveRuns()
+const { recovered } = await durableAgent.recoverActiveRuns()
+for (const run of recovered) {
+  if (run.status === 'skipped') console.log(`${run.runId} is still live: ${run.reason}`)
+}
 
 // Recover a single known run
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
+`recoverAllDurableAgents()` returns counts and re-checks skipped runs itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed.
+
 Manual recovery reads the same `running` checkpoints as automatic recovery. If `recovery.durableAgents` is `'off'` and you haven't set a custom `shouldPersistSnapshot` that includes `running`, in-flight runs are never checkpointed, so `listActiveRuns()` and `recoverActiveRuns()` find nothing after a crash. See [snapshot persistence](#snapshot-persistence).
+
+To take over a run that's still live, such as one held by a hung execution, call `recover()` with `force: true`:
+
+```typescript
+const { output } = await durableAgent.recover('run-abc-123', { force: true })
+```
+
+The execution that held the run loses it and stops, and streams for the run drop the events it still publishes. Without `force`, `recover()` throws `DURABLE_AGENT_RUN_ACTIVE` for a live run. Even with `force`, `recover()` refuses a run that the same process is executing.
+
+### Run ownership
+
+Every `stream()`, `generate()`, `resume()`, and `recover()` call claims the run before it executes and renews the claim every 10 seconds. A claim lapses 30 seconds after its last renewal, so a run whose process crashed becomes recoverable within 30 seconds. Until then, recovery treats the run as live, and a `stream()` or `resume()` call for that run waits up to 5 seconds for the claim, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. `mastra.shutdown()` stops the runs still executing after its drain window without further writes and releases their claims. The next boot then recovers them without waiting for the claims to lapse.
+
+Enforcement of the claim depends on the workflows store. When the store supports run fencing, the claim is a record in that store, and each write is checked against the claim in the same operation. Once another execution claims the run, writes from the execution that lost it are rejected. When the memory store also supports run fencing, its message, thread, and working memory writes are rejected too. These storage adapters support run fencing:
+
+- `@mastra/pg`
+- `@mastra/libsql` and `@mastra/turso`
+- `@mastra/mysql`
+- `@mastra/mssql`
+- `@mastra/oracledb`
+- `@mastra/spanner`
+- `@mastra/dsql`
+- `@mastra/cloudflare-d1`
+- `@mastra/cloudflare`, with `CloudflareDOStorage`
+- `@mastra/convex`
+- `@mastra/mongodb`, on a replica set or sharded cluster
+- `@mastra/dynamodb`
+- `@mastra/redis`
+- `@mastra/upstash`
+- `@mastra/valkey`
+
+With any other workflows store, the claim is a lease on the [PubSub](/docs/server/pubsub) backend. The lease keeps two executions from claiming the run at once, but writes from an execution that lost the run aren't rejected. A run taken over while its previous execution was still live can end with that execution's output. Mastra logs a warning when it recovers runs against a workflows or memory store without run fencing.
+
+A lease only coordinates the processes that share it. `EventEmitterPubSub`, the default, covers one process. `UnixSocketPubSub` covers the processes on one host. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` cover every instance connected to the same server. `GoogleCloudPubSub` doesn't provide leases, so with a store that lacks run fencing every claim succeeds, and recovery can take over a run that's still live.
 
 ### Multi-instance deployments
 
-Mastra doesn't provide a distributed lease or lock yet. In multi-replica deployments, every replica that starts with `recovery.durableAgents: 'auto'` will race to recover the same runs. For now, either gate recovery behind your own leader election or run it from a single replica.
+Every replica can start with `recovery.durableAgents: 'auto'`. Replicas that boot together race to recover the same orphaned runs, but only one claim succeeds per run and the other replicas skip it. This requires a claim that every replica shares: a workflows store that supports run fencing, or a PubSub backend whose lease every replica shares. Without either, gate recovery behind your own leader election or run it from a single replica.
 
 ## Related
 

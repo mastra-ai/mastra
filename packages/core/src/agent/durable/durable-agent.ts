@@ -622,8 +622,8 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   abortSignal?: AbortSignal;
   /**
    * Take the run over even while another execution is live. The other
-   * execution loses the run: its writes are rejected and, on the default
-   * engine, it is aborted. Without `force`, `recover()` throws
+   * execution loses the run and stops; its writes are rejected when the
+   * workflows store supports run fencing. Without `force`, `recover()` throws
    * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
    */
   force?: boolean;

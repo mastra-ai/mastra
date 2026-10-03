@@ -9,6 +9,8 @@ packages:
 
 `LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's [signals layer](/docs/harness/signals) uses it to elect a single owner across multiple processes (for example, serverless invocations) for a resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
 
+[Durable agents](/docs/harness/durable-agents#run-ownership) also claim each run through a lease when the workflows store doesn't support run fencing, so crash recovery can tell whether another process still drives the run.
+
 Leasing is separate from pub/sub. A `LeaseProvider` implementation needs actual lock coordination, whether through an atomic Redis operation such as `SET` or Lua or through an in-memory map for a single process. For backends that omit leasing, the signals runtime preserves single-process behavior with a no-op provider.
 
 The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables signals to coordinate across instances in distributed and serverless deployments.
