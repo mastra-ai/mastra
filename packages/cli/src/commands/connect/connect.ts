@@ -1,0 +1,345 @@
+import * as p from '@clack/prompts';
+import pc from 'picocolors';
+
+import { getToken, openBrowser } from '../auth/credentials.js';
+import { resolveCurrentOrg } from '../auth/orgs.js';
+import { resolveProject } from '../env/resolve-project.js';
+import type { IntegrationAuthField, IntegrationCatalogEntry, OrgMember, ProjectConnection } from './api.js';
+import {
+  createProjectConnectSession,
+  fetchIntegrationCatalog,
+  fetchOrgMembers,
+  fetchProjectConnections,
+  removeProjectConnection,
+} from './api.js';
+import {
+  authFieldKey,
+  authFieldsFor,
+  isAuthFieldVisible,
+  isCredentialAuthType,
+  isOAuthAuthType,
+  oauthConnectUrl,
+  splitAuthValues,
+  submitCredentialAuth,
+} from './nango.js';
+
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_MS = 5 * 60 * 1000;
+
+interface ConnectContext {
+  token: string;
+  orgId: string;
+  projectId: string;
+  projectName: string;
+}
+
+async function resolveConnectContext(projectArg?: string): Promise<ConnectContext> {
+  const token = await getToken();
+  const { orgId } = await resolveCurrentOrg(token);
+  const project = await resolveProject(token, orgId, projectArg);
+  return { token, orgId, projectId: project.id, projectName: project.name };
+}
+
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
+function connectionLabel(connection: ProjectConnection): string {
+  return connection.displayName || connection.accountLabel || connection.id;
+}
+
+function memberName(member: OrgMember | undefined): string | undefined {
+  if (!member) return undefined;
+  const name = [member.firstName, member.lastName].filter(Boolean).join(' ');
+  return name || member.email;
+}
+
+// ---- mastra connect list ----
+
+export async function listProvidersAction(options?: { project?: string }): Promise<void> {
+  const ctx = await resolveConnectContext(options?.project);
+  const [catalog, connections] = await Promise.all([
+    fetchIntegrationCatalog(ctx.token, ctx.orgId),
+    fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId),
+  ]);
+
+  // Connections without an account label are attributed to whoever connected
+  // them ("connected by Jane Doe"), which needs the org member list.
+  let memberByUserId = new Map<string, OrgMember>();
+  if (connections.some(connection => !connection.displayName && !connection.accountLabel)) {
+    const members = await fetchOrgMembers(ctx.token, ctx.orgId).catch(() => [] as OrgMember[]);
+    memberByUserId = new Map(members.map(member => [member.userId, member]));
+  }
+
+  const byIntegration = new Map<string, ProjectConnection[]>();
+  for (const connection of connections) {
+    const list = byIntegration.get(connection.integrationId) ?? [];
+    list.push(connection);
+    byIntegration.set(connection.integrationId, list);
+  }
+
+  const entries = [...catalog].sort((a, b) => {
+    const aConnected = byIntegration.has(a.id) ? 0 : 1;
+    const bConnected = byIntegration.has(b.id) ? 0 : 1;
+    return aConnected - bConnected || a.id.localeCompare(b.id);
+  });
+
+  console.info(`\nProviders for ${pc.bold(ctx.projectName)}:\n`);
+  for (const entry of entries) {
+    const rows = byIntegration.get(entry.id) ?? [];
+    const active = rows.filter(row => row.status === 'active');
+    const needsReauth = rows.filter(row => row.status === 'needs_reauth');
+
+    if (active.length > 0) {
+      const labels = active
+        .map(row => row.displayName || row.accountLabel)
+        .filter((label): label is string => Boolean(label));
+      let detail: string;
+      if (labels.length > 0) {
+        detail = `— connected (${labels.join(', ')})`;
+      } else {
+        const names = [
+          ...new Set(active.map(row => memberName(memberByUserId.get(row.connectedByUserId)) ?? 'a teammate')),
+        ];
+        detail = `— connected by ${names.join(', ')}`;
+      }
+      console.info(`  ${pc.green('●')} ${pc.green(entry.id)} ${pc.dim(detail)}`);
+    } else if (needsReauth.length > 0) {
+      console.info(`  ${pc.yellow('●')} ${pc.yellow(entry.id)} ${pc.dim('— needs reauth')}`);
+    } else if (entry.comingSoon) {
+      console.info(`  ${pc.gray('○')} ${pc.gray(entry.id)} ${pc.dim('— coming soon')}`);
+    } else {
+      console.info(`  ${pc.gray('○')} ${pc.gray(entry.id)}`);
+    }
+  }
+  console.info(`\nConnect one with: ${pc.cyan('mastra connect add <provider>')}\n`);
+}
+
+// ---- mastra connect add ----
+
+export async function connectProviderAction(
+  provider: string,
+  options?: { project?: string; yes?: boolean },
+): Promise<void> {
+  const ctx = await resolveConnectContext(options?.project);
+  const catalog = await fetchIntegrationCatalog(ctx.token, ctx.orgId);
+  const integration = findIntegration(catalog, provider);
+
+  const existing = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).filter(
+    connection => connection.integrationId === integration.id && connection.status === 'active',
+  );
+  if (existing.length > 0 && !options?.yes) {
+    const accounts = existing.map(connectionLabel).join(', ');
+    console.info(`${integration.displayName} is already connected to ${ctx.projectName} (${accounts}).`);
+    if (!isInteractive()) {
+      console.info('Pass --yes to add another connection.');
+      return;
+    }
+    const proceed = await p.confirm({ message: 'Add another connection?' });
+    if (p.isCancel(proceed) || !proceed) return;
+  }
+
+  const fields = authFieldsFor(integration.authType, integration.authFields);
+  const needsForm = fields.length > 0;
+  if (needsForm && !isInteractive()) {
+    throw new Error(
+      `${integration.displayName} needs credentials that must be entered interactively. Re-run in a terminal, or connect it from the platform UI.`,
+    );
+  }
+
+  const session = await createProjectConnectSession(ctx.token, ctx.orgId, ctx.projectId, integration.id);
+  const values = needsForm ? await promptAuthFields(integration, fields) : {};
+  const { credentials, params } = splitAuthValues(fields, values);
+
+  if (isCredentialAuthType(integration.authType)) {
+    if (!credentials) {
+      throw new Error(`${integration.displayName} requires credentials.`);
+    }
+    const spinner = p.spinner();
+    spinner.start('Verifying credentials with the provider');
+    try {
+      await submitCredentialAuth({
+        integrationId: integration.id,
+        sessionToken: session.sessionToken,
+        credentials,
+        params,
+      });
+      spinner.stop('Credentials accepted');
+    } catch (error) {
+      spinner.stop('Authorization failed');
+      throw error;
+    }
+  } else {
+    // OAuth goes straight to the provider's consent screen; any other auth
+    // type falls back to Nango's hosted Connect UI, which renders the
+    // provider-specific forms and setup guides.
+    const url = isOAuthAuthType(integration.authType)
+      ? oauthConnectUrl(integration.id, session.sessionToken, params)
+      : session.connectUrl;
+    console.info(`\nOpening your browser to authorize ${pc.bold(integration.displayName)}…`);
+    console.info(pc.dim(`If it doesn't open, visit:\n  ${url}\n`));
+    try {
+      openBrowser(url);
+    } catch {
+      // URL is printed above; the user can open it manually.
+    }
+  }
+
+  await waitForActiveConnection(ctx, session.connectionId);
+
+  const connection = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).find(
+    row => row.id === session.connectionId,
+  );
+  const account = connection ? ` (${connectionLabel(connection)})` : '';
+  console.info(`\n${pc.green('✓')} Connected ${pc.bold(integration.displayName)}${account} to ${ctx.projectName}.`);
+  console.info(
+    pc.dim(
+      `\nYour agents pick it up through @mastra/connect:\n\n  import { connect } from '@mastra/connect';\n\n  const tools = connect({\n    projectId: process.env.MASTRA_PROJECT_ID,\n    integrations: ['${integration.id}'],\n  });\n`,
+    ),
+  );
+}
+
+function findIntegration(catalog: IntegrationCatalogEntry[], provider: string): IntegrationCatalogEntry {
+  const integration = catalog.find(entry => entry.id === provider.toLowerCase());
+  if (!integration) {
+    const query = provider.toLowerCase();
+    const near = catalog
+      .filter(entry => entry.id.includes(query) || query.includes(entry.id))
+      .map(entry => entry.id);
+    const hint = near.length > 0 ? ` Did you mean: ${near.join(', ')}?` : '';
+    throw new Error(`Unknown provider: ${provider}.${hint} List providers with: mastra connect list`);
+  }
+  if (integration.comingSoon) {
+    throw new Error(`${integration.displayName} is not yet available for connection.`);
+  }
+  return integration;
+}
+
+async function promptAuthFields(
+  integration: IntegrationCatalogEntry,
+  fields: IntegrationAuthField[],
+): Promise<Record<string, string>> {
+  console.info(`\n${pc.bold(integration.displayName)} needs a few details:`);
+  const values: Record<string, string> = {};
+
+  for (const field of fields) {
+    // Visibility can depend on values entered earlier in the loop.
+    if (!isAuthFieldVisible(fields, field, values)) continue;
+    if (field.documentationUrl) {
+      console.info(pc.dim(`  ${field.label}: ${field.documentationUrl}`));
+    }
+
+    let answer: string | symbol;
+    if (field.options && field.options.length > 0) {
+      answer = await p.select({
+        message: field.label,
+        options: field.options.map(option => ({ value: option, label: option })),
+        initialValue: field.defaultValue ?? undefined,
+      });
+    } else if (field.secret) {
+      answer = await p.password({
+        message: field.label,
+        validate: value => (field.required && !value ? `${field.label} is required` : undefined),
+      });
+    } else {
+      answer = await p.text({
+        message: field.label,
+        placeholder: field.placeholder ?? undefined,
+        defaultValue: field.defaultValue ?? undefined,
+        validate: value => (field.required && !value && !field.defaultValue ? `${field.label} is required` : undefined),
+      });
+    }
+    if (p.isCancel(answer)) {
+      throw new Error('Cancelled.');
+    }
+    if (answer) {
+      values[authFieldKey(field)] = answer;
+    }
+  }
+
+  return values;
+}
+
+/**
+ * The provider reports success to Nango, and the platform flips the
+ * connection row to active from Nango's lifecycle webhook — so poll the
+ * project's connection list until the new row shows up active. Same
+ * poll cadence as the platform UI.
+ */
+async function waitForActiveConnection(ctx: ConnectContext, connectionId: string): Promise<void> {
+  const spinner = p.spinner();
+  spinner.start('Waiting for the connection to become active');
+  const deadline = Date.now() + POLL_MAX_MS;
+  try {
+    for (;;) {
+      const connections = await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId);
+      const connection = connections.find(row => row.id === connectionId);
+      if (connection?.status === 'active') {
+        spinner.stop('Connection is active');
+        return;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error('Authorization did not finish in time. Try again.');
+      }
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  } catch (error) {
+    spinner.stop('Authorization did not complete');
+    throw error;
+  }
+}
+
+// ---- mastra connect remove <provider> ----
+
+export async function removeConnectionAction(
+  provider: string,
+  options?: { project?: string; yes?: boolean },
+): Promise<void> {
+  const ctx = await resolveConnectContext(options?.project);
+  const connections = (await fetchProjectConnections(ctx.token, ctx.orgId, ctx.projectId)).filter(
+    connection => connection.integrationId === provider.toLowerCase(),
+  );
+
+  if (connections.length === 0) {
+    throw new Error(`${provider} is not connected to ${ctx.projectName}.`);
+  }
+
+  let targets = connections;
+  if (connections.length > 1 && isInteractive() && !options?.yes) {
+    const choice = await p.select({
+      message: `${provider} has ${connections.length} connections. Which one should be removed?`,
+      options: [
+        ...connections.map(connection => ({ value: connection.id, label: connectionLabel(connection) })),
+        { value: 'all', label: 'All connections' },
+      ],
+    });
+    if (p.isCancel(choice)) return;
+    if (choice !== 'all') {
+      targets = connections.filter(connection => connection.id === choice);
+    }
+  }
+
+  if (!options?.yes) {
+    if (!isInteractive()) {
+      throw new Error('Refusing to remove connections without confirmation. Pass --yes to proceed.');
+    }
+    const labels = targets.map(target => describeConnection(provider, target)).join(', ');
+    const confirmed = await p.confirm({
+      message: `Unlink ${labels} from ${ctx.projectName}? The org-level connection is kept.`,
+    });
+    if (p.isCancel(confirmed) || !confirmed) return;
+  }
+
+  for (const connection of targets) {
+    await removeProjectConnection(ctx.token, ctx.orgId, ctx.projectId, connection.id);
+  }
+  const removed =
+    targets.length === 1
+      ? describeConnection(provider, targets[0]!)
+      : `${targets.length} ${provider.toLowerCase()} connections`;
+  console.info(`${pc.green('✓')} Removed ${removed} from ${ctx.projectName}.`);
+}
+
+function describeConnection(provider: string, connection: ProjectConnection): string {
+  return `${provider.toLowerCase()} (${connectionLabel(connection)})`;
+}

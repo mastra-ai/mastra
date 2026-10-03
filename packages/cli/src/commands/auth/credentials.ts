@@ -96,7 +96,7 @@ function isWSL(): boolean {
   }
 }
 
-function openBrowser(url: string) {
+export function openBrowser(url: string) {
   // Use execFileSync (shell: false) to avoid shell-injection via the URL.
   if (process.platform === 'darwin') {
     execFileSync('open', [url]);
